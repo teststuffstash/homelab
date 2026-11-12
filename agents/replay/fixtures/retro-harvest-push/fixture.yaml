@@ -6,7 +6,9 @@
 # committed, the push died, no PR). An open report PR is pushed to, never re-created; a merged
 # one whose reports already match master is reused and nothing is pushed.
 #
-# Rows: `new-pr` (no PR yet → push + create) · `open-pr` (push onto it, no create) ·
+# Rows: `new-pr` (no PR yet → push + create) · `open-pr` (push onto it, no create) · `series-repo`
+# (a named series files in its STACK repo, oracle-fleet#1043: --repo/--base follow reportRepo, and a
+# single-cell run names no cross-review legs) ·
 # `merged-identical` (reuse the merged URL, no push).
 name: retro-harvest-push
 mode: table

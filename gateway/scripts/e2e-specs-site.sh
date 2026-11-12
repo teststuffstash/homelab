@@ -40,10 +40,16 @@ PY
 )
 [ "$PAGES" != "{}" ] || { echo "e2e-specs-site: no spec page carries a mermaid fence — nothing to check"; exit 0; }
 
-# No daemon is a red, never a skip (a ride's gates equal CI's). In a worker ride the daemon
-# exists only when the issue's `Touches:` reaches the claim's fixer.dockerPaths (gateway/**).
+# No docker is a red, never a skip (a ride's gates equal CI's) — and the red names WHICH half is
+# missing. The client comes from this island's devbox.json (`docker-client`; a CI runner has its
+# own too). In a worker ride the daemon exists only when the issue's `Touches:` reaches the
+# claim's fixer.dockerPaths (gateway/**); the launcher then exports DOCKER_HOST.
+command -v docker >/dev/null 2>&1 || {
+  echo "e2e-specs-site: no docker CLI on PATH (DOCKER_HOST=${DOCKER_HOST:-unset}). The client is the docker-client package in gateway/devbox.json — run this leg through devbox (\`devbox run specs-site-e2e\` here, \`devbox run gateway-specs-site-e2e\` at the repo root); do not skip this gate." >&2
+  exit 1
+}
 docker info >/dev/null 2>&1 || {
-  echo "e2e-specs-site: no docker daemon. This leg runs the pinned playwright image. In a worker ride that means the issue's Touches: did not reach gateway/** — stop and report the footprint; do not skip this gate." >&2
+  echo "e2e-specs-site: the docker CLI is here but no daemon answers (DOCKER_HOST=${DOCKER_HOST:-unset}). This leg runs the pinned playwright image. In a worker ride that means the issue's Touches: did not reach gateway/** — stop and report the footprint; do not skip this gate." >&2
   exit 1
 }
 
