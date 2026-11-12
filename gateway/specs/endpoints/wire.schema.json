@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agent-gateway/specs/endpoints/wire.schema.json",
+  "$comment": "MACHINE half of GET /wire and GET /wire/<source>; the HUMAN half is wire.md. GW-WIRE-VIEW owns `index_output` (and `member_headers`, the provenance of one member — its body is the stored bytes, not JSON of this schema) and the error code; GW-WIRE-RECORD owns `$defs.provenance` (what a record says about itself). `sha256` is the digest of the answer as the vendor sent it: for a `public` record also the digest of the stored bytes, for an `account` record the answer's identity only (the stored bytes are the sanitised structure). A source with no good answer yet is not listed as a member (404); in the index it carries null `fetched_at`/`age_s`/`complete` and its `last_error`.",
+  "x-endpoint": "wire",
+  "x-use-cases": ["UC-1"],
+  "$defs": {
+    "source_class": { "enum": ["public", "account"], "x-requirements": ["GW-WIRE-RECORD"] },
+    "timestamp": { "type": ["string", "null"], "format": "date-time" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "class", "url", "status", "bytes", "sha256", "fetched_at", "age_s", "complete", "last_error", "last_error_at"],
+      "properties": {
+        "source": { "type": "string", "description": "the source name a vendor read registered" },
+        "class": { "$ref": "#/$defs/source_class" },
+        "url": { "type": "string", "description": "the URL the read went to (no credential: none rides in a URL the gateway builds)" },
+        "status": { "type": ["integer", "null"], "description": "the HTTP status of the kept answer; null = no good answer yet" },
+        "bytes": { "type": ["integer", "null"], "minimum": 0, "description": "the stored length" },
+        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "fetched_at": { "$ref": "#/$defs/timestamp", "description": "when the kept answer was received" },
+        "age_s": { "type": ["integer", "null"], "minimum": 0 },
+        "complete": { "type": ["boolean", "null"], "description": "false = the answer was cut at the bound" },
+        "last_error": { "type": ["string", "null"], "description": "the latest failed read beside the kept answer: `status <n>`, `unreachable`, `withheld`, `over-bound`" },
+        "last_error_at": { "$ref": "#/$defs/timestamp" }
+      },
+      "x-requirements": ["GW-WIRE-RECORD", "GW-WIRE-VIEW"]
+    }
+  },
+  "index_output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sources"],
+    "properties": {
+      "sources": { "type": "array", "items": { "$ref": "#/$defs/provenance" }, "x-requirements": ["GW-WIRE-VIEW"] }
+    },
+    "x-requirements": ["GW-WIRE-VIEW"]
+  },
+  "member_headers": {
+    "type": "object",
+    "required": ["x-wire-source", "x-wire-class", "x-wire-sha256", "x-wire-fetched-at", "x-wire-complete"],
+    "x-requirements": ["GW-WIRE-VIEW"]
+  },
+  "errors": {
+    "wire-not-recorded": { "status": 404, "description": "no good answer is recorded for this source (never read, or every read failed)", "x-requirements": ["GW-WIRE-VIEW"] }
+  }
+}

@@ -397,3 +397,18 @@ backoff and the next re-verification) and `hold` (the backoff a credential's nex
 from) — never a credential value. A new gateway on the same DB reloads them at start, dropping only
 what the in-memory logic would already have let go
 ([GW-SESSIONS-CAPACITY §Kept across a restart](endpoints/sessions.md#kept-across-a-restart)).
+
+## wire source
+
+One vendor read the gateway makes, named (`go-models-dev`, `codex-usage`, …) and classed `public`
+(the read sent no credential and no account header — its bytes are kept verbatim) or `account`
+(anything else — kept as structure with every string reduced to its length). Each source has one
+[wire record](#wire-record)
+([GW-WIRE-RECORD](endpoints/wire.md#gw-wire-record)).
+
+## wire record
+
+The latest answer of a [wire source](#wire-source) as the gateway's store keeps it — the stored bytes, their provenance
+(class, url, status, bytes, sha256, fetched_at, complete) and the latest failed read beside it — recorded before the
+parser reads the answer, replaced by the next good one, served read-only at `GET /wire/<source>`
+([GW-WIRE-VIEW](endpoints/wire.md#gw-wire-view)).

@@ -800,6 +800,8 @@ class Settings:
     # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
     # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
     benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
+    # GW-WIRE-RECORD: the byte bound of one kept vendor answer (an over-bound answer is cut and marked incomplete).
+    wire_max_bytes: int = 1_048_576
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -831,4 +833,5 @@ class Settings:
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
+            wire_max_bytes=int(e.get("GATEWAY_WIRE_MAX_BYTES", "1048576")),
         )

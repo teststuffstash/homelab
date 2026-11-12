@@ -41,6 +41,7 @@ from .sessions import (
 )
 from .store import Store
 from .tiers import tier_evidence_age
+from .wire import WireRecorder, wire_index, wire_member
 
 log = logging.getLogger("gateway.app")
 
@@ -124,8 +125,10 @@ def create_app(
     # The Go catalog leg (GW-CATALOG-GO): starts from the store's last good snapshots, refreshes on
     # the schedule the lifespan runs (tests call refresh() themselves — ASGI transports run no lifespan).
     # Admission reads it: the Go window draw's prices, per-model limits and not-in-catalog.
+    # GW-WIRE-RECORD: every vendor read's latest answer, kept before its parser reads it.
+    wire = WireRecorder(store, clock, settings.wire_max_bytes, secrets=(settings.opencode_go_api_key or "",))
     catalog = GoCatalog(policy, store, client, settings.go_catalog_urls, settings.opencode_go_api_key, clock,
-                        settings.go_catalog_refresh_s)
+                        settings.go_catalog_refresh_s, wire)
     m.bind_extra(catalog.render)
     # GW-SESSIONS-PULL's identity check: the kube TokenReview API (tests hand a StaticTokenReviews in).
     sessions = SessionService(policy, store, resolver, m, settings.self_url, clock,
@@ -142,7 +145,7 @@ def create_app(
     # The OpenRouter catalog leg (GW-CATALOG-OR): the registry the snapshot comes from, the cells' entry
     # states and the canary gate. Runs only when the policy declares `rails.openrouter.catalog`.
     orcatalog = OpenRouterCatalog(policy, store, client, resolver, providers, settings.upstreams["openrouter"],
-                                  settings.or_mcp_url, clock, settings.or_catalog_refresh_s)
+                                  settings.or_mcp_url, clock, settings.or_catalog_refresh_s, wire)
     sessions.orcatalog = orcatalog if orcatalog.enabled else None
     sessions.outcomes.judge = orcatalog.judge if orcatalog.enabled else None
     if orcatalog.enabled:
@@ -169,7 +172,7 @@ def create_app(
     # GW-CODEX-HEADROOM §Poll: the gateway's own usage observation — the only report producer today.
     # Runs on the lifespan when the rail has a credential backend AND CODEX_USAGE_URL names the endpoint.
     m.bind_codex_rail(codex is not None)  # the poll counter family exists only for a declared rail
-    codex_poll = UsagePoll(codex, client, settings.codex_usage_url, m, clock) if codex is not None else None
+    codex_poll = UsagePoll(codex, client, settings.codex_usage_url, m, clock, wire) if codex is not None else None
     if codex is not None and not (codex_poll and codex_poll.enabled):
         log.warning("codex usage poll dark: %s — the rail answers quota-unknown",
                     "CODEX_USAGE_URL unset" if not settings.codex_usage_url else "no credential backend")
@@ -227,6 +230,8 @@ def create_app(
             Route("/metrics", metrics, methods=["GET"]),
             Route("/catalog/opencode", catalog_opencode, methods=["GET"]),
             Route("/catalog/openrouter", catalog_openrouter, methods=["GET"]),
+            Route("/wire", wire_index, methods=["GET"]),
+            Route("/wire/{source}", wire_member, methods=["GET"]),
             Route("/sessions", post_sessions, methods=["POST"]),
             Route("/sessions", list_sessions, methods=["GET"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
@@ -259,6 +264,7 @@ def create_app(
     app.state.go_usage = go_poll
     app.state.codex_poll = codex_poll
     app.state.catalog = catalog
+    app.state.wire = wire
     app.state.providers = providers
     app.state.orcatalog = orcatalog
     return app
