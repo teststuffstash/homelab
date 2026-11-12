@@ -147,6 +147,7 @@
       "description": "Class 4 — Helm charts, TOFU-managed (docs/dependency-upgrades.md §The dependency inventory; S9 #1988, 2026-10-10): the `helm_release` charts whose version is a `var.*` default (argo-cd, argocd-apps, longhorn — the `# renovate:` annotation manager below; Cilium is class 6 and carries no annotation, human-proposed by ruling). patch/minor → `deps-review`, armed: the merge-path reviewer + migration lens read the changelog and the management sentinel's plan-on-PR posts the changed addresses — and since FU-301 (2026-10-10) a MERGE IS THE DEPLOY for the policy/mgmt/plan-input.yaml apply_helm rows: the management box applies them under its evidence bracket (docs/management-box.md §Helm release applies — forward only, STOP + MgmtHelmApplyStopped on a bad verdict), `MgmtApplyResidueStanding` if a merge sits unapplied 24 h. Majors: argo-cd + argocd-apps ARMED behind the lens (the rule after the chart-major rules below, 2026-10-11); longhorn → the un-armed catch-all (human lane, no downgrade).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
+      "matchPackageNames": ["!kyverno-policies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["deps-review"],
       "automerge": true
@@ -312,7 +313,7 @@
       }
     },
     {
-      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource.",
+      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource; the class-4 helm rule above excludes it by name (`addLabels` accumulates — matching both put automerge AND deps-review on one PR, the lane lint's `two-lanes`).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
       "matchPackageNames": ["kyverno-policies"],
