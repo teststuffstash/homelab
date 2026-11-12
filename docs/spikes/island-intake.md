@@ -17,7 +17,8 @@ pointer), the coordinator's `goal-decompose` clause (the ancestor:
 Can a sitting with ONLY the island's context — `gateway/` + the authoring grammar, no corpus —
 read the island's unshaped inputs (inert issues, tracker text, meta-state bullets) and leave each
 in a state the loop already understands: queued with the spec written into the issue, a Goal
-tree whose assembly keeps the codeowner read, a `blocked-on: human` marker naming the one fact
+tree whose verdict stays the human's (the question as first posed said "whose assembly keeps the
+codeowner read" — on `gateway/**` no such read exists, Open questions 2), a `blocked-on: human` marker naming the one fact
 it lacks, or a close with evidence — well enough that the operator reads PRs instead of the pile?
 
 ## What was built
@@ -27,8 +28,8 @@ it lacks, or a close with evidence — well enough that the operator reads PRs i
   owned? → needs a human fact? → how big? → worth a ride now?), a queue-ready body shape that
   carries the KEY ROWS (pinned rule 2: "an issue carries a handful of key rows … the implementing
   agent adds boundary rows"), the bot-authored Goal's pins (budget ceiling, `agent/queued` on the
-  children only — never on the Goal, so breaker #1 stays the human's and the assembly's codeowner
-  read stays the gate), the hard limits (no code, no PRs, never close a human-filed issue — by age
+  children only — never on the Goal, so breaker #1 stays the human's; the Goal's verdict is the
+  human point, and an assembly has a codeowner read only where its paths are owned), the hard limits (no code, no PRs, never close a human-filed issue — by age
   for the operator's own since ADR-163, §Run 3 — ≤ 3
   queued per sitting, one `intake:` comment per ruling), and the island facts.
 - **The selector** — [`gateway/scripts/intake-select.sh`](../../gateway/scripts/intake-select.sh):
