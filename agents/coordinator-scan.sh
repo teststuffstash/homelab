@@ -749,7 +749,7 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
 #     way in and none on the way out. A re-run that settles somewhere else moves the hash when it
 #     settles, which is the only point at which there is something to rule on. A RED entry going
 #     in flight DOES leave the line (red → pending reads as the red clearing), so the fold alone
-#     is not the whole contract: every caller holds on `pr_rollup_settling` (below) before it
+#     is not the whole contract: the caller holds on `pr_rollup_settling` (below) before it
 #     compares, and the fingerprint is only ever judged against a settled rollup.
 #   `@startedAt` rides only on a non-passing `management-sentinel`: `mgmt_post_status` is an
 #     unconditional POST, so a re-judge on the same head (same FAILURE, new engine revision, fresh
@@ -780,6 +780,16 @@ STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // 
   , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
                     | .submittedAt ] | max // "")
   ] | join("|")'
+# goal-checkpoint-b clause fingerprint: the assembly PR's IDENTITY and nothing else. Trigger (b)
+# exists to get the assembly PR opened, so one ride per assembly PR is the whole budget: once it
+# is open a checkpoint has nothing left to rule on it (it cannot push to the protected `goal/**`
+# head; a CHANGES_REQUESTED is the `assembly-cr` trigger's, with its own fingerprint). Every other
+# input the wider folds carry — verdicts, `reviewDecision`, content, checks — is subtracted, so
+# nothing that happens ON the PR moves the hash. `number` is the probed PR's own number, supplied
+# by pr_state_fp_pair; the clause only ever probes an OPEN PR, so "open" is the caller's selection
+# rather than a hashed field. The hold therefore releases exactly when that PR closes (no open
+# assembly PR is left to probe) or is replaced (another PR number, which carries no marker).
+STATE_FP_JQ_IDENTITY='"pr=" + (.number | tostring)'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 # Supports BOTH old format (state-fp:<hash>) and new format (state-fp:<clause>:<hash>) for backwards compatibility.
 STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}")) ]
@@ -828,12 +838,12 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
 }
 
 # pr_rollup_settling <pr view json> → the number of in-flight rollup entries YOUNGER than
-# UM_SETTLE_S (0 when none, or when the payload is unreadable). The settling predicate of every
-# clause that rides STATE_FP_JQ_UNARMED — `unarmed-major` (#2100) and the `goal-checkpoint-b`
-# hold (#2477) — and the other half of that fold's contract: the fold ignores an in-flight entry,
+# UM_SETTLE_S (0 when none, or when the payload is unreadable). The settling predicate of the
+# clause that rides STATE_FP_JQ_UNARMED — `unarmed-major` (#2100) — and the other half of that
+# fold's contract: the fold ignores an in-flight entry,
 # so a re-run over a GREEN state hashes the same throughout, but over a RED state the settled
 # entry leaves `checks=` while the re-run is in flight and returns when it settles red again.
-# A caller holds while this is non-zero, so neither edge buys a ride; the fingerprint is compared
+# The caller holds while this is non-zero, so neither edge buys a ride; the fingerprint is compared
 # only against a settled rollup. In flight = no conclusion, PENDING or EXPECTED (the set the fold
 # drops). Age is the entry's startedAt, else the newest commit's date; an entry whose age cannot
 # be read counts as settling (the `fromdateiso8601? // null` → recent idiom — holding is the safe
@@ -861,9 +871,10 @@ pr_rollup_settling() {
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
 # conclusions and narrows head to the newest non-merge commit — homelab#1011; "assembly-cr" too,
 # homelab#1939); "unarmed-major"
-# and "goal-checkpoint-b" use STATE_FP_JQ_UNARMED (content id for head, SETTLED non-passing
+# uses STATE_FP_JQ_UNARMED (content id for head, SETTLED non-passing
 # checks only — an in-flight check contributes nothing — startedAt for a
-# non-passing management-sentinel — homelab#2066, #2100, #2477); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# non-passing management-sentinel — homelab#2066, #2100); "goal-checkpoint-b" uses
+# STATE_FP_JQ_IDENTITY (the PR's number only — homelab#2477); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
@@ -891,14 +902,9 @@ pr_state_fp_pair() {
     # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
     # rebase with unchanged content, a heartbeat re-post, a green check arriving or a check that
     # is merely in flight does not.
-    # goal-checkpoint-b (homelab#2477) reuses the SAME fold for the same reason: the hold must
-    # release on a verdict, a content change or a check flip (one SETTLED conclusion to another),
-    # and NOT on a rebase or a master-merge. The CI re-run either of them starts is inert here
-    # only over a green state; both callers hold on `pr_rollup_settling` before comparing, which
-    # is what covers a red one
-    # (the assembly PR's head is a `goal/**` branch the updater merges master into, and #1935 makes
-    # that wait long by construction).
-    unarmed-major|goal-checkpoint-b)
+    # The CI re-run a rebase starts is inert in the fold only over a green state; the caller
+    # holds on `pr_rollup_settling` before comparing, which is what covers a red one.
+    unarmed-major)
       fp_jq="$STATE_FP_JQ_UNARMED"
       # the content id (#2100) — probed HERE, so the clause and the dispatch-marker site (which
       # calls this without a pre-fetched probe) hash the same thing. Changed files' blob ids at
@@ -914,6 +920,12 @@ pr_state_fp_pair() {
     # it. The assembly PR is BEHIND by construction (#1935), so every updater master-merge moved
     # the generic head= and re-ran CI (per-check flips) — a ride per merge that ruled nothing.
     arbitrate|assembly-cr) fp_jq="$STATE_FP_JQ_ARBITRATE" ;;
+    # goal-checkpoint-b (homelab#2477): the PR's identity only. The number is the one this probe
+    # was asked for, added HERE so the clause and the dispatch-marker site hash the same thing.
+    goal-checkpoint-b)
+      fp_jq="$STATE_FP_JQ_IDENTITY"
+      fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg n "$2" '. + {number: ($n | tonumber)}' 2>/dev/null)" && fp_probe="$fp_raw"
+      ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
@@ -3877,14 +3889,13 @@ EOF_GTHEMES_OPEN
           # The hold is the state-fp idiom, clause-scoped (`state-fp:goal-checkpoint-b:<hash>`) and
           # written at DISPATCH time by the block at the bottom of this script — never at emission,
           # or a unit that lost the priority race would retire the clause without ever riding.
-          # The fold is STATE_FP_JQ_UNARMED's (cf. #1939): a verdict, a content change or a check
-          # flip (settled-to-settled) releases the hold; a rebase or a master-merge does not.
-          # Neither does the CI re-run they start, and that takes TWO parts: over a green state
-          # the fold ignores the in-flight entry, so the hash never moves; over a red state the
-          # settled entry leaves the fold while the re-run is in flight, so `pr_rollup_settling`
-          # holds first and the fingerprint is compared only once the rollup has settled (red
-          # again → the same hash; green → a flip). A check wedged in flight past the window
-          # stops holding and the fingerprint decides.
+          # The fingerprint is the assembly PR's IDENTITY (STATE_FP_JQ_IDENTITY — its number, and
+          # that it is open, which is this probe's own selection): ONE ride per assembly PR. The
+          # hold releases only when that PR closes or is replaced by another; nothing that happens
+          # ON the PR releases it — not a verdict, a content push, a check flip, a rebase or a
+          # master-merge. Each of those has its own reader: CHANGES_REQUESTED is the `assembly-cr`
+          # trigger's, a red check is the ci-red clause's report line, and everything else is the
+          # human's the PR is waiting on. Triggers (a), (c) and (e) are untouched by the hold.
           # rule #6, fail-OPEN: an unreadable PR probe or an unreadable fingerprint leaves (b)
           # firing exactly as it does today — the state-fp idiom's own direction.
           # The probe reads `prsjson` (the per-repo OPEN-PR fetch above), never a second fetch:
@@ -3896,21 +3907,12 @@ EOF_GTHEMES_OPEN
           case "$gb_pr" in ''|*[!0-9]*) gb_pr="" ;; esac
           gb_hold=0
           if [ -n "$gb_pr" ]; then
-            # ONE view, shared by the settling predicate and the fingerprint (the hoisted-fetch
-            # shape `unarmed-major` uses). Unreadable → not settling and no fingerprint → (b) fires.
-            gb_json="$(gh pr view "$gb_pr" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || gb_json=''
-            gb_settling="$(pr_rollup_settling "$gb_json")"
-            gb_cur=''; gb_prev=''
-            if [ "$gb_settling" -eq 0 ]; then
-              gb_pair="$(pr_state_fp_pair "$slug" "$gb_pr" goal-checkpoint-b "$gb_json")"
-              gb_cur="${gb_pair%%|*}"; gb_prev="${gb_pair#*|}"
-            fi
-            if [ "$gb_settling" -gt 0 ]; then
+            # Unreadable probe → no fingerprint → (b) fires.
+            gb_pair="$(pr_state_fp_pair "$slug" "$gb_pr" goal-checkpoint-b)"
+            gb_cur="${gb_pair%%|*}"; gb_prev="${gb_pair#*|}"
+            if [ -n "$gb_cur" ] && [ "$gb_cur" = "$gb_prev" ]; then
               gb_hold=1
-              orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch SETTLING — assembly PR #${gb_pr} has ${gb_settling} check(s) still in flight on the head (<${UM_SETTLE_S:-1800}s). The hold is judged against a settled rollup, next tick (homelab#2477).\n"
-            elif [ -n "$gb_cur" ] && [ "$gb_cur" = "$gb_prev" ]; then
-              gb_hold=1
-              orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch HELD — assembly PR #${gb_pr} is OPEN and awaiting a human (\`state-fp:goal-checkpoint-b:${gb_cur}\`, homelab#2477). Opening the assembly is all trigger (b) exists to do; a verdict, a content change or a check flip on the PR releases the hold, a rebase or a master-merge does not.\n"
+              orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch HELD — assembly PR #${gb_pr} is OPEN and awaiting a human (\`state-fp:goal-checkpoint-b:${gb_cur}\`, homelab#2477). Opening the assembly is all trigger (b) exists to do; the hold releases only when this PR closes or is replaced by another assembly PR.\n"
             else
               # Carry the PR to the dispatch site via a side map (the `assembly_cr_prs` shape):
               # the marker must gate on CONFIRMED selection, not on emission.
@@ -4428,8 +4430,7 @@ EOF_GTHEMES_OPEN
     # Two guards against #2100's churn (seven rides on one Renovate major, one decision): the
     # fingerprint keys on the diff's content, not the head oid (STATE_FP_JQ_UNARMED + the
     # pr_state_fp_pair probe — a rebase onto a moved master re-creates the head with identical
-    # content), and here, before the debounce, a SETTLING hold (`pr_rollup_settling`, shared with
-    # the goal-checkpoint-b hold) — a ride dispatched while
+    # content), and here, before the debounce, a SETTLING hold (`pr_rollup_settling`) — a ride dispatched while
     # the fresh head's rollup is still filling in reads a state that is not the one it will be
     # judged on (the fingerprint ignores an in-flight entry; a check that then settles red moves
     # it and buys a second ride). Held only while a pending entry is younger than
@@ -7210,7 +7211,7 @@ EOF
           elif ! gh pr comment "$bpr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
                 "🤖 \`state-fp:goal-checkpoint-b:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=b, child-set complete pre-launch) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
                 "" \
-                "Machine-readable hold marker (homelab#2477), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — the diff's content, the non-passing checks, \`reviewDecision\` and the newest verdict's timestamp — so a verdict, a content change or a check flip releases the hold while a rebase or a master-merge does not. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+                "Machine-readable hold marker (homelab#2477), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes this PR's identity (its number) and nothing that happens on it, so trigger (b) rides once per assembly PR: while this PR stays open the clause emits a report line instead of another unit, whatever verdicts, pushes or check results arrive. The hold releases only when this PR closes or is replaced by another assembly PR." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${bpr} (gh write refused?) — dispatching anyway; the goal-checkpoint-b hold will not arm (homelab#2477)" >&2
           fi
         fi
