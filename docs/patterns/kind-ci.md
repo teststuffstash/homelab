@@ -55,8 +55,10 @@ CI — the OOTB principle):
    snippet is oracle's `kind_mirror()` (copied by sleep): write a
    `/etc/containerd/certs.d/<registry>/hosts.toml` into the node container per
    `REGISTRY_MIRROR_DOCKER_IO` / `REGISTRY_MIRROR_GHCR` / `REGISTRY_MIRROR_MCR` (the ADR-091
-   env contract — rides export it, and so does each ci-runner slot's `.env`; the values are
-   `SERVICES.md` §Registry mirrors). `kindest/node` preconfigures containerd's `config_path`, so hosts.toml just works.
+   env contract — rides export it; each ci-runner slot's `.env` does from that runner's next
+   attended recreate (FU-306). Default each to its LAN VIP in the script
+   (`${REGISTRY_MIRROR_DOCKER_IO:-http://192.168.40.20}` …, values in `SERVICES.md` §Registry
+   mirrors), so the jail and a not-yet-recreated runner are covered too. `kindest/node` preconfigures containerd's `config_path`, so hosts.toml just works.
 5. **Retry the image *build*, not the cluster create.** Registry manifest HEADs flake
    (docker.io 500s) — a bounded retry on `docker build`/pull is honest (oracle does 3). A
    failing `kind create` is NOT a flake to retry: it means the daemon is sick (inotify, disk)
