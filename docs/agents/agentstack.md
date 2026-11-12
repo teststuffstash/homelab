@@ -89,6 +89,28 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   four kata nodes), and resolving once at dispatch black-holed any ride that outlived a dependency
   reschedule — [the spike](../spikes/kata-service-vip.md) has the three occurrences.
 
+### Docker by footprint (`fixer.dockerPaths`)
+
+`fixer.docker` is one switch per repo. A repo that holds several projects (homelab: tofu, manifests,
+the agent scripts, the gateway island) declares `fixer.dockerPaths` instead — a list of `Touches:`
+footprint paths (`["gateway/**"]`) — so only the rides that need a daemon pay for one. A ride's
+gates equal CI's gates; this is how a path-scoped gate that needs docker gets a ride that has it.
+
+- **Decision, per dispatch** (`agents/agent-session.sh`, `REPLAY:docker-paths`): the issue's declared
+  `Touches:` reaches an entry (the scan's `fp_conflict`) ⇒ docker ride. **No `Touches:` at all ⇒
+  docker ride** — the opposite of the spec-process rule below, because a missing daemon fails a
+  gate where a missing process only degrades a ride. Declared and not reaching ⇒ a plain pod whose
+  card names the paths and tells the ride to stop rather than edit them. `--docker` and
+  `docker: true` decide first. The scan's `dockerRepos` is unchanged (whole-repo docker only).
+- **Per namespace, not per ride:** a non-empty list turns the docker egress legs on in the repo's
+  CNP, and the claim must set `storage.scratch` (20Gi × concurrent docker rides) — a `"0"` cap
+  refuses the dind volume at create.
+- **A diff that strays into the paths undeclared** gets no daemon: the gate fails naming the cause
+  (`gateway/scripts/e2e-specs-site.sh`), never skips.
+
+Replay: `agents/replay/fixtures/docker-paths/` (reached / not reached / undeclared / field absent /
+already docker).
+
 ## The spec process rides with the worker (`repos[].specs`, ADR-156)
 
 A repo that keeps `specs/` under the [portable spec process](specs-reviewer.md#the-portable-process-adr-156-2026-10-16)

@@ -778,6 +778,11 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
       DOCKER=1
       echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
     fi
+    # fixer.dockerPaths from the SAME claim read: the PATH-SCOPED form of fixer.docker, for a repo
+    # that holds several projects (homelab: the gateway island). Decided per dispatch by
+    # REPLAY:docker-paths below, once the issue's declared footprint is known. A repo that is
+    # already docker (the flag, or fixer.docker=true) never consults it.
+    DOCKER_PATHS="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .fixer.dockerPaths | select(type == "array")] | first // [] | map(select(type == "string")) | join(", ")' 2>/dev/null)" || DOCKER_PATHS=""
     # The ride size class from the SAME claim read (fixer.rideSize; oracle handoff 2026-10-02) —
     # mapped to the pod envelope by REPLAY:ride-size below. Explicit --size wins.
     [ -n "$RIDE_SIZE" ] || RIDE_SIZE="$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" '[.items[].spec.repos[]|select(.name==$p)|.fixer.rideSize]|map(select(.!=null))|first // empty' 2>/dev/null)"
@@ -1006,7 +1011,11 @@ render_env_card() {
     # each docker stack's own scripts/test-integration.sh after #71). Card keeps the actionable HOW.
     printf '%s\n' "- **Docker: YES.** A real daemon is live at \`\$DOCKER_HOST\` (\`docker info\` succeeds). The \`docker\`/\`kind\` CLIs come from your \`devbox.json\` (\`docker-client\`+\`kind\`) — if \`docker\` is 'command not found', add \`docker-client\` there (never download). Run \`kind\`/\`k3d\` here for e2e gates. **CRITICAL:** a kind/k3d NODE's own image pulls go to docker.io/ghcr.io and are egress-DENIED → the node never goes Ready and \`create\` times out (looks like 'docker is broken' — it's the MISSING MIRROR). Point the node's containerd at the mirrors BEFORE it starts — kind: \`docker exec <node> tee /etc/containerd/certs.d/<reg>/hosts.toml\` pointing at \`\$REGISTRY_MIRROR_DOCKER_IO\`/\`\$REGISTRY_MIRROR_GHCR\`; k3d: \`--registry-config\`. For a non-Hub \`FROM\` in \`docker build\` (daemon.json's own mirror is Hub-only), create the mirror builder first — \`docker buildx create --driver docker-container --driver-opt default-load=true --config \$BUILDKITD_TOML --use --bootstrap\` — and if \`docker buildx\` is 'command not found', add \`docker-buildx\` to your \`devbox.json\` (never download)."
   else
-    printf '%s\n' "- **Docker: NO.** No daemon in this ride — docker-backed e2e gates run in GitHub CI, not here; don't try to start clusters."
+    if [ "${DOCKER_BY_PATH:-}" = "not-reached" ]; then
+      printf '%s\n' "- **Docker: NO.** No daemon in this ride: this repo gives one only to a ride whose issue \`Touches:\` reaches \`${DOCKER_PATHS}\`, and yours does not. A gate under those paths cannot run here — if your change needs to edit them, STOP and report that the issue's \`Touches:\` is too narrow; do not edit them and do not skip the gate."
+    else
+      printf '%s\n' "- **Docker: NO.** No daemon in this ride — docker-backed e2e gates run in GitHub CI, not here; don't try to start clusters."
+    fi
   fi
 
   if [ "${EGRESS_ENFORCE:-}" = "true" ]; then
@@ -1170,6 +1179,48 @@ if [ -n "${RECIPE:-}" ]; then
       fi
     fi
     # <<<REPLAY:base-declared-read<<<
+    # ── DOCKER BY FOOTPRINT (fixer.dockerPaths) ────────────────────────────────────────────────
+    # A ride's gates equal CI's gates, so a gate that needs a daemon needs a ride that has one —
+    # but fixer.docker is one switch per REPO, and a repo that holds several projects (homelab)
+    # would pay a kata microVM + dind on every ride to serve one island's gate. The claim's
+    # `fixer.dockerPaths` scopes it: THIS dispatch is docker when the issue's declared `Touches:`
+    # (the ONE parser, the same body the `Base:` read fetched; the scan's own fp_conflict decides
+    # "reaches") reaches one of the paths. An ABSENT `Touches:` is docker too — the opposite of
+    # the spec-process rule below, on purpose: an unmounted process degrades a ride, a missing
+    # daemon fails its gate, and the scan already treats an undeclared footprint as reaching
+    # everything (ADR-097). `--docker` and fixer.docker=true decide before this and skip it.
+    # The cluster side is per NAMESPACE, not per ride: the Composition turns the docker egress
+    # legs on for a repo with a non-empty dockerPaths, and the claim must carry a scratch quota.
+    # >>>REPLAY:docker-paths>>>
+    DOCKER_BY_PATH=""                                       # "" | reached | undeclared | not-reached — the card's switch
+    if [ -z "${DOCKER:-}" ] && [ -n "${DOCKER_PATHS:-}" ]; then
+      # Claim strings are prompt-adjacent input (they reach this log and the card): the XRD's
+      # footprint grammar, enforced again here for a claim applied before the schema had it.
+      _dp_bad=""
+      while IFS= read -r _dp_e; do
+        [ -n "$_dp_e" ] || continue
+        grep -Eq '^[A-Za-z0-9][A-Za-z0-9._*-]*(/[A-Za-z0-9*][A-Za-z0-9._*-]*)*$' <<< "$_dp_e" || _dp_bad=1
+      done <<< "$(printf '%s' "$DOCKER_PATHS" | tr ',' '\n' | sed 's/^ *//;s/ *$//')"
+      if [ -n "$_dp_bad" ]; then
+        echo "WARN: the claim's fixer.dockerPaths for ${PROJECT} is outside the footprint grammar (repo-relative paths/globs, no dot-led segment) — NOT considered; this ride has no docker" >&2
+        DOCKER_PATHS=""
+      else
+        _ib_rc=0
+        ISSUE_TOUCHES="$(printf '%s' "$_ib_body" | ib_get Touches "$_ib_ref")" || _ib_rc=$?
+        [ "$_ib_rc" -eq 0 ] || ib_refuse_malformed Touches "$_ib_ref"
+        if [ -z "$ISSUE_TOUCHES" ]; then
+          DOCKER=1; DOCKER_BY_PATH="undeclared"
+          echo "→ --docker derived from fixer.dockerPaths (${DOCKER_PATHS}): #${ISSUE_N} declares no Touches:, and an undeclared footprint reaches everything"
+        elif fp_conflict "$ISSUE_TOUCHES" "$DOCKER_PATHS"; then
+          DOCKER=1; DOCKER_BY_PATH="reached"
+          echo "→ --docker derived from fixer.dockerPaths: #${ISSUE_N}'s footprint reaches ${DOCKER_PATHS}"
+        else
+          DOCKER_BY_PATH="not-reached"
+          echo "→ no docker: #${ISSUE_N}'s footprint does not reach fixer.dockerPaths (${DOCKER_PATHS})"
+        fi
+      fi
+    fi
+    # <<<REPLAY:docker-paths<<<
     # ── THE SPEC PROCESS RIDES WITH THE WORKER (ADR-156, operator rulings 2026-10-29) ───────────
     # Every worker that touches a repo's specs gets the pinned process (RULES, CONVENTIONS, the
     # briefs) INJECTED — never a "please read X" line, never restated in a recipe: a rule a worker

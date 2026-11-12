@@ -1,0 +1,5 @@
+OUT → --docker derived from fixer.dockerPaths (gateway/**): #3300 declares no Touches:, and an undeclared footprint reaches everything
+OUT DOCKER:[1]
+OUT DOCKER_BY_PATH:[undeclared]
+OUT - **Docker: YES.** A real daemon is live at `$DOCKER_HOST` (`docker info` succeeds). The `docker`/`kind` CLIs come from your `devbox.json` (`docker-cl
+RC 0

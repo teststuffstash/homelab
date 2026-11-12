@@ -1,0 +1,4 @@
+OUT DOCKER:[]
+OUT DOCKER_BY_PATH:[]
+OUT - **Docker: NO.** No daemon in this ride — docker-backed e2e gates run in GitHub CI, not here; don't try to start clusters.
+RC 0
