@@ -1504,7 +1504,7 @@ Legend: `request_rows?` = the session's request rows as `provider status`; `ride
 
 | description | arrange | decision? | rail? | rail_choice? | request_rows? | rides? |
 |---|---|---|---|---|---|---|
-| the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖ | the Go window near its share; the openrouter fake's deepinfra answers 500 | dispatch | openrouter | openrouter over opencode: headroom | deepinfra 500, atlas-cloud 200 | atlas-cloud 1 / 1, deepinfra 0 / 0 |
+| the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖ | the Go window near its share; the openrouter fake's deepinfra answers 500; the consumer reports outcome clean | dispatch | openrouter | openrouter over opencode: headroom | deepinfra 500, atlas-cloud 200 | atlas-cloud 1 / 1, deepinfra 0 / 0 |
 
 #### A preference for the strongest
 
