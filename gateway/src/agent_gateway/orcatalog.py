@@ -130,7 +130,8 @@ def latest_week(rows: list, top_n: int) -> dict[str, int]:
 
 
 def benched(rows: list) -> dict[str, dict]:
-    """`{model id: {intelligence, coding, agentic}}` from the AA benchmark rows."""
+    """`{model id: {intelligence, coding, agentic}}` from the AA benchmark rows — EVERY row, ranked or
+    not (the snapshot keeps the whole set; a null index stays null)."""
     if not isinstance(rows, list):
         raise ParseError("benchmarks: `data` is not a list")
     out: dict[str, dict] = {}
@@ -254,7 +255,7 @@ class OpenRouterCatalog:
         sources = {"ranking": {"slices": list(cat.ranking_slices), "top_n": cat.ranking_top_n, "ranked": len(ranked)},
                    "benchmarks": {"source": "artificial-analysis", "as_of": (bench_doc.get("meta") or {}).get("as_of"), "rows": len(aa)},
                    "candidates": len(candidates), "endpoint_failures": failures}
-        self.store.snapshot_save(SNAPSHOT_SOURCE, now, {"models": models, "sources": sources})
+        self.store.snapshot_save(SNAPSHOT_SOURCE, now, {"models": models, "sources": sources, "benchmarks": aa})
         self.sources = sources
         self.snapshot.reload()
         entrants = self.store.cells_sync([(mid, e["slug"]) for mid, m in models.items() for e in m["endpoints"]], now)
@@ -445,6 +446,7 @@ class OpenRouterCatalog:
             "models_count": len(models), "last_outcome": self.last_outcome, "last_attempt_at": iso(self.last_attempt),
             "refresh_s": self.refresh_s, "sources": self.sources, "endpoint_failures": self.endpoint_failures,
             "models": models, "cells": counts, "canary": self.budget(now),
+            "benchmarks": dict(sorted((body.get("benchmarks") or {}).items())),
         }
 
     def render(self) -> list[str]:

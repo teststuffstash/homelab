@@ -13,6 +13,7 @@ spec's, verbatim (the header is the parameter list).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -35,7 +36,7 @@ from ._catalog_rows import (
     or_view,
     verdict,
 )
-from ._orcatalog_world import ACCOUNT_KEY
+from ._orcatalog_world import ACCOUNT_KEY, UNRANKED_ID, fixture
 from .conftest import POLICY_FIXTURE, attach_json, given, quiet, rule, when, world
 
 pytestmark = rule("GW-CATALOG-OR")
@@ -304,6 +305,98 @@ async def test_metrics(gw, app, mcp, clock, refreshes, read_at, series, expected
             refreshes={"actual": refreshes}, read_at={"actual": read_at}, series={"actual": series})
 
 
+# ── The benched set is kept whole (GW-CATALOG-OR §The benched set is kept whole) ──────────────
+def _recorded() -> dict[str, dict]:
+    """The recorded AA answer's rows by id, read straight from the fixture (the stamp stripped)."""
+    return {re.sub(r"-\d{8}$", "", r["model_permaslug"]): {"intelligence": r["intelligence_index"], "coding": r["coding_index"], "agentic": r["agentic_index"]}
+            for r in fixture("benchmarks-aa.json")["data"]}
+
+
+def _candidates_cell(v: dict) -> str:
+    src = v["sources"]
+    return f"{src['candidates']} ({src['ranking']['ranked']} ranked, {src['benchmarks']['rows']} benched)"
+
+
+BENCHED_ROWS = [
+    pytest.param("ok, the ranking served without one benched id", "7 (12 ranked, 8 benched)", "8 ids, the unranked one among them",
+                 id="every benched row is kept, ranked or not ⚖"),
+    pytest.param("ok, the ranking served without one benched id", "7 (12 ranked, 8 benched)", "the unranked id: its `intelligence`, `coding`, `agentic` as the recorded answer gives them",
+                 id="a benched row outside the ranking is served with its three indices ⚖"),
+    pytest.param("ok", "8 (13 ranked, 8 benched)", "a recorded row with a null index: that index null, the others as given",
+                 id="an index the feed does not give stays null, never 0 ⚖"),
+    pytest.param("ok", "8 (13 ranked, 8 benched)", "no dated permaslug and no `:variant` among the keys",
+                 id="a row is keyed as the candidates are — the stamp stripped, a `:variant` under its family ⚖"),
+]
+
+
+@pytest.mark.parametrize(("mcp_answer", "expected_candidates", "expected_benchmarks"), BENCHED_ROWS, ids=[p.id for p in BENCHED_ROWS])
+async def test_benched_set_kept_whole(gw, app, mcp, mcp_answer, expected_candidates, expected_benchmarks):
+    world(note=f"{WORLD}; mcp {mcp_answer}")
+    with given(f"mcp_answer = {mcp_answer}"):
+        mcp.mcp = "ranking-without-one" if "without one" in mcp_answer else "ok"
+    await or_refresh(app)
+    v = await or_view(gw)
+    got, rec = v["benchmarks"], _recorded()
+    if expected_benchmarks.startswith("8 ids"):
+        actual = "8 ids, the unranked one among them" if len(got) == 8 and UNRANKED_ID in got and UNRANKED_ID not in v["models"] else f"{sorted(got)}"
+    elif expected_benchmarks.startswith("the unranked id"):
+        actual = expected_benchmarks if got.get(UNRANKED_ID) == rec[UNRANKED_ID] and all(rec[UNRANKED_ID].values()) else f"{got.get(UNRANKED_ID)} vs {rec[UNRANKED_ID]}"
+    elif expected_benchmarks.startswith("a recorded row with a null"):
+        nulled = [m for m, r in rec.items() if None in r.values()]
+        actual = expected_benchmarks if nulled and all(got[m] == rec[m] for m in nulled) else f"{nulled}: {[got.get(m) for m in nulled]}"
+    else:
+        bad = [k for k in got if re.search(r"-\d{8}$", k) or re.search(r":(?!free$)", k)]
+        actual = expected_benchmarks if not bad and set(got) == set(rec) else f"stamped/variant keys: {bad}; keys {sorted(got)}"
+    verdict(f"candidates = {expected_candidates} · benchmarks = {expected_benchmarks}",
+            expected_candidates={"expected": expected_candidates, "actual": _candidates_cell(v)},
+            expected_benchmarks={"expected": expected_benchmarks, "actual": actual},
+            mcp_answer={"actual": mcp_answer})
+
+
+KEPT_ROWS = [
+    pytest.param("fetched T0, 8 ids", "503", "fetch-failed", "the 8 ids of T0", id="an MCP error keeps the last good set"),
+    pytest.param("fetched T0, 8 ids", "benchmarks-malformed", "parse-failed", "the 8 ids of T0",
+                 id="a benchmarks answer the leg cannot read is a parse failure, the set stands"),
+]
+
+
+@pytest.mark.parametrize(("last_good", "mcp_answer", "expected_outcome", "expected_benchmarks"), KEPT_ROWS, ids=[p.id for p in KEPT_ROWS])
+async def test_failed_read_keeps_benched_set(gw, app, mcp, last_good, mcp_answer, expected_outcome, expected_benchmarks):
+    world(note=f"{WORLD}; mcp {mcp_answer}")
+    with given(f"last_good = {last_good}"):
+        await or_refreshed(app)
+        before = (await or_view(gw))["benchmarks"]
+        assert len(before) == 8
+    with given(f"mcp_answer = {mcp_answer}"):
+        mcp.mcp = mcp_answer
+    outcome = await or_refresh(app, " again")
+    v = await or_view(gw)
+    verdict(f"outcome = {expected_outcome} · benchmarks = {expected_benchmarks}",
+            expected_outcome={"expected": expected_outcome, "actual": outcome},
+            expected_benchmarks={"expected": expected_benchmarks, "actual": expected_benchmarks if v["benchmarks"] == before else f"changed: {v['benchmarks']}"},
+            last_good={"actual": last_good}, mcp_answer={"actual": mcp_answer})
+
+
+RESTART_SET_ROWS = [pytest.param("fetched T0, 8 ids", "none (restart at T0 + 3600 s)", "the 8 ids of T0", id="the set survives a restart")]
+
+
+@pytest.mark.parametrize(("last_good", "mcp_answer", "expected_benchmarks"), RESTART_SET_ROWS, ids=[p.id for p in RESTART_SET_ROWS])
+async def test_benched_set_survives_restart(gw, app, clock, settings, policy, secrets, mcp_transport, reviews, pods, last_good, mcp_answer,
+                                            expected_benchmarks):
+    world(note=f"{WORLD}; a second gateway on the same DB, restart at T0 + 3600 s")
+    with given(f"last_good = {last_good}; mcp_answer = {mcp_answer}"):
+        await or_refreshed(app)
+        before = (await or_view(gw))["benchmarks"]
+    clock.advance(3600)
+    with when("gateway #2 starts on the same DB; GET /catalog/openrouter before any refresh"):
+        second = SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+        v = await or_view(second.gw)
+        await second.close()
+    verdict(f"benchmarks = {expected_benchmarks}",
+            expected_benchmarks={"expected": expected_benchmarks, "actual": expected_benchmarks if len(before) == 8 and v["benchmarks"] == before else f"{v['benchmarks']}"},
+            last_good={"actual": last_good}, mcp_answer={"actual": mcp_answer})
+
+
 SHAPE_ROWS = [pytest.param("ok", "exactly the schema's required keys", id="the view's shape is the schema's")]
 
 
@@ -319,7 +412,9 @@ async def test_view_shape(gw, app, mcp, mcp_answer, expected_shape):
     row = out["properties"]["models"]["additionalProperties"]
     want = {"view": sorted(out["required"]), "model row": sorted(row["required"]),
             "endpoint row": sorted(row["properties"]["endpoints"]["items"]["required"]), "canary": sorted(out["properties"]["canary"]["required"])}
-    got = {"view": sorted(v), "model row": sorted({k for r in v["models"].values() for k in r}),
+    snap = SCHEMA["$defs"]["benched_set"]["additionalProperties"]
+    want["benchmarks row"] = sorted(snap["required"])
+    got = {"benchmarks row": sorted({k for r in v["benchmarks"].values() for k in r}), "view": sorted(v), "model row": sorted({k for r in v["models"].values() for k in r}),
            "endpoint row": sorted({k for r in v["models"].values() for e in r["endpoints"] for k in e}), "canary": sorted(v["canary"])}
     diff = {k: {"schema": want[k], "view": got[k]} for k in want if want[k] != got[k]}
     verdict(f"shape = {expected_shape}", expected_shape={"expected": expected_shape, "actual": expected_shape if not diff else f"differs: {diff}"},

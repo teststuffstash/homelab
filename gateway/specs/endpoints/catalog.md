@@ -616,6 +616,15 @@ good snapshot kept on any failure and persisted in the store, shown on `/metrics
   this refresh (counted, never guessed); an MCP source that fails is `fetch-failed`, one that
   answers a shape the leg cannot read is `parse-failed`; a fresh snapshot with no model, or fewer
   than half the last good one's, is `implausible` — the last good snapshot stands.
+- **The whole benched set is kept** ⚖ (the runtime-tiers Goal, [#3305](https://github.com/teststuffstash/homelab/issues/3305)):
+  the snapshot carries every benched row the answer holds — ranked or not, the candidates' or not —
+  as `benchmarks`, per id its `intelligence`, `coding`, `agentic` (an index the feed does not give
+  stays `null`, never 0), keyed as the candidates are; `GET /catalog/openrouter` serves it. The
+  candidate set (ranked ∩ benched) is unchanged by it. ⚖ On the existing view, not a view of its
+  own (`GET /catalog/benchmarks` rejected): one snapshot, one refresh, one failure rule — the set
+  rides the last good snapshot and survives a restart with it. It is the evidence the tier
+  derivation of the next children reads for all rails (the `anthropic/…` and `openai/…` ids their
+  candidates join).
 
 **The floors' verdict on the view** ⚖ (operator ruling 2026-10-21, homelab#2775 — a bug, not a
 design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
@@ -644,7 +653,8 @@ serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (**M**) an
 `z-ai/glm-5.3-flash` (**G**) and 404 for the other six. T0 = the test clock. The account key is
 the fixture Secret `agent-egress/router-account-key`. Legend, every table below: `mcp_answer` = what the
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
-JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
+JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`, `ranking-without-one` = the
+ranking served without one benched id, `benchmarks-malformed` = a benchmarks answer whose `data` is not a list); `endpoints` = the endpoints route's behaviour per
 model (`ok`; `endpoints-503 for G`; `endpoints-null-uptime for G` = G's first endpoint's
 `uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
 `models?` = the snapshot's models after it; `cells?` = its candidate cells.
@@ -695,6 +705,33 @@ Legend: **the `other` row** is the rankings' `other` permaslug in both slices' l
 | description | rankings | benchmarks | candidates? | other_read? |
 |---|---|---|---|---|
 | the `other` bucket is never ranked and never a candidate ⚖ | the `other` row in both slices | ok | 8 (13 ranked, 8 benched) | absent |
+
+#### The benched set is kept whole
+
+Legend: `candidates?` = as in §A; `benchmarks?` = the view's `benchmarks` object. The unranked id is
+`xiaomi/mimo-v2.5`, which `ranking-without-one` leaves out of both slices (it has no endpoint
+fixture, so no model row changes). The null row is a recorded one: `deepseek/deepseek-v4.1-flash`
+carries `coding` and `agentic` as null in the fixture.
+
+| description | mcp_answer | candidates? | benchmarks? |
+|---|---|---|---|
+| every benched row is kept, ranked or not ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | 8 ids, the unranked one among them |
+| a benched row outside the ranking is served with its three indices ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | the unranked id: its `intelligence`, `coding`, `agentic` as the recorded answer gives them |
+| an index the feed does not give stays null, never 0 ⚖ | ok | 8 (13 ranked, 8 benched) | a recorded row with a null index: that index null, the others as given |
+| a row is keyed as the candidates are — the stamp stripped, a `:variant` under its family ⚖ | ok | 8 (13 ranked, 8 benched) | no dated permaslug and no `:variant` among the keys |
+
+#### A failed read keeps the last good benched set
+
+| description | last_good | mcp_answer | outcome? | benchmarks? |
+|---|---|---|---|---|
+| an MCP error keeps the last good set | fetched T0, 8 ids | 503 | fetch-failed | the 8 ids of T0 |
+| a benchmarks answer the leg cannot read is a parse failure, the set stands | fetched T0, 8 ids | benchmarks-malformed | parse-failed | the 8 ids of T0 |
+
+#### The benched set is kept across a restart
+
+| description | last_good | mcp_answer | benchmarks? |
+|---|---|---|---|
+| the set survives a restart | fetched T0, 8 ids | none (restart at T0 + 3600 s) | the 8 ids of T0 |
 
 #### A failed read keeps the last good (OpenRouter)
 
@@ -747,8 +784,8 @@ Legend: `refreshes` = the refreshes before the read, in order; `read_at` = when 
 
 #### The view's shape (OpenRouter)
 
-Legend: `shape?` = `exactly the schema's required keys` when the view's keys, each model row's,
-each endpoint row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
+Legend: `shape?` = `exactly the schema's required keys` when the view's keys (`benchmarks` among
+them), each model row's, each endpoint row's, each benchmarks row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
 difference.
 
 | description | mcp_answer | shape? |

@@ -80,8 +80,9 @@
       "$comment": "the store's `catalog_snapshots.openrouter-endpoints` body as the catalog leg writes it (GW-CATALOG-OR) — openai-chat.schema.json $defs.endpoint_snapshot's `models` with the leg's provenance per model, plus `sources`",
       "type": "object",
       "additionalProperties": false,
-      "required": ["models", "sources"],
+      "required": ["models", "sources", "benchmarks"],
       "properties": {
+        "benchmarks": { "$ref": "#/$defs/benched_set" },
         "models": {
           "type": "object",
           "additionalProperties": {
@@ -105,6 +106,14 @@
         }
       },
       "x-requirements": ["GW-CATALOG-OR", "GW-CATALOG-OR-CANARY"]
+    },
+    "benched_set": {
+      "$comment": "every AA-benched row the catalog leg read, ranked or not, keyed as the candidates are (the stamp stripped; a `:variant` joins its family's row) — GW-CATALOG-OR",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false, "required": ["intelligence", "coding", "agentic"],
+        "properties": { "intelligence": { "type": ["number", "null"] }, "coding": { "type": ["number", "null"] }, "agentic": { "type": ["number", "null"] } }
+      }
     },
     "band": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
     "tiers_block": {
@@ -309,8 +318,9 @@
     "$comment": "GET /catalog/openrouter — the OpenRouter catalog's read-only view (GW-CATALOG-OR): the snapshot with every cell's entry state, the provider the data plane would pin per model, the canary budget; no auth, no error codes (no snapshot = empty models)",
     "type": "object",
     "additionalProperties": false,
-    "required": ["fetched_at", "age_s", "models_count", "last_outcome", "last_attempt_at", "refresh_s", "sources", "endpoint_failures", "models", "cells", "canary"],
+    "required": ["fetched_at", "age_s", "models_count", "last_outcome", "last_attempt_at", "refresh_s", "sources", "endpoint_failures", "models", "cells", "canary", "benchmarks"],
     "properties": {
+      "benchmarks": { "$ref": "#/$defs/benched_set" },
       "fetched_at": { "$ref": "#/$defs/timestamp" },
       "age_s": { "type": ["number", "null"] },
       "models_count": { "type": "integer", "minimum": 0 },

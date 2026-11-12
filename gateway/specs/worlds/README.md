@@ -189,6 +189,8 @@ builds the snapshot, and every cell enters as `candidate`.
 | `rankings-undated` | ranking rows without `date` | parse-failed |
 | `benchmarks-empty` | an empty AA list | implausible (no candidate) |
 | `benchmarks-no-family` | the AA list without the `nvidia/nemotron-3-ultra-550b-a55b` family row | a `:free` id whose family does not bench is no candidate |
+| `ranking-without-one` | both rankings without the `xiaomi/mimo-v2.5` rows (`UNRANKED_ID`): a benched id outside the ranking — the fixtures are not edited, the fake filters | the benched-set rows (7 candidates of 12 ranked, 8 benched) |
+| `benchmarks-malformed` | the AA answer with `data` an object, not a list (rankings as usual) | the benched set stands on a parse failure |
 | `endpoints_behaviour[model]` = `endpoints-503` / `endpoints-malformed` | 503 / a row without the fields the parser reads, for that model | the unreadable-candidate rows |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime` | the fixture with its first endpoint's `uptime_last_1d` set to `null` (what the vendor answers for a fresh or idle endpoint — read live 2026-10-20 under `anthropic/claude-opus-5`) | the no-uptime row |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime@<tag>` | the same, on the endpoint whose `tag` is named (`endpoints-null-uptime@inference-net/fp8`: the one M endpoint every harness could otherwise pin) | the floors-verdict rows (`pinnable` / `floor`) |
