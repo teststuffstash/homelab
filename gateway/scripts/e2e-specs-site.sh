@@ -40,6 +40,13 @@ PY
 )
 [ "$PAGES" != "{}" ] || { echo "e2e-specs-site: no spec page carries a mermaid fence — nothing to check"; exit 0; }
 
+# No daemon is a red, never a skip (a ride's gates equal CI's). In a worker ride the daemon
+# exists only when the issue's `Touches:` reaches the claim's fixer.dockerPaths (gateway/**).
+docker info >/dev/null 2>&1 || {
+  echo "e2e-specs-site: no docker daemon. This leg runs the pinned playwright image. In a worker ride that means the issue's Touches: did not reach gateway/** — stop and report the footprint; do not skip this gate." >&2
+  exit 1
+}
+
 bash scripts/specs-build.sh >/dev/null
 
 docker pull -q "$PLAYWRIGHT_IMAGE" >/dev/null

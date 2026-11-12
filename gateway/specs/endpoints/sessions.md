@@ -28,7 +28,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 |---|---|---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `prefer` — [§The preferred end of the list](#the-preferred-end-of-the-list) — and `canary` — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-RAIL-CHOICE](catalog.md#gw-rail-choice)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell, each tier list from its head or (`prefer: strongest`) its end; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
 | [GW-SESSIONS-RETRY](#gw-sessions-retry) | `POST /sessions` | `post.input.attempt`, `get.output.attempt`, `post.output.defer.reason` (`cells-exhausted`, the one defer with no `retry_after_s`) | `malformed-body` (`attempt` < 1) | v0 — the walk reads [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s counted strikes, tier lists are ordered, `attempt` makes a re-run detectable; `⚑ gap`: one model across rails is two ids ([§Named gaps — retry](#named-gaps-retry)) |
-| [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | `POST /sessions` | `post.output.defer.reason` (`rail-window`, `rail-latched`, `cell-cooled`, `credential-rejected`, `not-in-catalog`, `no-eligible-provider`), `post.output.defer.retry_after_s` | — | v0 + the ladder's capacity half (window utilization, the 429 latch, the Go window draw, the per-cell 429 cooldown, the rejected credential and its recovery, the marks kept across a restart) + the openrouter provider axis (the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread — the rail's one shared allowance is learnt from a ride's first 429; the other capacity gaps (FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the Go draw as a lower bound, the capacity doorbell) are rows under [§Named gaps — capacity](#named-gaps-capacity) |
+| [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | `POST /sessions` | `post.output.defer.reason` (`rail-window`, `rail-latched`, `cell-cooled`, `credential-rejected`, `not-in-catalog`, `no-eligible-provider`; the Go account headroom's `quota-unknown`, `quota-stale`, `quota-limited`), `post.output.defer.retry_after_s` | — | v0 + the ladder's capacity half (window utilization, the 429 latch, the Go window draw, the Go account headroom ([§Go account headroom](#go-account-headroom)), the per-cell 429 cooldown, the rejected credential and its recovery, the marks kept across a restart) + the openrouter provider axis (the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402 and the capacity doorbell are rows under [§Named gaps — capacity](#named-gaps-capacity) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI, and opencode's provider-package fetch under enforced egress is unobserved ([§Evidence outside CI](#evidence-outside-ci)) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
@@ -106,7 +106,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 |---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | admission | `⚑ gap`: `/route` is not served; the ADR-096 ladder's labels / urgency / budget inputs are not read |
 | [GW-SESSIONS-RETRY](#gw-sessions-retry) | admission | `⚑ gap`: one model across rails is two ids |
-| [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | admission | `⚑ gap (2026-11-01, PR #3105 → work #3108)`: the Go account headroom is unread; FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the Go draw as a lower bound and the capacity doorbell are gaps too |
+| [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | admission | `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402 and the capacity doorbell |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | the session | `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off probe, opencode's provider-package fetch under enforced egress unobserved |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | the session | |
 | [GW-SESSIONS-PULL](#gw-sessions-pull) | the session | `⚑ gap`: the racing-rotation arm has no row |
@@ -555,7 +555,7 @@ round 0, unbound and with no caller token (`observe`) unless the sequence binds 
 
 ### GW-SESSIONS-CAPACITY
 
-Three per-rail checks and three per-cell checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
+Four per-rail checks and three per-cell checks after the slot count ([model-routing.md §The ladder](../../../docs/agents/model-routing.md#the-ladder--rail--class--tier--cell)'s
 capacity facts, moved from the old proxy's two limit endpoints into the admission answer). Every
 threshold, hold and anchor is policy data under `rails.<rail>.admission` — none is a code literal —
 and each is ⚖ **copied** from the old proxy, which keeps serving its own copy until it retires
@@ -567,8 +567,7 @@ operator ruling 5, 2026-10-17). The per-cell checks walk the tier's ordered list
 holds is skipped for the next one, and only when every model is held does the rail defer, with the
 hold that lifts first. A rail with no `admission` key has no
 capacity check. A blocked rail is skipped like a full one; it frees when the **last** of its
-blocks lifts. Every reading and every usage below arrives through the data plane — a session and
-one request the upstream answers — never from a seed.
+blocks lifts.
 
 - **Window utilization** (`anthropic`): the last-seen `anthropic-ratelimit-unified-<w>-utilization`
   of each window at/over `utilization_thresholds.<w>` blocks the rail until that window's
@@ -652,8 +651,10 @@ one request the upstream answers — never from a seed.
   at the model's first request after its previous one expired (`router.go_usage_chain_open`).
   Prices apply at READ time from the ledger (`requests` × `sessions.model`), so a catalog refresh
   re-prices the open windows. A model whose monthly limit is `unlimited` draws against no window.
-  ⚠ Since the allowance is ONE pool (the latch bullet above), a per-model draw under-reads it: the
-  account reading is the "⚑ gap: the Go account headroom" row under [§Named gaps — capacity](#named-gaps-capacity).
+  ⚠ Since the allowance is ONE pool (the latch bullet above), this per-model draw is a lower bound of
+  that pool, not the pool: the account reading is [§Go account headroom](#go-account-headroom).
+- **Go account headroom** (`opencode`): the vendor's account reading gates the whole Go rail before
+  any Go model is walked — [§Go account headroom](#go-account-headroom).
 - **Not in the catalog** (`opencode`, per cell): a Go model the catalog's config snapshot does not
   list, or that has no monthly-limit row under the policy's plan (or no snapshot exists yet), is
   refused — `not-in-catalog`, `retry_after_s` = the next scheduled catalog refresh — never priced at
@@ -834,6 +835,67 @@ after the one just run, or `defer_retry_s` (60) when none is scheduled yet.
 |---|---|---|---|---|---|---|---|---|
 | no catalog snapshot at all: every Go model is not-in-catalog ⚖ | policy-default | none (a fresh store) | opencode | (policy) | defer | — | not-in-catalog | 60 |
 
+#### Go account headroom
+
+The Go rail's one account allowance (the latch bullet above) is read, not learnt from a ride's first
+429. The vendor publishes the reading at `GET /zen/go/v1/usage`, probed 200 with the gateway's own Go
+key on 2026-11-01: `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}`, account-level
+only (no per-model split, no absolute amounts). The gateway polls the URL named by
+`OPENCODE_USAGE_URL` (no default: unset = no poll) with its own key, every `poll_interval_s` ⚖ (30 s),
+and keeps ONE snapshot as the codex rail does ([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom)):
+a strictly newer valid reading replaces it, and the verdicts are the same — `admit`, `quota-unknown`,
+`quota-stale`, `quota-limited` — read from `rails.opencode.headroom`. A reading older than `max_age_s`
+(120 s ⚖) is stale. A window at or above `ceiling` (0.95 ⚖) limits the account until that window's
+reset. A window whose `status` is not `ok` limits it too ⚖ — the vendor's other status spellings are
+unverified, and `percent` is taken as a number from 0 to 100 (observed as whole numbers).
+`retry_after_s` is what [GW-CODEX-ADMISSION](openai-responses.md#gw-codex-admission) rules for the
+codex rail: the latest reset among the windows at or above the ceiling; with no such window — a
+non-`ok` status under the ceiling, `quota-unknown`, `quota-stale` — the policy's `defer_retry_s`
+(60 s). No reading and a stale reading defer ⚖ (fail closed, where the anthropic window reading
+admits): a ride admitted onto an exhausted Go block meets the 429 this reading exists to prevent.
+
+The window profile is the names `rolling`, `weekly`, `monthly`, not spans: the monthly window is
+anchored at the subscription, so a span would be a guess. Every reading carries exactly that profile.
+The verdict gates the whole Go rail before any Go model is walked, because it is one allowance under
+every Go model: no ride admits onto a Go cell against an exhausted block. A reading the gateway refuses
+(a window missing, a window outside the profile, a reset already passed) changes nothing: the last
+accepted reading stands. A policy without `rails.opencode.headroom` admits the Go rail as it did before
+this block existed, on the window draw and the latch alone.
+
+The worker's body. Legend: the `world` is [policy-go](../worlds/README.md#policy-worlds) (its
+`rails.opencode.headroom`) except the one `policy-default` row; `usage_url` = whether
+`OPENCODE_USAGE_URL` names the fake Go usage endpoint (`set`) or nothing (`unset`); `polls` = the
+gateway's own polls before the ask and what each made of the answer (`@ T0 − n` = polled n seconds
+before T0; `resets T0 + n` = that window resets n seconds after T0; `fresh` = rolling 20 %, weekly
+46 %, monthly 36 %, every window `ok`, resetting at T0 + 18000, T0 + 80000 and T0 + 2000000; `others
+fresh` keeps those values for the windows a cell does not name; `none` = no poll answered); `ask` =
+the seconds after T0 the admission is asked; `rail` = the body's, `(policy)` = the policy walk (the
+worker's rails: opencode, then openrouter).
+
+| description | world | usage_url | polls | ask | rail | decision? | rail? | reason? | retry_after_s? |
+|---|---|---|---|---|---|---|---|---|---|
+| a fresh Go reading under the ceiling admits the opencode rail | policy-go · upstream-ok | set | fresh @ T0 − 10 → accepted | 0 | opencode | dispatch | opencode | — | — |
+| the rolling block at the ceiling defers until its reset ⚖ | policy-go · upstream-ok | set | rolling 95 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 1000 |
+| two exhausted windows wait for the later reset ⚖ | policy-go · upstream-ok | set | rolling 96 % resets T0 + 1000, weekly 97 % resets T0 + 8000, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 8000 |
+| a window whose status is not ok limits ⚖ | policy-go · upstream-ok | set | rolling limited at 20 %, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 60 |
+| no reading yet is unknown — fail closed ⚖ | policy-go · upstream-ok | set | none | 0 | opencode | defer | — | quota-unknown | 60 |
+| a stale reading is stale ⚖ | policy-go · upstream-ok | set | fresh @ T0 − 10 → accepted | 115 | opencode | defer | — | quota-stale | 60 |
+| a missing window refuses the whole report, the last accepted reading stands | policy-go · upstream-ok | set | fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid | 0 | opencode | dispatch | opencode | — | — |
+| a passed resetsAt refuses the report, the last accepted reading stands | policy-go · upstream-ok | set | fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid | 0 | opencode | dispatch | opencode | — | — |
+| a limited Go rail is skipped, the walk continues | policy-go · upstream-ok | set | rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | (policy) | dispatch | openrouter | — | — |
+| no headroom block keeps today's admission ⚖ | policy-default · upstream-ok | set | none | 0 | opencode | dispatch | opencode | — | — |
+| a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖ | policy-go · upstream-ok | unset | none | 0 | opencode | defer | — | quota-unknown | 60 |
+
+The poll's request carries `authorization: Bearer <the Go key>`. The answer's fields beyond `usage` are
+never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`),
+with no counter family yet ⚖. Legend: one poll at T0 − 10 answers a `fresh` reading that also carries a
+dummy account identity; `observable` = what is looked at afterwards.
+
+| description | world | observable | value? |
+|---|---|---|---|
+| the poll carries the Go key | policy-go · upstream-ok | poll authorization | Bearer <the Go key> |
+| no identity reaches a log | policy-go · upstream-ok | identity in log lines | none |
+
 #### Kept across a restart
 
 The capacity state is written through to the store's `capacity_marks` table as it changes — one row
@@ -924,8 +986,6 @@ reported `harness-gave-up`; `—` = none); `role` / `rail` / `tier` / `attempt` 
 | ⚑ gap: the OpenRouter account latch | 402s / credit below the floor on a stack key | no latch | the old proxy's `rpd` / `credit` / hard-402 legs (homelab#158) and the key headroom poll ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)); cross-model 429s are per-cell facts here, not an account signal |
 | ⚑ gap: the free-tier key budget spans every `:free` cell | a 429 whose body says `limit_source: openrouter_free_tier_per_minute` | only the cell that saw it cools; the next `:free` cell 429s once and cools itself | the limit is the key's across `:free` models (20 req/min in the experiment's headers); reading the body's `limit_source` would cool them as one group — not built |
 | ⚑ gap: a Go 402 | an upstream 402 on opencode | no latch | the old proxy latches a Go 402 for `GO_CAPACITY_402_HOLD_S` (1800 s) |
-| ⚑ gap: the Go draw is the gateway's own traffic only | Go spend through the old proxy or the jail shim | not in this ledger — this draw is a lower bound of the account's | the account-wide reading (the old proxy's ledger, the jail shim's reports) |
-| ⚑ gap: the Go account headroom | (work #3108) the vendor's account windows — `GET /zen/go/v1/usage` answers the Go key `{usage: {rolling, weekly, monthly: {status, percent, resetsAt}}}` (account-level, no per-model split; probed 200 on 2026-11-01) | not read — an exhausted block is learnt from the first 429 of a ride, which the harness does not survive (opencode retries three times and exits: 2026-11-01, three rides died mid-work) | a Go twin of [GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom), admitting on the account reading and deferring `quota-limited` until `resetsAt`; the per-model window draw above is then a lower bound of one shared pool, not the pool |
 | ⚑ gap: a capacity doorbell | a rail frees a slot | nothing is pushed | the caller polls `retry_after_s` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -1790,7 +1850,12 @@ harness-scoped strike is matched on it. ⚖ At most one per
 (session, class, source, provider): nine 502s on one ride are one `provider-5xx`, not nine — and a
 failed-over ride strikes each provider it tried, one per cell. ⚖ A 429 writes
 **no** strike: the cell cooldown is that fact's whole answer, and a rate limit says nothing about
-this task. ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
+this task. ⚖ A consumer's non-`clean` outcome after a session's LAST relayed upstream answer was a 429
+is stored (`GET` shows it) and counts **no** strike: the gateway owns that transport fact first-hand,
+and the 429 already latched or cooled the cell — a capacity death is no verdict on the model, cell or
+harness. A judge's outcome (`wrong-verdict`) is on the verdict, not the ride, and still counts; a canary
+ride keeps its task strike by [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s ruling
+(2026-10-22: the 429 withholds the cell's verdict only). ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say (unverified — no row). **A clean outcome refutes** the task's counted strikes on the same cell
 (cell-scoped), the same model (model-scoped) and the same harness (harness-scoped): they stay as
 history, with `refuted_at` set.
@@ -1872,6 +1937,18 @@ Legend: `answered` = what the fake upstream answers the session's request (`× 3
 | a policy refusal is a transport strike, not a rejected credential | policy-default · upstream-403-refused | upstream-403-refused (403 upstream-refused) | {opencode, opencode-go/deepseek-v4.1-flash, opencode, refused, cell, gateway} | {class="refused",source="gateway"} 1 |
 | a cut stream is a transport strike | policy-default · upstream-stream-truncated | upstream-stream-truncated (a stream) | {opencode, opencode-go/deepseek-v4.1-flash, opencode, stream-incomplete, cell, gateway} | {class="stream-incomplete",source="gateway"} 1 |
 
+#### After a relayed 429
+
+Legend: `sequence` = the session's requests and the consumer's report, in order; `strikes?` = the
+task's counted strikes afterwards; `outcome?` = the class `GET /sessions/{id}` shows stored; `series?`
+= the reported class's `gateway_strikes_total` series.
+
+| description | world | sequence | strikes? | outcome? | series? |
+|---|---|---|---|---|---|
+| a consumer outcome after a relayed 429 strikes nothing ⚖ | policy-default · upstream-429 | upstream-429, then the consumer reports unknown | none | unknown | {class="unknown",source="outcome"} 0 |
+| a harness that gave up on a 429 strikes nothing ⚖ | policy-default · upstream-429 | upstream-429, then the consumer reports harness-gave-up | none | harness-gave-up | {class="harness-gave-up",source="outcome"} 0 |
+| a 429 followed by a 2xx is no capacity death ⚖ | policy-default · upstream-429 | upstream-429, then upstream-ok on the same session, then the consumer reports unknown | {opencode, opencode-go/deepseek-v4.1-flash, opencode, unknown, model, outcome} | unknown | {class="unknown",source="outcome"} 1 |
+
 #### Refutation
 
 Legend: `sequence` = the session's requests and reports in order; `strikes?` = the counted strikes
@@ -1882,6 +1959,7 @@ afterwards; `refuted?` = the outcome answer's `refuted` count (`—` = no outcom
 | a bare 2xx refutes nothing | policy-default · upstream-500 | upstream-500, then upstream-ok on the same session | {opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway} | — |
 | a clean outcome refutes the task's counted strikes | policy-default · upstream-500 | upstream-500, then the consumer reports clean | none | 1 |
 | a clean outcome on another model refutes nothing there | policy-default | the heavy model struck no-verdict; a standard-tier session of the task reports clean | {opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome} | 0 |
+| a clean outcome after a 429 still refutes ⚖ | policy-default · upstream-429 | an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean | none | 1 |
 
 #### One vocabulary, one view
 

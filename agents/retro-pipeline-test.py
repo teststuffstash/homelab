@@ -22,6 +22,13 @@ REPORT = '''# report
 '''
 
 
+
+def harvest_params(block):
+    """Argo substitutes the report-repo parameters before the harvest runs; the sliced block gets
+    the loop retro's defaults (the WorkflowTemplate's own values, oracle-fleet#1043)."""
+    return (block.replace('{{workflow.parameters.reportRepo}}', 'teststuffstash/homelab')
+                 .replace('{{workflow.parameters.reportDir}}', 'docs/agents/retros'))
+
 class PipelineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -220,9 +227,9 @@ class PipelineTests(unittest.TestCase):
         reports.mkdir(parents=True, exist_ok=True)
         report.write_text('retry report')
         source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
-        block = source.split('mkdir -p /tmp/retro-reports', 1)[1].split('git add docs/agents/retros/', 1)[0]
+        block = source.split('mkdir -p /tmp/retro-reports', 1)[1].split('git add "$REPORT_DIR"/', 1)[0]
         block = 'mkdir -p /tmp/retro-reports' + block
-        block = block.replace('/tmp/retro-reports', str(self.root / 'saved'))
+        block = harvest_params(block.replace('/tmp/retro-reports', str(self.root / 'saved')))
         # SERIES names the report (homelab#3140); == the stack for its own retro.
         prefix = 'DATE=2026-09-28; STACK=platform; SERIES=platform; RUN=r6; BR=retro/retry; gh() { echo https://github.com/o/r/pull/123; }; '
         p.run('bash', '-ec', prefix + block, cwd=repo, env=env)
@@ -248,7 +255,7 @@ class PipelineTests(unittest.TestCase):
         report.write_text('report')
         source = (Path(__file__).parent / 'coordinator/retro-argo.yaml').read_text()
         block = source.split('mkdir -p /tmp/retro-reports', 1)[1].split('REPORT_ARGS=()', 1)[0]
-        block = ('mkdir -p /tmp/retro-reports' + block).replace('/tmp/retro-reports', str(self.root / 'saved'))
+        block = harvest_params(('mkdir -p /tmp/retro-reports' + block).replace('/tmp/retro-reports', str(self.root / 'saved')))
         log = self.root / 'calls'
         prefix = ('DATE=2026-09-28; STACK=platform; SERIES=platform; RUN=r6; BR=retro/r6; N=1; DEAD_NOTE=; GH_TOKEN=t; '
                   'gh() { echo "gh $*" >> %s; case "$*" in *"pr create"*) echo https://new/pull/9;; '

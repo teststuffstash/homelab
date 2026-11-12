@@ -128,15 +128,14 @@ spec:
       specs: { root: gateway/specs, tests: gateway/tests }
       # ADR-089 quota-as-contract, ARMED 2026-08-07. Until today NO claim set spec.repos[].storage,
       # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
-      # fails fast at CREATE" promise was never in force. This repo is docker:false, so it takes
-      # no per-ride 20Gi scratch volume — scratch stays at the "0" default DELIBERATELY, which
-      # means flipping docker:true later also requires setting a scratch cap here. That coupling
-      # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
+      # fails fast at CREATE" promise was never in force. A docker ride takes a 20Gi scratch
+      # volume, so the cap is a declared decision instead of a silent draw on the pool: this
+      # repo's docker rides are the gateway island's only (fixer.dockerPaths below), sized for two.
       storage:
         standard: "5Gi"
         bulk: "0"
         fast: "0"
-        scratch: "0" # declared-not-defaulted (agent-fixer.yaml doctrine, 2026-08-12 drift)
+        scratch: "40Gi" # 20Gi × 2 concurrent gateway docker rides (fixer.dockerPaths)
       # FIXER BLOCK 2026-08-04 — homelab becomes a dispatch target. The gate it lands behind is
       # PATH-based, not repo-based (docs/agents/iac-lane.md §The platform lane): CODEOWNERS owns
       # the governance tiers, and tier 1 (argocd/resources/) is owned as a temporary scaffold until
@@ -151,6 +150,10 @@ spec:
         # before spend and the ride could never start. budgetUSD is what bounds it.
         guardrail: none
         docker: false
+        # Docker by footprint: only a ride whose issue `Touches:` reaches the gateway island (or
+        # declares none) is a kata+dind ride — its specs-site gate runs a browser image, and a
+        # ride's gates equal CI's. Every other homelab ride stays a plain pod.
+        dockerPaths: ["gateway/**"]
         # true since 2026-08-07 (subscription cutover, when the chain's primary was claude/haiku;
         # the M12 credit-floor degrade below is what keeps it load-bearing after the 2026-09-19
         # chainless flip) — renders

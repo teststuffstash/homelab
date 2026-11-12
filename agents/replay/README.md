@@ -281,6 +281,11 @@ is stale, so it cannot drift the way the prose register did.
 | `deploy-revert-token-clone/unset` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `dispatch-phase/scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase/session` | actions | - | `agents/coordinator-session.sh` | - |
+| `docker-paths/already-docker` | actions | - | `agents/agent-session.sh` | - |
+| `docker-paths/field-absent` | actions | - | `agents/agent-session.sh` | - |
+| `docker-paths/not-reached` | actions | - | `agents/agent-session.sh` | - |
+| `docker-paths/reached` | actions | - | `agents/agent-session.sh` | - |
+| `docker-paths/undeclared` | actions | - | `agents/agent-session.sh` | - |
 | `done-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T28 |
 | `doorbell/collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell/fanout-wiring` | table | - | `agents/coordinator-scan.sh` | - |

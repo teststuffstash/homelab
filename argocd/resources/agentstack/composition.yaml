@@ -1440,7 +1440,9 @@ spec:
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
             {{- $ownsvc := default (list) (get $eg "ownServices") }}
             {{- $enforce := default false (get $eg "enforce") }}
-            {{- $docker := default false (get $fx "docker") }}
+            {{- /* docker egress legs are per NAMESPACE: on for a docker repo AND for a repo whose
+                   docker rides are path-scoped (fixer.dockerPaths) — some of its rides are kata+dind. */}}
+            {{- $docker := or (default false (get $fx "docker")) (gt (len (default (list) (get $fx "dockerPaths"))) 0) }}
             {{- $mcp := $xr.spec.mcp }}
             ---
             # Transcript-capture WRITE-ONLY S3 key, mirrored in-namespace (FU-080 a): worker pods
