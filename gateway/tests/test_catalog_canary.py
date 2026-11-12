@@ -216,7 +216,7 @@ UPS = "upstream_provider_shared_pool"
 BACKOFF_ROWS = [
     pytest.param("a 429'd canary at T0", "candidate", "T0 + 3600 s", "3600", UPS, "no-verdict 1", "none", 0,
                  id="a 429'd canary is no verdict: the cell backs off ⚖"),
-    pytest.param("a struck canary at T0; a 429'd canary at T0 + 86400 s", "candidate", "T0 + 90000 s", "3600", UPS, "no-verdict 1, excluded 1", "none", 1,
+    pytest.param("a struck canary at T0; a 429'd canary at T0 + 86400 s; no refresh between", "candidate", "T0 + 90000 s", "3600", UPS, "no-verdict 1, excluded 1", "none", 1,
                  id="a cell back from exclusion backs off the same way"),
     pytest.param("four 429'd canaries, each at the previous horizon", "candidate", "T0 + 39600 s", "3600, 7200, 14400, 14400", UPS, "no-verdict 4", "none", 0,
                  id="a consecutive 429'd canary doubles the horizon; the policy caps it ⚖"),
