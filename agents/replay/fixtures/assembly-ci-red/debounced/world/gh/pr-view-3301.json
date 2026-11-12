@@ -1,0 +1,63 @@
+{
+  "headRefOid": "a55e3b1ea55e3b1ea55e3b1ea55e3b1ea55e3b1e",
+  "reviewDecision": "APPROVED",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "ci",
+      "workflowName": "CI",
+      "status": "COMPLETED",
+      "conclusion": "FAILURE",
+      "startedAt": "2026-11-12T09:00:10Z",
+      "detailsUrl": "https://github.com/teststuffstash/homelab/actions/runs/43300000001/job/131460000001"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "approve / approve",
+      "workflowName": "renovate-approve",
+      "status": "COMPLETED",
+      "conclusion": "SKIPPED",
+      "startedAt": "2026-11-12T09:00:09Z",
+      "detailsUrl": "https://github.com/teststuffstash/homelab/actions/runs/43300000001/job/131460000001"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "iac-sentinel",
+      "state": "FAILURE",
+      "startedAt": "2026-11-12T11:56:00Z",
+      "targetUrl": ""
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "management-sentinel",
+      "state": "SUCCESS",
+      "startedAt": "2026-11-12T09:02:00Z",
+      "targetUrl": ""
+    }
+  ],
+  "reviews": [
+    {
+      "author": {
+        "login": "homelab-reviewer"
+      },
+      "state": "APPROVED",
+      "submittedAt": "2026-11-12T08:58:00Z"
+    }
+  ],
+  "comments": [
+    {
+      "author": {
+        "login": "homelab-agents"
+      },
+      "createdAt": "2026-11-12T09:20:00Z",
+      "body": "🤖 `state-fp:assembly-ci-red:275c4e614d6a` — deterministic scan dispatching a `goal-checkpoint` unit (trigger=assembly-ci-red) for goal 3118 at 2026-11-12T09:20:00Z."
+    }
+  ],
+  "commits": [
+    {
+      "oid": "a55e3b1ea55e3b1ea55e3b1ea55e3b1ea55e3b1e",
+      "messageHeadline": "gateway: wire declarations (#3290)",
+      "committedDate": "2026-11-12T08:55:00Z"
+    }
+  ]
+}

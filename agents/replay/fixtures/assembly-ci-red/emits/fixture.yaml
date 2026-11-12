@@ -1,0 +1,26 @@
+# assembly-ci-red/emits — an assembly PR (HEAD goal/**, `Assembly-for: #3118`) whose `ci` check-run has
+# SETTLED red, every changed file classifying machine-merge (gateway/**: no codeowner), no marker yet.
+# Nothing else will ever move it — no codeowner is waiting on it and no fix round can push to the
+# protected head — so the clause emits the goal-checkpoint unit `assembly-cr` emits, carrying the PR
+# to the dispatch-marker site in its own side map.
+#
+# THE CONTRACT:
+#   1. ONE `goal-checkpoint|homelab|issue-3118` unit, and the side-map entry naming PR #3301.
+#   2. No report line: the red has an owner now.
+# WORLD: constructed (the first live instance will replace it); entry shapes follow a live
+# `gh pr view --json statusCheckRollup` (CheckRun = name/conclusion, StatusContext = context/state).
+name: assembly-ci-red-emits
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z
