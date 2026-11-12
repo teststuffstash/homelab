@@ -2750,7 +2750,7 @@ nothing, which only a heartbeat sees and only an actor outside Argo can answer. 
 so an app-major is the lens's CHANGES_REQUESTED, never an auto-merge; a CRD-carrying chart sync is a
 control-plane memory event (FU-304, GOMEMLIMIT); the receiver is chart-agnostic but argo-workflows is its
 only consumer until a second chart earns the same evidence. Design: [`designs/fu-1990-workflow-pin-revert.md`](designs/fu-1990-workflow-pin-revert.md)
-§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Next steps 9.
+§Part 4. Tracked: [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end (the `chart-revert` row).
 **Amended 2026-10-06 (ADR-150):** the "management box as actor — rejected, no PR-writing credential" line is
 REVERSED for one class: the box becomes the revert actor for ⚓ upgrade LEASES (commit-confirm on a
 deadline), never for alerts — `homelab-sentinel` gains `contents: write` + `pull_requests: write` on homelab
