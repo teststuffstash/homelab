@@ -1,32 +1,45 @@
 # Renovate — dependency updates + supply-chain hardening (the S2C2F consumer leg)
 
 Self-hosted Renovate keeps our dependencies current **and** is our first line of defence for the
-things we *ingest* — the consumer side of the supply chain ([`slsa.md`](slsa.md) names this **S2C2F**
-but hadn't built it — since built). LIVE since 2026-09-25 (the App's missing `statuses` grant,
-FU-125 — archived 2026-09-27) and routed through the S9 lanes since 2026-09-27 (homelab#1985,
-ADR-141); which class has actually merged through which lane is the generated coverage table in
-[`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory (homelab#1992 — one row
-per pin × proposer/gate/edge/detector/revert/canary/last proven) and its per-lane companion §"Last
-proven end to end"; liveness is the `github_renovate_last_pr_timestamp` gauge → `RenovateSilent`,
-never the workflow's own verdict.
+things we *ingest* — the consumer side of the supply chain, which [`slsa.md`](slsa.md) names
+**S2C2F**. It has opened, gated and merged PRs on every lane since 2026-09-27 (ADR-141; the remaining
+lane work is homelab#1985, open).
+
+This doc owns how Renovate runs, the supply-chain baseline, and the rules for handling a Renovate
+PR. It does **not** own:
+
+- which dependency class rides which lane, and what is still moved by hand —
+  [`dependency-classes.yaml`](dependency-classes.yaml), rendered in
+  [`dependency-upgrades.md`](dependency-upgrades.md) §The dependency inventory;
+- which lane has actually merged end to end — [`dependency-upgrades.md`](dependency-upgrades.md)
+  §"Last proven end to end". A lane is trusted only once that table carries a merge for it.
+
+**Liveness is the `github_renovate_last_pr_timestamp` gauge → `RenovateSilent`** (no new
+`renovate/*` PR anywhere in the org for 14 days), never the workflow's own verdict: the workflow
+stayed green through a stretch in which Renovate opened nothing
+([`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth).
 
 ## Shape
 
-```
-homelab/.github/workflows/renovate.yaml   scheduled runner on the ARC tier, runs as the homelab-renovate
-   │  (autodiscover; RENOVATE_CONFIG_FILE = the global baseline)   App → walks the repos it's installed on
-   ▼
-homelab/.github/renovate-global.json      the SUPPLY-CHAIN BASELINE enforced on EVERY repo (below)
-   ▼
-<repo>/renovate.json                      per-repo EXTRACTION coverage + automerge preferences (§Scope)
-   ▼
-reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automerge`-labelled PRs →
-                                          satisfies required-approval → GitHub merges on CI-green
-                                          (idempotent since 2026-08-11: per-PR concurrency group +
-                                          fail-closed APPROVED-at-head dup check — homelab#114)
-```
+| Piece | What it does |
+|---|---|
+| `.github/workflows/renovate.yaml` | A GitHub Actions workflow on the ARC runner tier (`homelab-ephemeral`), every 6 hours (`0 */6 * * *`) or by `workflow_dispatch` (with a `dryRun` input). It mints a token for the `homelab-renovate` App and runs the pinned `renovatebot/github-action` with `RENOVATE_AUTODISCOVER`, so it walks every repo the App is installed on. Not the Mend hosted App. |
+| `.github/renovate-global.json` | The global config (`RENOVATE_CONFIG_FILE`): the supply-chain baseline **and** the lane classification, applied to every repo. `onboarding: false` + `requireConfig: optional` — a repo needs no config of its own to be classified. It also holds homelab's own extraction (the `argocd` / `kubernetes` file patterns, the `customManagers`); homelab has no `renovate.json`. |
+| `<repo>/renovate.json` (optional) | A stack's extraction coverage and automerge preferences (§Scope). |
+| `renovate-approve` (per repo) | The 3-line caller of `renovate-approve.reusable.yml`: the `homelab-reviewer` App approves a bot PR labelled `automerge` + `dependencies` and not `major`, once per head. That satisfies the required approval on repos that have one, and GitHub auto-merge lands the PR on green CI. |
+| the review reflex + the coordinator | Everything that is not mechanical: `deps-review` and `major` PRs ([`agents/merge-path.md`](agents/merge-path.md); §Coordinator × Renovate PRs). |
 
-**Scope — who owns what.**
+PR pacing is `prHourlyLimit: 3` per repo per run, so a backlog drains over days instead of landing
+as one wave on the reviewer and the shared App rate-limit pool (FU-290). The workflow rings no
+coordinator doorbell for the same reason; the per-stack `coordinate-<stack>` crons pick the PRs up
+on their own schedule.
+
+The `homelab-renovate` App identity also opens the weekly `devbox-update` PRs and the deploy-pin
+PRs (`deploy/*` branches), so a PR's author does not say "Renovate proposed this" — the
+`renovate/*` branch does.
+
+### Scope
+
 - The baseline **fails closed**: every non-major update a named rule does not place lands in
   `deps-review`, armed — so every ecosystem has a reader with no platform work (the catch-all rules in
   `renovate-global.json`; their description says how they avoid the `addLabels` union).
@@ -37,15 +50,13 @@ reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automer
 - A stack's `renovate.json` owns **extraction** coverage (`managerFilePatterns`, `customManagers`,
   `ignorePaths` for repo-specific files — e.g. dropping the `**/tests/**` preset skip) plus automerge
   preferences, and never overrides a lane (majors → `automerge` is out of contract).
-- A lane hole a stack finds is a baseline bug — report it to homelab (#1988's no-lane class;
+- A lane hole a stack finds is a baseline bug — report it to homelab (homelab#1988's no-lane class;
   `devbox run renovate-lane-lint` is the check).
 
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
-Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
-
-A lane is trusted only once [`dependency-upgrades.md`](dependency-upgrades.md) §"Last proven end to
-end" carries a merge for it; liveness is the `RenovateSilent` gauge (the 2026-07 → 09-25 silent
-stretch, §Ground truth there, is why the workflow's own green is never the signal).
+Which repos Renovate has opened a PR on is the gauge's `repo` label. The App's permissions are
+declared in [`github-apps.yaml`](github-apps.yaml); bootstrap is
+`scripts/github-app-bootstrap.sh homelab-renovate`.
 
 ## Threat model — mitigate a Trivy-style compromise
 
@@ -56,14 +67,15 @@ immediately. Our baseline blunts both vectors:
 
 | Mitigation (`renovate-global.json`) | What it stops | Idea from |
 |---|---|---|
-| **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. | pnpm `minimumReleaseAge` |
+| **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. Timestamp-optional for pins, digests and the Docker datasource (their releases carry no timestamp), and off for the crossplane chart (its index re-stamps every entry) — CI and the revert are the gate there. | pnpm `minimumReleaseAge` |
 | **SHA-pin Actions** — `helpers:pinGitHubActionDigests` | **Tag re-pointing** — a hijacked `@v4` can't inject if we're on the immutable commit SHA. Renovate keeps the SHA current (+ the tag in a comment). | SLSA / pinning |
 | **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable **direct** deps already on the base branch; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). It never sees a TRANSITIVE dependency, nor what a PR brings in — that is the next row. | SLSA S2C2F |
-| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock` + `package-lock.json`; any other lockfile type fails closed until it has an extractor. | the #2032 lodash-es miss |
+| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock`, `package-lock.json` and `uv.lock`; any other lockfile type fails closed until it has an extractor. | the #2032 lodash-es miss |
 
-Not yet built (the strongest, aspirational leg): **verify SLSA provenance / signatures** on consumed
-artifacts (`cosign verify-attestation`) so a backdoored artifact is rejected even *inside* the cooldown.
-Needs the upstream to publish verifiable provenance + a verify step in CI — [`slsa.md`](slsa.md) Phase-later.
+Not built: **verifying SLSA provenance / signatures** on consumed artifacts
+(`cosign verify-attestation`), which would reject a backdoored artifact even *inside* the cooldown.
+It needs the upstream to publish verifiable provenance plus a verify step in CI; the plan is
+[`slsa.md`](slsa.md)'s, as a later phase.
 
 ## The automerge vs review split — "is there anything a human can actually review?"
 
@@ -74,21 +86,26 @@ restate them, and a lane question is answered there, cell by cell.**
 
 - **Digest bumps are mechanical** (`@sha256`, SHA-pinned Actions): a human comparing two hashes is
   theatre; the gates are the cooldown, CI on the head and the reviewer reflex (`automerge` label →
-  reflex approval → CI-green auto-merge).
-- **Reviewable bumps go to the LLM reviewer, not a human** (`deps-review`): the merge-path review
-  reflex + the migration lens read the changelog; APPROVED merges, CHANGES_REQUESTED parks the PR for
-  a worker to adapt the code on the Renovate branch (FU-046).
-- **Majors are un-armed by default and ARM per class on evidence** (ADR-141): the `major` label is
-  kept and no `automerge` label is added, so the reflex refuses it and the lens's APPROVED completes
-  the merge — behind that class's own detector + revert pair (the register's columns). An Actions major
-  graduates to its own ungrouped `major` PR the first time a revert names it, its PR goes red, or a
-  review asks for an adaptation. A chart major arms itself when it is packaging-only
-  (`appVersion: unchanged`, `agents/major-handoff.sh`). The marker must not leak: Renovate MERGES
-  `addLabels` across rules, so every mechanical rule is restricted to non-major update types.
-- **The [management box](management-box.md) is the gate where a merge is an apply** (tofu providers, tofu-managed charts):
-  the sentinel's plan-on-PR must be empty or a default backfill (ADR-131); the lens is the merge gate
-  for majors; the box's bracket is the deploy edge, forward only (FU-301).
-- **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
+  `renovate-approve` approval → CI-green auto-merge).
+- **Reviewable bumps go to the LLM reviewer, not a human** (`deps-review`, armed): the merge-path
+  review reflex + the migration lens read the changelog; APPROVED merges, CHANGES_REQUESTED or a
+  red head brings a worker to adapt the code on the Renovate branch (§Coordinator × Renovate PRs).
+- **Majors are un-armed by default and ARM per class on evidence** (ADR-141): an armed class keeps
+  the `major` label and gets no `automerge` label, so `renovate-approve` refuses it and the lens's
+  APPROVED completes the merge — behind that class's own detector + revert pair (the register's
+  columns). An un-armed major is the coordinator's and ends on a human
+  ([`agents/coordinator/README.md`](../agents/coordinator/README.md) §Dependency major bumps).
+  GitHub Actions majors ride the mechanical lane, grouped; one graduates to its own ungrouped
+  `major` PR the first time a revert names it, its PR goes red, or a review asks for an adaptation.
+  A chart major arms itself when it is packaging-only (`appVersion: unchanged`,
+  `agents/major-handoff.sh`). The marker must not leak: Renovate MERGES `addLabels` across rules,
+  so every mechanical rule is restricted to non-major update types.
+- **The [management box](management-box.md) is the gate where a merge is an apply** (tofu
+  providers, tofu-managed charts): the sentinel's plan-on-PR must be empty or a default backfill
+  (ADR-131); the lens is the merge gate for majors; the box's bracket is the deploy edge, forward
+  only.
+- **Security fixes** (OSV) fast-track: no cooldown, labels `security` + `automerge`, auto-approved,
+  auto-merged. One that is also a major keeps `major` and rides the major lane.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated
 deploy (ADR-084), so a hands-off dep bump reaches prod on its own.
@@ -96,38 +113,39 @@ deploy (ADR-084), so a hands-off dep bump reaches prod on its own.
 ## Coordinator × Renovate PRs — "close" is NOT a terminal action
 
 A Renovate PR is **not** an agent PR, so the coordinator's usual escalation verbs differ — Renovate,
-not the coordinator, owns whether an update should exist:
+not the coordinator, owns whether an update should exist. The coordinator's own procedure is
+[`agents/coordinator/README.md`](../agents/coordinator/README.md) §Dependency major bumps; the
+rules that follow from how Renovate behaves:
 
-- **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
-  won't duplicate it, and Renovate keeps it current while nobody else has pushed to it
-  (`rebaseWhen: behind-base-branch`, next bullet). Action: **a worker adapts the code
-  on the renovate branch** — since 2026-10-12 the scan's `unarmed-major` unit owns this for an ARMED
-  `deps-review` PR too, in its red or changes-requested state (the reflex is green-only; FU-046), and
-  since 2026-10-28 an ARMED `automerge` PR in its red state (G12b): five rides, then `agent/arbitrate`
-  for a human — never close a `deps-review` one. **Not on the GitHub Actions lane** (ADR-141):
-  those PRs are grouped per repo per wave, and the reviewer reads one as a batch member with no fixer
-  behind it.
-- **Renovate owns its PRs' currency, conflicts and autoclose (ADR-153, 2026-10-12).**
+- **A stuck PR gets a worker on the Renovate branch, not a close.** The review reflex reads green
+  heads only, so the scan's `unarmed-major` unit owns the rest: an un-armed `major` in any state,
+  an armed `deps-review` PR that is red or changes-requested, and an armed `automerge` PR that is
+  red at a settled head (gap G12b) or has sat untouched for a day (ADR-162). The bound is five
+  rides, then `agent/arbitrate` for a human. Never close a `deps-review` PR; a hopeless mechanical
+  one is closed with an issue naming the failing step, because the bump comes back on Renovate's
+  next run and the issue is the record. **Not on the GitHub Actions lane** (ADR-141): those PRs
+  are grouped per repo per wave, and the reviewer reads one as a batch member with no fixer behind
+  it.
+- **Renovate owns its PRs' currency, conflicts and autoclose (ADR-153).**
   `rebaseWhen: behind-base-branch` is the org default: Renovate keeps every UNTOUCHED PR current,
   re-extracts master on each rebase (a call site added after the PR opened is bumped on the next
   rebase), rebases on conflict and autocloses a superseded PR — and it stops maintaining a branch
-  the moment anyone else pushes to it (its edited-PR rule). The in-cluster updater therefore keeps
-  its hands off an untouched Renovate PR, with ONE exception: merge-ready (armed + approved + green,
-  currency the only gap) it updates, so the fast path keeps 15-minute currency instead of Renovate's
-  6-hour cron (the zombie it must not mint — sleep-tracking#185: one updater merge onto an
-  approved-but-red PR → "Edited/Blocked" → neither rebase nor autoclose, abandoned by Renovate yet
-  unclosable). **When that update misses** — master moves again before it merges, or the update pulls
-  a red in (homelab#2754, sleep-tracking#203, 2026-10-20) — the branch carries the updater's merge
-  commit, which Renovate's edited-PR rule counts, so the updater **hands it back**: it ticks
-  Renovate's rebase/retry checkbox and Renovate's next run rebuilds the branch as its own
-  (`agents/renovate-currency.sh` `renovate_handback` — ONE predicate shared by the updater and the scan's
-  FU-124 nudge, which is the call site that actually made the 2026-10-20 merges; its probe reads checks
-  over REST, since `gh pr view --json statusCheckRollup` needs `actions: read` the updater's App lacks).
-  The hand-back reaches every armed Renovate PR, BEHIND or not (the updater's leg 1b sweep,
-  homelab#1985): a merged-into PR whose CI has CONCLUDED red while current, or a red codeowner park, is handed back
-  (in-flight or absent checks wait — a just-updated PR is re-running CI)
-  without waiting for master to move. A worker-adapted branch is the updater's as before — never
-  handed back (Renovate's rebuild would drop the worker's commit).
+  the moment anyone else pushes to it (its edited-PR rule: one foreign commit makes the PR
+  "Edited/Blocked", neither rebased nor autoclosed). So:
+  - The in-cluster updater keeps its hands off an untouched Renovate PR, with ONE exception: a
+    merge-ready one (armed + approved + green, currency the only gap) it updates, so the fast path
+    keeps the updater's 15-minute currency instead of Renovate's 6-hour run.
+  - **When that update misses** — master moves again before the merge, or the update pulls a red
+    in — the branch carries the updater's merge commit, so the updater **hands it back**: it
+    ticks Renovate's rebase/retry checkbox and Renovate's next run rebuilds the branch as its own
+    (`agents/renovate-currency.sh` `renovate_handback`, one predicate shared by the updater and
+    the scan). The hand-back reaches every armed Renovate PR, behind or not: a merged-into PR
+    whose CI has concluded red, or a red codeowner park, is handed back without waiting for master
+    to move; in-flight or absent checks wait.
+  - An untouched PR with a merge conflict gets the same checkbox tick from the scan — never
+    `update-branch`.
+  - **A worker-adapted branch is never handed back** — Renovate's rebuild would drop the worker's
+    commit. It moves by merging master into it.
 - **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
   closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
   DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and
@@ -136,75 +154,75 @@ not the coordinator, owns whether an update should exist:
   `matchPackageNames … "enabled": false` rule, or an `allowedVersions`/`matchCurrentVersion` pin. That is
   the coordinator's (or human's) "don't do this bump" verb for Renovate PRs.
 
-The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-argo.yaml`); the
-changes-requested→worker transition covers un-armed `major` PRs and, since #2521 (2026-10-12), an
-ARMED `deps-review` PR that is red or changes-requested — the worker pushes to the `renovate/*`
-branch, up to five rides, then `agent/arbitrate` (first proven on sleep-tracking#191; FU-046,
-archived). Since 2026-10-28 a red ARMED `automerge` (mechanical-lane) PR rides the same unit, red at a
-settled head only, same bound — the worker adapts in-PR from the failing step's log; a hopeless one is
-closed and the gap filed (docs/dependency-upgrades.md G12b, #2919).
+## devbox — the weekly `devbox-update` job
 
-## Gotchas encountered
+**`@latest` devbox/nix pins are un-trackable**, so Renovate mis-resolves them (it once proposed
+downgrading gitleaks to a dead 5-year-old release). The `nix`/`devbox` managers are **disabled**;
+devbox updates are owned by the weekly **`devbox-update`** job (`scripts/devbox-update.sh` /
+`.github/workflows/devbox-update.yaml`, Mondays 03:00 UTC), which keeps `@latest` but re-resolves
+*all* matrix repos' locks in one pass so the shared toolchain aligns (nix cache + agent-base bake
+hits) — alignment a per-repo Renovate bump can't give. The devbox binary's own version is a
+separate pin, and moving it in step everywhere is FU-240.
+
+- **Non-major lock moves are armed and mechanical.** The PR body carries a second section —
+  same-major downgrades + compatibility-line moves of python3/opentofu/kubectl/openssl — that the
+  migration lens answers line by line; it informs, never un-arms (gap G17).
+- **A lock MAJOR is armed too** (`major` kept, the lens's APPROVED completes the merge). The one
+  exception is an opentofu major, which stays un-armed for a human: no lock revert can undo a
+  state-format change.
+- **A reverted lock version is refused for 30 days** by `pin-only-lint` check (i), which holds the
+  WHOLE weekly PR red. The lever out is a `devbox.json` pin of that one package
+  (`"<pkg>": {"version": "<x.y.z>"}`), dropped once nixpkgs moves on.
+- **Files generated from a pinned tool's output** (today: the replay `gh-json-fields` allowlist)
+  are re-rendered from the new lock on the same PR, so a tool bump does not red its own weekly PR.
+- **A locked build must be downloadable** (`scripts/lock-cache-check.sh`): devbox installs a
+  locked store path from the binary cache and BUILDS it from source when no substituter has it, so
+  one uncached package turns every CI warm step into a compile that the runner's memory limit
+  kills. The weekly job puts such a package back to its previous lock entry (named in its own PR
+  body section; it retries next week), and `ci`'s first step runs the same check before the first
+  `devbox run`, so a lock from any other source reds in seconds with the package named. The remedy
+  is always the lock entry, never the runner's limit.
+
+## Gotchas
 
 - **Validate the LANES, not just the syntax: `devbox run renovate-lane-lint`** before landing a change
   to `renovate-global.json`. Renovate arms a grouped branch only when EVERY member has
   `automerge: true` while labels are the UNION — a rule gap on one member produces a lane-labelled,
-  un-armed PR nobody reads (G15: #2295 sat 16 h green). The verb runs Renovate itself
+  un-armed PR nobody reads (gap G15). The verb runs Renovate itself
   (`--platform=local --dry-run=lookup`, trace log) over the checkout and asserts one lane per branch;
-  ~2 min of datasource lookups, so a seat verb, not CI (operator 2026-10-06 — CI WAN stays locked
-  down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
+  ~2 min of datasource lookups over the WAN, so it is a seat verb, not a CI step (CI's WAN egress
+  stays locked down). `--self-test` replays the fixture; `--trace FILE` re-asserts a saved run.
 - **`postUpgradeTasks` run in the SLIM image, with no shell.** The pinned `renovatebot/github-action`
   runs `ghcr.io/renovatebot/renovate:<version>` — containerbase + `jq`, no helm/yq/python — and executes
   each command via execa (no `&&`, no pipes unless `allowShellExecutorForPostUpgradeCommands`, which we
-  do not set). Tools come from a runtime `install-tool <tool> <ver>` command (slim keeps
-  `binarySource=install`; the `-full` image sets `global`, which also disables `installTools`), every
-  command string must match the global `allowedCommands` exactly (compiled as a Handlebars template
-  first), and `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`). The
-  first consumer: the kube-prometheus-stack rule re-rendering the upstream alert list on its branch
-  (G12 — `scripts/upstream-alerts-refresh.sh` is yq-free for exactly this container); the second is
-  `scripts/vendor-kyverno-policies.sh` on a `KYVERNO_POLICIES_SHA` branch, re-fetching `policy/component/`
-  from the bumped kyverno/policies head (class 18; bash/curl/sed/awk only, same constraint). The helm itself
-  is installed BY the script (`HELM_VERSION=v<x.y.z>` + `install-tool helm`, a no-op for the seat where
-  `install-tool` is absent) and Renovate-proposed through one `customManager` over that line (depName
-  `helm/helm`, class 17 of docs/dependency-classes.yaml; 2026-10-22). Until then the version sat in
-  `renovate-global.json` itself as two halves — the command and its regex-escaped `allowedCommands`
-  entry, two managers with `currentValueTemplate` + `autoReplaceStringTemplate` to move the pair —
-  which put every helm patch under the `/.github/` codeowner row (#2804 parked on 4.3.0 → 4.3.1);
-  `scripts/` has no row, so the bump now rides the custom.regex automerge lane. A dry run
-  (`workflow_dispatch` → `dryRun`) still executes the commands and logs `DRY-RUN: Would commit files`,
-  but only when a branch is (re)built — an up-to-date branch runs nothing, so the proof is the next bump.
-- **`pinGitHubActionDigests` pins our OWN reusable workflows too** — the first live run
-  (2026-09-25) SHA-pinned every `teststuffstash/homelab/.github/workflows/*.reusable.yml@master`
-  caller, freezing it at one homelab commit (and queueing a digest PR per master move). First-party
-  `teststuffstash/**` refs are excluded in the global config; `@master` is the contract.
-- **`@latest` devbox/nix pins are un-trackable** → Renovate mis-resolves them (it once proposed
-  downgrading gitleaks to a dead 5-yr-old release). The `nix`/`devbox` manager is **disabled**; devbox
-  updates are owned instead by the weekly **`devbox-update`** job (`scripts/devbox-update.sh` /
-  `.github/workflows/devbox-update.yaml`), which keeps `@latest` but
-  re-resolves *all* repos' locks in one pass so the shared toolchain aligns (nix cache + agent-base bake
-  hits) — alignment a per-repo Renovate bump can't give. The PR body carries a second section —
-  same-major downgrades + compatibility-line moves of python3/opentofu/kubectl/openssl — that the
-  migration lens answers line by line; it informs, never un-arms (G17, ADR-141 as amended 2026-10-06).
-  A lock MAJOR is armed too (`major` kept, the lens's APPROVED completes the merge; opentofu majors
-  excepted — §"The automerge vs review split"); a reverted lock version is refused by `pin-only-lint`
-  check (i) for 30 days, which holds the WHOLE weekly PR red — the lever out is a `devbox.json` pin of
-  that one package (`"<pkg>": {"version": "<x.y.z>"}`), dropped once nixpkgs moves on.
-  Files GENERATED from a pinned tool's output (today: the replay `gh-json-fields` allowlist) are
-  re-rendered from the new lock on the same PR, so a tool bump does not red its own weekly PR (G12b).
-  **A locked build must be downloadable** (`scripts/lock-cache-check.sh`, homelab#3233): devbox
-  installs a locked store path from the binary cache and BUILDS it from source when no substituter
-  has it, so one uncached package turns every CI warm step into a compile that the runner's memory
-  limit kills. The weekly job puts such a package back to its previous lock entry (named in its own
-  PR body section; it retries next week), and `ci`'s first step runs the same check before the first
-  `devbox run`, so a lock from any other source reds in seconds with the package named. The remedy
-  is always the lock entry, never the runner's limit.
+  do not set). So:
+  - tools come from a runtime `install-tool <tool> <ver>` command, called by the script itself (a
+    no-op for the seat, where `install-tool` is absent);
+  - every command string must match the global `allowedCommands` exactly (compiled as a Handlebars
+    template first);
+  - `fileFilters` is the ONLY way a generated file reaches the commit (never `git add`);
+  - a tool version the script needs lives in the script (`HELM_VERSION=v<x.y.z>`, proposed by a
+    `customManager` over that line), never in `renovate-global.json`: `/.github/` is
+    codeowner-gated, so a pin there parks every patch on a human;
+  - a dry run (`workflow_dispatch` → `dryRun`) still executes the commands and logs
+    `DRY-RUN: Would commit files`, but only when a branch is (re)built — an up-to-date branch runs
+    nothing.
+
+  The two consumers: `scripts/upstream-alerts-refresh.sh` (the kube-prometheus-stack rule
+  re-renders the upstream alert list on its branch) and `scripts/vendor-kyverno-policies.sh`
+  (re-fetches `policy/component/` on a `KYVERNO_POLICIES_SHA` bump). Both are bash/curl/sed/awk
+  only, for exactly this container.
+- **`pinGitHubActionDigests` pins our OWN reusable workflows too**, which would freeze every
+  `teststuffstash/homelab/.github/workflows/*.reusable.yml@master` caller at one homelab commit and
+  queue a digest PR per master move. First-party `teststuffstash/**` refs are excluded in the
+  global config; `@master` is the contract.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
-  digest" warnings. Removed.
-- **GitHub Dependabot alerts**: OSV stays the vulnerability source, but the `Cannot access vulnerability
-  alerts` WARN cannot be ignored — it is a *Repository Problem*, and Renovate ensures a Dependency
-  Dashboard issue on every repo that has one, `dependencyDashboard: false` notwithstanding (10 open
-  dashboards org-wide on 2026-09-27; agent-coordinator#1 deleted → #24 re-created within the hour).
-  So the App declares `vulnerability_alerts: read` (`docs/github-apps.yaml`, the FU-098 flow: PR the
-  declaration, click in the App settings + approve the install, `GithubAppPermissionDrift` clears).
-  With the WARN gone and no pending branches, the dashboards stop being ensured — close them once.
+  digest" warnings.
+- **The Dependency Dashboard is off, and two things keep it off.** `dependencyDashboard: false`
+  alone does not: `config:recommended` re-enables it at repo level, and any *Repository Problem*
+  makes Renovate ensure a dashboard issue regardless. So the global config sets it under `force`,
+  and the App declares `vulnerability_alerts: read` ([`github-apps.yaml`](github-apps.yaml)) —
+  OSV stays the vulnerability source, the grant only removes the `Cannot access vulnerability
+  alerts` warning that counts as a Repository Problem. No dashboard issue is open in the org
+  (2026-11-12).
