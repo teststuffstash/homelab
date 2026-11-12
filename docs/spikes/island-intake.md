@@ -205,6 +205,12 @@ drifted from `gateway/specs/README.md`.
    **An operator text that answers a parked question is the ruling, lean or not (operator,
    same day):** #3231 came back `seat` after three operator statements because "leaning towards
    runtime" was read as too weak to reverse recorded rulings.
+   **A recorded ruling is not a pending one (same day):** #3145 sat `seat` twice asking for a
+   ruling to "replace" the codex candidate rule, which GW-MODEL-TIERS already records and which
+   was executable given a catalog view and an entry canary — the sitting filed both (#3296,
+   #3310) once told so. **The loop may launch an entry canary itself, one ride per rail per
+   refresh (operator, same day: "2. yes")** — before it, #3310 could build the codex gate but a
+   new id still needed a jail-launched ride in an operator window.
 3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
    issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
    rule is the brief's (§Hard limits).

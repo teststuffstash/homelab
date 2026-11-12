@@ -790,6 +790,22 @@ STATE_FP_JQ_ARBITRATE='[ "head=" + ([ .commits[]? | select((.messageHeadline // 
 # rather than a hashed field. The hold therefore releases exactly when that PR closes (no open
 # assembly PR is left to probe) or is replaced (another PR number, which carries no marker).
 STATE_FP_JQ_IDENTITY='"pr=" + (.number | tostring)'
+# assembly-ci-red clause fingerprint: ONE red state of an assembly PR — the head sha and the
+# check-runs that have SETTLED red on it, each with its startedAt. "Red" is the ci-red clause's own
+# predicate (`.conclusion` FAILURE / TIMED_OUT), so the fold and the clause that summons it can
+# never disagree on what is red — and a commit STATUS never enters it: statuses carry `.state`, not
+# `.conclusion`, which is what keeps the heartbeat re-posts (`iac-sentinel`, `management-sentinel`
+# — the #2065 ride-per-beat class) out of a fold that reads startedAt. For a check-run, startedAt
+# is the run attempt: a re-run that settles red AGAIN is a new state and buys a ride (the #1108
+# semantic — the play re-runs an environmental red once and needs to see the second red), while an
+# in-flight entry has no conclusion and contributes nothing — the caller holds on
+# `pr_rollup_settling` before comparing. Review state is deliberately absent: a verdict on the
+# assembly PR is `assembly-cr`'s. No settled red → "" → no fingerprint → the caller's report line.
+STATE_FP_JQ_ASSEMBLY_RED='([ .statusCheckRollup[]?
+    | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")
+    | (.name // "?") + "@" + (.startedAt // "") ] | sort) as $red
+  | if ($red | length) == 0 then ""
+    else "head=" + (.headRefOid // "") + "|red=" + ($red | join(",")) end'
 # Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
 # Supports BOTH old format (state-fp:<hash>) and new format (state-fp:<clause>:<hash>) for backwards compatibility.
 STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:([a-z-]+:)?[0-9a-f]{6,64}")) ]
@@ -926,6 +942,8 @@ pr_state_fp_pair() {
       fp_jq="$STATE_FP_JQ_IDENTITY"
       fp_raw="$(printf '%s' "$fp_probe" | jq -c --arg n "$2" '. + {number: ($n | tonumber)}' 2>/dev/null)" && fp_probe="$fp_raw"
       ;;
+    # assembly-ci-red: head sha + the settled-red check-runs (name@startedAt) and nothing else.
+    assembly-ci-red) fp_jq="$STATE_FP_JQ_ASSEMBLY_RED" ;;
     *)         fp_jq="$STATE_FP_JQ" ;;
   esac
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$fp_jq" 2>/dev/null)" || fp_raw=''
@@ -1959,7 +1977,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""; um_lane_side=""
+  items=""; orphans=""; units=""; punits=""; noop_units=""; wipmap=""; assembly_cr_prs=""; assembly_red_prs=""; resumable_branches=""; goal_theme_side=""; goal_ckpt_b_prs=""; goal_ckpt_c_issues=""; um_lane_side=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   # #1451: the stack-wide sub-issue tree is fetched LAZILY — by the first repo in this stack that
@@ -3894,7 +3912,8 @@ EOF_GTHEMES_OPEN
           # hold releases only when that PR closes or is replaced by another; nothing that happens
           # ON the PR releases it — not a verdict, a content push, a check flip, a rebase or a
           # master-merge. Each of those has its own reader: CHANGES_REQUESTED is the `assembly-cr`
-          # trigger's, a red check is the ci-red clause's report line, and everything else is the
+          # trigger's, a settled red check on machine-merged paths is the `assembly-ci-red` trigger's (the
+          # ci-red clause's report line otherwise), and everything else is the
           # human's the PR is waiting on. Triggers (a), (c) and (e) are untouched by the hold.
           # rule #6, fail-OPEN: an unreadable PR probe or an unreadable fingerprint leaves (b)
           # firing exactly as it does today — the state-fp idiom's own direction.
@@ -6245,6 +6264,7 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
           | select([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0)
           | "  PR #\(.number) (author \(.author.login))"')"
       [ -n "$red_foreign" ] && orphans="${orphans}[$repo] ⚠ armed+red but NOT loop-authored (mandate: author fixes; no dispatch):\n${red_foreign}\n"
+      # >>>REPLAY:ci-red-select>>>
       red_n=0
       for u in $(printf '%s' "$red_probe" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '
           .[]|(.labels|map(.name)) as $L
@@ -6265,6 +6285,7 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
         # through unchanged (can only ADD holds), and the hold needs a LIVE pod so it self-releases.
         red_issue="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")
             | (capture("(?i)(^|[^a-z])(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
+        # <<<REPLAY:ci-red-select<<<
         if [ -n "$red_issue" ] && [ -n "$WIPPODS_JSON" ] \
            && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
@@ -6288,8 +6309,70 @@ $(printf '%s' "${openall:-[]}" | jq -r '.[]|(.labels|map(.name)) as $L|select($L
           orphans="${orphans}[$repo] ⏳ ci-red held (project WIP at ${REPO_MAX_WIP} in ${repo}):\n  PR #${u}\n"
           continue
         fi
+        # >>>REPLAY:assembly-ci-red>>>
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+        # ASSEMBLY PR, settled red, MACHINE-MERGED paths → a goal-checkpoint ride (trigger=assembly-ci-red).
+        # The exclusion below is right that no fix round can push to a protected goal/** head, but its
+        # report line assumes a reader. An assembly whose paths carry a codeowner has one: it blocks on
+        # the human, who sees the red (and some operator-path assemblies are red by design — pin-only
+        # lint, ADR-100). An assembly whose every changed path classifies `machine-merge` has none: the
+        # merge waits on a green check and nothing else, so a red one sits with no ride and no human.
+        # That class takes the route the report line names — a NEW child on the goal — through the
+        # machinery `assembly-cr` already rides: the same goal-checkpoint unit, the same dispatch-time
+        # `state-fp:` marker on the PR, the same Goal resolution (trailer, else the themed `Fixes`).
+        #   lane      — the PR's changed files through `classify_touches_repo` (agents/footprint.sh, the
+        #               ONE lane classifier; it anchors CODEOWNERS to this checkout, which is why the
+        #               trigger is scoped to GUARDED_REPO like the operator-lane hold). No path list here.
+        #   settled   — `pr_rollup_settling` holds while any check is in flight, so a re-run buys no ride
+        #               on the way in; the fingerprint is only ever judged against a settled rollup.
+        #   one ride  — STATE_FP_JQ_ASSEMBLY_RED: head sha + the settled-red check-runs (this clause's
+        #               own red predicate) with each one's startedAt. Same red, next tick → DEBOUNCED.
+        # Everything that is not a positive match falls through to the report line unchanged: another
+        # repo, a codeowner path, unreadable files, an unreadable probe, no resolvable Goal.
+        if [[ "$u_head" == goal/* ]] && [ "$repo" = "${GUARDED_REPO:-}" ]; then
+          ar_files="$(gh api "repos/${slug}/pulls/${u}/files" --paginate 2>/dev/null)" || ar_files=''
+          ar_touches="$(printf '%s' "$ar_files" | jq -rs 'add // [] | [ .[] | .filename // empty ] | join(",")' 2>/dev/null)" || ar_touches=''
+          ar_lane=""
+          [ -z "$ar_touches" ] || ar_lane="$(classify_touches_repo "$slug" "$ar_touches")" || ar_lane=""
+          # Goal: the line-anchored `Assembly-for: #<n>` trailer, else the themed shape's `Fixes #<level-2>`
+          # walked to its goal ancestor (homelab#1229) — the two forms the assembly-cr trigger routes on.
+          ar_goal=""
+          if [ "$ar_lane" = "machine-merge" ]; then
+            ar_body="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")' 2>/dev/null)" || ar_body=""
+            ar_goal="$(printf '%s' "$ar_body" | jq -Rrs 'capture("(?mi)^[ \\t]*assembly-for:[ \\t]*#(?<g>[0-9]+)\\b")|.g' 2>/dev/null)" || ar_goal=""
+            case "$ar_goal" in ''|*[!0-9]*)
+              ar_goal=""
+              case "$red_issue" in ''|*[!0-9]*) : ;; *)
+                command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+                goal_resolve_ancestor "$slug" "$red_issue"
+                ar_goal="${GB_GOAL:-}"
+              ;; esac
+            ;; esac
+          fi
+          if [ -n "$ar_goal" ]; then
+            ar_json="$(gh pr view "$u" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || ar_json=''
+            ar_pending="$(pr_rollup_settling "$ar_json")"
+            if [ "$ar_pending" -gt 0 ]; then
+              orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} ci-red SETTLING — ${ar_pending} check(s) still in flight on the head (<${UM_SETTLE_S:-1800}s); the goal-checkpoint for goal #${ar_goal} reads a settled rollup, next tick (trigger=assembly-ci-red)\n"
+              continue
+            fi
+            arfp="$(pr_state_fp_pair "$slug" "$u" assembly-ci-red "$ar_json")"; arfp_prev="${arfp#*|}"; arfp_cur="${arfp%%|*}"
+            if [ -n "$arfp_cur" ] && [ "$arfp_cur" = "$arfp_prev" ]; then
+              orphans="${orphans}[$repo] ⏳ ASSEMBLY PR #${u} ci-red DEBOUNCED — the same settled red since the last goal-checkpoint emit for goal #${ar_goal} (\`state-fp:assembly-ci-red:${arfp_cur}\`). That ride owns it (a fix child on the goal, or a re-run of an environmental red); a new head or a check settling red again re-arms the trigger.\n"
+              continue
+            fi
+            if [ -n "$arfp_cur" ]; then
+              echo "  [$repo] ASSEMBLY PR #${u} has a settled ci-red on machine-merged paths — emitting goal-checkpoint for goal #${ar_goal} (trigger=assembly-ci-red)"
+              units="${units}goal-checkpoint|${repo}|issue-${ar_goal}\n"
+              item_class_push "$repo" "issue-${ar_goal}" "container" "machine" "${default_branch:-}"
+              # The marker gates on CONFIRMED selection, not emission (the `assembly_cr_prs` shape).
+              assembly_red_prs="${assembly_red_prs:-} ${repo}:issue-${ar_goal}:${u}"
+              continue
+            fi
+          fi
+        fi
+        # <<<REPLAY:assembly-ci-red<<<
         # >>>REPLAY:ci-red-goal-head-exclusion>>>
         # FU-143: an ASSEMBLY PR (head goal/**) with ci-red is EXCLUDED — a fix round
         # pushes to the PR head, and the head IS the protected goal/** integration branch
@@ -7216,6 +7299,27 @@ EOF
                 "" \
                 "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the PR state — head sha, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an assembly PR waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
             echo "  WARN: could not record state-fp on ${urepo} PR #${apr} (gh write refused?) — dispatching anyway; the assembly-cr clause will re-emit on unchanged state (homelab#198)" >&2
+          fi
+        fi
+        # trigger=assembly-ci-red: the same marker on the same surface (the assembly PR), under its
+        # own clause key and side map. Written here, at CONFIRMED dispatch and before the spawn, so
+        # the ride's own act (a re-run, a child) is what re-opens the gate — never at emission.
+        rpr=""
+        for entry in ${assembly_red_prs:-}; do
+          if [[ "$entry" == "${urepo}:${uitem}:"* ]]; then
+            rpr="${entry##*:}"
+            break
+          fi
+        done
+        if [ -n "$rpr" ]; then
+          dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "$rpr" assembly-ci-red)"; dfp="${dfp%%|*}"
+          if [ -z "$dfp" ]; then
+            echo "  WARN: state fingerprint unreadable for ${urepo} PR #${rpr} — dispatching anyway; the assembly-ci-red debounce cannot arm this pass" >&2
+          elif ! gh pr comment "$rpr" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+                "🤖 \`state-fp:assembly-ci-red:${dfp}\` — deterministic scan dispatching a \`goal-checkpoint\` unit (trigger=assembly-ci-red) for goal ${uitem#issue-} at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+                "" \
+                "Machine-readable debounce marker, written by \`agents/coordinator-scan.sh\`, not by the session that follows. This assembly PR changes only machine-merged paths and has a check that settled red, so nothing but a fix can move it: the ride routes the red as a child on the goal (or re-runs an environmental red once). The marker hashes the head sha and the settled-red checks with their start times. While the hash is unchanged the scan emits a report line instead of another unit; a new head, or a check settling red again after a re-run, changes it and the trigger re-arms by itself." )" >/dev/null 2>&1; then
+            echo "  WARN: could not record state-fp on ${urepo} PR #${rpr} (gh write refused?) — dispatching anyway; the assembly-ci-red trigger will re-emit on unchanged state" >&2
           fi
         fi
         # homelab#2477: the (b) HOLD's marker. Same shape, different clause key and a different
