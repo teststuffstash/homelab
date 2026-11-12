@@ -738,10 +738,19 @@ STATE_FP_JQ_CIRED='[ "head=" + (.headRefOid // "")
 #     rides, one decision. `contentId` is the changed files' blob ids at head (the clause's
 #     `pulls/<n>/files` probe); a push that changes what the PR changes moves it, a rebase does not.
 #     No contentId (probe unreadable) → falls back to head=, the pre-#2100 behaviour.
-#   checks= folds only the entries that are NOT passing (SUCCESS/SKIPPED/NEUTRAL dropped). A
-#     flip either way still moves the hash (the entry appears or leaves); a green sentinel posting
+#   checks= folds only the entries that have SETTLED on a non-passing conclusion: passing ones
+#     (SUCCESS/SKIPPED/NEUTRAL) are dropped, and so is every entry still in flight (no conclusion
+#     yet, PENDING, EXPECTED — the settling hold's own in-flight set). A flip is settled-to-settled
+#     and still moves the hash either way (the entry appears or leaves); a green sentinel posting
 #     on a fresh head does not — #2100's 7th ride was `management-sentinel` arriving SUCCESS
-#     minutes after the 6th ride's dispatch, with nothing to decide.
+#     minutes after the 6th ride's dispatch, with nothing to decide. A check that merely goes in
+#     flight and comes back does not either: green → pending → green hashes identically at all
+#     three points, so a re-run (a push, a rebase, an updater master-merge) costs no ride on the
+#     way in and none on the way out. A re-run that settles somewhere else moves the hash when it
+#     settles, which is the only point at which there is something to rule on. A RED entry going
+#     in flight DOES leave the line (red → pending reads as the red clearing), so the fold alone
+#     is not the whole contract: every caller holds on `pr_rollup_settling` (below) before it
+#     compares, and the fingerprint is only ever judged against a settled rollup.
 #   `@startedAt` rides only on a non-passing `management-sentinel`: `mgmt_post_status` is an
 #     unconditional POST, so a re-judge on the same head (same FAILURE, new engine revision, fresh
 #     position lines for the lens) moves only its startedAt. Every other entry keeps name=state —
@@ -754,6 +763,7 @@ STATE_FP_JQ_UNARMED='[ (if ((.contentId // "") != "") then "content=" + .content
   , "checks=" + ([ .statusCheckRollup[]?
                    | ((.name // .context // "?") as $n
                       | (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end) as $s
+                      | select(($s == "PENDING" or $s == "EXPECTED") | not)
                       | select(($s == "SUCCESS" or $s == "SKIPPED" or $s == "NEUTRAL") | not)
                       | $n + "=" + $s
                         + (if $n == "management-sentinel" then "@" + (.startedAt // "") else "" end)) ]
@@ -816,6 +826,33 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
      | (((.body // "") | scan("state-fp:" + $c + ":([0-9a-f]{6,64})") | .[0]) // "")' 2>/dev/null || true
   return 0
 }
+
+# pr_rollup_settling <pr view json> → the number of in-flight rollup entries YOUNGER than
+# UM_SETTLE_S (0 when none, or when the payload is unreadable). The settling predicate of every
+# clause that rides STATE_FP_JQ_UNARMED — `unarmed-major` (#2100) and the `goal-checkpoint-b`
+# hold (#2477) — and the other half of that fold's contract: the fold ignores an in-flight entry,
+# so a re-run over a GREEN state hashes the same throughout, but over a RED state the settled
+# entry leaves `checks=` while the re-run is in flight and returns when it settles red again.
+# A caller holds while this is non-zero, so neither edge buys a ride; the fingerprint is compared
+# only against a settled rollup. In flight = no conclusion, PENDING or EXPECTED (the set the fold
+# drops). Age is the entry's startedAt, else the newest commit's date; an entry whose age cannot
+# be read counts as settling (the `fromdateiso8601? // null` → recent idiom — holding is the safe
+# side). The window is the wedge bound: an entry in flight for longer stops holding, so a wedged
+# check never holds a ride that is otherwise owed. Always exits 0 and always prints an integer.
+um_now() { date -u +%s; }   # replay seam: the wall clock
+pr_rollup_settling() {
+  local n
+  n="$(printf '%s' "${1:-null}" | jq -r --argjson now "$(um_now)" --argjson win "${UM_SETTLE_S:-1800}" '
+      ([ .commits[]? | .committedDate // empty ] | max // "") as $hc
+      | [ .statusCheckRollup[]?
+          | select((((.conclusion // .state) // "") | . == "" or . == "PENDING" or . == "EXPECTED"))
+          | ((.startedAt // "") | if . == "" or startswith("0001-") then $hc else . end)
+          | (fromdateiso8601? // null)
+          | select(. == null or $now - . < $win) ] | length' 2>/dev/null)" || n=0
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  printf '%s\n' "$n"
+  return 0
+}
 # <<<REPLAY:state-fp-jq<<<
 
 # pr_state_fp_pair <slug> <pr> [clause] → "<current>|<recorded>", either side empty when unknown.
@@ -824,8 +861,9 @@ issue_state_fp_for_clause() {   # $1 clause, $2 comments json (bare array)
 # CI rerun changes the fingerprint; "arbitrate" uses STATE_FP_JQ_ARBITRATE (drops per-check
 # conclusions and narrows head to the newest non-merge commit — homelab#1011; "assembly-cr" too,
 # homelab#1939); "unarmed-major"
-# uses STATE_FP_JQ_UNARMED (content id for head, non-passing checks only, startedAt for a
-# non-passing management-sentinel — homelab#2066, #2100); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
+# and "goal-checkpoint-b" use STATE_FP_JQ_UNARMED (content id for head, SETTLED non-passing
+# checks only — an in-flight check contributes nothing — startedAt for a
+# non-passing management-sentinel — homelab#2066, #2100, #2477); other clauses use STATE_FP_JQ. Always exits 0: under `set -e` a probe failure here must skip the guard, never
 # kill the scan.
 # >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
@@ -851,9 +889,13 @@ pr_state_fp_pair() {
   case "$clause" in
     ci-red)    fp_jq="$STATE_FP_JQ_CIRED" ;;
     # unarmed-major (homelab#2066, #2100): a sentinel re-judge re-opens the debounce; a Renovate
-    # rebase with unchanged content, a heartbeat re-post or a green check arriving does not.
+    # rebase with unchanged content, a heartbeat re-post, a green check arriving or a check that
+    # is merely in flight does not.
     # goal-checkpoint-b (homelab#2477) reuses the SAME fold for the same reason: the hold must
-    # release on a verdict, a content change or a check flip, and NOT on a rebase or a master-merge
+    # release on a verdict, a content change or a check flip (one SETTLED conclusion to another),
+    # and NOT on a rebase or a master-merge. The CI re-run either of them starts is inert here
+    # only over a green state; both callers hold on `pr_rollup_settling` before comparing, which
+    # is what covers a red one
     # (the assembly PR's head is a `goal/**` branch the updater merges master into, and #1935 makes
     # that wait long by construction).
     unarmed-major|goal-checkpoint-b)
@@ -3836,7 +3878,13 @@ EOF_GTHEMES_OPEN
           # written at DISPATCH time by the block at the bottom of this script — never at emission,
           # or a unit that lost the priority race would retire the clause without ever riding.
           # The fold is STATE_FP_JQ_UNARMED's (cf. #1939): a verdict, a content change or a check
-          # flip releases the hold; a rebase or a master-merge does not.
+          # flip (settled-to-settled) releases the hold; a rebase or a master-merge does not.
+          # Neither does the CI re-run they start, and that takes TWO parts: over a green state
+          # the fold ignores the in-flight entry, so the hash never moves; over a red state the
+          # settled entry leaves the fold while the re-run is in flight, so `pr_rollup_settling`
+          # holds first and the fingerprint is compared only once the rollup has settled (red
+          # again → the same hash; green → a flip). A check wedged in flight past the window
+          # stops holding and the fingerprint decides.
           # rule #6, fail-OPEN: an unreadable PR probe or an unreadable fingerprint leaves (b)
           # firing exactly as it does today — the state-fp idiom's own direction.
           # The probe reads `prsjson` (the per-repo OPEN-PR fetch above), never a second fetch:
@@ -3848,9 +3896,19 @@ EOF_GTHEMES_OPEN
           case "$gb_pr" in ''|*[!0-9]*) gb_pr="" ;; esac
           gb_hold=0
           if [ -n "$gb_pr" ]; then
-            gb_pair="$(pr_state_fp_pair "$slug" "$gb_pr" goal-checkpoint-b)"
-            gb_cur="${gb_pair%%|*}"; gb_prev="${gb_pair#*|}"
-            if [ -n "$gb_cur" ] && [ "$gb_cur" = "$gb_prev" ]; then
+            # ONE view, shared by the settling predicate and the fingerprint (the hoisted-fetch
+            # shape `unarmed-major` uses). Unreadable → not settling and no fingerprint → (b) fires.
+            gb_json="$(gh pr view "$gb_pr" --repo "$slug" --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits 2>/dev/null)" || gb_json=''
+            gb_settling="$(pr_rollup_settling "$gb_json")"
+            gb_cur=''; gb_prev=''
+            if [ "$gb_settling" -eq 0 ]; then
+              gb_pair="$(pr_state_fp_pair "$slug" "$gb_pr" goal-checkpoint-b "$gb_json")"
+              gb_cur="${gb_pair%%|*}"; gb_prev="${gb_pair#*|}"
+            fi
+            if [ "$gb_settling" -gt 0 ]; then
+              gb_hold=1
+              orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch SETTLING — assembly PR #${gb_pr} has ${gb_settling} check(s) still in flight on the head (<${UM_SETTLE_S:-1800}s). The hold is judged against a settled rollup, next tick (homelab#2477).\n"
+            elif [ -n "$gb_cur" ] && [ "$gb_cur" = "$gb_prev" ]; then
               gb_hold=1
               orphans="${orphans}[$repo] ⏳ goal #${g}: child-set complete pre-launch HELD — assembly PR #${gb_pr} is OPEN and awaiting a human (\`state-fp:goal-checkpoint-b:${gb_cur}\`, homelab#2477). Opening the assembly is all trigger (b) exists to do; a verdict, a content change or a check flip on the PR releases the hold, a rebase or a master-merge does not.\n"
             else
@@ -4355,7 +4413,6 @@ EOF_GTHEMES_OPEN
       fi
     done
     # <<<REPLAY:stale-stamp-repair<<<
-    um_now() { date -u +%s; }   # replay seam: the wall clock (the SETTLING hold below)
     # unarmed-major (the brief's §Dependency major bumps play) — EVERY state of an un-armed `major`
     # is this unit's (2026-09-28, homelab#2051 + the #2046/#2047 drill): red at birth (the lens
     # investigates the red — reviewer STEP 0's un-armed-major exception), CHANGES_REQUESTED (the
@@ -4371,10 +4428,12 @@ EOF_GTHEMES_OPEN
     # Two guards against #2100's churn (seven rides on one Renovate major, one decision): the
     # fingerprint keys on the diff's content, not the head oid (STATE_FP_JQ_UNARMED + the
     # pr_state_fp_pair probe — a rebase onto a moved master re-creates the head with identical
-    # content), and here, before the debounce, a SETTLING hold — a ride dispatched while
-    # the fresh head's rollup is still filling in records a marker the next posted check moves,
-    # which buys a second ride on the same state. Held only while a pending entry is younger than
-    # UM_SETTLE_S, so a wedged check still reaches a ride; a pending entry whose age cannot be read
+    # content), and here, before the debounce, a SETTLING hold (`pr_rollup_settling`, shared with
+    # the goal-checkpoint-b hold) — a ride dispatched while
+    # the fresh head's rollup is still filling in reads a state that is not the one it will be
+    # judged on (the fingerprint ignores an in-flight entry; a check that then settles red moves
+    # it and buys a second ride). Held only while a pending entry is younger than
+    # UM_SETTLE_S, so a wedged check never holds a ride that is otherwise owed; a pending entry whose age cannot be read
     # counts as settling (this file's `fromdateiso8601? // null` → recent idiom — holding is the safe
     # side of this guard). The content probe fails open to the old behaviour.
     UM_SETTLE_S="${UM_SETTLE_S:-1800}"
@@ -4458,14 +4517,7 @@ EOF_GTHEMES_OPEN
         fi
         continue
       fi
-      um_pending="$(printf '%s' "$pr_json_um" | jq -r --argjson now "$(um_now)" --argjson win "$UM_SETTLE_S" '
-          ([ .commits[]? | .committedDate // empty ] | max // "") as $hc
-          | [ .statusCheckRollup[]?
-              | select((((.conclusion // .state) // "") | . == "" or . == "PENDING" or . == "EXPECTED"))
-              | ((.startedAt // "") | if . == "" or startswith("0001-") then $hc else . end)
-              | (fromdateiso8601? // null)
-              | select(. == null or $now - . < $win) ] | length' 2>/dev/null)" || um_pending=0
-      case "$um_pending" in ''|*[!0-9]*) um_pending=0 ;; esac
+      um_pending="$(pr_rollup_settling "$pr_json_um")"
       if [ "$um_pending" -gt 0 ]; then
         orphans="${orphans}[$repo] ⏳ unarmed-major SETTLING — PR #${u}: ${um_pending} check(s) still pending on the head (<${UM_SETTLE_S}s) — the ride reads a settled rollup, next tick (#2100)\n"
         continue
