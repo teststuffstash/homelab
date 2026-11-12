@@ -133,7 +133,9 @@ what stopped it?), the loop-worker PRs merged since (was the blocker that ride's
 or gauge, the spec line, the ruling the tracker called pending, the done-when the body offers
 (has one of them already happened?). Changed → rule the item afresh through steps 1–5 (`requeue`,
 `queue` after a rewrite, `close`, `standing`). Unchanged → no write; the report says which fact
-you tested and where. Never restate a wait in a second comment.
+you tested and where. Never restate a wait in a second comment. Step 3's parity check runs on a
+re-read too: a wait that narrows (one of its facts filed as a parity gap) has changed, and gets
+the one comment naming what remains.
 
 Cap: **at most 3 `queue` outcomes (children and `requeue` included) per sitting.** The cap limits `queue`, not
 ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
@@ -264,5 +266,8 @@ never pad it, never leave it out.
 - Sibling sets (step 3's parity check): the rails — `opencode`, `openrouter`, `anthropic`,
   `codex`. A per-rail facility is a `/catalog/<rail>` view, a catalog read leg, a headroom
   reading, a metric family.
+- A seat act, not the operator's: a recorded wire answer read through the pod's existing
+  credential (a fixture under `gateway/tests/fixtures/`). A `seat` waiting only on one says
+  "seat act" in its comment, so the seat does it without the operator.
 - Operator-only, not yours to reason around: the Go key mint (FU-313), the codex login (seed), a
   canary / maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
