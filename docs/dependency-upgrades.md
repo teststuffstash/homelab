@@ -314,7 +314,9 @@ with no person on the path:
 - **Class 13**, the box's flake lock, moves in the weekly lock PR and the box re-activates itself
   hourly; the register's proof column has not caught up, and the activation was not re-read for
   this pass. **Class 18** has the lane but no bump has used it yet.
-- **Class 15 applies** and the **class 9 BACKUP converge** — the box, on merge.
+- **Class 15 applies** — the box, on merge. The **class 9 BACKUP converge** is the box's by policy,
+  but it has refused since 2026-10-31 (live drift on the BACKUP's Kea config) and needs one human
+  converge before it runs again — [`management-box.md`](management-box.md) §The capability ledger.
 
 ### Last proven end to end — per LANE, org-wide (hand-kept)
 
