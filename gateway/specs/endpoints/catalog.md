@@ -446,7 +446,9 @@ page's fact, the listing the catalog's.
 **The plan.** The policy names the plan (`rails.opencode.plan`: `go` | `go-plus`, required) because
 no vendor API says which plan a key is on (ruling 4). What the policy no longer holds (ruling 5):
 the vendor facts live in the snapshot, so a policy that still carries one refuses to load — a
-stale hand copy can never shadow the catalog. The same rule holds a Go model's harness window:
+stale hand copy can never shadow the catalog. `rails.<rail>.admission.latch_scope` takes `account`
+(the default — a 429 latches the whole rail) or `model` (a 429 cools only that model's cell); any
+other value refuses the load, naming `latch_scope`. The same rule holds a Go model's harness window:
 the dispatch answer's `context_tokens` is the snapshot's `context`, and a policy `context_tokens`
 entry for an `opencode-go/*` model refuses the load — the rows live on
 [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
