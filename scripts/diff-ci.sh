@@ -129,6 +129,8 @@ MAP=(
   "devbox-update-test:^scripts/devbox-update|^scripts/lock-cache-check|^scripts/fixtures/devbox-update/"
   # the self-test's only inputs are scripts/governance-lint.sh + scripts/governance-lint-test.sh (FU-296)
   "governance-lint-test:^scripts/governance-lint"
+  # the keep-set's selection rule; its only input is the script itself (FU-274)
+  "registry-keep-set-test:^scripts/registry-keep-set"
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
   # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
   # level of recursion (a belt-only run, no git base) that exits in well under a second.

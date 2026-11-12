@@ -537,6 +537,12 @@ jobs:
         if: steps.diff.outputs.governance-lint-test != 'false'
         run: devbox run governance-lint-test
 
+      # FU-274: the registry keep-set's selection rule (which image tags an agent-image build
+      # untags on registry.teststuff.net). No network: a fixed tag list in, the untag set out.
+      - name: registry-keep-set self-test (devbox run registry-keep-set-test)
+        if: steps.diff.outputs.registry-keep-set-test != 'false'
+        run: devbox run registry-keep-set-test
+
       # FU-185 / ADR-113: ShellCheck -S warning over the tracked shell, ratcheted against
       # scripts/shellcheck-baseline.txt (#3081 shipped the lint + MAP row; this is its ci step).
       - name: shellcheck-lint (devbox run shellcheck-lint)

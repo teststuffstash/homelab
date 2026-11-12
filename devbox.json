@@ -237,6 +237,9 @@
       "governance-lint-test": [
         "bash scripts/governance-lint-test.sh"
       ],
+      "registry-keep-set-test": [
+        "bash scripts/registry-keep-set.sh --self-test"
+      ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
       ],
