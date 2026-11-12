@@ -832,6 +832,15 @@ WAKES this clause and never blocks it — an undispositioned member does not cou
 completion predicate, so (b) can fire in the same tick (#1315 held G-G's assembly ~10.5h under
 the old predicate, which counted every open member).
 
+Trigger (b) rides **once per assembly PR**. Its job is to get the assembly PR opened; while an
+OPEN `goal/**`-head PR carries this goal's `Assembly-for: #<goal>` trailer the scan holds (b)
+(the `state-fp:goal-checkpoint-b` hold, which hashes the PR's number and nothing else) and
+releases it only when that PR closes or is replaced by another. Nothing that happens ON the PR
+re-summons you through (b) — not a bot approval, a push, or a check result: a
+`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a red check stays on the scan's
+report surface, and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
+not held.
+
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
 undispositioned member wakes this clause once per member SET — the `state-fp:goal-checkpoint-c`
 hold, homelab#2565: a ride that rules nothing buys no second ride until a member is ruled, added or

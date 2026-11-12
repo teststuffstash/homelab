@@ -83,6 +83,13 @@ spec:
       # repo's `.agents/<series>.md`, pointed at by docs/agents/retros/SERIES-BRIEF.md — and its
       # own guard (guardExpr below).
       - { name: series, value: "" }
+      # Where the harvest files the report PR (oracle-fleet#1043): the default is the loop retro's
+      # home. A NAMED series files in its stack repo, where the stack reads it — the harvest keeps
+      # its homelab clone for the scripts and clones reportRepo for the branch, push and PR (its
+      # default branch is the PR base). coordinator-git already holds contents + pull_requests write
+      # on every agent repo; the repo's own rulesets gate the merge.
+      - { name: reportRepo, value: "teststuffstash/homelab" }
+      - { name: reportDir, value: "docs/agents/retros" }
       # The series' guard as a PromQL instant query (homelab#3140). Empty = the ledger guard
       # (minWindowTasks). Set: the guard step queries Prometheus — a result > 0 FIRES the series,
       # == 0 is a QUIET week (the outcome=quiet push, nothing rides), an EMPTY result or an error
@@ -421,8 +428,9 @@ spec:
           limits: { memory: "1Gi" }
 
     # Extract the BEGIN/END-RETRO-REPORT blocks from both ride logs → branch + PR into
-    # docs/agents/retros/ (coordinator-git identity; auto-merge NOT armed — a human reads
-    # retro reports, that's the whole point of the PR gate).
+    # the reportRepo/reportDir parameters (coordinator-git identity, a worker-App PR: the review reflex's
+    # C9 arms it and it merges on the bot review; the operator reads it after merge — ruling
+    # 2026-10-15).
     - name: harvest
       inputs:
         artifacts:
@@ -557,29 +565,42 @@ spec:
             [ -n "$DEAD" ] && DEAD_NOTE=$(printf '\n\n⚠ **PARTIAL RUN — no report from: %s.** That cell failed its own report-marker self-check and its DAG task is marked Failed; its ride log is still attached as a workflow artifact. Read this report knowing it is one cell%s view, not the cross-checked pair.' "$DEAD" "'s")
             # <<<REPLAY:retro-harvest-slug<<<
             export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
-            git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
             BR="retro/${DATE}-${SERIES}-${RUN}"
+            # The block above staged the reports in the homelab clone's docs/agents/retros/; from
+            # here on the git work happens in the REPORT repo's checkout (oracle-fleet#1043) — the
+            # homelab clone itself when reportRepo is homelab, a second clone otherwise.
             mkdir -p /tmp/retro-reports
             cp docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md /tmp/retro-reports/
+            rm docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md
+            HL=/work/homelab
+            REPORT_REPO="{{workflow.parameters.reportRepo}}"; REPORT_DIR="{{workflow.parameters.reportDir}}"
+            if [ "$REPORT_REPO" != "teststuffstash/homelab" ]; then
+              rm -rf /work/report
+              git clone -c "$_ah" --depth 1 "https://github.com/${REPORT_REPO}.git" /work/report
+              cd /work/report
+            fi
+            # The clone checked out the repo's default branch: that is the PR base.
+            REPORT_BASE=$(git symbolic-ref --short HEAD)
+            git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
             # A retry reuses only an OPEN report PR (never a merged/closed one — new commits on a
             # recreated branch under a dead PR would never reach a human). A MERGED one whose
-            # reports already match master is the same publication: reuse its URL, push nothing.
-            OPEN_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state open --json url --jq '.[0].url // empty')
-            MERGED_PR=$(gh pr list --repo teststuffstash/homelab --head "$BR" --state merged --json url --jq '.[0].url // empty')
+            # reports already match the base is the same publication: reuse its URL, push nothing.
+            OPEN_PR=$(gh pr list --repo "$REPORT_REPO" --head "$BR" --state open --json url --jq '.[0].url // empty')
+            MERGED_PR=$(gh pr list --repo "$REPORT_REPO" --head "$BR" --state merged --json url --jq '.[0].url // empty')
             if [ -n "$OPEN_PR" ]; then
-              # Remove newly harvested untracked paths before checking out the retry branch.
-              rm docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md
               git fetch -q origin "refs/pull/${OPEN_PR##*/}/head"
               git checkout -B "$BR" FETCH_HEAD
-              cp /tmp/retro-reports/*.md docs/agents/retros/
             else
               git checkout -b "$BR"
             fi
-            git add docs/agents/retros/
+            # The first harvest into a stack repo creates the directory.
+            mkdir -p "$REPORT_DIR"
+            cp /tmp/retro-reports/*.md "$REPORT_DIR"/
+            git add "$REPORT_DIR"/
             git diff --cached --quiet || git commit -m "retros: ${SERIES} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
             # >>>REPLAY:retro-harvest-push>>>
-            PR_BODY="FU-058 scheduled retro output — merges on the bot review; the operator reads it after merge (operator ruling 2026-10-15). Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
-            if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet origin/master HEAD -- docs/agents/retros/; then
+            PR_BODY="FU-058 scheduled retro output — merges on the bot review; the operator reads it after merge (operator ruling 2026-10-15). Window and population are frozen in the evidence bundle; findings require explicit acceptance before queueing.${HARNESS_B:+ Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review ${REPORT_DIR}/<report>.md\` per report.}${DEAD_NOTE}"
+            if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ] && git diff --quiet "origin/${REPORT_BASE}" HEAD -- "$REPORT_DIR"/; then
               REPORT_PR="$MERGED_PR"
             else
               # The clone above persisted the auth header (`clone -c`, GH_TOKEN exported first since
@@ -587,15 +608,15 @@ spec:
               # ("Duplicate header: Authorization"; r7 harvest 2026-10-05 failed exactly so).
               git push origin "HEAD:$BR"
               REPORT_PR="$OPEN_PR"
-              [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
+              [ -n "$REPORT_PR" ] || REPORT_PR=$(gh pr create --repo "$REPORT_REPO" --base "$REPORT_BASE" --head "$BR" \
                 --title "retros: ${SERIES} ${RUN} ($N report(s), scheduled retro)" --body "$PR_BODY")
             fi
             # <<<REPLAY:retro-harvest-push<<<
             REPORT_ARGS=()
-            for report in docs/agents/retros/"${DATE}-${SERIES}-${RUN}-"*.md; do
+            for report in "$REPORT_DIR"/"${DATE}-${SERIES}-${RUN}-"*.md; do
               REPORT_ARGS+=(--report "$(basename "$report")=$report")
             done
-            python3 agents/retro_pipeline.py publish --series "$SERIES" --bundle /work/bundle.json \
+            python3 "$HL/agents/retro_pipeline.py" publish --series "$SERIES" --bundle /work/bundle.json \
               --pr "$REPORT_PR" "${REPORT_ARGS[@]}"
             # The publication checkpoint is independent of whether the human has merged the PR.
             # ADR-103 rule-3 belt (FU-058, 2026-08-10): a report that LANDED is the only success
@@ -629,7 +650,7 @@ spec:
               # what the note's leading blank line wants to be) silently ENDS the scalar and
               # breaks the manifest. The escapes belong to printf; the YAML never sees a newline.
               PUSH_WARN=$(printf '\n\n⚠ **PUSHGATEWAY PUSH FAILED** — the RetroReportOverdue alert will fire stale until the next successful push. The report itself landed successfully.')
-              gh pr edit "$BR" --repo teststuffstash/homelab \
+              gh pr edit "$BR" --repo "$REPORT_REPO" \
                 --body "${PR_BODY}${PUSH_WARN}"
             fi
             # <<<REPLAY:retro-push-belt<<<
@@ -695,6 +716,10 @@ spec:
         - { name: series, value: "feedback-triage" }
         - { name: harnessA, value: "claude" }
         - { name: harnessB, value: "" }
+        # The report lands where the stack reads it (oracle-fleet#1043); docs/retros/ is outside
+        # oracle-fleet's codeowner paths, so it merges on the bot review. r1/r2 stay in homelab.
+        - { name: reportRepo, value: "teststuffstash/oracle-fleet" }
+        - { name: reportDir, value: "docs/retros" }
         # > 0 when the oldest untriaged feedback row is older than 7 days; 0 when none is; ABSENT
         # when oracle's exporter is not publishing the gauge (= a failed run, never quiet).
         - { name: guardExpr, value: "max(oracle_feedback_untriaged_oldest_age_seconds) > bool (7 * 86400)" }

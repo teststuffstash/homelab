@@ -17,7 +17,8 @@ pointer), the coordinator's `goal-decompose` clause (the ancestor:
 Can a sitting with ONLY the island's context — `gateway/` + the authoring grammar, no corpus —
 read the island's unshaped inputs (inert issues, tracker text, meta-state bullets) and leave each
 in a state the loop already understands: queued with the spec written into the issue, a Goal
-tree whose assembly keeps the codeowner read, a `blocked-on: human` marker naming the one fact
+tree whose verdict stays the human's (the question as first posed said "whose assembly keeps the
+codeowner read" — on `gateway/**` no such read exists, Open questions 2), a `blocked-on: human` marker naming the one fact
 it lacks, or a close with evidence — well enough that the operator reads PRs instead of the pile?
 
 ## What was built
@@ -27,8 +28,8 @@ it lacks, or a close with evidence — well enough that the operator reads PRs i
   owned? → needs a human fact? → how big? → worth a ride now?), a queue-ready body shape that
   carries the KEY ROWS (pinned rule 2: "an issue carries a handful of key rows … the implementing
   agent adds boundary rows"), the bot-authored Goal's pins (budget ceiling, `agent/queued` on the
-  children only — never on the Goal, so breaker #1 stays the human's and the assembly's codeowner
-  read stays the gate), the hard limits (no code, no PRs, never close a human-filed issue — by age
+  children only — never on the Goal, so breaker #1 stays the human's; the Goal's verdict is the
+  human point, and an assembly has a codeowner read only where its paths are owned), the hard limits (no code, no PRs, never close a human-filed issue — by age
   for the operator's own since ADR-163, §Run 3 — ≤ 3
   queued per sitting, one `intake:` comment per ruling), and the island facts.
 - **The selector** — [`gateway/scripts/intake-select.sh`](../../gateway/scripts/intake-select.sh):
@@ -192,9 +193,24 @@ drifted from `gateway/specs/README.md`.
    or, for an alert no island's rules define, when its evidence cites a path under the island's
    `Touches` prefixes; prose that mentions the island no longer selects. Other islands' piles stay
    seat-run (question 5).
-2. **Budget ceiling for a bot-authored Goal** (`INTAKE_GOAL_BUDGET_USD`, default 10) — P6 said
-   "Goals stay human"; the ask puts the human at the assembly read instead. The ceiling is the
-   dial between the two.
+2. **Budget ceiling for a bot-authored Goal — RULED 2026-11-12 (operator): 30**
+   (`INTAKE_GOAL_BUDGET_USD`; "whatever, we don't have proper counting yet anyway"). Both
+   Goal-shaped dry-runs of that day stopped on the old 10 because no read prices a ride; an
+   unpriced Goal now takes the ceiling. P6 said "Goals stay human" — the human point is the
+   Goal's verdict: **gateway assemblies stay machine-merged (operator, same day: "let it be
+   autonomous")** after #3270 merged on two bot approvals (`gateway/**` has no codeowner; the
+   brief had claimed an assembly read that never existed there). The one read the operator keeps
+   on the island: a change adding an upstream read on a subscription credential or letting an
+   account-bound value into a committed file.
+   **An operator text that answers a parked question is the ruling, lean or not (operator,
+   same day):** #3231 came back `seat` after three operator statements because "leaning towards
+   runtime" was read as too weak to reverse recorded rulings.
+   **A recorded ruling is not a pending one (same day):** #3145 sat `seat` twice asking for a
+   ruling to "replace" the codex candidate rule, which GW-MODEL-TIERS already records and which
+   was executable given a catalog view and an entry canary — the sitting filed both (#3296,
+   #3310) once told so. **The loop may launch an entry canary itself, one ride per rail per
+   refresh (operator, same day: "2. yes")** — before it, #3310 could build the codex gate but a
+   new id still needed a jail-launched ride in an operator window.
 3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
    issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
    rule is the brief's (§Hard limits).

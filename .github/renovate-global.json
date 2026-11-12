@@ -147,6 +147,7 @@
       "description": "Class 4 — Helm charts, TOFU-managed (docs/dependency-upgrades.md §The dependency inventory; S9 #1988, 2026-10-10): the `helm_release` charts whose version is a `var.*` default (argo-cd, argocd-apps, longhorn — the `# renovate:` annotation manager below; Cilium is class 6 and carries no annotation, human-proposed by ruling). patch/minor → `deps-review`, armed: the merge-path reviewer + migration lens read the changelog and the management sentinel's plan-on-PR posts the changed addresses — and since FU-301 (2026-10-10) a MERGE IS THE DEPLOY for the policy/mgmt/plan-input.yaml apply_helm rows: the management box applies them under its evidence bracket (docs/management-box.md §Helm release applies — forward only, STOP + MgmtHelmApplyStopped on a bad verdict), `MgmtApplyResidueStanding` if a merge sits unapplied 24 h. Majors: argo-cd + argocd-apps ARMED behind the lens (the rule after the chart-major rules below, 2026-10-11); longhorn → the un-armed catch-all (human lane, no downgrade).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
+      "matchPackageNames": ["!kyverno-policies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["deps-review"],
       "automerge": true
@@ -175,9 +176,11 @@
       "groupName": "arc"
     },
     {
-      "description": "Crossplane is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the chart pin in argocd/platform/crossplane.yaml AND the `crossplane.io/engine-image-digest.<version>` annotation next to it, which publicroute-tf-validate keys by chart version to render the composition with the engine pulled BY DIGEST (homelab#1779). A chart bump alone is CI-red forever — #2224 (2.3.2 → 2.3.6, 2026-10-04) was the first Renovate crossplane PR and proved it. The regex customManager below moves the annotation (version in the KEY, digest in the VALUE — crossplane's chart version equals its engine tag v<version>); this group puts both in ONE PR. Labels come from the argocd rule only (the custom.regex automerge rule excludes this dep) so the grouped PR rides `deps-review`, never the mechanical lane.",
+      "description": "Crossplane is a VERSION SET (docs/dependency-upgrades.md §Version SETS): the chart pin in argocd/platform/crossplane.yaml AND the `crossplane.io/engine-image-digest.<version>` annotation next to it, which publicroute-tf-validate keys by chart version to render the composition with the engine pulled BY DIGEST (homelab#1779). A chart bump alone is CI-red forever — #2224 (2.3.2 → 2.3.6, 2026-10-04) was the first Renovate crossplane PR and proved it. The regex customManager below moves the annotation (version in the KEY, digest in the VALUE — crossplane's chart version equals its engine tag v<version>); this group puts both in ONE PR. Labels come from the argocd rule only (the custom.regex automerge rule excludes this dep) so the grouped PR rides `deps-review`, never the mechanical lane. The two version-set keys (gap G16, docs/dependency-upgrades.md §Version SETS): `separateMinorPatch: false` — Renovate's `patch-` branch prefix is applied per member AFTER grouping (branch-name.ts), so the global `true` would deal a patch member and a minor member of one set into two PRs (docs: separateMajorMinor 'has priority over package groups … set this option to false within the packageRule'; separateMinorPatch splits the same way); `minimumGroupSize: 2` — Renovate postpones creating the branch until both updates are in it (docs: minimumGroupSize, 'always wait until both upgrades are available'), so one member that clears its lookup before the other never opens a PR alone. Both members are invalid alone here, so both carry it.",
       "matchPackageNames": ["crossplane", "crossplane/crossplane"],
-      "groupName": "crossplane"
+      "groupName": "crossplane",
+      "separateMinorPatch": false,
+      "minimumGroupSize": 2
     },
     {
       "description": "Crossplane chart: NO cooldown (operator 2026-10-24, #2821). charts.crossplane.io/stable/index.yaml re-stamps EVERY entry's `created` on each publish (2026-10-22T15:41:36Z on 2.4.3 down to 1.0.0), so the 7-day minimumReleaseAge never measures a release's real age — it withheld the chart while the cooldown-exempt engine digest (docker, timestamp-optional) went out alone: a half version set, CI-red by construction (#2819). Exempt, the `crossplane` group moves together at release, like its engine image already does; the deps-review lens still reads it before merge. Scoped to the one chart served from that index (argocd manager, helm datasource, package `crossplane` — repoURL https://charts.crossplane.io/stable), so every other chart keeps the floor.",
@@ -187,10 +190,17 @@
       "minimumReleaseAge": null
     },
     {
-      "description": "kube-prometheus-stack is a VERSION SET (ADR-151, gap G16 — docs/dependency-upgrades.md §Version SETS): the stack chart in argocd/platform/kube-prometheus-stack.yaml (`skipCrds: true` since the 2026-08-04 adoption) AND upstream's `prometheus-operator-crds` chart in argocd/platform/prometheus-operator-crds.yaml, which owns the ten monitoring.coreos.com CRDs the stack chart never applies (Helm's crds/ is install-only; they sat at operator v0.91.0 owned by nobody). The CRD chart cuts one major per operator minor (29.0.0 = v0.91.0, 32.0.1 = v0.94.1), so a stack major that crosses an operator minor MUST carry the CRD bump in the same PR — one group, one PR; labels come from the argocd rules (deps-review for patch/minor, the major catch-all for majors). `devbox run renovate-lane-lint` asserts the group arms as one. The first CRD sync is the FU-304 control-plane memory event — the seat merges a crossing inside a window.",
+      "description": "kube-prometheus-stack is a VERSION SET (ADR-151, gap G16 — docs/dependency-upgrades.md §Version SETS): the stack chart in argocd/platform/kube-prometheus-stack.yaml (`skipCrds: true` since the 2026-08-04 adoption) AND upstream's `prometheus-operator-crds` chart in argocd/platform/prometheus-operator-crds.yaml, which owns the ten monitoring.coreos.com CRDs the stack chart never applies (Helm's crds/ is install-only; they sat at operator v0.91.0 owned by nobody). The CRD chart cuts one major per operator minor (29.0.0 = v0.91.0, 32.0.1 = v0.94.1), so a stack major that crosses an operator minor MUST carry the CRD bump in the same PR — one group, one PR; labels come from the argocd rules (deps-review for patch/minor, the major catch-all for majors). `devbox run renovate-lane-lint` asserts the group arms as one. The first CRD sync is the FU-304 control-plane memory event — the seat merges a crossing inside a window. `separateMinorPatch: false` is the first version-set key (see the crossplane group): without it a CRD-chart patch and a stack minor land on two branches (#3036, 2026-10-30).",
       "matchManagers": ["argocd"],
       "matchPackageNames": ["kube-prometheus-stack", "prometheus-operator-crds"],
-      "groupName": "kube-prometheus-stack"
+      "groupName": "kube-prometheus-stack",
+      "separateMinorPatch": false
+    },
+    {
+      "description": "The second version-set key for kube-prometheus-stack, on the PARTNER only: the CRD chart never opens a branch alone (`minimumGroupSize: 2` — Renovate takes the highest value among a branch's upgrades, generate.ts getMinimumGroupSize). minimumReleaseAge ages each version on its own (docs: 'Renovate will wait for the set duration to pass for each separate version'), and the CRD chart is cut at the operator release, days before the stack chart that ships it: CRD 33.0.0 (v0.95.0) cleared the 7 days while kps 93.0.0 (v0.95.1) was still pending, and the group opened as the CRD bump alone (#3280, 2026-11-12). The stack chart keeps `1`: most stack releases leave the operator alone and must still flow. What this cannot do is match patch versions (Renovate picks each member's newest, not the pair with equal appVersions) — the PR-time leg of `argocd-validate-pins` (the `homelab.teststuff.net/app-version-of` annotation) fails a branch whose two appVersions differ. Only gates branch CREATION: an already-open branch keeps being maintained (lib/workers/repository/update/branch/index.ts, `!branchExists`).",
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["prometheus-operator-crds"],
+      "minimumGroupSize": 2
     },
     {
       "description": "Class 1/2 (charts in argocd/platform, images in argocd/resources) patch/minor → the LLM `deps-review` lane (FU-046): armed, the merge-path review reflex reviews, APPROVED merges, ArgoCD auto-sync is the deploy edge. Not `automerge`: a chart minor re-renders manifests and an image minor runs in prod — there is something to read. Digest bumps take the mechanical rule at the top; majors take the catch-all below (un-armed, `major` — the CRD-carrying charts Argo/Crossplane/cert-manager/ESO/CNPG reach the human lane by update type, IAC-G09).",
@@ -303,7 +313,7 @@
       }
     },
     {
-      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource.",
+      "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource; the class-4 helm rule above excludes it by name (`addLabels` accumulates — matching both put automerge AND deps-review on one PR, the lane lint's `two-lanes`).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
       "matchPackageNames": ["kyverno-policies"],
