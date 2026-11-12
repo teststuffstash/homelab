@@ -192,9 +192,18 @@ drifted from `gateway/specs/README.md`.
    or, for an alert no island's rules define, when its evidence cites a path under the island's
    `Touches` prefixes; prose that mentions the island no longer selects. Other islands' piles stay
    seat-run (question 5).
-2. **Budget ceiling for a bot-authored Goal** (`INTAKE_GOAL_BUDGET_USD`, default 10) — P6 said
-   "Goals stay human"; the ask puts the human at the assembly read instead. The ceiling is the
-   dial between the two.
+2. **Budget ceiling for a bot-authored Goal — RULED 2026-11-12 (operator): 30**
+   (`INTAKE_GOAL_BUDGET_USD`; "whatever, we don't have proper counting yet anyway"). Both
+   Goal-shaped dry-runs of that day stopped on the old 10 because no read prices a ride; an
+   unpriced Goal now takes the ceiling. P6 said "Goals stay human" — the human point is the
+   Goal's verdict: **gateway assemblies stay machine-merged (operator, same day: "let it be
+   autonomous")** after #3270 merged on two bot approvals (`gateway/**` has no codeowner; the
+   brief had claimed an assembly read that never existed there). The one read the operator keeps
+   on the island: a change adding an upstream read on a subscription credential or letting an
+   account-bound value into a committed file.
+   **An operator text that answers a parked question is the ruling, lean or not (operator,
+   same day):** #3231 came back `seat` after three operator statements because "leaning towards
+   runtime" was read as too weak to reverse recorded rulings.
 3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
    issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
    rule is the brief's (§Hard limits).

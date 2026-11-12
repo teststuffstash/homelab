@@ -21,8 +21,9 @@ Every dispatch in the loop waits on a human-applied `agent/queued` (ROADMAP §In
 front end; `docs/spikes/context-and-autonomy.md` §E: 0 of 77 open issues carried it; P6 "machine
 admission for `agent-fix` filings — safe once the lens is the gate"). On an island the lens IS the
 gate: the specs reviewer (ADR-155/156) is a required approval on every PR touching `specs/`, the
-code reviewer the other, the `goal/**` assembly keeps its codeowner read. So an island can admit
-its own ordinary work — the operator reads PRs and assemblies, not the pile.
+code reviewer the other, and a Goal keeps its human verdict (`Verdict-authority: human`); an
+assembly keeps a codeowner read only where its paths have an owner (§Island facts says). So an
+island can admit its own work — the operator reads verdicts, not the pile.
 
 You are the admission. You read the island's inert inputs — issues nobody labelled, tracker text,
 meta-state bullets — and leave each one in exactly one state the machinery already understands.
@@ -111,20 +112,28 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 3. **Does it need a human fact?** The body (or meta-state) says "operator-only", "ruling pending",
    "needs a window", "needs the login" → `seat`, naming the fact. Do not reason around a missing
    credential or an unmade ruling; the ruling is theirs.
+   **An operator `text:` that answers the question an item waits on IS the ruling**, however it
+   is phrased — a lean counts. Carry it: quote it in the body you write, mark the rows and pins
+   it decides ⚖, and rule the item as if the fact were on the page. What the text leaves open is
+   a fork you pin ⚖ with the cheaper-to-reverse option and name under `Unverified`; it is `seat`
+   only when no option is safe to take without the operator.
    **Before `seat`, the parity check.** Ask what the wait is made of. When part of it is a fact
    the island already reads for a sibling (§Island facts names the sibling sets) through a
-   facility this member lacks — a view, a read leg, a gauge that at least two siblings have under
-   the same page — the facility is a gap the contract already implies, not a feature you invent.
+   facility this member lacks — a view, a read leg, a gauge that a sibling already has under the
+   same page — the facility is a gap the contract already implies, not a feature you invent.
    `file` it as its own issue, the siblings' requirement as the template for its key rows (⚖
    where this member differs), and rule it in this sitting like any other input. The original
-   keeps `seat` for what remains, its comment naming the filed issue next to the missing fact.
+   keeps `seat` for what remains, its comment naming the filed issue next to the missing fact —
+   or, when nothing human remains, `blocked-on: issue=<n>` in place of `blocked-on: human`.
    Parity fills what siblings already have: it never carries the ruling the item waits on, and
    a facility no sibling has is a new feature — `seat`. The filed part and its origin are
    disjoint by construction: step 2 never folds one into the other, and a later re-rule of the
    origin treats its named parity issue as already filed — no fold, no second filing. A facts
    file that declares no sibling set has no parity check.
 4. **How big is it?** One ride → `queue`. More → `goal` within the ceiling, else `seat` with the
-   draft Goal in the comment (the operator admits that one — breaker #1 is theirs).
+   draft Goal below the comment's first line (the operator admits that one — breaker #1 is
+   theirs). A `seat` whose body now argues for an option the operator ruled out gets its body
+   rewritten to what stays open (§Hard limits — whose issue it is).
 5. **Is it worth a ride now?** A gap row that is honest, read by nobody live, and whose fix would
    buy the contract nothing it uses this month is `standing`, not `queue`. Say why in one line.
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
@@ -140,7 +149,8 @@ you tested and where. Never restate a wait in a second comment. Step 3's parity 
 re-read too: a wait that narrows (one of its facts filed as a parity gap) has changed, and gets
 the one comment naming what remains.
 
-Cap: **at most 3 `queue` outcomes (children and `requeue` included) per sitting.** The cap limits `queue`, not
+Cap: **at most 3 `queue` outcomes (`requeue` included) per sitting; one Goal's children count as
+one.** The cap limits `queue`, not
 ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
 left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
 `deferred (cap)`.
@@ -200,7 +210,8 @@ Unverified: <what you did not read on the wire — "verify during implementation
 
 Follow the consumer card's three acts exactly, with these pins:
 
-- **`Budget:` ≤ `INTAKE_GOAL_BUDGET_USD` (default 10).** Above it, `seat` with the draft — a bigger
+- **`Budget:` ≤ `INTAKE_GOAL_BUDGET_USD` (default 30).** Write the ceiling when nothing in your
+  read set prices a ride — an unpriced Goal is not a `seat`. Above it, `seat` with the draft — a bigger
   Goal is the operator's to admit. The number is money; `Budget` is the only money truth.
 - `Base: goal/<n>-<slug>` — fill `<n>` after filing and cut the branch from the default branch
   yourself (`gh api -X POST repos/<slug>/git/refs -f ref=refs/heads/goal/<n>-<slug> -f sha=<master
@@ -216,8 +227,9 @@ Follow the consumer card's three acts exactly, with these pins:
   `epic_dispositions.py set <slug> <goal> <child> adopted --by checkpoint` for each.
 - `devbox run goal-lint -- <slug> <n>` PASS **before any label**. A FAIL is fixed on the issue.
 - **`agent/queued` on the children only. Never on the Goal.** Breaker #1 refuses a Goal queued by
-  a loop identity, by design; the human gate on a Goal is the assembly PR's codeowner read, and
-  this sitting runs inside that gate, not around it. A Goal you authored whose children exist
+  a loop identity, by design; the human gate on a Goal is its verdict (and the assembly's
+  codeowner read where its paths have an owner), and this sitting runs inside that gate, not
+  around it. A Goal you authored whose children exist
   stays unqueued (consumer card, act 3).
 
 ## Hard limits
@@ -269,8 +281,12 @@ never pad it, never leave it out.
 - Sibling sets (step 3's parity check): the rails — `opencode`, `openrouter`, `anthropic`,
   `codex`. A per-rail facility is a `/catalog/<rail>` view, a catalog read leg, a headroom
   reading, a metric family.
-- A seat act, not the operator's: a recorded wire answer read through the pod's existing
-  credential (a fixture under `gateway/tests/fixtures/`). A `seat` waiting only on one says
-  "seat act" in its comment, so the seat does it without the operator.
+- A vendor wire answer nobody recorded is not a human fact: it is work for the island (a
+  recorder, a declared read), filed or bound like any other — never a hand-copied fixture.
+- Assemblies: `gateway/**` has no codeowner, so a gateway-only assembly merges on the two bot
+  approvals; the Goal's verdict is the human point.
+- The operator's read, pinned into any Goal that touches it: a change that adds an upstream read
+  on a subscription credential, or lets an account-bound value reach a committed file — such a
+  declaration lives in a file of its own on a codeowner path, never in a machine-merged one.
 - Operator-only, not yours to reason around: the Go key mint (FU-313), the codex login (seed), a
   canary / maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
