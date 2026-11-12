@@ -66,6 +66,11 @@ none) and records `over-bound`. An answer that echoes a credential the gateway h
 The record is in the SQLite store and survives a restart. A recorder fault never takes a read down.
 The `sha256` is the answer's digest as the vendor sent it.
 
+Unverified — expected to hold, no row yet: an `account` answer over the bound records `over-bound`;
+a recorder fault never takes a read down; the parsers, snapshots and views are unchanged; the sources
+`go-docs`, `openrouter-endpoints`, `openrouter-mcp-rankings` and `openrouter-mcp-benchmarks` record as
+described.
+
 **World: [policy-codex](../worlds/README.md#policy-worlds)** — every world's gateway starts from the Go
 catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity).
 
@@ -97,13 +102,17 @@ answer is whole).
 
 #### The credential never lands in a record
 
-Legend: `record_bytes_with_key?` = the stored record's fields that contain the Go key; `log_lines_with_key?`
-= the log lines that do.
+Legend: `credential_sent` = the credential the read carries; `source_class?` = the class the source is
+recorded under; `last_error?` = the failure the recorder notes beside the source (`status <n>` = a non-200
+answer, of which no byte is kept; `withheld` = a 200 answer that echoed a credential the gateway holds, no part of it kept); `record_fields_with_key?` =
+the number of the stored record's fields (body included) that contain the Go key;
+`log_lines_with_key?` = the log lines that do.
 
-| description | source | read | record_bytes_with_key? | log_lines_with_key? |
-|---|---|---|---|---|
-| a vendor answer that echoes the key is withheld ⚖ | `go-console-config` | `config-401-echo` | `0` | `0` |
-| a read that carried a credential is never class public | `go-console-config` | `config-ok` | `0` | `0` |
+| description | source | read | credential_sent | source_class? | last_error? | record_fields_with_key? | log_lines_with_key? |
+|---|---|---|---|---|---|---|---|
+| a vendor answer that echoes the key is withheld ⚖ | `go-console-config` | `config-401-echo` | `the Go key as a bearer` | `account` | `status 401` | `0` | `0` |
+| a good answer that echoes the key is withheld whole ⚖ | `go-console-config` | `config-200-echo` | `the Go key as a bearer` | `account` | `withheld` | `0` | `0` |
+| a read that carried a credential is never class public ⚖ | `go-console-config` | `config-ok` | `the Go key as a bearer` | `account` | `none` | `0` | `0` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -122,6 +131,9 @@ is reachable by whoever reaches the gateway's port, so it may carry nothing a cr
 protect — which is what the `account` class's sanitising is for), and returns none: every
 `account` body is structure and lengths.
 
+Unverified — expected to hold, no row yet: an `account` body served through the door is its sanitised
+structure; a source whose every read failed answers 404.
+
 **World: [policy-codex](../worlds/README.md#policy-worlds)** — as GW-WIRE-RECORD.
 
 #### The door
@@ -130,10 +142,10 @@ Legend: `recorded` = the answers on file at T0; `call` = the request made; `answ
 
 | description | recorded | call | status? | answer? |
 |---|---|---|---|---|
-| the index lists every source with its provenance and no body | `go-models-dev at T0` | `GET /wire` | `200` | per source: class, url, status, bytes, sha256, fetched_at, age_s, complete |
-| one member is its stored bytes, the provenance in headers ⚖ | `go-models-dev at T0` | `GET /wire/go-models-dev` | `200` | body = the stored bytes; x-wire-source, x-wire-class, x-wire-sha256, x-wire-fetched-at |
-| a source never read is not an empty answer | `nothing for codex-models` | `GET /wire/codex-models` | `404` | `wire-not-recorded` |
-| the door asks for no credential ⚖ | `go-models-dev at T0` | `GET /wire/go-models-dev`, no token | `200` | as above |
+| the index lists every source with its provenance and no body | `go-models-dev and go-console-config at T0` | `GET /wire` | `200` | `sources` = one entry per source on file, each exactly source, class, url, status, bytes, sha256, fetched_at, age_s, complete, last_error, last_error_at; no body |
+| one member is its stored bytes, the provenance in headers ⚖ | `go-models-dev at T0` | `GET /wire/go-models-dev` | `200` | body = the stored bytes; headers x-wire-source, x-wire-class, x-wire-sha256, x-wire-fetched-at, x-wire-complete |
+| a source never read is not an empty answer | `nothing for go-docs` | `GET /wire/go-docs` | `404` | `wire-not-recorded` |
+| the door asks for no credential ⚖ | `go-models-dev at T0` | `GET /wire/go-models-dev`, no token | `200` | body = the stored bytes, `x-wire-class` = `public` |
 | the view's shape is the schema's | `go-models-dev at T0` | `GET /wire` | `200` | exactly the schema's required keys |
 
 <details markdown="1"><summary>Evidence — latest run</summary>

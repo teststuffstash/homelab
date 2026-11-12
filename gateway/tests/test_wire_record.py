@@ -25,7 +25,7 @@ from ._catalog_rows import T0, at_offset
 from ._catalog_world import catalog_doc
 from ._codex_rows import row, verdicts
 from ._codex_world import CODEX_BASE, CODEX_POLICY
-from .conftest import GO_KEY, attach_json, given, quiet, rule, then, when, world
+from .conftest import GO_KEY, attach_json, given, quiet, rule, when, world
 from .test_codex_usage_poll import usage_doc
 
 pytestmark = rule("GW-WIRE-RECORD")
@@ -166,28 +166,32 @@ async def test_a_failed_read_a_bound_a_restart(cworld, vendor, vendor_transport,
 
 # ── The credential never lands in a record ──────────────────────────────────────────────────
 KEY_ROWS = [
-    pytest.param("go-console-config", "config-401-echo", 0, 0, id="a vendor answer that echoes the key is withheld ⚖"),
-    pytest.param("go-console-config", "config-ok", 0, 0, id="a read that carried a credential is never class public"),
+    pytest.param("go-console-config", "config-401-echo", "the Go key as a bearer", "account", "status 401", 0, 0,
+                 id="a vendor answer that echoes the key is withheld ⚖"),
+    pytest.param("go-console-config", "config-200-echo", "the Go key as a bearer", "account", "withheld", 0, 0,
+                 id="a good answer that echoes the key is withheld whole ⚖"),
+    pytest.param("go-console-config", "config-ok", "the Go key as a bearer", "account", "none", 0, 0,
+                 id="a read that carried a credential is never class public ⚖"),
 ]
 
 
-@pytest.mark.parametrize(("source", "read", "expected_record_bytes_with_key", "expected_log_lines_with_key"), KEY_ROWS,
-                         ids=[p.id for p in KEY_ROWS])
-async def test_the_credential_never_lands_in_a_record(cworld, vendor, caplog, source, read, expected_record_bytes_with_key,
-                                                      expected_log_lines_with_key):
+@pytest.mark.parametrize(("source", "read", "credential_sent", "expected_source_class", "expected_last_error",
+                          "expected_record_fields_with_key", "expected_log_lines_with_key"), KEY_ROWS, ids=[p.id for p in KEY_ROWS])
+async def test_the_credential_never_lands_in_a_record(cworld, vendor, caplog, source, read, credential_sent, expected_source_class,
+                                                      expected_last_error, expected_record_fields_with_key, expected_log_lines_with_key):
     world("policy-codex", upstream=read)
-    row(source=source, read=read)
+    row(source=source, read=read, credential_sent=credential_sent)
     caplog.set_level(logging.DEBUG)
     app = cworld.build()
     with given(f"the console answers {read}"):
         vendor.config = read
-    with when("the config source refreshes (the config read carries the Go key as a bearer)"):
+    with when(f"the config source refreshes (the config read carries {credential_sent})"):
         with quiet():
             await app.state.catalog.refresh_source("config")
     rec = _stored(app, source)
     key = GO_KEY.encode()
     in_record = sum(1 for v in rec.values() if isinstance(v, (str, bytes)) and key in (v if isinstance(v, bytes) else v.encode()))
     lines = sum(1 for r in caplog.records if GO_KEY in r.getMessage())
-    verdicts(record_bytes_with_key=(in_record, expected_record_bytes_with_key), log_lines_with_key=(lines, expected_log_lines_with_key))
-    with then("the source's class is account, never public", expected_class={"expected": "account", "actual": rec.get("class")}):
-        assert rec.get("class") == "account"
+    got_error = rec.get("last_error")
+    verdicts(source_class=(rec.get("class"), expected_source_class), last_error=("none" if got_error is None else got_error, expected_last_error),
+             record_fields_with_key=(in_record, expected_record_fields_with_key), log_lines_with_key=(lines, expected_log_lines_with_key))
