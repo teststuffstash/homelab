@@ -42,6 +42,13 @@
 #               lease → apply → confirm (--check changed=0 + the row's health). Bad = STOP: lease + window
 #               kept, $ADIR/ansible-stopped (→ MgmtAnsibleApplyStopped). Row `mode: shadow` = the checks
 #               and the would-be apply in the journal, nothing applied. Never a revert, never a retry.
+#   VM recreate  a plan whose only out-of-allowlist changes are the recreate of `apply_vm_recreate` VMs (the
+#               plan replaces the VM, or re-creates a cloud-init seed file it references — FU-306's runner
+#               VMs ignore their seed id, so a template edit plans no VM diff) runs mgmt/scripts/mgmt-runner.sh
+#               for ONE VM: a scoped `-target/-replace` plan → scripts/runner-maintenance.sh run <id> <vm>
+#               (window, drain, apply, verify). No stamp: the next tick re-plans (the next VM, or the
+#               final unscoped apply that stamps). Row `mode: off` (shipped) = refused as before; `shadow`
+#               = the scoped plan + scope check in the journal, then refused as before
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.
 set -uo pipefail
@@ -52,6 +59,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/mgmt-helm.sh"
 # shellcheck source=mgmt-ansible.sh
 . "$HERE/mgmt-ansible.sh"
+# shellcheck source=mgmt-runner.sh
+. "$HERE/mgmt-runner.sh"
 # A Type=oneshot unit is `activating` for the whole run of its script (`is-active` exits 3 on it), so
 # the engines unit read as NOT running on every tick of its first live run (2026-10-11 07:22→, 42 moves)
 # and was "started" again each minute — a coalesced no-op in systemd, but a lying log line.
@@ -296,6 +305,30 @@ for root in "${apply_roots[@]}"; do
   if [ $rc = 2 ] && [ -z "$changes" ] && [ -z "$outs" ]; then refuse "$sha" "$root: plan exit 2 but an empty summary — inconsistent, human"; exit 0; fi
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ] && [ -z "$outs" ]; then log "$root: no changes"; continue; fi
+  # Non-Talos VM recreates (mgmt-runner.sh): admitted only when EVERYTHING else in the plan is the box's
+  # anyway — the rest inside the allowlist, the Talos precondition clean, no helm change (the helm bracket
+  # demands to be alone). The rest is applied by the final unscoped tick, after the last VM.
+  # Rows all `off` (as shipped) → not read at all: the loop is byte-for-byte the old one.
+  rlive="$(mgmt_runner_live "$POL" "$root")" || rlive=unreadable
+  if [ -n "$changes" ] && [ "$rlive" != 0 ]; then
+    [ "$rlive" = unreadable ] && { refuse "$sha" "$root: apply_vm_recreate unreadable — human apply"; exit 0; }
+    rcand="$(mgmt_runner_candidates "$POL" "$root" "$out")" || { refuse "$sha" "$root: VM recreate candidates unreadable (plan JSON or apply_vm_recreate) — human apply"; exit 0; }
+    ract="$(awk -F'\t' '$4 == "on" || $4 == "shadow"' <<<"$rcand")"
+    if [ -n "$ract" ]; then
+      rrest="$(printf '%s\n' "$changes" | mgmt_runner_rest "$ract")"
+      routside="$(printf '%s\n' "$rrest" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
+      rthits="$(mgmt_talos_gate "$POL" "$root" "$out")" || { refuse "$sha" "$root: Talos precondition unreadable — human apply"; exit 0; }
+      if [ -z "$routside" ] && [ -z "$rthits" ] && [ ! -s "$out.helm" ]; then
+        runner_bracket "$POL" "$root" "$sha" "$rel" "$ract"; brc=$?
+        case "$brc" in
+          0|3) exit 0 ;;     # one VM recreated (no stamp — the next tick re-plans) / REFUSED
+          1) exit 1 ;;       # PROBE-FAIL
+        esac                 # 4: not taken (shadow) — the ordinary path below refuses the seed file as before
+      else
+        log "$root: VM recreate pending ($(cut -f2 <<<"$ract" | tr '\n' ' ' | sed 's/ $//')) but the rest of the plan is not the box's alone — the ordinary path decides"
+      fi
+    fi
+  fi
   if [ -n "$changes" ]; then
     outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
     if [ -n "$outside" ]; then

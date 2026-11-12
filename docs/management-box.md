@@ -1018,7 +1018,7 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Plan-on-PR sentinel: `main`, `provisioning`, `github`, `cloudflare` (`management-sentinel`, a verdict, never an apply) | unattended (required context) | every PR head since 2026-09-13 | §MB3; cloudflare plans with the read-only `cloudflare-mgmt-read` token | — (hardening open: FU-237 (c)/(d), FU-305) |
 | Router config: test-VM verdict on every PR head (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | unattended (required context since 2026-10-27; a verdict, never an apply) | 2026-10-31 (last router-path head judged, `mgmt_router_verdict_last_verdict_timestamp_seconds`) | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test` | — |
 | Main root, raw-k8s residue (the apply allowlist) | unattended (always on) | since 2026-09-13; loop ticking clean 2026-11-12 | every `management-apply` tick; §The test surface | — |
-| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the two verbs below |
+| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the two verbs below (the runner's row exists, disabled) |
 | Talos config apply, workers (`no_reboot`, health-gated) | unattended | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean | — |
 | Talos config apply, control planes | unattended (`apply_controlplane_config: true`) | 2026-09-22 | the same apply, CP rows included | — |
 | Talos install rollout, workers + CPs (`mgmt-reconcile`) | unattended once the bump is merged (`reconcile_rollout.enabled: true`) | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last | the mechanism: nothing. The bump PR is human-proposed and operator-attended as class 6 (FU-319; a Renovate proposer is #1988's substrate row). No rollout has run since: declared = live = v1.14.1 on 13/13 |
@@ -1037,7 +1037,7 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | manual: seat API calls, test VM 9110 first (ruling 2026-09-29, [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (prod by hand 2026-09-29/30) | class 14 in `dependency-upgrades.md` | ADR-152 program step 4 (test VM → BACKUP → MASTER under one lease) — ROADMAP §Deploy paths; not built |
 | Router BACKUP certificate carry (`scripts/opnsense-cert-carry.sh`) | manual: a seat verb | — | FU-297 | FU-297 next (1): a nightly box timer |
 | OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-08 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
-| ci-runner VM replace (`runner-maintenance`) | attended: `devbox run runner-maint -- run <plan-id> <vm>` | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below | the box wiring designed in §Non-Talos VMs — not built, no tracking item (2026-11-12) |
+| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **built, disabled — operator trial pending** (`mode: "off"`) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below | the operator's shadow → `on` flip, then the first unattended success |
 | Proxmox host maintenance (`host-maintenance`, nx-02 / pve) | attended: `devbox run host-maint -- preflight\|down\|up <host>` | 2026-10-09 (attended, nx-02) | §Hypervisor below | box wiring not built, no tracking item (2026-11-12); FU-288 for the BMC power path |
 | Upgrade-lease revert for an ArgoCD chart whose cone holds its own detector (`mgmt-lease`, §MB5) | unattended | 2026-10-10 (drill) | revert #2441 opened by the box, merged with zero hand acts — [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end | — |
 | The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-10 (`mgmt-confirm` gate 5/5, `mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
@@ -1047,9 +1047,10 @@ table is the box's half. Live reads below are as of 2026-11-12.
 
 ### Non-Talos VMs: the runner verb
 
-The two GitHub Actions runner VMs (`tofu/ci-runner.tf`, Debian + cloud-init, not Talos) are
-replaced whole by any edit to their cloud-init template, and a `proxmox_virtual_environment_vm`
-replace is outside the apply allowlist, so the box refuses that plan to a human apply. The runner
+The two GitHub Actions runner VMs (`tofu/ci-runner.tf`, Debian + cloud-init, not Talos) take a
+cloud-init template edit only through a recreate: since FU-306 the edit re-renders the snippet file
+and replaces no VM, and neither the snippet nor a `proxmox_virtual_environment_vm` replace is in the
+apply allowlist, so the box refuses that plan to a human apply. The runner
 is stateless; the replace is safe exactly when no job is running on it. `node-maintenance.sh`
 covers Talos nodes only, so the runner has its own verb,
 [`scripts/runner-maintenance.sh`](../scripts/runner-maintenance.sh) (`devbox run runner-maint`):
@@ -1066,21 +1067,55 @@ baseline and the drain it also opens Alertmanager silences (`instance=~"<ip>(:[0
 `TargetDown{job="ci-runner-node"}`, which is job-wide), owner-tagged so close expires only its own;
 a failure leaves them with the window, and `silence-close <vm>` expires them once you have finished.
 
-**It is ATTENDED today.** The box wiring below is designed, not built, and no FU or issue tracks
-it (2026-11-12):
+**The box wiring is built and ships OFF** (`apply_vm_recreate.main` in `policy/mgmt/plan-input.yaml`,
+`mode: "off"`); until the operator flips it the box refuses a runner template change to a human
+apply exactly as before, and the [runbook recipe](runbook.md#replacing-a-ci-runner-vm--drained-one-at-a-time)
+is the path. Mechanism: [`mgmt/scripts/mgmt-runner.sh`](../mgmt/scripts/mgmt-runner.sh) (its header is
+the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `_scope`), fixtures in
+`mgmt-runner-test` (inside `mgmt-policy-test`). The shape:
 
-- **The policy maps an address glob and an action to a verb**: a `proxmox_virtual_environment_vm`
-  replace under `ci_runner*` runs `runner-maintenance run` instead of refusing the plan. The
-  allowlist stays a list of addresses, and the verb is the gate for this one shape.
-- **The VM name is read from the plan JSON**, the replaced resource's `name`, never from a list of
-  runner names in the policy or the script.
-- **One VM per tick.** With both runners pending, the loop plans with `-exclude` on the other
-  runner's VM and snippet file, runs the verb on that scoped plan id, and leaves the other runner
-  for the next tick. The lane is never empty.
+- **The policy maps an address glob to a verb**: the row `proxmox_virtual_environment_vm.ci_runner*` →
+  `runner-maintenance`, with `mode` `off` | `shadow` | `on` (the operator's toggle, the `apply_ansible`
+  convention). The allowlist stays a list of addresses, and the verb is the gate for this one shape.
+- **The trigger is the seed file, not a VM replace** — the design predated FU-306. Both runner VMs
+  ignore `initialization[0].user_data_file_id` (`tofu/ci-runner.tf`), so a template edit plans only the
+  snippet file's re-create and no VM diff. The loop's unscoped plan of master names the VM anyway: the
+  plan JSON's `configuration` lists what each VM's `initialization` block references, and a matched VM
+  that plans no change while a file it references is created/replaced/updated is a `seed` candidate (a
+  matched VM the plan replaces outright is a `replace` one). A VM with an in-place update is not a
+  candidate. The shape was checked against a real `tofu show -json` (a dependant whose reference is
+  ignored plans `no-op` beside the replaced resource). Not covered: a human apply that re-creates the
+  snippet WITHOUT the recreate (an unscoped `mgmt-tf apply`, or the runbook's unscoped `-replace` plan
+  of the other VM) consumes the trigger — that VM keeps its old seed until a recreate is planned by hand.
+- **The VM name is read from the plan JSON** (the VM's `name`), never from a list of runner names.
+- **Admitted only when the rest of the plan is the box's anyway**: every change the candidates do not
+  cover inside the allowlist, the Talos precondition clean, no helm change. Otherwise the ordinary path
+  decides (and refuses the snippet to a human).
+- **One VM per tick, scoped with `-target`, not `-exclude`.** The box plans
+  `-target=<vm> -replace=<vm>`: the VM and its dependencies (its own snippet, the seed image) and
+  nothing else, so the other runner's snippet stays pending and its trigger survives for the next tick.
+  `-replace` beside `-exclude` is silently ignored ([runbook](runbook.md) §Recreating a Talos VM), so
+  the design's "`-exclude` the other runner" bullet became this; `mgmt_plan_root` refuses the pair. The
+  snippet re-create rides in the same scoped apply as its VM's replace, which is what the new VM boots.
+  The box then checks the scoped plan itself (that VM replaced, no other VM, no Talos/helm change, the
+  rest its seed files or allowlisted) and hands the plan id to `runner-maintenance run <plan-id> <vm>`,
+  which re-checks its VM half and runs the bracket above. `mgmt-runner.sh` doubles as the verb's
+  `MGMT_TF` on the box (`summary`/`apply` of the locally saved plan — `mgmt-tf.sh` reaches the box over
+  ssh and cannot run on it).
+- **The verdict.** Verb 0 → `management-apply` success naming the VM, no stamp. 1 (failed after acting:
+  its window and silences stay open, and that window holds the loop), 2 (drain refused, labels restored),
+  3 (refused before a window) → a refusal naming it, `refused-rev` like any other. The same VM still a
+  candidate after its recreate at the same sha is refused as a perpetual diff, never recreated twice.
 - **The final full apply stamps.** A scoped apply does not advance `applied-rev`; the tick after
   the last runner plans master unscoped, and that apply stamps as any other.
+- **Shadow** makes the scoped plan and its scope check and writes the would-be `run` to the journal,
+  then lets the ordinary path refuse as before. The sentinel's PR comment names the VMs the box will
+  recreate when the row is `on`.
 
-It enters the ledger above as box-run only after its first unattended success.
+**Trying it (operator):** flip the row to `mode: shadow` (a codeowner-gated policy PR), merge a runner
+template change, read the tick (`journalctl -u mgmt-apply` on the box: `VM recreate candidate …`,
+`scoped plan … in scope`, `[shadow] would run …`), then flip to `on`; the next template change runs it.
+The first unattended success moves the ledger row.
 
 ### Hypervisor: the host verb
 
@@ -1090,8 +1125,8 @@ preflight|down|up <host>`): a composer over the verbs above — guests read live
 and classified by name, then the runner verb, `node-maintenance` (control planes via
 `controlplane-upgrade.sh`), `pct shutdown`, and the router node's `carp-maintenance` last, in the
 order [runbook §Proxmox host maintenance](runbook.md#proxmox-host-maintenance-window-updates--reboot)
-gives. It opens its own host window (an `instance` silence + a declared window). **Attended**,
-like the runner verb; box wiring is not built.
+gives. It opens its own host window (an `instance` silence + a declared window). **Attended**;
+box wiring is not built (the runner verb's is, disabled).
 
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
@@ -1656,7 +1691,8 @@ still a human" is §The capability ledger.
 | Router MASTER converge and router firmware as box runs | not built — ADR-152 program step 3 (the rolling part) and step 4 | ROADMAP §Deploy paths |
 | The router BACKUP's certificate carry as a box timer | a seat verb today | FU-297 |
 | The router BACKUP converge is refusing on live drift (Kea, since 2026-10-31) | needs a human converge | no tracking item found 2026-11-12 |
-| ci-runner VM replace and Proxmox host maintenance as box-run verbs | designed (§Non-Talos VMs), attended today | no tracking item 2026-11-12 |
+| ci-runner VM replace as a box-run verb | built, disabled — operator trial pending (§Non-Talos VMs) | no tracking item 2026-11-12 |
+| Proxmox host maintenance as a box-run verb | attended today (§Hypervisor), box wiring not designed | no tracking item 2026-11-12 |
 | The pilot's replacement (a Tiny; UEFI + vPro) — and with it a PXE install path and an automatic boot-failure rollback | waits on hardware | the private hardware register's R12 row |
 | A CI gate on `mgmt/nixos/` (`nix flake check`) | deliberately not built: the repo's CI is a list of `devbox run` steps, and the step wants the nix cache warm on the runner first | — |
 
