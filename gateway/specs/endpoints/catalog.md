@@ -39,7 +39,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 
 | Requirement | Governs (schema) | Error codes | Status |
 |---|---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #2768)`: listed is not a liveness signal — ⚖ standing, #2768 closed on [its ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677); `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
+| [GW-CATALOG-GO](#gw-catalog-go) | `$defs.config_snapshot`, `$defs.docs_snapshot`, `output.sources`; metrics `families.gateway_go_catalog_*` | — | v0 — the read leg; admission reads it ([GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit) §Capacity owns those rows); since 2026-10-20 the `config` source is models.dev's catalog under the console's overlay (the console answer became override-only that day); `⚑ gap (2026-10-20, PR #2766 → work #3293)`: listed is not a liveness signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time is unread (the "⚑ gap" rows below) |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
@@ -96,7 +96,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 
 | Requirement | Section | Status |
 |---|---|---|
-| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #2768)`: listed is not a liveness signal — ⚖ standing: #2768 closed on [its ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677), which keeps the rail's own `/models` answer unread and names the shadow cells and the 4xx/5xx belts as the signal; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
+| [GW-CATALOG-GO](#gw-catalog-go) | the Go catalog | `⚑ gap (2026-10-20, PR #2766 → work #3293)`: listed is not a liveness signal — no vendor source the leg reads is one; the shadow cells and the 4xx/5xx belts are; `⚑ gap (2026-11-06, PR #3187 → work #3118)`: a vendor reset time — this leg reads no Go usage, the headroom Goal reads the account's windows |
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | the Go catalog | |
 | [GW-CATALOG-OR](#gw-catalog-or) | the OpenRouter catalog | — |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | the OpenRouter catalog | `⚑ gap` rows below: no in-cluster canary trigger, the Go rail's canary |
@@ -209,7 +209,8 @@ never the Go rail's own model list. The leg does not read that list (`/zen/go/v1
 reads are the three under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
 `served` flag and no reference price (unverified — expected, no row). An id the rail serves and the catalog does not list — a
 deprecated row the vendor still serves, a pay-as-you-go model with no Go row, an id with no vendor
-row at all — is unlisted like any other: an admission naming it defers `not-in-catalog`
+row at all (the kinds: unverified — expected, no row; the row cited next is an id models.dev
+lacks) — is unlisted like any other: an admission naming it defers `not-in-catalog`
 ([GW-SESSIONS-CAPACITY §Not in the catalog](sessions.md#not-in-the-catalog), "a Go model the
 catalog no longer lists defers not-in-catalog"), never priced at a fallback (ruling 4) — a
 pay-as-you-go row is not a Go price.
@@ -238,7 +239,7 @@ five + X`); `unlisted?` = ids either read carries that the listing lacks.
 #### Which rows the merged listing holds
 
 Rows run with no last good snapshot. Legend: `config-disables` = `deepseek-v4-pro: {disabled: true}`;
-`config-adds` = a console-only `deepseek-v4-flash` with a cost and both limits; `config-adds-bare` =
+`config-adds` = a console-only `deepseek-v4-flash` as a full row (cost, both limits, family, tools); `config-adds-bare` =
 `deepseek-v4-flash: {disabled: false}`; `catalog-google` = models.dev lists `gemini-4-argon` on
 `@ai-sdk/google`; `config-adds-gemini` = a complete console override for that dropped id.
 
@@ -367,7 +368,7 @@ reads; `log_lines_with_key?` = `gateway.catalog` lines carrying the key, raw or 
 #### Kept across a restart
 
 Legend: `stored` = what the store holds when gateway #2 starts (`both snapshots at T0` = gateway #1
-refreshed both sources at T0; `a config row that is not JSON`); `restart_at` = when #2 starts;
+refreshed both sources at T0; `a config row that is not JSON, no docs row`); `restart_at` = when #2 starts;
 `age_s?` = the view's `age_s`, config · docs; `startup_delay?` = the seconds the loop waits before
 its first refresh; `retry_after_s?` = a `not-in-catalog` defer's `retry_after_s` on #2 before any
 refresh.
@@ -375,7 +376,7 @@ refresh.
 | description | stored | restart_at | age_s? | models? | startup_delay? | retry_after_s? |
 |---|---|---|---|---|---|---|
 | a PVC store keeps the snapshot | both snapshots at T0 | T0 + 600 s | 600 · 600 | 5 | 21000 | 21000 |
-| a corrupt stored snapshot is ignored | a config row that is not JSON | T0 | none · none | 0 | 0 | 60 |
+| a corrupt stored snapshot is ignored | a config row that is not JSON, no docs row | T0 | none · none | 0 | 0 | 60 |
 | a restart inside the interval refreshes nothing at start ⚖ | both snapshots at T0 | T0 + 3600 s | 3600 · 3600 | 5 | 18000 | 18000 |
 | a restart after the interval refreshes at start | both snapshots at T0 | T0 + 21600 s | 21600 · 21600 | 5 | 0 | 60 |
 
@@ -407,19 +408,21 @@ Legend: `refreshes` = the config source's refreshes before the read, in order; `
 
 `policy-default` names the Go ids `deepseek-v4.1-flash` and `claude-haiku-5-5`. Legend: `missing?` =
 `gateway_go_catalog_policy_models_missing{source=…}`; `uncovered?` = the policy Go models the view's
-`policy_models` shows without a listing (config) or without a limit row under the plan (docs).
+`policy_models` shows without a listing (config) or without a limit row under the plan (docs);
+`last_good` = the source's snapshot before the refresh (`none` = the refresh is the first, so no
+plausibility floor holds it).
 
-| description | source | behaviour | missing? | uncovered? |
-|---|---|---|---|---|
-| every policy Go model listed: none missing | config | catalog-ok | 0 | none |
-| policy Go models the config does not list are counted | config | catalog-shrunk | 1 | claude-haiku-5-5 |
-| policy Go models without a limit row under the plan are counted | docs | docs-shrunk | 1 | claude-haiku-5-5 |
+| description | last_good | source | behaviour | missing? | uncovered? |
+|---|---|---|---|---|---|
+| every policy Go model listed: none missing | none | config | catalog-ok | 0 | none |
+| policy Go models the config does not list are counted | none | config | catalog-shrunk | 1 | claude-haiku-5-5 |
+| policy Go models without a limit row under the plan are counted | none | docs | docs-shrunk | 1 | claude-haiku-5-5 |
 
 #### Named gaps — the Go catalog
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
-| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are. ⚖ Standing: the rail's own `/models` answer, the one source that could be, stays unread ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677) — the residue record) |
+| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are ([#3293](https://github.com/teststuffstash/homelab/issues/3293)); the rail's own `/models` answer stays unread |
 | ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed; the account's windows and their reset are the headroom Goal's read ([#3118](https://github.com/teststuffstash/homelab/issues/3118)) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -827,8 +830,8 @@ gateway; its model is the catalog's, not the policy's (⚖
 [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)'s one exception: the catalog is the
 entry gate the policy's lists are derived from). The checks, in order: the cell is in the snapshot
 (`not-in-catalog`, `retry_after_s` = the next refresh), it is a candidate (`canary-not-due` —
-already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end), the
-budget, then the rail's slot count and credential as any admission.
+already eligible (`retry_after_s` = the next refresh), or excluded inside its cooldown
+(`retry_after_s` = the cooldown's end)), the budget, then the rail's slot count and credential as any admission.
 
 **Who rides the canaries** is the jail's `gateway/scripts/canary-entrants.sh`: it reads the view,
 launches one prober ride per candidate cell through `agents/agent-session.sh`'s
@@ -941,7 +944,7 @@ Legend: `rides` = the canary rides on (M, deepinfra), in order; `state?` / `retr
 | description | rides | state? | retry_at? | backoff_s? | limit_source? | counted? | strike? | admitted? |
 |---|---|---|---|---|---|---|---|---|
 | a 429'd canary is no verdict: the cell backs off ⚖ | a 429'd canary at T0 | candidate | T0 + 3600 s | 3600 | upstream_provider_shared_pool | no-verdict 1 | none | 0 |
-| a cell back from exclusion backs off the same way | a struck canary at T0; a 429'd canary at T0 + 86400 s | candidate | T0 + 90000 s | 3600 | upstream_provider_shared_pool | no-verdict 1, excluded 1 | none | 1 |
+| a cell back from exclusion backs off the same way | a struck canary at T0; a 429'd canary at T0 + 86400 s; no refresh between | candidate | T0 + 90000 s | 3600 | upstream_provider_shared_pool | no-verdict 1, excluded 1 | none | 1 |
 | a consecutive 429'd canary doubles the horizon; the policy caps it ⚖ | four 429'd canaries, each at the previous horizon | candidate | T0 + 39600 s | 3600, 7200, 14400, 14400 | upstream_provider_shared_pool | no-verdict 4 | none | 0 |
 | a verdict resets the backoff ⚖ | two 429'd canaries at their horizons, then a clean canary | eligible | none | 3600, 7200, none | none | no-verdict 2, eligible 1 | none | 1 |
 | a strike on a ride that saw a 429 is not the cell's verdict ⚖ | a 429'd canary at T0, then its consumer reports harness-gave-up | candidate | T0 + 3600 s | 3600 | upstream_provider_shared_pool | no-verdict 1 | harness-gave-up, scope cell | 0 |
