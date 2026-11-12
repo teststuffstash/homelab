@@ -198,6 +198,13 @@ drifted from `gateway/specs/README.md`.
 3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
    issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
    rule is the brief's (§Hard limits).
+   **A wait may hide a parity gap — RULED 2026-11-12 (operator):** a `seat` on #3145 (the codex
+   catalog leg) parked the whole item on a candidate ruling, although half of what it lacked —
+   the account's model list — is a read the gateway already serves for two other rails
+   (`/catalog/opencode`, `/catalog/openrouter`). The sitting now checks parity across the island's
+   sibling sets before `seat` and files the facility siblings already have; it fills gaps the
+   contract implies and never invents a feature or carries the pending ruling. The rule is the
+   brief's (§The procedure, step 3).
 4. **The `⚑ gap` flag grammar for a closed work issue** (run 1's finding): rule 10 names a work
    issue; the island already uses `⚑ gap (date, homelab#N)` for residue. One form or the other
    belongs in the pinned text (allure-behavior-snippets), not here.

@@ -89,7 +89,7 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 | **requeue** | a `reread:` input whose blocker no longer holds and whose work is one ride from done (a salvaged branch, a blocker that was that ride's own) | labels: remove `agent/blocked`, add `agent/queued`; `intake: requeue — <the fact that changed, with its evidence>`, naming the resumable branch when the ride record has one (the next round resumes it) |
 | **standing** | a valid gap the island records honestly and nobody should spend a ride on now | `intake: standing — <why not now>` (the selector skips it from then on); no labels |
 | **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it (§Hard limits — whose issue it is). A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling); a part owned by yours is ruled in this sitting like any other input |
-| **file** | a `text:` input worth an issue | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting |
+| **file** | a `text:` input worth an issue, or the parity gap inside a `seat` (§The procedure, step 3; `Origin=<the input>`) | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting |
 
 ## The procedure, per input, in this order
 
@@ -111,6 +111,15 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 3. **Does it need a human fact?** The body (or meta-state) says "operator-only", "ruling pending",
    "needs a window", "needs the login" → `seat`, naming the fact. Do not reason around a missing
    credential or an unmade ruling; the ruling is theirs.
+   **Before `seat`, the parity check.** Ask what the wait is made of. When part of it is a fact
+   the island already reads for a sibling (§Island facts names the sibling sets) through a
+   facility this member lacks — a view, a read leg, a gauge that at least two siblings have under
+   the same page — the facility is a gap the contract already implies, not a feature you invent.
+   `file` it as its own issue, the siblings' requirement as the template for its key rows (⚖
+   where this member differs), and rule it in this sitting like any other input. The original
+   keeps `seat` for what remains, its comment naming the filed issue next to the missing fact.
+   Parity fills what siblings already have: it never carries the ruling the item waits on, and
+   a facility no sibling has is a new feature — `seat`.
 4. **How big is it?** One ride → `queue`. More → `goal` within the ceiling, else `seat` with the
    draft Goal in the comment (the operator admits that one — breaker #1 is theirs).
 5. **Is it worth a ride now?** A gap row that is honest, read by nobody live, and whose fix would
@@ -252,5 +261,8 @@ never pad it, never leave it out.
   the review classes that cost rounds (TICK-LOG 10-19, 10-20).
 - Pinned process: `allure-behavior-snippets` RULES.md/CONVENTIONS.md, at the version
   `gateway/specs/README.md` §Rules pins (no number here — it drifted). "Rule N" means rule N there.
+- Sibling sets (step 3's parity check): the rails — `opencode`, `openrouter`, `anthropic`,
+  `codex`. A per-rail facility is a `/catalog/<rail>` view, a catalog read leg, a headroom
+  reading, a metric family.
 - Operator-only, not yours to reason around: the Go key mint (FU-313), the codex login (seed), a
   canary / maintenance window, any ruling the tracker marks "ruling pending" (FU-270 names them).
