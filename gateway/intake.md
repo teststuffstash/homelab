@@ -119,7 +119,10 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
    where this member differs), and rule it in this sitting like any other input. The original
    keeps `seat` for what remains, its comment naming the filed issue next to the missing fact.
    Parity fills what siblings already have: it never carries the ruling the item waits on, and
-   a facility no sibling has is a new feature — `seat`.
+   a facility no sibling has is a new feature — `seat`. The filed part and its origin are
+   disjoint by construction: step 2 never folds one into the other, and a later re-rule of the
+   origin treats its named parity issue as already filed — no fold, no second filing. A facts
+   file that declares no sibling set has no parity check.
 4. **How big is it?** One ride → `queue`. More → `goal` within the ceiling, else `seat` with the
    draft Goal in the comment (the operator admits that one — breaker #1 is theirs).
 5. **Is it worth a ride now?** A gap row that is honest, read by nobody live, and whose fix would
