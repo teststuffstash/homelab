@@ -162,7 +162,8 @@ each with its own snapshot:
   re-listed (#2933: the complete-row branch would list it with a guessed `openai` dialect, which
   the ruling forbids). The console request carries the Go key as a bearer, a `User-Agent` and a
   fresh `x-opencode-session` — Cloudflare answers 1010 to a bare client; the catalog read carries
-  no credential. The two reads are one source: the first that fails ends the refresh with its
+  no credential. With no Go key (`OPENCODE_GO_API_KEY` unset) the source sends no request at all
+  and its refresh is `fetch-failed`. The two reads are one source: the first that fails ends the refresh with its
   outcome (the log line names the read: unverified — expected, no row), and the merged listing is
   the one snapshot admission reads.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
@@ -458,7 +459,10 @@ page's fact, the listing the catalog's.
 **The plan.** The policy names the plan (`rails.opencode.plan`: `go` | `go-plus`, required) because
 no vendor API says which plan a key is on (ruling 4). What the policy no longer holds (ruling 5):
 the vendor facts live in the snapshot, so a policy that still carries one refuses to load — a
-stale hand copy can never shadow the catalog. The same rule holds a Go model's harness window:
+stale hand copy can never shadow the catalog. Two entries of `rails.<rail>.admission` are closed
+sets, and a value outside one refuses the load: a window under `window_draw.windows` is one the
+page gives a share — `5h`, `7d`, `30d`, the snapshot's `window_shares` — and `latch_scope` is
+`account` (the default) or `model` ([GW-SESSIONS-CAPACITY](sessions.md#capacity--the-ladders-capacity-half)). The same rule holds a Go model's harness window:
 the dispatch answer's `context_tokens` is the snapshot's `context`, and a policy `context_tokens`
 entry for an `opencode-go/*` model refuses the load — the rows live on
 [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
@@ -627,7 +631,8 @@ good snapshot kept on any failure and persisted in the store, shown on `/metrics
   [endpoint snapshot](../glossary.md#endpoint-snapshot) (`$defs.openrouter_snapshot`: the rows plus
   the model's ranking tokens and AA indices — what [#2743](https://github.com/teststuffstash/homelab/issues/2743)'s
   comparison needs on equal terms). ⚖ A candidate whose endpoints cannot be read is absent from
-  this refresh (counted, never guessed); an MCP source that fails is `fetch-failed`, one that
+  this refresh (counted, never guessed); an account key that does not resolve is `fetch-failed` with no MCP call; an MCP source that
+  fails is `fetch-failed`, one that
   answers a shape the leg cannot read is `parse-failed`; a fresh snapshot with no model, or fewer
   than half the last good one's, is `implausible` — the last good snapshot stands.
 
@@ -660,7 +665,8 @@ the fixture Secret `agent-egress/router-account-key`. Legend, every table below:
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
 JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
 model (`ok`; `endpoints-503 for G`; `endpoints-null-uptime for G` = G's first endpoint's
-`uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
+`uptime_last_1d` null; `endpoints-null-uptime@<provider>/<quantization> for M` = M's endpoint on
+that provider at that quantization, `uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
 `models?` = the snapshot's models after it; `cells?` = its candidate cells.
 
 #### A refresh builds the snapshot
@@ -739,7 +745,8 @@ Legend: `calls?` = the MCP requests in order (`initialize` before each tool call
 A good refresh at T0 on gateway #1; gateway #2 starts on the same DB at `restart_at`. Legend:
 `age_s?` / `models?` / `cells?` = the view on #2 before any refresh; `startup_delay?` = the seconds
 #2's loop waits before its first refresh; `retry_after_s?` = a canary on a cell the snapshot lacks
-defers `not-in-catalog` with this `retry_after_s` on #2.
+defers `not-in-catalog` with this `retry_after_s` on #2 ([sessions.md §Not in the catalog](sessions.md#not-in-the-catalog)'s rule: the next scheduled
+refresh, or `defer_retry_s` (60) when none is scheduled yet).
 
 | description | restart_at | age_s? | models? | cells? | startup_delay? | retry_after_s? |
 |---|---|---|---|---|---|---|
@@ -829,7 +836,9 @@ with the class, a `candidate` again after `canary.cooldown_s` (⚖ 86400 s). A c
 session like any other (a token, an env, the outcome endpoint), so its rides are metered by the
 gateway; its model is the catalog's, not the policy's (⚖
 [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)'s one exception: the catalog is the
-entry gate the policy's lists are derived from). The checks, in order: the cell is in the snapshot
+entry gate the policy's lists are derived from). A `canary` body from any role but
+the policy's is a 400 `malformed-body` — the admission's own check, before any of the cell's. The
+checks, in order: the cell is in the snapshot
 (`not-in-catalog`, `retry_after_s` = the next refresh), it is a candidate (`canary-not-due` —
 already eligible (`retry_after_s` = the next refresh), or excluded inside its cooldown
 (`retry_after_s` = the cooldown's end)), the budget, then the rail's slot count and credential as any admission.
@@ -1090,14 +1099,17 @@ parts, each a reviewable file in git:
   and the run says to delete it) — the file cannot shadow real evidence. A snapshot row scored
   from one says so: `score_source: manual` with `score_source_url` and `score_read_at` (optional
   row keys, absent on a feed-scored row). The join stays the rule below: a manual id is one more
-  AA id it runs over, never a policy-id → row pair. The file is strict — every row names its
-  source url and the day it was read, or the whole file is refused and nothing is written
+  AA id it runs over, never a policy-id → row pair. The file is strict — every row carries exactly
+  the row keys: a `vendor/model` id no other row repeats, at least one score (each a number or
+  null), its https source url and the day it was read (`YYYY-MM-DD`); an unknown key at either
+  level, or a row short of that, and the whole file is refused and nothing is written
   ([§Manual benchmark rows](#manual-benchmark-rows)).
 - **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
   fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
   the cost-per-clean-ride terms (`ride_tokens_out_m`, `strike_overhead_usd`, `min_rides`;
-  [§Cost per clean ride](#cost-per-clean-ride)). Unknown keys refuse the load like every other
+  [§Cost per clean ride](#cost-per-clean-ride)); the block is required, `ride_tokens_out_m` a
+  positive number, `min_rides` a positive integer. Unknown keys refuse the load like every other
   policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
 - **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
   `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
@@ -1187,7 +1199,7 @@ Legend: `rail` = a hand-written rail — `fx` (priced; `fx/top` 50 · out 2.0 / 
 unbenched · 0 / 0; under `score: coding` `top` 10, `near` 60, `mid` 55, `low` 50, `far` 5), `fxt`
 (`fxt/a` 40 · 0.5 / 0.2, `fxt/b` 44 · 0.5 / 0.1, `fxt/c` 44 · 0.5 / 0.2), `anthropic` (`claude/fx-a`
 40, `claude/fx-b` 55, `claude/fx-c` 60, no prices), `fx + fx/mid rides 2 / 6` (fx with `fx/mid` at
-two clean of six judged rides); bands 0.9 / 0.75 / 0.5, cap 3, `tiers.cost` 0.01 · 0 · 5 throughout;
+two clean of six judged rides); bands 0.9 / 0.75 / 0.5, cap 3, `tiers.cost` 0.01 · 0 · 5 and prior 1 throughout;
 under `intelligence` fx's top is 50 → heavy ≥ 45, standard ≥ 37.5, light ≥ 25. `list?` = the
 derived list of `tier` (several tiers: their lists in that order, `·`-separated).
 
@@ -1482,7 +1494,7 @@ series after (`none` = no series).
 | no twin at the tier: the role's order, no choice | nothing | standard | dispatch | opencode | MG | null | none |
 
 The defer of the both-held row carries `reason: no-eligible-provider`, `retry_after_s: 60` — the
-hold that lifts first.
+hold that lifts first (unverified — expected, no row).
 
 #### The choice survives a failover
 
