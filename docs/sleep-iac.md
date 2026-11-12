@@ -28,8 +28,8 @@ Three layers, so app repos know nothing about homelab and a deploy is a reviewab
   to ghcr on a `v*` tag. Standard Kubernetes; zero homelab knowledge.
 - **`sleep-iac`** (new): the stack's deployment truth — ArgoCD child Applications + values +
   version pins **+ the apps' infra CRs** (Garage Workspaces, ExternalSecrets, OpenRouterKeys,
-  agent git-token). Own CI gates; **a deploy = a version-bump PR here** (Renovate — see
-  [`renovate.md`](renovate.md) — and the coordinator's step-7a automation both plug in at this seam).
+  agent git-token). Own CI gates; **a deploy = a version-bump PR here**, opened by the app repo's deploy-pin
+  flow (§Deploy pipeline); Renovate ([`renovate.md`](renovate.md)) moves only this repo's third-party pins.
 - **homelab**: the platform — operators, SERVICES.md, the `sleep` **AppProject** (tenancy
   boundary), and one root Application pointing at sleep-iac. **sleep-iac is public** (it's
   deployment config with no secret material — the CRs carry Garage *key ids* and Infisical
@@ -72,7 +72,8 @@ sleep-iac/
   snore-recorder/            # the CRs formerly in snore-recorder/infra/
   devbox.json                # ci seam: yamllint + kubeconform + helm-template-with-pinned-values
   .github/workflows/ci.yaml  # thin: devbox run ci; runs-on homelab-ephemeral
-  renovate.json              # watches the ghcr chart/image pins (see renovate.md / FU-125)
+  renovate.json              # extraction overrides for third-party pins only (Actions, the deploy runner
+                             # image — renovate.md §Scope); first-party chart/image pins move by deploy-pin PRs
 ```
 
 ## Grafana dashboard migration
@@ -169,7 +170,7 @@ the data buckets).
    ("deployment + infra CRs live in sleep-iac"); update `argocd/README.md`, the pattern doc ("today
    argocd/sleep plays the role" note), SERVICES.md ArgoCD row if worded around it.
 6. **Wire the gates** — Renovate on sleep-iac (chart `targetRevision` + image `tag` pins → bump
-   PRs); the reviewer/auto-merge gate applies as on the app repos. Later the full-stack k3d gate
+   PRs; as built, the first-party pins move by the deploy-pin flow instead — §"Why not Renovate for this"); the reviewer/auto-merge gate applies as on the app repos. Later the full-stack k3d gate
    (ADR-082) becomes a required check here — that's the "deploy verify" of agent P2.
 
 ## Deploy pipeline (build → PR → sync)
@@ -255,7 +256,7 @@ deploy) is **FU-044**. Harden app CI so it stays the safety net, not the control
 - **New ADR: three-layer repo topology** (app → stack-iac → platform), refining ADR-004/ADR-074 —
   the app still *owns* its resources, but the declarations live in the stack's iac repo, not the
   app repo (the app repo stays a pure artifact producer).
-- Coordinator step 7a flips from "flag and stop" to: worker/Renovate opens the version-bump PR in
+- Coordinator step 7a flips from "flag and stop" to: the app repo's deploy workflow opens the version-bump PR in
   sleep-iac → gates → auto-merge → ArgoCD syncs (`agents/coordinator/README.md`).
 - **Dashboard body moves to GitOps** (`sleep-iac/sleep-tracking/`) while the datasource + sqlite-sync
   sidecar + reader secret stay platform-owned (§"Grafana dashboard migration"); datasource **uid `sleep-data`**

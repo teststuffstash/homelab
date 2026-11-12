@@ -29,7 +29,7 @@
       "last_proven_pr": 3038,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
-      "rows": 17
+      "rows": 19
     },
     {
       "complete": false,
@@ -82,11 +82,12 @@
       "gap_cells": [],
       "gap_rows": 0,
       "human_cells": [
+        "deploy_edge",
         "merge_gate",
         "proposer",
         "revert"
       ],
-      "human_rows": 0,
+      "human_rows": 1,
       "id": 6,
       "last_proven": "2026-09-22T00:00:00Z",
       "last_proven_pr": null,
@@ -107,7 +108,7 @@
       "last_proven_pr": 2919,
       "name": "devbox/nix toolchain",
       "owner_may_leave": false,
-      "rows": 42
+      "rows": 43
     },
     {
       "complete": true,
@@ -125,7 +126,6 @@
     {
       "complete": false,
       "gap_cells": [
-        "merge_gate",
         "deploy_edge",
         "detector"
       ],
@@ -847,7 +847,7 @@
       "key": "1:argo-workflows",
       "last_proven": "2026-10-30T04:08:43Z",
       "name": "argo-workflows",
-      "version": "2.0.14",
+      "version": "2.0.16",
       "where": [
         "argocd/platform/argo-workflows.yaml"
       ]
@@ -947,7 +947,7 @@
       "key": "1:infisical-standalone",
       "last_proven": "2026-10-29T04:01:11Z",
       "name": "infisical-standalone",
-      "version": "1.11.1",
+      "version": "1.12.0",
       "where": [
         "argocd/platform/infisical.yaml"
       ]
@@ -969,7 +969,7 @@
       "key": "1:kube-prometheus-stack",
       "last_proven": "2026-10-31T17:35:22Z",
       "name": "kube-prometheus-stack",
-      "version": "92.16.1",
+      "version": "92.18.0",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -1024,7 +1024,7 @@
       "key": "2:docker.io/grafana/alloy",
       "last_proven": "2026-10-29T22:49:58Z",
       "name": "docker.io/grafana/alloy",
-      "version": "v1.21.2",
+      "version": "v1.21.3",
       "where": [
         "argocd/resources/loki/alloy.yaml"
       ]
@@ -1057,7 +1057,7 @@
       "key": "2:docker.io/library/busybox",
       "last_proven": "2026-10-04T22:57:06Z",
       "name": "docker.io/library/busybox",
-      "version": "1.38.0@sha256:fd7dc98638c8",
+      "version": "1.38.0@sha256:a46257e06c82",
       "where": [
         "argocd/resources/loki/kmsg-reader.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1080,7 +1080,7 @@
       "key": "2:docker.io/library/python",
       "last_proven": "2026-10-28T12:12:06Z",
       "name": "docker.io/library/python",
-      "version": "3.15-slim, 3.15-slim@sha256:3053ea19f293",
+      "version": "3.15-slim, 3.15-slim@sha256:fd2aef5e0d84",
       "where": [
         "argocd/resources/cloudflare-exporter/credential-expiry-probe-deployment.yaml",
         "argocd/resources/cloudflare-exporter/edge-probe-deployment.yaml",
@@ -1131,7 +1131,7 @@
       "key": "2:docker.io/otel/opentelemetry-collector-contrib",
       "last_proven": "2026-10-27T03:31:42Z",
       "name": "docker.io/otel/opentelemetry-collector-contrib",
-      "version": "0.164.0",
+      "version": "0.165.0",
       "where": [
         "argocd/resources/otel-collector/deployment.yaml"
       ]
@@ -1216,12 +1216,34 @@
       ]
     },
     {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:registry.teststuff.net/kindergarten",
+      "last_proven": null,
+      "name": "registry.teststuff.net/kindergarten",
+      "version": "main",
+      "where": [
+        "argocd/resources/kindergarten/kindergarten.yaml"
+      ]
+    },
+    {
+      "class": 2,
+      "gap_columns": [],
+      "key": "2:registry.teststuff.net/school",
+      "last_proven": null,
+      "name": "registry.teststuff.net/school",
+      "version": "main",
+      "where": [
+        "argocd/resources/school/school.yaml"
+      ]
+    },
+    {
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-base",
       "last_proven": "2026-10-30T18:48:04Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.10.30-g2c482a920eed; 1 manifest ref(s)",
+      "version": "`AGENT_BASE_IMAGE`=2026.11.11-gb111711ac6a7; 1 manifest ref(s)",
       "where": [
         "agents/images.env",
         "argocd/resources/agentstack/composition.yaml"
@@ -1235,7 +1257,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-10-31T15:52:39Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.10.31-g8f5cedb3b83f; 35 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.11-g0ba770de8d02; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1271,7 +1293,7 @@
       "key": "3:agent-gateway",
       "last_proven": "2026-10-30T18:27:21Z",
       "name": "agent-gateway",
-      "version": "2026.10.30-g3ec68b9810ea (×1)",
+      "version": "2026.11.11-g477495f15753 (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -1296,7 +1318,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-30T19:02:39Z",
       "name": "homelab/arc-runner",
-      "version": "2026.10.30-g3ec68b9810ea (×3)",
+      "version": "2026.11.10-g9ca9f3195fa2 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -1308,7 +1330,7 @@
       "key": "4:argo-cd",
       "last_proven": "2026-10-30T18:06:32Z",
       "name": "argo-cd",
-      "version": "10.11.1",
+      "version": "10.12.1",
       "where": [
         "tofu/argocd.tf",
         "tofu/variables.tf"
@@ -1343,7 +1365,7 @@
       "key": "5:bpg/proxmox@tofu",
       "last_proven": "2026-10-29T12:11:26Z",
       "name": "bpg/proxmox",
-      "version": "0.118.0 (`~> 0.118`)",
+      "version": "0.120.0 (`~> 0.120`)",
       "where": [
         "tofu/versions.tf",
         "tofu/.terraform.lock.hcl"
@@ -1355,7 +1377,7 @@
       "key": "5:bpg/proxmox@tofu/provisioning",
       "last_proven": "2026-10-29T12:11:26Z",
       "name": "bpg/proxmox",
-      "version": "0.118.0 (`~> 0.118`)",
+      "version": "0.120.0 (`~> 0.120`)",
       "where": [
         "tofu/provisioning/versions.tf",
         "tofu/provisioning/.terraform.lock.hcl"
@@ -1572,7 +1594,7 @@
       "key": "7:ansible",
       "last_proven": null,
       "name": "ansible",
-      "version": "2.21.4",
+      "version": "2.21.5",
       "where": [
         "devbox.lock"
       ]
@@ -1594,7 +1616,7 @@
       "key": "7:argocd",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "argocd",
-      "version": "3.4.6",
+      "version": "3.5.6",
       "where": [
         "devbox.lock"
       ]
@@ -1638,7 +1660,7 @@
       "key": "7:claude-code@version-sets",
       "last_proven": null,
       "name": "claude-code",
-      "version": "2.1.309",
+      "version": "2.1.316",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1649,7 +1671,7 @@
       "key": "7:cloudflared",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "cloudflared",
-      "version": "2026.10.1",
+      "version": "2026.10.3",
       "where": [
         "devbox.lock"
       ]
@@ -1682,7 +1704,7 @@
       "key": "7:deno",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "deno",
-      "version": "2.9.7",
+      "version": "2.9.8",
       "where": [
         "devbox.lock"
       ]
@@ -1693,7 +1715,7 @@
       "key": "7:gh",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "gh",
-      "version": "2.103.2",
+      "version": "2.103.3",
       "where": [
         "devbox.lock"
       ]
@@ -1759,7 +1781,7 @@
       "key": "7:keepassxc",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "keepassxc",
-      "version": "2.7.12",
+      "version": "2.8.0",
       "where": [
         "devbox.lock"
       ]
@@ -1792,7 +1814,7 @@
       "key": "7:kubectl",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "kubectl",
-      "version": "1.37.1",
+      "version": "1.37.2",
       "where": [
         "devbox.lock"
       ]
@@ -1847,7 +1869,7 @@
       "key": "7:nixpkgs-unstable",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@f05535a0efcb",
+      "version": "nixpkgs@5c9de89ec55b",
       "where": [
         "devbox.lock"
       ]
@@ -1858,7 +1880,7 @@
       "key": "7:nixpkgs-unstable@version-sets",
       "last_proven": null,
       "name": "nixpkgs-unstable",
-      "version": "nixpkgs@f05535a0efcb",
+      "version": "nixpkgs@5c9de89ec55b",
       "where": [
         "version-sets/devbox.lock"
       ]
@@ -1913,7 +1935,7 @@
       "key": "7:prometheus",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "prometheus",
-      "version": "3.15.0",
+      "version": "3.15.1",
       "where": [
         "devbox.lock"
       ]
@@ -1946,7 +1968,18 @@
       "key": "7:renovate",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "renovate",
-      "version": "44.151.2",
+      "version": "44.181.0",
+      "where": [
+        "devbox.lock"
+      ]
+    },
+    {
+      "class": 7,
+      "gap_columns": [],
+      "key": "7:shellcheck",
+      "last_proven": null,
+      "name": "shellcheck",
+      "version": "0.11.0",
       "where": [
         "devbox.lock"
       ]
@@ -1968,7 +2001,7 @@
       "key": "7:talosctl",
       "last_proven": "2026-10-28T10:27:27Z",
       "name": "talosctl",
-      "version": "1.14.3",
+      "version": "1.14.5",
       "where": [
         "devbox.lock"
       ]
@@ -2082,7 +2115,7 @@
       "key": "8:renovatebot/github-action",
       "last_proven": "2026-10-26T12:11:04Z",
       "name": "renovatebot/github-action",
-      "version": "a63d9a7bc606f7336fd20b47f2f32259a35e6213 (v46.3.9)",
+      "version": "1c0cf989c02653fba0efe7ca5772338860ca71dc (v46.3.12)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]
@@ -2091,8 +2124,7 @@
       "class": 9,
       "gap_columns": [
         "deploy_edge",
-        "detector",
-        "merge_gate"
+        "detector"
       ],
       "key": "9:oxlorg.opnsense",
       "last_proven": "2026-09-29T18:49:44Z",
@@ -2119,7 +2151,7 @@
       "key": "10:jetify-com/devbox",
       "last_proven": "2026-10-02T21:45:42Z",
       "name": "jetify-com/devbox",
-      "version": "0.18.4",
+      "version": "0.19.0",
       "where": [
         "docker/arc-runner/Dockerfile"
       ]
@@ -2143,7 +2175,7 @@
       "key": "12:linkedom",
       "last_proven": "2026-10-28T12:05:20Z",
       "name": "linkedom",
-      "version": "0.18.14",
+      "version": "0.18.15",
       "where": [
         "scripts/mermaid-lint/deno.json"
       ]
@@ -2154,7 +2186,7 @@
       "key": "12:mermaid",
       "last_proven": "2026-10-20T16:20:37Z",
       "name": "mermaid",
-      "version": "12.2.0",
+      "version": "12.3.0",
       "where": [
         "scripts/mermaid-lint/deno.json"
       ]
@@ -2176,7 +2208,7 @@
       "key": "13:NixOS/nixpkgs",
       "last_proven": null,
       "name": "NixOS/nixpkgs",
-      "version": "nixos-26.05@718f670e8453",
+      "version": "nixos-26.05@9bb52223f4f6",
       "where": [
         "mgmt/nixos/flake.lock"
       ]
