@@ -225,11 +225,15 @@ runcmd:
   # loaded for every job step — put both on PATH there. `nix` must be present for `devbox run`.
   # Per-slot DOCKER_CONFIG + shared BUILDX_CONFIG + the job-started hook: see
   # runner-job-started.sh in write_files above (the stale-registry-login fix).
+  # REGISTRY_MIRROR_* = the ADR-091 env contract rides already export: a kind/k3d node runs its OWN
+  # containerd, which never reads dockerd's daemon.json, so a gate script points the node at the
+  # mirrors only through these (docs/patterns/kind-ci.md rule 4). Without them every manifest image
+  # in a kind e2e pulled from upstream over the WAN (oracle-fleet e2e, 3 rollout timeouts 11-11/12).
   - install -d -m 0700 -o runner -g runner /home/runner/.docker-slot-1 /home/runner/.docker-slot-2
   - |
     for slot in 1 2; do
       dir=/home/runner/actions-runner; [ "$slot" = 1 ] || dir=/home/runner/actions-runner-$slot
-      printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\nDOCKER_CONFIG=/home/runner/.docker-slot-%s\nBUILDX_CONFIG=/home/runner/.docker/buildx\nACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/runner-job-started.sh\n' "$slot" > "$dir/.env"
+      printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\nDOCKER_CONFIG=/home/runner/.docker-slot-%s\nBUILDX_CONFIG=/home/runner/.docker/buildx\nACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/runner-job-started.sh\nREGISTRY_MIRROR_DOCKER_IO=http://192.168.40.20\nREGISTRY_MIRROR_GHCR=http://192.168.40.21\nREGISTRY_MIRROR_MCR=http://192.168.40.31\n' "$slot" > "$dir/.env"
       chown runner:runner "$dir/.env"
     done
   - |
