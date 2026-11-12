@@ -11,7 +11,7 @@ and WHAT to decide is the stack's file; nothing here restates it.
 ASSEMBLY (agents/retro-session.sh --series does this): replace
   {{STACK}}        — stack name (e.g. oracle)
   {{SERIES}}       — series name (e.g. feedback-triage); the brief is .agents/{{SERIES}}.md
-  {{RUN_ID}}       — r<N> (docs/agents/retros/ numbering, per series)
+  {{RUN_ID}}       — r<N> (per series; frozen in the guard's bundle)
   {{MAIN_REPO}}    — the stack's main repo (e.g. teststuffstash/oracle-fleet)
 The first user message is the same as the loop retro's:
   "Read /tmp/retro-brief.md and execute it exactly. Your final message must contain the
@@ -40,7 +40,8 @@ the platform's harvest reads.
 
 End your FINAL message with the complete report between these exact markers. The harvest
 extracts the block, requires at least 20 non-heading content lines, and files it under
-`docs/agents/retros/<date>-{{SERIES}}-{{RUN_ID}}-<model>.md` in homelab via PR.
+`<date>-{{SERIES}}-{{RUN_ID}}-<model>.md` in the series' report repo via PR (the stack repo for a
+named series — retro-argo.yaml `reportRepo`/`reportDir`).
 
 BEGIN-RETRO-REPORT
 # {{SERIES}} ({{STACK}}) run {{RUN_ID}} — <your model name>
