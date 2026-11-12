@@ -3,3 +3,4 @@
 new-pr            |       |       | GIT_DIFF_RC=1                                                       | new-pr           |
 open-pr           |       |       | OPEN_PR=https://github.com/teststuffstash/homelab/pull/2278 GIT_DIFF_RC=1 | open-pr          |
 merged-identical  |       |       | MERGED_PR=https://github.com/teststuffstash/homelab/pull/2050 GIT_DIFF_RC=0 | merged-identical |
+series-repo       |       |       | REPORT_REPO=teststuffstash/oracle-fleet REPORT_DIR=docs/retros HARNESS_B= SERIES=feedback-triage BR=retro/2026-11-18-feedback-triage-r3 RUN=r3 N=1 GIT_DIFF_RC=1 | series-repo |

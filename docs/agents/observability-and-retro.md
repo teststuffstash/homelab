@@ -612,7 +612,9 @@ PLATFORM retro and per-stack retros — built in that order.**
    fires, 0 is a quiet week, an EMPTY result or a dead Prometheus FAILS the run — an absent gauge
    is a broken exporter, never a quiet week), with `retro_pipeline.py prepare --no-ledger`
    freezing the run's coordinates and no ledger read; its **state** is `_retro/<series>/`, its
-   reports `docs/agents/retros/<date>-<series>-rN-<model>.md`, its belt group
+   reports `<date>-<series>-rN-<model>.md` filed by the harvest as a PR in the series' STACK repo
+   (`reportRepo`/`reportDir` — oracle's land in oracle-fleet `docs/retros/`, where the stack reads
+   them; numbering continues from the `_retro/<series>/` checkpoint), its belt group
    `series=<series>` (RetroReportOverdue reads `max by (series)`, so a fresh platform push never
    hides a stale sibling); its **cell** is ONE (`harnessB` empty — two cells would open two PRs),
    carries `pr-open` on PATH (ADR-157; agent-session.sh's `AGENT_PR_OPEN`) and, when the brief
