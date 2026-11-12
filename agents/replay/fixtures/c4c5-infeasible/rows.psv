@@ -41,3 +41,23 @@ error-latch-named | verdict | gh/issue-list-inprog.json @ patches/add-agent-erro
 # writes ride REST (gh_label_add/gh_label_rm, agents/machine-comment.sh), so they still LAND; RED on
 # the pre-REST source, whose `gh pr|issue edit --add-label/--remove-label` hit the drain.
 parks-graphql-drained | verdict |                                           | STUB_GH_GRAPHQL=drained | parks
+# ── homelab#3301/#3306 (2026-11-12): the input axis is WHICH RIDE the marker belongs to. The
+# coordinator stamps every dispatch into the issue's ONE `<!-- agent-summary -->` comment as
+# `<!-- agent-event kind=dispatch ts=<ISO> -->` (agents/machine-comment.sh), so "this ride's
+# marker" = an anchored marker comment CREATED AFTER the newest such stamp. Four rows on the SAME
+# verdict world, each a rows/<id>/ overlay of #66's thread (the only file that differs):
+# marker-this-ride    = one dispatch (09:00), marker 09:20 → parked exactly as `parks` (same
+#                       expected stream — the stamp changes nothing when the marker is current).
+# marker-earlier-ride = the #3301 shape: marker 09:20, then re-queued and re-dispatched (second
+#                       stamp 11:00). The marker is the EARLIER ride's → NO park, no write, #66
+#                       keeps its ordinary C4/C5 handling beside #70. RED on the base tree, which
+#                       parked it again on the old marker (a latch with no release).
+# marker-per-ride     = the same two dispatches, and round 2 posted its OWN marker at 11:25 → parked
+#                       on the NEWER marker's payload, not round 1's. RED on the base tree (`first`).
+# marker-no-stamp     = no dispatch stamp in the summary comment, and a human comment QUOTING one
+#                       dated after the marker: a quote is not a stamp (summary comment only), so
+#                       there is no anchor and the marker parks as it always did (= `parks`).
+marker-this-ride    | verdict |                                           |                    | parks
+marker-earlier-ride | verdict |                                           |                    | marker-earlier-ride
+marker-per-ride     | verdict |                                           |                    | marker-per-ride
+marker-no-stamp     | verdict |                                           |                    | parks

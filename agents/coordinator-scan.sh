@@ -4847,13 +4847,26 @@ EOF_GTHEMES_OPEN
             # `AGENT_INFEASIBLE: <path/resource>` (the producer half is the recipe paragraph in each
             # repo's `.agents/fix.yaml`), and the scan parks the issue on `agent/blocked` — a human
             # gate — instead of re-riding it.
-            # Three properties are load-bearing:
+            # Four properties are load-bearing:
             #   • ANCHORED at the start of a comment body, never a substring. This issue's own title
             #     contains the marker, and a human quoting it writes `> AGENT_INFEASIBLE: …`; an
             #     unanchored read would make "talks about the terminal" mean "IS the terminal" — the
             #     same defect the fix-debounce lane's `alert-fp:` test was fixed for (homelab#244).
             #   • ISSUE COMMENTS ONLY, never the body: the body is written by the human who filed it.
-            #   • THE MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands.
+            #   • THE MARKER COUNTS ONLY FOR THE RIDE THAT POSTED IT (homelab#3301/#3306). The park
+            #     comment tells the human "do the named part by hand — then remove `agent/blocked`
+            #     and re-queue"; a read that took the first marker EVER re-parked the issue the
+            #     moment it was dispatched again, on the old marker, under the new ride — a latch
+            #     with no release. "This ride's" = the marker comment was CREATED AFTER the issue's
+            #     newest dispatch stamp, `<!-- agent-event kind=dispatch ts=<ISO> -->`, which the
+            #     coordinator appends to the ONE `<!-- agent-summary -->` comment when it claims the
+            #     issue (agents/machine-comment.sh, coordinator/README.md step 2). Read from the
+            #     comment list already in hand — no new call, and nothing new for whoever re-queues
+            #     to type. The stamp's `ts` is the anchor, never the summary comment's own
+            #     timestamps (it is edited in place: created at round 1, updated at every event).
+            #     NO stamp readable (a thread dispatched without one) → there is no anchor and the
+            #     newest marker counts, as it always did.
+            #   • A CURRENT MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands.
             #     A failed/half-applied write is reported loudly and the issue still leaves the unit
             #     list: re-riding a task a worker has already proven impossible costs a paid session
             #     to re-derive a known answer, which is strictly worse than a report line. An
@@ -4871,11 +4884,24 @@ EOF_GTHEMES_OPEN
                 orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading issue #${icand}'s comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)\n"
                 continue
               fi
-              # `first // ""` — a worker posts the marker once; if a second one exists the first is
-              # the one that ended the ride. jq's `^` is string-start (no "m" flag), which IS the
-              # anchor this wants: the marker opens the comment or it does not count.
-              imark="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_INFEASIBLE:"))] | first // ""' <<<"$icmt")"
+              # jq's `^` is string-start (no "m" flag), which IS the anchor this wants: the marker
+              # opens the comment or it does not count. `$d` = the newest dispatch stamp, read ONLY
+              # from a comment that OPENS with the summary marker (a human quoting a stamp line is
+              # not a dispatch — the same anchor discipline) and only in the exact shape `mc_now`
+              # writes, so the comparison with GitHub's `created_at` is one fixed-width UTC string
+              # against another. A marker is this ride's when it was created after `$d`; with no
+              # stamp at all (`$d == ""`) every marker qualifies. `last`: a worker posts the marker
+              # once PER RIDE, so the newest qualifying one is the ride that just ended.
+              imark="$(jq -r '
+                ([ .[] | (.body // "") | select(startswith("<!-- agent-summary -->"))
+                       | scan("<!-- agent-event kind=dispatch ts=([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z) -->") | .[0] ]
+                 | max // "") as $d
+                | [ .[] | select((.body // "") | test("^AGENT_INFEASIBLE:"))
+                        | select($d == "" or ((.created_at // "") > $d))
+                        | .body ] | last // ""' <<<"$icmt")"
               if [ -z "$imark" ]; then
+                # No marker, or only an EARLIER ride's (older than the newest dispatch): the issue
+                # keeps its ordinary handling below — a re-queued issue rides again.
                 # The read window is ONE page. A marker past comment 100 is invisible, and this
                 # clause's whole value is that it is not guessed at — so the bound is REPORTED rather
                 # than left to look like "no marker". Fall-through is today's behaviour, not a new
