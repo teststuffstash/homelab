@@ -331,17 +331,20 @@ transitions:
   - id: IL-T26
     name: infeasible scope → parked agent/blocked (the terminal)
     owner: coordinator-scan, deterministically — no LLM tick in the path
-    when: "IL-T06's predicate ∧ one issue COMMENT whose first characters are `AGENT_INFEASIBLE:` →
+    when: "IL-T06's predicate ∧ one issue COMMENT whose first characters are `AGENT_INFEASIBLE:`,
+      created after the issue's newest dispatch stamp (this ride's marker, never an earlier ride's) →
       add agent/blocked, remove agent/in-progress, comment the audit quoting the named
       path/resource. Runs BEFORE the IL-T16 belt and removes the issue from every C4/C5
       derivation, so a verdict is never re-queued and never re-dispatched. A human re-scopes it
       (or does the named part by hand) and strips agent/blocked to send it back to Queued."
     status: guarded
     replay:
-      - agents/replay/fixtures/c4c5-infeasible   # THE TABLE (move-2 rollout): row parks = read → blocked → in-progress off → re-read → audit, no unit; row quoted-inert = a QUOTED marker latches nothing and a human-blocked issue is not even read; row probe-fail = rule #6, an unreadable probe writes nothing, reports, and leaves today's behaviour whole
+      - agents/replay/fixtures/c4c5-infeasible   # THE TABLE (move-2 rollout): row parks = read → blocked → in-progress off → re-read → audit, no unit; row quoted-inert = a QUOTED marker latches nothing and a human-blocked issue is not even read; row probe-fail = rule #6, an unreadable probe writes nothing, reports, and leaves today's behaviour whole; rows marker-* = the marker parks only the ride that posted it (earlier-ride: a re-queued, re-dispatched issue is NOT re-parked on the old marker)
     guards:
       - desc: "the marker is ANCHORED at the start of a COMMENT — talking about the terminal is not the terminal"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_INFEASIBLE:"\)' }
+      - desc: "a marker counts only when it is newer than the newest dispatch stamp — a re-queued issue rides again (no latch without a release)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "THE MARKER COUNTS ONLY FOR THE RIDE THAT POSTED IT" }
       - desc: "add agent/blocked FIRST, remove agent/in-progress SECOND, then re-read and prove the end state (the edit is not atomic — IL-T16's lesson)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "Same non-atomic write as the belt" }
       - desc: "the MARKER suppresses the redispatch, not the label write — a failed/half-applied write reports loudly and the issue still leaves the unit list"
@@ -353,6 +356,7 @@ transitions:
     incidents:
       - "2026-08-11 oracle-fleet#66: the whole deliverable was .github/workflows/ci.yaml, banned by .agents/fix.yaml. The worker correctly self-reported 'not implementable as written' — with no terminal for it, that landed as AGENT_STRIKE error_class=unknown, and the coordinator had to override the mechanical c4c5-redispatch clause BY HAND (retro r3 F4)"
       - "2026-08-11 oracle-fleet#225: 'none of that is executable by a fix-class worker (no cluster/infra access, no live-API credentials, no oracle-iac checkout)' — the worker RESCOPED itself instead, and its PR's `Fixes #225` then wrongly auto-closed the issue (reopened 19:03:31Z). Self-rescoping is what an agent does when the honest answer has no exit"
+      - "2026-11-12 homelab#3301/#3306: both parked correctly on a missing docker client; the named part was done by hand (#3317) and both were re-queued and re-dispatched (round 2, 20:32Z) — and the scan re-parked both two minutes later on the ROUND-1 marker, under the new ride. The read took the first marker ever, so the terminal was a latch with no release"
 
   - id: IL-T27
     name: phantom review reconciled → queued (the belt)

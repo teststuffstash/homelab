@@ -1,0 +1,11 @@
+CALL gh api repos/teststuffstash/homelab/issues/66/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/70/comments?per_page=100
+OUT INFEAS <empty>
+OUT CLASS homelab|issue-66|phantom|machine|...
+OUT CLASS homelab|issue-70|phantom|machine|...
+OUT UNIT c4c5-redispatch|homelab|issue-66|fix
+OUT UNIT c4c5-redispatch|homelab|issue-70|fix
+OUT V2   issue #66 — CI: add the required `ci` workflow to this repo [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT V2   issue #70 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

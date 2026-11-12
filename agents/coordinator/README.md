@@ -1487,14 +1487,23 @@ issue.
 | producer | the **worker**, via its repo's `.agents/fix.yaml` | ONE issue comment whose first characters are exactly `AGENT_INFEASIBLE: <path or resource>`, then END the run **without pushing** |
 | consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
 
-Three properties are load-bearing, and each is pinned by
-`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail):
+Four properties are load-bearing, and each is pinned by
+`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail, and the four
+`marker-*` rows):
 
 - **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
   issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the
   string, and a human quoting a past exit writes `> AGENT_INFEASIBLE: …`. This is the fix-debounce
   lane's `alert-fp:` lesson (homelab#244) one lane over.
-- **The marker alone suppresses the redispatch**, whether or not the label write lands. A
+- **A marker counts only for the ride that posted it** — the marker comment must be newer than the
+  issue's newest dispatch stamp (the `<!-- agent-event kind=dispatch ts=… -->` line step 2's
+  `machine-comment.sh event --kind dispatch` appends to the summary comment). An earlier ride's
+  marker is history: once the issue is re-queued and dispatched again it rides, and only a marker
+  the NEW ride posts parks it. Without this the terminal was a latch with no release — the park
+  comment says "then remove `agent/blocked` and re-queue", and the scan re-parked the re-dispatched
+  issue on the old marker (homelab#3301/#3306). A thread with no dispatch stamp has no anchor, so
+  its newest marker counts. This is why step 2's stamp is not optional bookkeeping.
+- **A current marker alone suppresses the redispatch**, whether or not the label write lands. A
   failed/half-applied write reports loudly and the issue *still* leaves the unit list: re-riding a
   task a worker already proved impossible spends a paid session to re-derive a known answer, which
   is strictly worse than a report line. An **unreadable** comments probe is the other way round —
@@ -1506,8 +1515,9 @@ Three properties are load-bearing, and each is pinned by
 
 **What YOU do with one.** Nothing automatic — that is the point. The issue sits `agent/blocked` with
 the resource named on the thread. Either re-scope it so the deliverable is inside a fix-class
-worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
-it unchanged reaches the same verdict** — and unlike a strike, this one is free.
+worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue — nothing
+else to type or edit, the next dispatch's stamp is what retires the old marker. **Re-queueing it
+unchanged reaches the same verdict**, at the price of one more ride to re-derive it.
 
 > ⚠ **The producer half is per-repo — installed everywhere** (homelab `566fe38` 2026-08-11;
 > oracle-fleet, sleep-tracking, circles, snore-recorder verified 2026-10-14). A NEW stack repo
