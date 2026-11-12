@@ -567,8 +567,7 @@ operator ruling 5, 2026-10-17). The per-cell checks walk the tier's ordered list
 holds is skipped for the next one, and only when every model is held does the rail defer, with the
 hold that lifts first. A rail with no `admission` key has no
 capacity check. A blocked rail is skipped like a full one; it frees when the **last** of its
-blocks lifts. Every reading and every usage below arrives through the data plane — a session and
-one request the upstream answers — never from a seed.
+blocks lifts.
 
 - **Window utilization** (`anthropic`): the last-seen `anthropic-ratelimit-unified-<w>-utilization`
   of each window at/over `utilization_thresholds.<w>` blocks the rail until that window's
@@ -847,9 +846,13 @@ and keeps ONE snapshot as the codex rail does ([GW-CODEX-HEADROOM](openai-respon
 a strictly newer valid reading replaces it, and the verdicts are the same — `admit`, `quota-unknown`,
 `quota-stale`, `quota-limited` — read from `rails.opencode.headroom`. A reading older than `max_age_s`
 (120 s ⚖) is stale. A window at or above `ceiling` (0.95 ⚖) limits the account until that window's
-reset. A window whose `status` is not `ok` limits it for the default hold ⚖ — the vendor's other
-status spellings are unverified, and `percent` is taken as a number from 0 to 100 (observed as whole
-numbers).
+reset. A window whose `status` is not `ok` limits it too ⚖ — the vendor's other status spellings are
+unverified, and `percent` is taken as a number from 0 to 100 (observed as whole numbers).
+`retry_after_s` is what [GW-CODEX-ADMISSION](openai-responses.md#gw-codex-admission) rules for the
+codex rail: the latest reset among the windows at or above the ceiling; with no such window — a
+non-`ok` status under the ceiling, `quota-unknown`, `quota-stale` — the policy's `defer_retry_s`
+(60 s). No reading and a stale reading defer ⚖ (fail closed, where the anthropic window reading
+admits): a ride admitted onto an exhausted Go block meets the 429 this reading exists to prevent.
 
 The window profile is the names `rolling`, `weekly`, `monthly`, not spans: the monthly window is
 anchored at the subscription, so a span would be a guess. Every reading carries exactly that profile.
@@ -875,8 +878,8 @@ worker's rails: opencode, then openrouter).
 | the rolling block at the ceiling defers until its reset ⚖ | policy-go · upstream-ok | set | rolling 95 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 1000 |
 | two exhausted windows wait for the later reset ⚖ | policy-go · upstream-ok | set | rolling 96 % resets T0 + 1000, weekly 97 % resets T0 + 8000, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 8000 |
 | a window whose status is not ok limits ⚖ | policy-go · upstream-ok | set | rolling limited at 20 %, others fresh @ T0 − 10 → accepted | 0 | opencode | defer | — | quota-limited | 60 |
-| no reading yet is unknown — fail closed | policy-go · upstream-ok | set | none | 0 | opencode | defer | — | quota-unknown | 60 |
-| a stale reading is stale | policy-go · upstream-ok | set | fresh @ T0 − 10 → accepted | 115 | opencode | defer | — | quota-stale | 60 |
+| no reading yet is unknown — fail closed ⚖ | policy-go · upstream-ok | set | none | 0 | opencode | defer | — | quota-unknown | 60 |
+| a stale reading is stale ⚖ | policy-go · upstream-ok | set | fresh @ T0 − 10 → accepted | 115 | opencode | defer | — | quota-stale | 60 |
 | a missing window refuses the whole report, the last accepted reading stands | policy-go · upstream-ok | set | fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid | 0 | opencode | dispatch | opencode | — | — |
 | a passed resetsAt refuses the report, the last accepted reading stands | policy-go · upstream-ok | set | fresh @ T0 − 20 → accepted; rolling resets T0 − 15, others fresh @ T0 − 10 → quota-invalid | 0 | opencode | dispatch | opencode | — | — |
 | a limited Go rail is skipped, the walk continues | policy-go · upstream-ok | set | rolling 96 % resets T0 + 1000, others fresh @ T0 − 10 → accepted | 0 | (policy) | dispatch | openrouter | — | — |
@@ -1956,7 +1959,7 @@ afterwards; `refuted?` = the outcome answer's `refuted` count (`—` = no outcom
 | a bare 2xx refutes nothing | policy-default · upstream-500 | upstream-500, then upstream-ok on the same session | {opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway} | — |
 | a clean outcome refutes the task's counted strikes | policy-default · upstream-500 | upstream-500, then the consumer reports clean | none | 1 |
 | a clean outcome on another model refutes nothing there | policy-default | the heavy model struck no-verdict; a standard-tier session of the task reports clean | {opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome} | 0 |
-| a clean outcome after a 429 still refutes ⚖ | policy-default · upstream-429 | an earlier session's counted no-verdict; this session upstream-429, then the consumer reports clean | none | 1 |
+| a clean outcome after a 429 still refutes ⚖ | policy-default · upstream-429 | an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean | none | 1 |
 
 #### One vocabulary, one view
 

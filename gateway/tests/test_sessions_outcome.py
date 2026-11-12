@@ -338,7 +338,7 @@ REFUTE_ROWS = [
     pytest.param("policy-default · upstream-500", "upstream-500, then the consumer reports clean", "none", 1, id="a clean outcome refutes the task's counted strikes"),
     pytest.param("policy-default", "the heavy model struck no-verdict; a standard-tier session of the task reports clean",
                  "{opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome}", 0, id="a clean outcome on another model refutes nothing there"),
-    pytest.param("policy-default · upstream-429", "an earlier session's counted no-verdict; this session upstream-429, then the consumer reports clean",
+    pytest.param("policy-default · upstream-429", "an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean",
                  "none", 1, id="a clean outcome after a 429 still refutes ⚖"),
 ]
 
