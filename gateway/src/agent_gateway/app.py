@@ -41,6 +41,7 @@ from .sessions import (
 )
 from .store import Store
 from .tiers import tier_evidence_age
+from .tierview import TierDerivation
 
 log = logging.getLogger("gateway.app")
 
@@ -60,18 +61,26 @@ async def catalog_opencode(request: Request) -> JSONResponse:
     return JSONResponse(request.app.state.catalog.view(pricing))
 
 
-async def catalog_openrouter(request: Request) -> JSONResponse:
-    """GW-CATALOG-OR's read-only view: the endpoint snapshot with every cell's entry state, the
-    provider the data plane would pin per model, the canary budget — never a credential."""
-    svc: SessionService = request.app.state.sessions
-    cat: OpenRouterCatalog = request.app.state.orcatalog
+def _openrouter_view(svc: SessionService, cat: OpenRouterCatalog) -> dict:
     harness = cat.canary.harness if cat.canary else "opencode"
 
     def order(model: str) -> list[str]:
         verdict, plan = svc.provider_plan("openrouter", model, harness, "", "", svc.clock())
         return [e.slug for e in plan] if verdict == "pinned" else []
 
-    return JSONResponse(cat.view(order))
+    return cat.view(order)
+
+
+async def catalog_openrouter(request: Request) -> JSONResponse:
+    """GW-CATALOG-OR's read-only view: the endpoint snapshot with every cell's entry state, the
+    provider the data plane would pin per model, the canary budget — never a credential."""
+    return JSONResponse(_openrouter_view(request.app.state.sessions, request.app.state.orcatalog))
+
+
+async def catalog_tiers(request: Request) -> JSONResponse:
+    """GW-MODEL-TIERS' read-only view: the lists the gateway derived at its last good refresh, the evidence
+    behind each id, and whether each equals the list the admission walks. No derivation = an empty view."""
+    return JSONResponse(request.app.state.tier_derivation.view())
 
 
 async def metrics(request: Request) -> PlainTextResponse:
@@ -149,6 +158,16 @@ def create_app(
         m.bind_extra(orcatalog.render)
     # GW-MODEL-TIERS: the committed tier-evidence snapshot rides beside the policy; its age is the
     # staleness alert's signal (a comparison on a month-old price is a wrong answer — #2718 item 3).
+    # GW-MODEL-TIERS §The derivation at a refresh (the SHADOW step: the admission still walks the policy's lists):
+    # every good refresh of either catalog leg re-derives the lists from the store's own evidence.
+    def _go_view() -> dict:
+        return catalog.view(sessions.capacity.go_pricing("opencode", clock()) if "opencode" in policy.rails else None)
+
+    tier_derivation = TierDerivation(policy, store, _go_view,
+                                     (lambda: _openrouter_view(sessions, orcatalog)) if orcatalog.enabled else None,
+                                     clock, settings.benchmarks_manual_path)
+    catalog.on_refresh = tier_derivation.run
+    orcatalog.on_refresh = tier_derivation.run
     m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
@@ -227,6 +246,7 @@ def create_app(
             Route("/metrics", metrics, methods=["GET"]),
             Route("/catalog/opencode", catalog_opencode, methods=["GET"]),
             Route("/catalog/openrouter", catalog_openrouter, methods=["GET"]),
+            Route("/catalog/tiers", catalog_tiers, methods=["GET"]),
             Route("/sessions", post_sessions, methods=["POST"]),
             Route("/sessions", list_sessions, methods=["GET"]),
             Route("/sessions/{id}", get_session, methods=["GET"]),
@@ -261,4 +281,5 @@ def create_app(
     app.state.catalog = catalog
     app.state.providers = providers
     app.state.orcatalog = orcatalog
+    app.state.tier_derivation = tier_derivation
     return app

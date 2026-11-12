@@ -43,7 +43,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
-| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.manual_benchmarks` (the committed `benchmarks-manual.json`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list; `tiers snapshot` exits 2 on a malformed manual benchmark file) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `tiers_output` (`GET /catalog/tiers`, the runtime derivation — [§The derivation at a refresh](#the-derivation-at-a-refresh)), `$defs.derived_tier`, `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.manual_benchmarks` (the committed `benchmarks-manual.json`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list; `tiers snapshot` exits 2 on a malformed manual benchmark file) | v0 — the derivation by COST PER CLEAN RIDE (also run by the gateway at each good catalog refresh and shown on `GET /catalog/tiers`, the admission untouched — homelab#3307) (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`; `$defs.rides` (the cell's clean-ride evidence the choice reads) | — | v0 — split from GW-MODEL-TIERS 2026-11-06 ⚖: the admission's rail choice between a model's twin cells on two rails (homelab#2743); `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior (the "⚑ gap" row below) |
 
 ## Flow overview
@@ -1417,6 +1417,112 @@ Legend: `mounted` = what `GATEWAY_BENCHMARKS` names; `age?` = `gateway_tier_evid
 |---|---|---|
 | age is seconds since snapshot_at ⚖ | a file with snapshot_at T0 − 600 s | 600 |
 | no snapshot mounted, no series | a missing file | absent |
+
+#### The derivation at a refresh
+
+**The gateway derives the lists itself** ⚖ (the Goal [homelab#3305](https://github.com/teststuffstash/homelab/issues/3305),
+operator ruling 2026-11-12: "I am also leaning towards runtime"). After every good refresh of either
+catalog leg the derivation runs, with `agent_gateway.tiers`' own `derive`, `join_aa_id`,
+`cost_per_clean_ride`, `undecided` and `unscored` — no rule of it changes, only where its inputs come
+from and where its output goes. Its inputs are the gateway's own store: the benched rows
+(`GET /catalog/openrouter` `benchmarks`), the Go price (`GET /catalog/opencode` `pricing`), the
+openrouter models' selected endpoints and rides, the manual benchmark rows when a file is mounted, and
+the policy's `tiers` block. **The candidates per rail** ⚖ are [§The rulings](#the-rulings)' for
+`opencode` and `openrouter` (from the two catalogs); for `anthropic` and `codex` they are the ids of
+the policy's `rails.<rail>.models` lists — the gateway adds no upstream read on a subscription
+credential. **A rail whose input is absent is held** ⚖: `opencode` while no Go catalog snapshot
+exists, and any rail the policy does not declare, is absent from the derivation and the view; the
+other rails derive. **When no derivation can run** — no benched rows, no `tiers` block, no OpenRouter
+leg — the last good derivation stands. **An undecided tier keeps its last derived list** ⚖ and is
+named `undecided`; with none yet its list is empty. The last good derivation is stored
+(`catalog_snapshots`, source `tier-derivation`) and a restart serves it. **The manual rows keep
+their rule** ⚖ ([§Manual benchmark rows](#manual-benchmark-rows)): the optional file
+`GATEWAY_BENCHMARKS_MANUAL` names — unset or absent, no manual rows — scores only an id the feed lacks;
+a row the feed carries is reported `retired` on the view; a file `parse_manual` refuses is refused
+whole, the derivation runs without it, and the view carries the reason.
+
+**This is the SHADOW step**: the admission still walks the policy's lists; `GET /catalog/tiers`
+(`tiers_output`) shows the derivation beside them, and `equals_walked` says per tier whether the two
+are the same ids in the same order.
+
+**World:** `policy-default` · `openrouter-endpoints` with the Go catalog (`catalog-ok` + `docs-ok`),
+the [tier derivation's world](../worlds/README.md#the-tier-derivation-world) (a hand-written benched
+set and openrouter view, the real Go catalog snapshots), and for the refresh, failure and restart
+rows the real `openrouter-catalog` fakes; T0 = Fri 2027-01-15 08:00:00Z.
+
+#### The refresh runs the derivation
+
+Legend: `store_before` = what the store holds before the refresh (`the Go catalog (the world's) at T0,
+no derivation` = the `catalog-ok` + `docs-ok` snapshots, no OpenRouter snapshot yet; `the openrouter leg
+refreshed at T0` = a good refresh of the `openrouter-catalog` world at T0, which derived); `refresh` =
+the leg and source whose good refresh lands; `derived_at?` = the view's `derived_at`.
+
+| description | store_before | refresh | derived_at? |
+|---|---|---|---|
+| a good openrouter refresh derives ⚖ | the Go catalog (the world's) at T0, no derivation | openrouter leg ok at T0 + 21600 s | T0 + 21600 s |
+| a good Go refresh derives too ⚖ | the openrouter leg refreshed at T0 | Go leg docs source ok at T0 + 21600 s | T0 + 21600 s |
+
+#### The derivation at a refresh
+
+Legend (the [tier derivation's world](../worlds/README.md#the-tier-derivation-world)): the benched set
+`V4` = `deepseek/deepseek-v4-flash` (intelligence 50, out $0.3/M), `V41` = `deepseek/deepseek-v4.1-flash`
+(40, $0.2), `GLM` = `z-ai/glm-5.3-flash` (30, $0.1), each one selected endpoint, uptime 100; the
+anthropic aliases `FXA` … `FXD` = `claude/fxa` … `claude/fxd` (20, 40, 60, 80). The policy's lists
+the admission walks: `openrouter` heavy `V41`, standard `V41, V4`, light `V4, V41`; with four aliases
+declared (`store_before`) `anthropic` light `FXA, FXB`, standard `FXC`, heavy `FXD`. `refresh` = the
+leg's good refresh at T0 + 21600 s over the store after the change it names (`ok` = no change;
+`GLM intelligence 30 → 48`; `every openrouter price null`; `GLM intelligence null` = its row keeps
+coding 70); `rail` = the rail the expected cells read; `lists?` = the rail's derived list per tier;
+`undecided?` / `unscored?` / `equals_walked?` as the view says them.
+
+| description | store_before | refresh | rail | derived_at? | lists? | undecided? | unscored? | equals_walked? |
+|---|---|---|---|---|---|---|---|---|
+| a good refresh derives every rail's tiers ⚖ | catalogs and benched rows at T0, no derivation | ok | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | none | none | heavy false · standard true · light false |
+| the feed moves, the lists move with no commit ⚖ | a derivation at T0 | GLM intelligence 30 → 48 | openrouter | T0 + 21600 s | heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4 | none | none | heavy false · standard false · light false |
+| a tier with no priced candidate is undecided and keeps its last derived list ⚖ | a derivation at T0 with openrouter light decided | every openrouter price null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | heavy, standard, light | none | heavy false · standard true · light false |
+| a benched candidate with no value on the score axis is in no list and is named ⚖ | catalogs at T0 | GLM intelligence null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light V41, V4 | none | GLM | heavy false · standard true · light false |
+| a subscription rail's candidates are the policy's ids ⚖ | policy rails.anthropic.models naming four aliases | ok | anthropic | T0 + 21600 s | heavy FXD · standard FXC, FXD · light FXB, FXC, FXD | none | none | heavy true · standard false · light false |
+
+#### What a failed input leaves
+
+Legend: `store_before` = the store before the refresh (`a derivation at T0` = a good `openrouter-catalog`
+refresh at T0; `benched rows present, no Go catalog` = the same world with no Go catalog snapshot;
+`empty store` = no OpenRouter snapshot); `refresh` = the OpenRouter leg's refresh (`ok`;
+`fetch-failed` = the MCP answers 503) at T0 + 21600 s, or, for the restart, none — a new gateway on
+the same store at T0 + 3600 s; `lists?` = the view's rails (`none` = no rail; `the T0 lists` = the
+rails as the derivation at T0 served them; `opencode: none; the other rails derived` = no `opencode`
+rail, the `anthropic` and `openrouter` rails present).
+
+| description | store_before | refresh | derived_at? | lists? |
+|---|---|---|---|---|
+| no benched rows, no derivation | empty store | openrouter leg fetch-failed | none | none |
+| a failed refresh keeps the last good derivation | a derivation at T0 | openrouter leg fetch-failed at T0 + 21600 s | T0 | the T0 lists |
+| one rail's input missing holds that rail only ⚖ | benched rows present, no Go catalog | ok | T0 + 21600 s | opencode: none; the other rails derived |
+| the derivation survives a restart | a derivation at T0 | none (restart at T0 + 3600 s) | T0 | the T0 lists |
+
+#### The manual rows on the derivation
+
+Legend: `file` = the file `GATEWAY_BENCHMARKS_MANUAL` names (`none` = unset); `manual_row` = its one
+row — `FXE = 90` is `{id: anthropic/claude-fxe-1.0, intelligence: 90, source_url: https://bench.example/fx,
+read_at: 2027-01-10, note: fx}`, `FXD = 95` the same for `anthropic/claude-fxd-1.0` (a row the feed
+carries), `no source` a row without its `source_url`; the policy declares the alias `claude/fxe`
+beside `FXA` … `FXD`, and the feed has no row for it; `anthropic_heavy?` = the anthropic rail's
+derived heavy list with the score behind each id; `manual?` = the view's `manual` (`used` · `retired`
+· `refused`, `none` = empty).
+
+| description | file | manual_row | anthropic_heavy? | manual? |
+|---|---|---|---|---|
+| a manual row scores an id the feed lacks ⚖ | a file | FXE = 90 | claude/fxe 90 | used anthropic/claude-fxe-1.0 · retired none · refused none |
+| a row the feed carries is reported retired and does not score ⚖ | a file | FXD = 95 | claude/fxd 80 | used none · retired anthropic/claude-fxd-1.0 · refused none |
+| no file, no manual rows | none | FXE = 90 | claude/fxd 80 | used none · retired none · refused none |
+| a malformed file is refused whole and the derivation runs without it ⚖ | a file | no source | claude/fxd 80 | used none · retired none · refused naming source_url |
+
+#### The view's shape (tiers)
+
+| description | state | shape? |
+|---|---|---|
+| the view's shape is the schema's | a derivation at T0 | exactly the schema's required keys |
+| no derivation is an empty view, never an error | empty store | `derived_at` null, no rails |
 
 #### Named gaps — the tier evidence
 
