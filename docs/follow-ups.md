@@ -812,7 +812,7 @@ the block needs pruning, not more headings.
       window per 6 h refresh, re-cut when the lists move (last #2903; 11-01 check = derivation, terra in the snapshot, no tier);
       the weekly AA pull misses release-day models (terra, 10-26) — `benchmarks-snapshot.sh`'s cadence knob; hand-passed codex
       candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:** FU-313;
-      ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
+      #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
