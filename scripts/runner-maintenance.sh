@@ -20,9 +20,10 @@
 # ignored, docs/runbook.md §Recreating a Talos VM), and this verb consumes that plan. The runner is
 # stateless (boot-minted registration, fresh disk), so a replace is safe exactly when no job is
 # running on it: the job dies with the VM, and its repo reads a red run nobody caused. This verb
-# makes "no job in flight" a computed answer. It is built ATTENDED
-# first and wired into the box later — the shape `scripts/helm-release-evidence.sh` took
-# (docs/management-box.md §"Non-Talos VMs: the runner verb").
+# makes "no job in flight" a computed answer. It is built ATTENDED first; the box calls the same
+# `run` unattended (mgmt/scripts/mgmt-runner.sh as its MGMT_TF, policy `apply_vm_recreate`, shipped
+# off) — the shape `scripts/helm-release-evidence.sh` took (docs/management-box.md §"Non-Talos VMs:
+# the runner verb").
 #
 # A VM is its registrations: cloud-init registers `<vm>` and `<vm>-2` (two slots, same labels,
 # `var.github_runner_labels`). `drain` REMOVES the declared custom labels from every registration of

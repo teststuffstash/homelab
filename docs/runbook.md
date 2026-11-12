@@ -738,6 +738,12 @@ a replace to a human apply. Do one VM per plan, through `scripts/runner-maintena
 3. The other VM the same way, then a full `mgmt-tf -- plan` of master applied by its id, which
    stamps the apply loop's baseline (a scoped apply does not).
 
+The box can run steps 1–3 itself, one VM per tick, once the operator flips `apply_vm_recreate.main`
+from `off` (shipped) to `shadow`/`on` ([`management-box.md`](management-box.md) §Non-Talos VMs: the
+runner verb). It scopes with `-target` so the other VM's snippet stays pending; the unscoped
+`-replace` plan above re-creates both snippets, so after it the box no longer sees the other VM's
+pending seed — finish both by hand.
+
 By hand: `runner-maint -- drain|undrain|verify|silence-close <vm>`. Exits: 0 ok, 1 failed after acting,
 2 refused with nothing touched, 3 refused before a window.
 

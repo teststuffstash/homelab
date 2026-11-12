@@ -510,9 +510,13 @@ mgmt_stage1() {
 }
 
 # ── tofu ───────────────────────────────────────────────────────────────────────────────────────
-# mgmt_plan_root <checkout> <policy> <root> <plan-out> [lock:true|false] → rc 0 no-changes / 2 changes /
-# 1 error (stderr+stdout captured to <plan-out>.log). main = local state via -state=; a root
-# with backend.tf = tofu-state-env.sh in a subshell (the mgmt-probe.sh pattern).
+# mgmt_plan_root <checkout> <policy> <root> <plan-out> [lock:true|false] [plan flags…] → rc 0 no-changes / 2
+# changes / 1 error (stderr+stdout captured to <plan-out>.log). main = local state via -state=; a root
+# with backend.tf = tofu-state-env.sh in a subshell (the mgmt-probe.sh pattern). The optional plan
+# flags are the runner recreate's scope (`-target=<vm> -replace=<vm>`, mgmt/scripts/mgmt-runner.sh) —
+# never beside the root's plan_exclude_types: `-target` and `-exclude` cannot be combined, and a
+# `-replace` beside `-exclude` is silently ignored (docs/runbook.md §Recreating a Talos VM), so that
+# pair is an error here, not a plan.
 # ⚠ EXECUTION SURFACE (review finding on homelab#1619): <checkout> may be an UNTRUSTED PR
 # worktree. Nothing of it is ever executed — tofu is the one $REPO's devbox.lock pins (the loop's
 # own clone, reset to origin/master each run; read as DATA by mgmt_tree_path, devbox never runs —
@@ -521,6 +525,7 @@ mgmt_stage1() {
 # what makes that sufficient. The head's own devbox.lock/devbox.json are never read.
 mgmt_plan_root() {
   local co="$1" pol="$2" root="$3" out="$4" lock="${5:-false}" dir rel logf varfile stateargs
+  local -a pflags=("${@:6}")
   logf="$out.log"
   # an unreadable/empty dir would plan "$co/" — the repo root, no .tf files, "No changes": fail-open
   rel="$(mgmt_root_dir "$pol" "$root")" && [ -n "$rel" ] && [ "$rel" != null ] || { echo "dir of root $root unreadable from the policy — refusing to plan" >"$logf"; return 1; }
@@ -547,6 +552,9 @@ mgmt_plan_root() {
       || { echo "tofu init failed for $root" >&2; tofu -chdir="$dir" init -input=false -lockfile=readonly -lock=false 2>&1 | tail -5 >&2; exit 1; }
     excl_out="$(mgmt_root_excludes "$pol" "$root" "$dir")" || { echo "plan_exclude_types for $root could not be resolved (policy or state list unreadable) — not planning un-excluded" >&2; exit 1; }
     excludes=(); [ -n "$excl_out" ] && mapfile -t excludes <<<"$excl_out"
+    if [ ${#pflags[@]} -gt 0 ] && [ ${#excludes[@]} -gt 0 ]; then
+      echo "plan flags (${pflags[*]}) beside plan_exclude_types for $root — -target/-replace never ride beside -exclude; not planning" >&2; exit 1
+    fi
     # what this plan did NOT judge — the verdict must say so (a reviewer reads the comment, not the policy)
     printf '%s\n' "${excludes[@]#-exclude=}" | grep -v '^$' > "$out.excluded" || true
     # every address in state — the verdict's "not planned" set is this minus what the plan carried,
@@ -555,7 +563,7 @@ mgmt_plan_root() {
     # shellcheck disable=SC2086
     # -no-color: the verdict quotes this log's tail — ANSI escapes made the first cloudflare
     # failure unreadable in the PR comment (homelab#1634)
-    tofu -chdir="$dir" plan -no-color -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}"
+    tofu -chdir="$dir" plan -no-color -detailed-exitcode -input=false -lock="$lock" -out="$out" $stateargs $varfile "${excludes[@]}" "${pflags[@]}"
   ) >"$logf" 2>&1
   local rc=$?
   case $rc in 0|2) return $rc ;; *) return 1 ;; esac
@@ -833,6 +841,103 @@ mgmt_helm_gate() {
 }
 # mgmt_helm_row <policy> <root> <address> → the `apply_helm` row as compact JSON (cap_min, engine_order…)
 mgmt_helm_row() { _yq -o=json -I=0 ".apply_helm.\"$2\"[]? | select(.address == \"$3\")" "$1"; }
+
+# ── non-Talos VM recreates (docs/management-box.md §"Non-Talos VMs: the runner verb") ────────────
+# mgmt_runner_candidates <policy> <root> <plan-out> → one line per `proxmox_virtual_environment_vm`
+# instance that matches an `apply_vm_recreate.<root>` row's address glob AND needs a recreate:
+#   "vm-address<TAB>vm-name<TAB>trigger<TAB>mode<TAB>verb<TAB>covered addresses (space-joined)"
+# trigger: `replace` — the plan itself replaces the VM; `seed` — the VM plans no change (it ignores
+# its seed id: FU-306's `ignore_changes = [initialization[0].user_data_file_id]`), but a file its
+# `initialization` block REFERENCES in the plan's configuration (the cloud-init snippet) is created,
+# replaced or updated — the VM would keep booting the old seed. `covered` = the VM + those files: what
+# the recreate takes off the ordinary allowlist read. The VM name is the plan's own (`before.name`,
+# else `after.name`; `-` when neither) — never a list of runner names. A VM that plans an in-place
+# update is NOT a candidate (the recreate would apply it unread). A reference the plan does not
+# resolve to one instance address is no trigger (fail closed: the ordinary path refuses the file).
+# Reads <plan-out>.json (mgmt_plan_digest's local `show -json`). Sorted by address. rc 1 = the plan
+# JSON or the policy is unreadable — the caller refuses, never reads that as "no candidate".
+mgmt_runner_candidates() {
+  local pol="$1" root="$2" out="$3" rows lines addr name trig cov r pat row
+  [ -s "$out.json" ] || { echo "plan JSON missing ($out.json)" >&2; return 1; }
+  rows="$(_yq -o=json -I=0 "[.apply_vm_recreate.\"$root\"[]?]" "$pol")" || return 1
+  jq -e 'type == "array"' >/dev/null 2>&1 <<<"$rows" || return 1
+  [ "$(jq length <<<"$rows")" -gt 0 ] || return 0
+  lines="$(jq -r '
+    (.configuration.root_module.resources // []) as $cfg
+    | ([.resource_changes[]? | {key: .address, value: .change.actions}] | from_entries) as $act
+    | [.resource_changes[]?
+       | select(.mode == "managed" and .type == "proxmox_virtual_environment_vm" and ((.module_address // "") == ""))
+       | . as $vm | "\(.type).\(.name)" as $caddr
+       | ([$cfg[] | select(.address == $caddr) | (.expressions.initialization // [])[]
+           | .. | objects | (.references? // empty) | .[]] | unique) as $refs
+       | [$refs[] | select(($act[.] // ["no-op"]) as $a | $a != ["no-op"] and $a != ["read"])] as $seeds
+       | (($vm.change.actions | sort) == ["create", "delete"]) as $repl
+       | select($repl or ($vm.change.actions == ["no-op"] and ($seeds | length) > 0))
+       | [$vm.address, (($vm.change.before // {}).name // ($vm.change.after // {}).name // "-"),
+          (if $repl then "replace" else "seed" end), ([$vm.address] + $seeds | join(" "))]]
+    | sort_by(.[0])[] | @tsv' "$out.json")" || return 1
+  while IFS=$'\t' read -r addr name trig cov; do
+    [ -n "$addr" ] || continue
+    row=""
+    while IFS= read -r r; do
+      pat="$(jq -r '.address // ""' <<<"$r")"; [ -n "$pat" ] || continue
+      # shellcheck disable=SC2254
+      case "$addr" in $pat) row="$r"; break ;; esac
+    done < <(jq -c '.[]' <<<"$rows")
+    [ -n "$row" ] || continue
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$addr" "${name:--}" "$trig" \
+      "$(jq -r '.mode // "off" | tostring' <<<"$row")" "$(jq -r '.verb // "-"' <<<"$row")" "$cov"
+  done <<<"$lines"
+}
+# mgmt_runner_live <policy> <root> → how many `apply_vm_recreate.<root>` rows are not `off` (absent mode =
+# off). 0 = the apply loop does not read the recreate path at all. rc 1 = the policy is unreadable.
+mgmt_runner_live() { mgmt_policy_get "$1" "[.apply_vm_recreate.\"$2\"[]? | select((.mode // \"off\") != \"off\")] | length"; }
+# mgmt_runner_rest <candidate-lines> <changes "address<TAB>actions" on stdin> → the changes the
+# candidates' `covered` sets do not take — what the ordinary allowlist + gates still judge.
+mgmt_runner_rest() {
+  awk -F'\t' 'NR == FNR { n = split($6, c, " "); for (i = 1; i <= n; i++) cov[c[i]] = 1; next }
+              $1 != "" && !($1 in cov)' <(printf '%s\n' "$1") -
+}
+# mgmt_runner_scope <policy> <root> <vm-address> <covered> <scoped changes on stdin> → the box's own
+# read of the SCOPED plan before it hands the plan id to the verb (the verb re-checks its VM half):
+# one hit per offending change, "rule<TAB>address<TAB>detail"; empty = in scope.
+#   runner-not-replaced  the plan does not replace <vm-address> (delete+create, either order)
+#   runner-other-vm      it changes any other proxmox_virtual_environment_vm — one VM per tick
+#   runner-gated-class   a talos_machine_configuration_apply / helm_release change: those run only
+#                        through their own gates and brackets, never inside a runner recreate
+#   runner-outside       an address neither in <covered> (the VM's seed files) nor in the allowlist
+mgmt_runner_scope() {
+  local pol="$1" root="$2" vm="$3" cov=" $4 " changes addr acts seen=0 outside
+  changes="$(cat)"
+  outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$pol" "$root")" || return 1
+  while IFS=$'\t' read -r addr acts; do
+    [ -n "$addr" ] || continue
+    if [ "$addr" = "$vm" ]; then
+      seen=1
+      case "$acts" in delete+create|create+delete) ;; *) printf 'runner-not-replaced\t%s\tactions %s\n' "$addr" "$acts" ;; esac
+      continue
+    fi
+    case "$addr" in
+      proxmox_virtual_environment_vm.*) printf 'runner-other-vm\t%s\t%s\n' "$addr" "$acts"; continue ;;
+      talos_machine_configuration_apply.*|helm_release.*) printf 'runner-gated-class\t%s\t%s\n' "$addr" "$acts"; continue ;;
+    esac
+    case "$cov" in *" $addr "*) continue ;; esac
+    grep -qxF "$addr" <<<"$outside" && printf 'runner-outside\t%s\t%s\n' "$addr" "$acts"
+  done <<<"$changes"
+  [ $seen = 1 ] || printf 'runner-not-replaced\t%s\tnot in the scoped plan\n' "$vm"
+  return 0
+}
+# mgmt_plan_summary <plan-out> <plan-id> <scoped:true|false> → the `MGMT_SUMMARY` JSON of a LOCAL saved
+# plan — the shape mgmt/scripts/mgmt-tf.sh `summary` prints from the box (addresses, types, actions,
+# a VM's `name`; never a value), which scripts/runner-maintenance.sh's plan_scope reads. The two must
+# agree; mgmt-runner-test.sh pins this one against the verb's own reader.
+mgmt_plan_summary() {
+  jq -c --arg id "$2" --argjson scoped "$3" '{plan_id: $id, scoped: $scoped,
+    changes: [.resource_changes[]? | select(.change.actions != ["no-op"] and .change.actions != ["read"])
+      | {address, type, actions: .change.actions}
+        + (if .type == "proxmox_virtual_environment_vm"
+           then {name: ((.change.before // {}).name // (.change.after // {}).name)} else {} end)]}' "$1.json"
+}
 
 # ── the declared-window gate (FU-300) ──────────────────────────────────────────────────────────
 # The apply loop's WIP 1 across windows it did not open — the reconciler's rule (mgmt-reconcile.sh
