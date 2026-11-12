@@ -34,12 +34,15 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    # the version-set relation, read by argocd-validate-pins on every PR: this chart's appVersion
+    # must EQUAL kube-prometheus-stack's (gap G16 — Renovate's group cannot hold it on its own)
+    homelab.teststuff.net/app-version-of: kube-prometheus-stack
 spec:
   project: default
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: prometheus-operator-crds
-    targetRevision: 32.0.2 # = operator v0.94.2 — kps 92.14.1+ ships that operator (92.16.1 pinned); the pair moves together (ADR-151)
+    targetRevision: 32.0.2 # its appVersion (the operator version) must equal kube-prometheus-stack's — see the app-version-of annotation (ADR-151)
     helm:
       valuesObject:
         crds:
