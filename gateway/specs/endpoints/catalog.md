@@ -457,7 +457,8 @@ that the config does not list is shown with `listed: false` and its limit — th
 page's fact, the listing the catalog's.
 
 **The plan.** The policy names the plan (`rails.opencode.plan`: `go` | `go-plus`, required) because
-no vendor API says which plan a key is on (ruling 4). What the policy no longer holds (ruling 5):
+no vendor API says which plan a key is on (ruling 4); `plan` is the opencode rail's key only, so one
+under any other rail refuses the load, naming `rails.<rail>.plan`. What the policy no longer holds (ruling 5):
 the vendor facts live in the snapshot, so a policy that still carries one refuses to load — a
 stale hand copy can never shadow the catalog. Two entries of `rails.<rail>.admission` are closed
 sets, and a value outside one refuses the load: a window under `window_draw.windows` is one the
