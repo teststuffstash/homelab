@@ -105,6 +105,11 @@ gates equal CI's gates; this is how a path-scoped gate that needs docker gets a 
 - **Per namespace, not per ride:** a non-empty list turns the docker egress legs on in the repo's
   CNP, and the claim must set `storage.scratch` (20Gi × concurrent docker rides) — a `"0"` cap
   refuses the dind volume at create.
+- **The ride gets the daemon; the repo brings the client.** The launcher gives a docker ride the
+  dind sidecar and `$DOCKER_HOST`, never a `docker` binary: the CLI is `docker-client` in the
+  `devbox.json` the gate runs under (homelab: `gateway/devbox.json`, where
+  `gateway-specs-site-e2e` runs). A worker cannot add it on a repo whose `devbox.json` is outside
+  its tier, so it is declared with the paths, not discovered by the first ride.
 - **A diff that strays into the paths undeclared** gets no daemon: the gate fails naming the cause
   (`gateway/scripts/e2e-specs-site.sh`), never skips.
 
