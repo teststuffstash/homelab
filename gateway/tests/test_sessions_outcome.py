@@ -293,12 +293,53 @@ async def test_the_gateways_transport_strike(gw, upstreams, transport, store, wo
             check("gateway_credentials_rejected{rail=opencode}", float(line.split()[-1]), 0)
 
 
+# -- a consumer's outcome after a relayed 429 (the gateway owns that transport fact first-hand) ----------------
+AFTER_429 = {
+    "upstream-429, then the consumer reports unknown": [("ride", "upstream-429"), ("report", "unknown")],
+    "upstream-429, then the consumer reports harness-gave-up": [("ride", "upstream-429"), ("report", "harness-gave-up")],
+    "upstream-429, then upstream-ok on the same session, then the consumer reports unknown":
+        [("ride", "upstream-429"), ("ride", "upstream-ok"), ("report", "unknown")],
+}
+AFTER_429_ROWS = [
+    pytest.param("policy-default · upstream-429", "upstream-429, then the consumer reports unknown", "none", "unknown", '{class="unknown",source="outcome"} 0',
+                 id="a consumer outcome after a relayed 429 strikes nothing ⚖"),
+    pytest.param("policy-default · upstream-429", "upstream-429, then the consumer reports harness-gave-up", "none", "harness-gave-up",
+                 '{class="harness-gave-up",source="outcome"} 0', id="a harness that gave up on a 429 strikes nothing ⚖"),
+    pytest.param("policy-default · upstream-429", "upstream-429, then upstream-ok on the same session, then the consumer reports unknown",
+                 "{opencode, opencode-go/deepseek-v4.1-flash, opencode, unknown, model, outcome}", "unknown", '{class="unknown",source="outcome"} 1',
+                 id="a 429 followed by a 2xx is no capacity death ⚖"),
+]
+
+
+@pytest.mark.parametrize(("world", "sequence", "expected_strikes", "expected_outcome", "expected_series"), AFTER_429_ROWS)
+async def test_an_outcome_after_a_relayed_429(gw, upstreams, store, world, sequence, expected_strikes, expected_outcome, expected_series):
+    enter_world(world)
+    inputs(sequence=sequence)
+    steps = AFTER_429[sequence]
+    with given(f"sequence = {sequence}: a worker session (opencode, opencode-go/deepseek-v4.1-flash) and its requests, in order"):
+        doc = await open_session(gw, **WORKER)
+        with quiet():
+            for kind, what in steps[:-1]:
+                await _act(gw, upstreams, doc, kind, what)
+    kind, klass = steps[-1]
+    with when(f"POST /sessions/{{id}}/outcome {{class: {klass}}}"):
+        r = await _act(gw, upstreams, doc, kind, klass)
+        assert r.status_code == 200, r.text
+    with quiet():
+        stored = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
+    series = _series_cell(klass, "outcome", await _series(gw, klass, "outcome"))
+    expect({"strikes": _strike_cell(_strikes(store)), "outcome": stored["class"] if stored else "not stored", "series": series},
+           strikes=expected_strikes, outcome=expected_outcome, series=expected_series)
+
+
 REFUTE_ROWS = [
     pytest.param("policy-default · upstream-500", "upstream-500, then upstream-ok on the same session",
                  "{opencode, opencode-go/deepseek-v4.1-flash, opencode, provider-5xx, cell, gateway}", DASH, id="a bare 2xx refutes nothing"),
     pytest.param("policy-default · upstream-500", "upstream-500, then the consumer reports clean", "none", 1, id="a clean outcome refutes the task's counted strikes"),
     pytest.param("policy-default", "the heavy model struck no-verdict; a standard-tier session of the task reports clean",
                  "{opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome}", 0, id="a clean outcome on another model refutes nothing there"),
+    pytest.param("policy-default · upstream-429", "an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean",
+                 "none", 1, id="a clean outcome after a 429 still refutes ⚖"),
 ]
 
 
@@ -321,6 +362,21 @@ async def test_refutation(gw, upstreams, store, world, sequence, expected_strike
                 r = await _report(gw, doc["session"]["id"], {"class": "clean"}, None)
             refuted = r.json()["refuted"]
             attach_json("strikes after (all, refuted kept)", _strikes(store, counted=False))
+    elif sequence.startswith("an earlier session"):
+        with given("two worker sessions on the task, both admitted on the same model (round 2 does not supersede round 1)"):
+            with quiet():
+                a1 = await open_session(gw, **WORKER)
+                a2 = await open_session(gw, **{**WORKER, "round": 2})
+        with given("the earlier session's no-verdict is counted (model-scoped), then this session's request is answered upstream-429"):
+            with quiet():
+                await _report(gw, a1["session"]["id"], {"class": "no-verdict"}, None)
+            attach_json("strikes before", _strikes(store))
+            assert len(_strikes(store)) == 1, _strikes(store)
+            with quiet():
+                await _act(gw, upstreams, a2, "ride", "upstream-429")
+        with when("POST /sessions/{id}/outcome {class: clean}"):
+            r = await _report(gw, a2["session"]["id"], {"class": "clean"}, None)
+        refuted = r.json()["refuted"]
     else:
         with given("a heavy-tier session (opencode-go/claude-haiku-5-5) struck no-verdict; a standard-tier session of the same task"):
             with quiet():

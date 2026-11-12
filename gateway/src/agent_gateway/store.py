@@ -680,6 +680,14 @@ class Store:
             row = self._db.execute("SELECT 1 FROM requests WHERE session_id = ? AND status = 429 LIMIT 1", (session_id,)).fetchone()
         return row is not None
 
+    def session_last_throttled(self, session_id: str) -> bool:
+        """Whether the session's LAST relayed upstream answer was a 429 — a consumer's non-clean outcome
+        after it is a capacity death, no strike (GW-SESSIONS-OUTCOME §The store)."""
+        with self._lock:
+            row = self._db.execute("SELECT status FROM requests WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                                   (session_id,)).fetchone()
+        return row is not None and row["status"] == 429
+
     def canary_usage_since(self, since: float) -> list[tuple[str, str, int, int, int, int]]:
         """The canary sessions' 2xx requests since `since`: (model, provider, tokens_in, cache_read,
         cache_write, tokens_out) — the budget meter's ledger."""
