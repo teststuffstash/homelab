@@ -533,6 +533,42 @@ fx ".headRefOid = \"ffffffff66666666666666666666666666666666\"
 UCLAUSE=assembly-cr _go probe
 differs  "AC3: a real non-merge push MOVES the assembly-cr hash"      "$BASE_ASM" "$(field CUR)"
 
+# ── 6d ── THE UNARMED FOLD IGNORES AN IN-FLIGHT CHECK. `unarmed-major` and `goal-checkpoint-b`
+# share STATE_FP_JQ_UNARMED, whose `checks=` line carries only entries SETTLED on a non-passing
+# conclusion. Both clauses promise that a rebase or a master-merge buys no ride; each of those
+# re-runs CI, so a fold that counted a pending entry as non-passing broke the promise twice per
+# re-run (once into PENDING, once back out). Expected values come from the fold's contract, not
+# from running it: the base state's only non-passing entry is `e2e=FAILURE`, so `ci` leaving
+# SUCCESS for any in-flight shape and returning changes nothing in `checks=`; `ci` SETTLING on
+# FAILURE adds an entry and must move the hash. The stub serves no `pulls/<n>/files`, so the
+# fold runs on its documented `head=` fallback — the head is held fixed in every row here.
+section "6d — unarmed fold: a check going in flight and coming back is inert; a settled flip moves"
+fx_base
+UCLAUSE=unarmed-major _go probe; BASE_UM="$(field CUR)"
+nonempty "U0: unarmed-major fingerprint is non-empty"                 "$BASE_UM"
+UCLAUSE=goal-checkpoint-b _go probe
+eq       "U0: goal-checkpoint-b hashes exactly what unarmed-major hashes" "$(field CUR)" "$BASE_UM"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="IN_PROGRESS" | .conclusion=null)'
+UCLAUSE=unarmed-major _go probe
+same     "U1: green → IN_PROGRESS does NOT move the unarmed hash"     "$BASE_UM" "$(field CUR)"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="QUEUED" | .conclusion="")'
+UCLAUSE=unarmed-major _go probe
+same     "U1b: QUEUED (empty conclusion) is in flight too"            "$BASE_UM" "$(field CUR)"
+fx '.statusCheckRollup |= map(if .name == "ci" then {"__typename":"StatusContext","context":"ci","state":"PENDING"} else . end)'
+UCLAUSE=unarmed-major _go probe
+same     "U1c: a StatusContext in state PENDING is in flight too"     "$BASE_UM" "$(field CUR)"
+fx '.statusCheckRollup |= map(if .context == "ci" then {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"} else . end)'
+UCLAUSE=unarmed-major _go probe
+same     "U2: …and settling green again lands on the SAME hash"       "$BASE_UM" "$(field CUR)"
+fx '(.statusCheckRollup[] | select(.name=="ci") | .conclusion) = "FAILURE"'
+UCLAUSE=unarmed-major _go probe
+differs  "U3: a SETTLED flip (green → FAILURE) MOVES the unarmed hash" "$BASE_UM" "$(field CUR)"
+# The generic fold keeps its own contract (M3: a check going in flight moves it) — ci-red and
+# merge-conflict want that sensitivity; only the unarmed fold subtracts the in-flight entry.
+fx_base; GEN_BASE="$(fp)"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="IN_PROGRESS" | .conclusion=null)'
+differs  "U4: (control) the GENERIC fold still moves on the same edit" "$GEN_BASE" "$(fp)"
+
 # ── 7 ── FAIL-OPEN. An unreadable probe must behave exactly as the pre-#198 clause did: EMIT. The
 # guard is worth less than the loop it guards (FU-104), so every unknown resolves to "ride".
 section "7 — fail-open: an unreadable probe never holds a unit back"

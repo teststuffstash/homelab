@@ -18,7 +18,7 @@ description: >
 **The invariant this skill owns:** the operator's queue holds only items that need the operator,
 each as ONE line naming the missing fact (a ruling, a window, a mint, a verdict). Everything else
 leaves the pass queued, closed with evidence, or ruled `standing`. The human gate stays where it
-was designed — the PR read, the Goal assembly read (ADR-110), breaker #1 on Goals — and moves off
+was designed — the PR read, the Goal's verdict, and the assembly read where its paths are owned (ADR-110), breaker #1 on Goals — and moves off
 the pile.
 
 No new mechanism: [island intake](../../../docs/glossary.md) is the sitting

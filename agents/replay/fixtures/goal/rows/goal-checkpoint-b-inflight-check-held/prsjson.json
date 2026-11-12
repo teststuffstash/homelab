@@ -1,0 +1,15 @@
+[
+  {
+    "number": 845,
+    "title": "Assembly for #29 — the P0 slice, end to end",
+    "labels": [],
+    "reviewDecision": "REVIEW_REQUIRED",
+    "autoMergeRequest": { "enabledAt": "2026-10-10T17:32:00Z" },
+    "mergeStateStatus": "BEHIND",
+    "author": { "login": "homelab-agents-1234" },
+    "headRefName": "goal/29-whatif",
+    "body": "Coverage map: every acceptance id owned, deferred to a named issue, or evidenced.\n\nAssembly-for: #29\n\nADR-102: merge is a MIDPOINT — this PR does NOT close the goal.\n",
+    "baseRefName": "master",
+    "headRefOid": "845aaaa1111bbbb2222cccc3333dddd4444eeee"
+  }
+]
