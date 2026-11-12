@@ -837,8 +837,10 @@ OPEN `goal/**`-head PR carries this goal's `Assembly-for: #<goal>` trailer the s
 (the `state-fp:goal-checkpoint-b` hold, which hashes the PR's number and nothing else) and
 releases it only when that PR closes or is replaced by another. Nothing that happens ON the PR
 re-summons you through (b) — not a bot approval, a push, or a check result: a
-`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a red check stays on the scan's
-report surface, and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
+`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a settled red check on an
+assembly that changes only machine-merged paths arrives as `trigger=assembly-ci-red` (below; on
+any other assembly a red check stays on the scan's report surface, in front of the codeowner the
+PR is waiting on), and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
 not held.
 
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
@@ -1072,6 +1074,29 @@ Rule exactly one of:
   `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
   reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
   — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
+  **`trigger=assembly-ci-red`:** the scan's ci-red clause emits a `goal-checkpoint` unit when an
+  assembly PR has a check that SETTLED red and every file it changes classifies `machine-merge`
+  (`classify_touches`, agents/footprint.sh) — no codeowner is waiting on that PR and no fix round
+  can push to its head, so you are its only mover. You are here by this trigger when the goal's
+  open assembly PR carries a `state-fp:assembly-ci-red:` marker the scan wrote at this dispatch.
+  Re-read the PR's checks first (`gh pr view <pr> --json statusCheckRollup`): green or in flight
+  → the red already moved; say so on the goal and mint nothing. Otherwise read the failing run
+  (`gh run view <run-id> --json jobs,attempt`, `gh run view <run-id> --log-failed`) and rule
+  exactly one of:
+  - **Environmental, and the failing run is still attempt 1** (the §ci-red test: a transient
+    network/vendor blip or infra cold-start, the diff demonstrably not implicated) →
+    `gh run rerun <run-id> --failed`, ONCE, with the diagnosis and its `ci-cause:` line (§ci-cause)
+    in a comment on the assembly PR. Mint nothing: a re-run that goes green leaves nothing behind,
+    and one that settles red again is a new state the scan summons you for.
+  - **Anything else — the diff's own red, or a red on attempt ≥ 2** → ONE new child on the goal,
+    by the rule above (native sub-issue, `Base: goal/<n>-<slug>`, narrowed `Touches:`,
+    `agent/queued`). Its deliverable is that check green on the goal branch: name the assembly PR,
+    the failing `<job>/<step>` and the first failing lines of the log, and make the child's first
+    acceptance line the reproduction — the named check, run on the current goal head. **Never a
+    second child for the same red**: if an open child of this goal already owns this check on this
+    assembly PR, add what is new as a comment there and mint nothing.
+  A child of this kind that is still open once the assembly PR's check is green has its
+  acceptance met: close it with the green run linked, on whichever ride sees it first.
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still

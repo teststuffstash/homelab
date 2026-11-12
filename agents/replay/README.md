@@ -192,6 +192,14 @@ is stale, so it cannot drift the way the prose register did.
 | `argv-payload/over-ceiling` | actions | - | `agents/agent-session.sh` | - |
 | `argv-payload/retro-handoff` | actions | - | `agents/retro-session.sh` | - |
 | `argv-payload/warn-band` | actions | - | `agents/agent-session.sh` | - |
+| `assembly-ci-red/codeowner-path-report-only` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/debounced` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/emits` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/green-nothing` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/in-flight-held` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/rerun-red-again-rearms` | actions | - | `agents/coordinator-scan.sh` | - |
+| `assembly-ci-red/themed-emits` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-debounced` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-dispatch-marker` | actions | - | `agents/coordinator-scan.sh` | - |
 | `assembly-cr-emit` | actions | - | `agents/coordinator-scan.sh` | - |
