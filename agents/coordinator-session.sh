@@ -241,7 +241,7 @@ else
   LOOP_FETCH=""
 fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
-IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"
+IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-registry.teststuff.net/agent-coordinator:latest}}"
 POD="coordinator-$(date -u +%H%M%S)"
 # Janitor pods are date-keyed: a second run the same day collides on create — natural daily dedup.
 [ -n "$JANITOR" ] && POD="coordinator-janitor-$(date -u +%Y%m%d)"

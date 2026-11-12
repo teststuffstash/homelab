@@ -129,8 +129,8 @@ cat >"$R/mgmt/nixos/flake.lock" <<'EOF2'
 }
 EOF2
 # check (k)'s home: the coordinator pin's two files, in the deploy-pin's own shapes (#3040's base).
-printf '# agent-base\nAGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:2026.10.28-g2a1ab2455a9c.122\n# agent-coordinator\nAGENT_COORDINATOR_IMAGE=ghcr.io/teststuffstash/agent-coordinator:2026.10.28-g950b7f0b8201\n' >"$R/agents/images.env"
-printf 'resources:\n  - a.yaml\nimages:\n  - name: ghcr.io/teststuffstash/agent-coordinator\n    newTag: 2026.10.28-g950b7f0b8201\n' >"$R/agents/coordinator/kustomization.yaml"
+printf '# agent-base\nAGENT_BASE_IMAGE=registry.teststuff.net/agent-base:2026.10.28-g2a1ab2455a9c.122\n# agent-coordinator\nAGENT_COORDINATOR_IMAGE=registry.teststuff.net/agent-coordinator:2026.10.28-g950b7f0b8201\n' >"$R/agents/images.env"
+printf 'resources:\n  - a.yaml\nimages:\n  - name: registry.teststuff.net/agent-coordinator\n    newTag: 2026.10.28-g950b7f0b8201\n' >"$R/agents/coordinator/kustomization.yaml"
 git -C "$R" add -A && git -C "$R" commit -q -m base
 BASE="$(git -C "$R" rev-parse HEAD)"
 

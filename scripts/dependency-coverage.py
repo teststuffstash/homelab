@@ -65,7 +65,11 @@ SUBSTRATE_VARS = {"talos_version_controlplane": "Talos (control planes)",
                   "talos_version_worker": "Talos (workers)",
                   "kubernetes_version": "Kubernetes",
                   "cilium_version": "Cilium"}
-FIRST_PARTY = "ghcr.io/teststuffstash/"
+# First-party image names: the org's ghcr namespace, and the agent images on the LAN push registry
+# (ADR-121, FU-274 — the deploy-pin lane moved there with them). Not all of registry.teststuff.net:
+# the operator's `:main` site images there have no deploy-pin and stay class 2.
+# str.startswith takes the tuple as-is.
+FIRST_PARTY = ("ghcr.io/teststuffstash/", "registry.teststuff.net/agent-")
 IMAGE_GLOBS = ("argocd/resources/**/*.yaml", "agents/coordinator/*.yaml", "agents/fixer/**/*.yaml")
 IMAGE_RE = re.compile(r'^\s*(?:-\s*)?image:\s*"?([^"\s]+)"?\s*(?:#.*)?$')
 REF_RE = re.compile(r"^(?P<name>[^:@\s]+(?::\d+/[^:@\s]+)?)(?::(?P<tag>[^@\s]+))?(?:@(?P<digest>sha256:[0-9a-f]+))?$")
@@ -270,7 +274,7 @@ def extract_first_party_images(refs):
         entry = refs.get(name, {"versions": {}, "files": set()})
         versions = dict(entry["versions"])
         where = set(entry["files"])
-        short = name[len(FIRST_PARTY):]
+        short = name[len(next(p for p in FIRST_PARTY if name.startswith(p)).rsplit("/", 1)[0]) + 1:]
         row = {"name": short, "where": sorted(where), "match": [short.rsplit("/", 1)[-1]]}
         if name in pinned:
             var, tag = pinned[name]
@@ -902,7 +906,7 @@ def self_test():
     assert names_dependency("renovate/random-3.9.x-lockfile", ["hashicorp/random", "random"])
     # a store path, an image ref, an action ref, a lock key (the shapes each extractor emits)
     assert names_dependency("/nix/store/abc-age-1.3.1", ["-age-1.3.1"])
-    assert names_dependency("AGENT_COORDINATOR_IMAGE=ghcr.io/teststuffstash/agent-coordinator:2026.9.27-gca94", ["agent-coordinator"])
+    assert names_dependency("AGENT_COORDINATOR_IMAGE=registry.teststuff.net/agent-coordinator:2026.9.27-gca94", ["agent-coordinator"])
     assert names_dependency("uses: actions/checkout@11d5960a # v4", ["actions/checkout"])
     assert names_dependency('  "jq@latest": {', ['"jq@latest"'])
     # case-insensitive, like Renovate's lower-cased branch names vs `Infisical/infisical`

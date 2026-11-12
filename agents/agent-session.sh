@@ -1684,7 +1684,7 @@ if [ -n "${RECIPE:-}" ] || [ -n "${AGENT_PR_OPEN:-}" ]; then
   RUN_CMD="mkdir -p /work/bin; printf '%s' '${PR_OPEN_B64}' | base64 -d > /work/bin/pr-open; chmod +x /work/bin/pr-open; export PATH=/work/bin:\$PATH PR_OPEN_BASE=${BASE_REF}; ${RUN_CMD}"
 fi
 
-IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
+IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-registry.teststuff.net/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 # Idempotency: for TASKED runs the key IS the pod name (workflow.md §Hazards — implemented

@@ -56,7 +56,7 @@ classes:
   - id: 3
     name: First-party images
     extract: first_party_images
-    where: "`agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`)"
+    where: "`agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` or `registry.teststuff.net/agent-…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`)"
     manager: "n/a — the deploy-pin PR (ADR-084); Renovate never touches our own artifacts (a `2026.<m>.<d>-g<sha>` tag does not order)"
     proof_head_prefixes: ["deploy/", "runner-image-pin"]
     proof_paths: ["agents/images.env", "argocd/platform/arc-runners", "agents/coordinator/", "argocd/resources/agent-gateway/"]

@@ -166,7 +166,7 @@
     {
       "description": "First-party IMAGES and CHARTS (ghcr.io/teststuffstash/**) are NOT Renovate's — class 3 (docs/dependency-upgrades.md): the image repo's deploy-pin PR moves them (ADR-084) and a `2026.<m>.<d>-g<sha>` tag does not order. Same rule as the first-party Actions one above. Datasource-scoped (not manager-scoped) so it holds wherever such a ref appears — the `kubernetes` manager's manifests, the `argocd` manager's openrouter-operator OCI chart (ghcr.io/teststuffstash/charts), a tofu Deployment image.",
       "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/teststuffstash/**"],
+      "matchPackageNames": ["ghcr.io/teststuffstash/**", "registry.teststuff.net/**"],
       "enabled": false
     },
     {

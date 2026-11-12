@@ -62,5 +62,5 @@ configurations:
   - image-paths.yaml
 
 images:
-  - name: ghcr.io/teststuffstash/agent-coordinator
+  - name: registry.teststuff.net/agent-coordinator
     newTag: 2026.11.12-g7b51771a868d

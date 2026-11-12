@@ -274,7 +274,10 @@ six OVERSIZE items pointer-ized into
       first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
       third-party images only. **Next:** per-repo keep-sets there first (only oracle-fleet has a
       retention policy; the store is the 150Gi filesystem volume since FU-280's 2026-09-24 cutover, not
-      the 48Gi bucket), then dual-publish → pin flip per image. Relates FU-196, FU-203, FU-280.
+      the 48Gi bucket), then dual-publish → pin flip per image. **`agent-base` + `agent-coordinator` moved
+      2026-11-12** (pins on `registry.teststuff.net/agent-*`, keep-set `scripts/registry-keep-set.sh`) — forced,
+      not scheduled: both carry the Claude Code binary and their ghcr packages were public. The two oracle
+      images remain. Relates FU-196, FU-203, FU-280.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating

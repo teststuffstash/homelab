@@ -1811,8 +1811,8 @@ The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
 (`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) +
 `agents/coordinator/kustomization.yaml` `newTag` (every in-cluster manifest, ArgoCD-synced); the
-repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The ghcr package
-is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
+repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The image lives on
+`registry.teststuff.net` (LAN-only, anonymous pull), never on ghcr: it carries the Claude Code binary. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 
 ## Logs & behaviour analysis
@@ -1838,8 +1838,9 @@ labels) + **`pull_requests:write`** + **`contents`** (merge). It is minted from 
 `homelab-agents` GitHub App as the worker token (ESO generator, [`git-token.yaml`](git-token.yaml),
 ~1h) — no hand PAT; the App private key in Infisical is the only long-lived secret.
 
-The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
-(`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
+The **image-build CI** pushes to `registry.teststuff.net` with the `REGISTRY_PUSH_TOKEN` repo secret (a
+copy of the registry's push credential — `scripts/github-secrets-sync.sh`). The only *new* credential the
+coordinator adds at runtime is `coordinator-git`.
 
 ## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
 

@@ -308,7 +308,7 @@ spec:
                     metadata:
                       labels: { app: review-perstack-workflow }
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator
+                      image: registry.teststuff.net/agent-coordinator
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -425,7 +425,7 @@ spec:
       metadata:
         labels: { app: review-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |

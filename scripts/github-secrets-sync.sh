@@ -75,10 +75,14 @@ done
 # Source of truth for these is Infisical (ESO materializes the cluster Secret this reads) —
 # same write-only-copy rationale, same host-side requirement, same rule #6 on empty sources.
 SINGLES="
-teststuffstash/oracle-fleet | registry | registry-push-token | token | REGISTRY_PUSH_TOKEN
+teststuffstash/oracle-fleet      | registry | registry-push-token | token | REGISTRY_PUSH_TOKEN
+teststuffstash/agent-runtime     | registry | registry-push-token | token | REGISTRY_PUSH_TOKEN
+teststuffstash/agent-coordinator | registry | registry-push-token | token | REGISTRY_PUSH_TOKEN
 "
 # ^ REGISTRY_PUSH_TOKEN: the ADR-121 first-party registry push credential (user `releaser`) —
-#   consumed by oracle-fleet release-corpus.yaml's dual-publish (PR#352).
+#   consumed by oracle-fleet release-corpus.yaml's dual-publish (PR#352), and by the build-image.yaml
+#   of agent-runtime and agent-coordinator, which publish ONLY there: both images carry the Claude
+#   Code binary, which is not ours to hand out from a public ghcr package (FU-274).
 
 printf '%s\n' "$SINGLES" | while IFS='|' read -r repo ns sec key ghname; do
   repo=$(echo "$repo" | tr -d ' '); ns=$(echo "$ns" | tr -d ' ')
