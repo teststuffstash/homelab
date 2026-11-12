@@ -227,7 +227,9 @@ five + X`); `unlisted?` = ids either read carries that the listing lacks.
 #### Which rows the merged listing holds
 
 Rows run with no last good snapshot. Legend: `config-disables` = `deepseek-v4-pro: {disabled: true}`;
-`config-adds` = a console-only `deepseek-v4-flash` with a cost and both limits; `config-adds-bare` =
+`config-adds` = a console-only `deepseek-v4-flash` whose override carries `family` `deepseek-flash`,
+`capabilities.tools` true, a cost row 0.14 / 0.28 / 0.028 / — (input / output / cache read / cache write),
+`limit.context` 1000000 and `limit.output` 384000; `config-adds-bare` =
 `deepseek-v4-flash: {disabled: false}`; `catalog-google` = models.dev lists `gemini-4-argon` on
 `@ai-sdk/google`; `config-adds-gemini` = a complete console override for that dropped id.
 
@@ -844,7 +846,7 @@ None.
 routing, exactly as before this leg — never refused for lack of a canary). A cell becomes
 `eligible` when ONE [canary](../glossary.md#canary) ride completes a tool-call loop through the
 gateway on exactly that cell: a session admitted by `POST /sessions` with **`canary: {model,
-provider}`** (the policy's `canary.role` — `prober` — on rail openrouter, the harness the cell
+provider}`** (the policy's `canary.role` — `prober` — on rail openrouter; a `canary` body from any other role is a `400 malformed-body`, the harness the cell
 serves — `canary.harness`, `opencode` — unless the body names another the rail speaks), pinned to
 that provider with fallbacks off and **no failover**, whose outcome is the verdict: `clean` →
 `eligible`; any strike (the consumer's class, or the gateway's own transport class) → `excluded`
@@ -854,7 +856,9 @@ gateway; its model is the catalog's, not the policy's (⚖
 [GW-MODEL-RESOLVE](anthropic-messages.md#gw-model-resolve)'s one exception: the catalog is the
 entry gate the policy's lists are derived from). The checks, in order: the cell is in the snapshot
 (`not-in-catalog`, `retry_after_s` = the next refresh), it is a candidate (`canary-not-due` —
-already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end), the
+already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end, and for an
+already-eligible cell, which has no cooldown, the seconds to the next catalog refresh — 21600 at T0
+in the rows below, the refresh interval), the
 budget, then the rail's slot count and credential as any admission.
 
 **Who rides the canaries** is the jail's `gateway/scripts/canary-entrants.sh`: it reads the view,
