@@ -747,9 +747,10 @@ that line). A major
 - **A minor** is merged by a person for now, inside a declared maintenance window:
   1. `devbox run -- bash scripts/garage-upgrade.sh preflight --kubeconfig tofu/kubeconfig` —
      refuses unless `garage:disruption_allowed` is 1, the StatefulSet is settled, every node
-     reports one version and the write probe is green; then launches the table repair and takes a
-     metadata snapshot on every node (the restore point for a one-way release, and across a major;
-     writes made since the snapshot are lost).
+     reports one version and the write probe is green; then takes a metadata snapshot on each node
+     in turn (the restore point for a one-way release, and across a major; writes made since the
+     snapshot are lost) and launches the table repair. The signal closes for ~10 minutes after any
+     resync spike — wait, do not override. A snapshot took 5.5 minutes on wk-metal-01.
   2. Merge the Renovate PR. The sync rolls one zone at a time behind readiness and
      `minReadySeconds`. The roll does not wait for the resync backlog (§Voluntary disruption, "Not
      gated by it").
@@ -757,8 +758,10 @@ that line). A major
      every node runs the target version, every partition has all replicas up and the write probe
      is green.
 
-  These two verbs are what the Garage Application's PreSync / PostSync hooks will run under an
-  upgrade lease ([ADR-150](adr.md)); the minor arms once that chain is drilled.
+  First run: homelab#3344, v2.3.0 → v2.5.0, 2026-11-13 (three zones in 11 minutes, no alert). The
+  two verbs are meant to become the Garage Application's PreSync / PostSync hooks, stopping and
+  paging on a refusal. No automatic revert is planned: a release can be one-way, and a one-way
+  release stops and escalates to a person (operator, 2026-11-13).
 - **A major** is a person's decision (operator, 2026-11-13): read upstream's migration guide for
   that version first.
 

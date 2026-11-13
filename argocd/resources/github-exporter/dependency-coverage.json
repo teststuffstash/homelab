@@ -9,8 +9,8 @@
       ],
       "human_rows": 0,
       "id": 1,
-      "last_proven": "2026-11-12T23:19:42Z",
-      "last_proven_pr": 3334,
+      "last_proven": "2026-11-13T13:00:30Z",
+      "last_proven_pr": 3343,
       "name": "Helm charts, GitOps",
       "owner_may_leave": false,
       "rows": 17
@@ -25,8 +25,8 @@
       ],
       "human_rows": 0,
       "id": 2,
-      "last_proven": "2026-11-12T14:54:48Z",
-      "last_proven_pr": 3284,
+      "last_proven": "2026-11-13T12:54:35Z",
+      "last_proven_pr": 3342,
       "name": "In-cluster images, GitOps",
       "owner_may_leave": false,
       "rows": 19
@@ -40,8 +40,8 @@
       ],
       "human_rows": 0,
       "id": 3,
-      "last_proven": "2026-11-13T10:22:26Z",
-      "last_proven_pr": 3340,
+      "last_proven": "2026-11-13T17:10:12Z",
+      "last_proven_pr": 3357,
       "name": "First-party images",
       "owner_may_leave": false,
       "rows": 5
@@ -310,7 +310,7 @@
       "rows": 1
     },
     {
-      "complete": false,
+      "complete": true,
       "gap_cells": [],
       "gap_rows": 0,
       "human_cells": [
@@ -320,8 +320,8 @@
       ],
       "human_rows": 0,
       "id": 20,
-      "last_proven": null,
-      "last_proven_pr": null,
+      "last_proven": "2026-11-13T17:17:47Z",
+      "last_proven_pr": 3344,
       "name": "In-cluster Garage (the vendored chart)",
       "owner_may_leave": false,
       "rows": 1
@@ -332,9 +332,9 @@
   "proofs": {
     "classes": {
       "1": {
-        "merged_at": "2026-11-12T23:19:42Z",
-        "pr": 3334,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.21.1"
+        "merged_at": "2026-11-13T13:00:30Z",
+        "pr": 3343,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v92.21.2"
       },
       "10": {
         "merged_at": "2026-11-05T23:28:28Z",
@@ -352,14 +352,19 @@
         "title": "chore(deps): update dependency helm/helm to v4.3.1"
       },
       "2": {
-        "merged_at": "2026-11-12T14:54:48Z",
-        "pr": 3284,
-        "title": "chore(deps): update cloudflare/cloudflared docker tag to v2026.11.0"
+        "merged_at": "2026-11-13T12:54:35Z",
+        "pr": 3342,
+        "title": "chore(deps): update docker.io/grafana/loki docker tag to v3.7.10"
+      },
+      "20": {
+        "merged_at": "2026-11-13T17:17:47Z",
+        "pr": 3344,
+        "title": "chore(deps): update dependency deuxfleurs/garage to v2.5.0"
       },
       "3": {
-        "merged_at": "2026-11-13T10:22:26Z",
-        "pr": 3340,
-        "title": "deploy: agent-base 2026.11.13-gcf846e507131"
+        "merged_at": "2026-11-13T17:10:12Z",
+        "pr": 3357,
+        "title": "deploy: agent-gateway 2026.11.13-g1736d0e30eb5"
       },
       "4": {
         "merged_at": "2026-11-12T23:12:45Z",
@@ -469,9 +474,9 @@
         "title": "chore(deps): update ghcr.io/akuity/kargo-charts/kargo docker tag to v1.12.5"
       },
       "1:kube-prometheus-stack": {
-        "merged_at": "2026-11-12T23:19:42Z",
-        "pr": 3334,
-        "title": "chore(deps): update helm release kube-prometheus-stack to v92.21.1"
+        "merged_at": "2026-11-13T13:00:30Z",
+        "pr": 3343,
+        "title": "chore(deps): update helm release kube-prometheus-stack to v92.21.2"
       },
       "1:metrics-server": {
         "merged_at": "2026-10-09T05:28:58Z",
@@ -482,6 +487,11 @@
         "merged_at": "2026-10-30T04:01:34Z",
         "pr": 3036,
         "title": "chore(deps): update helm release prometheus-operator-crds to v32.0.2"
+      },
+      "20:deuxfleurs/garage (in-cluster chart)": {
+        "merged_at": "2026-11-13T17:17:47Z",
+        "pr": 3344,
+        "title": "chore(deps): update dependency deuxfleurs/garage to v2.5.0"
       },
       "2:cloudflare/cloudflared": {
         "merged_at": "2026-11-12T14:54:48Z",
@@ -494,9 +504,9 @@
         "title": "chore(deps): update docker.io/grafana/alloy docker tag to v1.21.3"
       },
       "2:docker.io/grafana/loki": {
-        "merged_at": "2026-10-21T03:03:16Z",
-        "pr": 2781,
-        "title": "chore(deps): update grafana/loki docker tag to v3.7.9"
+        "merged_at": "2026-11-13T12:54:35Z",
+        "pr": 3342,
+        "title": "chore(deps): update docker.io/grafana/loki docker tag to v3.7.10"
       },
       "2:docker.io/library/alpine": {
         "merged_at": "2026-10-04T22:50:54Z",
@@ -564,9 +574,9 @@
         "title": "deploy: agent-coordinator 2026.11.13-g703b436ee38d"
       },
       "3:agent-gateway": {
-        "merged_at": "2026-11-12T23:35:36Z",
-        "pr": 3335,
-        "title": "deploy: agent-gateway 2026.11.12-g6cdb9bd38ff8"
+        "merged_at": "2026-11-13T17:10:12Z",
+        "pr": 3357,
+        "title": "deploy: agent-gateway 2026.11.13-g1736d0e30eb5"
       },
       "3:homelab/arc-runner": {
         "merged_at": "2026-11-12T15:16:21Z",
@@ -994,7 +1004,7 @@
       "class": 1,
       "gap_columns": [],
       "key": "1:kube-prometheus-stack",
-      "last_proven": "2026-11-12T23:19:42Z",
+      "last_proven": "2026-11-13T13:00:30Z",
       "name": "kube-prometheus-stack",
       "version": "92.21.2",
       "where": [
@@ -1060,7 +1070,7 @@
       "class": 2,
       "gap_columns": [],
       "key": "2:docker.io/grafana/loki",
-      "last_proven": "2026-10-21T03:03:16Z",
+      "last_proven": "2026-11-13T12:54:35Z",
       "name": "docker.io/grafana/loki",
       "version": "3.7.10",
       "where": [
@@ -1318,9 +1328,9 @@
       "class": 3,
       "gap_columns": [],
       "key": "3:agent-gateway",
-      "last_proven": "2026-11-12T23:35:36Z",
+      "last_proven": "2026-11-13T17:10:12Z",
       "name": "agent-gateway",
-      "version": "2026.11.12-g6cdb9bd38ff8 (×1)",
+      "version": "2026.11.13-g1736d0e30eb5 (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -2342,7 +2352,7 @@
       "class": 20,
       "gap_columns": [],
       "key": "20:deuxfleurs/garage (in-cluster chart)",
-      "last_proven": null,
+      "last_proven": "2026-11-13T17:17:47Z",
       "name": "deuxfleurs/garage (in-cluster chart)",
       "version": "v2.5.0",
       "where": [
