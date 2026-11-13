@@ -18,6 +18,30 @@ PLAYWRIGHT_VERSION="1.62.0"
 PLAYWRIGHT_IMAGE="${REGISTRY_MIRROR_MCR:-http://192.168.40.31}"
 PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE#*://}/playwright/python:v${PLAYWRIGHT_VERSION}"
 
+# --prepull: start the image pull in the BACKGROUND and return at once. The repo-root `gateway-ci`
+# task calls it, so on a CI runner the pull (~3 min into a fresh dind, every job) overlaps the
+# gateway suite instead of sitting on the critical path here; dind persists across a job's steps,
+# and the leg below still runs its own `docker pull`, which joins a pull still in flight (dockerd
+# shares the layer transfers) or re-pulls after one that failed. Best-effort by construction:
+# always exit 0, nothing in the foreground touches the daemon, the background pull is detached
+# (stdio to a log, not the step's pipes) and bounded by `timeout`. CI only — a ride or a local run
+# pulls in the leg as before. Skipped when this PR's skip map turns the leg off (ci.yaml writes
+# /tmp/ci-skip-map from scripts/diff-ci.sh; push runs have none and run every gate).
+if [ "${1:-}" = "--prepull" ]; then
+  if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+    echo "e2e-specs-site --prepull: not a CI runner — the leg pulls when it runs"
+  elif [ -f /tmp/ci-skip-map ] && grep -qx 'gateway-specs-site-e2e=false' /tmp/ci-skip-map; then
+    echo "e2e-specs-site --prepull: the leg is skipped on this PR — no pull"
+  elif ! command -v docker >/dev/null 2>&1; then
+    echo "e2e-specs-site --prepull: no docker CLI — the leg will report it"
+  else
+    log="${RUNNER_TEMP:-/tmp}/specs-site-prepull.log"
+    nohup timeout 900 docker pull -q "$PLAYWRIGHT_IMAGE" </dev/null >"$log" 2>&1 &
+    echo "e2e-specs-site --prepull: pulling $PLAYWRIGHT_IMAGE in the background (log: $log)"
+  fi
+  exit 0
+fi
+
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 EVID="e2e-specs-site-evidence/$TS"
 INSTANT=0
@@ -53,9 +77,21 @@ docker info >/dev/null 2>&1 || {
   exit 1
 }
 
-bash scripts/specs-build.sh >/dev/null
+# Reuse the site the publish step built earlier in this CI job (same tree, same evidence fragments —
+# site_build_stamp in lib/site.sh); anywhere else, or on any mismatch, build it here.
+# shellcheck source=lib/site.sh
+source scripts/lib/site.sh
+stamp=$(site_build_stamp)
+if [ -n "$stamp" ] && [ -f specs-site/index.html ] && [ "$(cat .specs-site.stamp 2>/dev/null)" = "$stamp" ]; then
+  echo "e2e-specs-site: reusing specs-site/ built earlier in this job ($stamp)"
+else
+  bash scripts/specs-build.sh >/dev/null
+fi
 
+t0=$(date +%s)
+local_before=no; docker image inspect "$PLAYWRIGHT_IMAGE" >/dev/null 2>&1 && local_before=yes
 docker pull -q "$PLAYWRIGHT_IMAGE" >/dev/null
+echo "e2e-specs-site: $PLAYWRIGHT_IMAGE ready in $(( $(date +%s) - t0 ))s (already local: $local_before)"
 vol="gw-specs-site-check-$$-$RANDOM"
 docker volume create "$vol" >/dev/null
 trap 'docker volume rm "$vol" >/dev/null 2>&1 || true' EXIT

@@ -12,6 +12,7 @@ source scripts/lib/site.sh
 # a rule's tables joined to the evidence where the tool parses them, the plain evidence table
 # otherwise). `devbox run evidence` leaves them behind; a build without them is a valid
 # fragment-less build (rule 5's visibly-unverified — the pages render as authored).
+rm -f .specs-site.stamp   # rewritten only when this build completes (site_build_stamp, lib/site.sh)
 rm -rf .site-evidence && mkdir -p .site-evidence
 if [ -d allure-evidence ]; then
   find allure-evidence -maxdepth 1 -name 'GW-*.md' -exec cp {} .site-evidence/ \;
@@ -96,4 +97,6 @@ find specs-site -type d | while read -r d; do
     echo "</ul>"
   } > "$d/index.html"
 done
+stamp=$(site_build_stamp)
+[ -z "$stamp" ] || printf '%s\n' "$stamp" > .specs-site.stamp
 echo "specs-build: specs-site/ ($(find specs-site -type f | wc -l) files$([ -f specs-site/report/index.html ] && echo ', report/index.html included'))"
