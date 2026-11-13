@@ -331,7 +331,7 @@
       "automerge": true
     },
     {
-      "description": "Garage MINOR (and a re-pointed tag: `digest`/`pin`) is handled as a MAJOR: `major`-labelled, NOT armed — the migration lens reads the upstream upgrade notes and the human-gated coordinator lane owns it. Blast class decides, not semver: Garage is the data layer, a minor may change the metadata format, and a downgrade across that is not a revert (docs/dependency-classes.yaml class 20, `revert`). A real major lands in the same lane through the `major` catch-all below.",
+      "description": "Garage MINOR (and a re-pointed tag: `digest`/`pin`) is `major`-labelled and NOT armed YET: the migration lens reads the upstream notes and a human merges. Upstream's contract is that a bump inside one major keeps protocols and data structures and rolls node by node with no downtime, so this is not a format risk — it is the house rule that a chart joins the armed lane only on its own drilled chain (the argo-workflows rule above). The chain being built: scripts/garage-upgrade.sh `preflight` / `verify` run by hand on the first bump, then as PreSync / PostSync hooks under an upgrade lease (docs/garage.md §Upgrading). A real major (v2 → v3: protocol or metadata format changes, upstream's own definition) stays human by operator ruling 2026-11-13, through the `major` catch-all.",
       "matchManagers": ["custom.regex"],
       "matchPackageNames": ["deuxfleurs/garage"],
       "matchUpdateTypes": ["minor", "digest", "pin"],
