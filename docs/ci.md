@@ -40,6 +40,10 @@ GitHub-outage fallback, not a live read path, so its single mostly-idle runner d
   **Master pushes run every gate** — the net that catches a too-narrow row. Locally,
   **`devbox run diff-ci`** is the pre-flight over the same map. A coverage belt inside diff-ci
   fails if ci.yaml runs a task the map doesn't know.
+  **Runtime is read weekly** by the [`ci-optimizer`](../.agents/ci-optimizer.md) retro series
+  (proposed; per-step timings, what-ran-vs-what-changed, measured speedups). The 2026-11 baseline,
+  including why the `GithubCiWallTimeDrift` alert went blind:
+  [`spikes/ci-runtime-2026-11.md`](spikes/ci-runtime-2026-11.md).
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.
