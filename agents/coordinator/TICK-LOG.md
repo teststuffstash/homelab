@@ -15347,3 +15347,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
   wait arms its own budget (the reviewer's catch — the shared deadline would have refused after slow snapshots);
   `verify` waits for the target version first; the Garage rule, class 20 and garage.md carry the one-way ruling.
   Still owed: the node-by-node snapshot's first live run, the verbs as hooks (stop and page), the backup LXC.
+
+## 2026-11-13 (evening) — seat (second jail, then primary): CI wait — the drift alert was blind, five stage speedups, the weekly ci-optimizer drafted
+
+- **Read** (30 days, 2,511 `CI` runs; `docs/spikes/ci-runtime-2026-11.md`): master push weekly median exec 611 → 1,198 s;
+  `GithubCiWallTimeDrift` blind since ~10-22 (its `offset 21d` baseline sat past the ~19 days `retentionSize` holds).
+  Operator ruling: runner-minutes are free, **waiting on CI is the cost** — so the master-push net stays.
+- **Merged:** #3346 (ci-optimizer brief, PROPOSED, unwired — a single-cell named retro series) + #3359 (its cost model =
+  PR wait); #3350 diff-ci: a `devbox.json`/lock/MAP edit selects what it changed (pinned by `scripts/diff-ci-test.sh`,
+  20 assertions, riding `--coverage-only`; the review's ask); #3354 mgmt fixtures concurrent (CI step 236 → 65 s);
+  #3349/#3352 specs-site e2e pre-pull (174 → 22–46 s); #3353 gateway test DB template; #3355 intake-select batched
+  (byte-identical over 1,818 inputs); #3360 drift alert week-over-week at 1.25× + `GithubCiWallTimeDriftBlind`
+  (loaded 19:0xZ; Prometheus normalises the expr to `offset 1w`); #3362 reconciler batched reads (identical over 168
+  captured ticks; live on the box's next pull); #3361 gateway schema in one transaction (153 → 40 ms; deploy PR #3363).
+- **Open, operator-owed:** #3348 `minRunners` 1 → 3 (guarded file, seat review APPROVE posted). The post-merge burst
+  — PR pickup median 3/23/44/57 s at 0/1/2/3+ jobs just ahead — is what it buys.
+- The session drained the shared GitHub pool to 0 at 17:54Z (six parallel subagents + pr-waits); reset 17:57Z, no
+  failure. A ci.yaml comment fix (the mgmt step) went seat-direct.

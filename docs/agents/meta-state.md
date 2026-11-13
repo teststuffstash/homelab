@@ -18,6 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** OPERATOR-OWED: admin-merge **#3348** (`minRunners` 1 → 3;
+  `pin-only-lint` red by design, seat review APPROVE posted on the PR): `gh pr merge 3348 --repo teststuffstash/homelab --squash --admin`.
+  ~7 days after it syncs: re-run the burst-pickup table (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) —
+  PR job pickup by jobs-just-ahead should flatten toward ~3 s; if not, raise again or read the listener. Also expect
+  `GithubCiWallTimeDrift` (week-over-week since #3360) to fire once on homelab push (1.30 at the change) — a true positive
+  about the pre-speedup creep; it clears as the week's median falls. #3362 (reconciler: batched reads, identical output
+  over 168 captured ticks) goes live on the box's next hourly `mgmt-pull` with no rebuild: confirm
+  `mgmt_reconcile_last_run_timestamp_seconds` keeps advancing and `mgmt_reconcile_node_state` stays 13 idle (the
+  baseline at 19:25Z). Delete this bullet after the readout.
+
 - **⚑ PICKUP (2026-11-08 — oracle-fleet spec-process mount; operator ruling owed).** oracle-fleet#1026 made `scripts/lib/snippets.sh` set
   `SNIPPETS_RELEASE=<url>` and `SNIPPETS_WHEEL="file://…"`, so `sp_pin_version` (`agents/agent-session.sh`) parses nothing from it (checked against master 11-08; the gateway's still
   parses, #3228 kept the line). Oracle rides reaching `specs/` should be unmounted since 11-08 12:45Z; NOT confirmed in logs (the launcher's mount lines are not in the oracle Loki tenants).
