@@ -85,8 +85,9 @@ jobs:
 
       # ADR-131: the management box's stage-1 fixtures + the fail-closed policy/classifier reads
       # (homelab#1631's four review rounds were unverified by any required check — the reviewer
-      # read the diff). Serial and BEFORE the ∥ suites start: the test's nested `devbox run yq`
-      # calls must not overlap a background `devbox run` (the "text file busy" class, #1139).
+      # read the diff). The fixtures run concurrently INSIDE this step (mgmt-policy-test-all.sh,
+      # no nested `devbox run` since #3354); the step itself stays serial because it invokes
+      # `devbox run`, which only serial steps may do (the snapshot rule above, #1139).
       - name: mgmt policy fixtures (devbox run mgmt-policy-test)
         if: steps.diff.outputs.mgmt-policy-test != 'false'
         run: devbox run mgmt-policy-test
