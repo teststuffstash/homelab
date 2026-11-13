@@ -200,20 +200,23 @@ island_of_path() {
   printf '%s' "$best"
 }
 
-# island_of_issue <title> <touches> → the one island the issue belongs to (first ISLANDS row whose
-# title regex matches or that owns every Touches entry), or nothing.
+# island_of_issue <title> <touches> <index> → the one island the issue belongs to (first ISLANDS row
+# whose title regex matches or that owns every Touches entry), or nothing. The title rows are read
+# from TMATCH (the walk's one grep per island over every title); a multi-line title greps its own.
 island_of_issue() {
   load_table
-  local title="$1" touches="$2" tisl="" p pi i=0 isl
+  local title="$1" touches="$2" ix="$3" tisl="" p pi i=0 isl
   if [ -n "$touches" ]; then
-    for p in $(printf '%s' "$touches" | tr ',' ' '); do
+    # shellcheck disable=SC2086  # word-split on the commas' spaces, as the entries always were
+    for p in ${touches//,/ }; do
       pi="$(island_of_path "$p")"
       if [ -z "$pi" ] || { [ -n "$tisl" ] && [ "$pi" != "$tisl" ]; }; then tisl=""; break; fi
       tisl="$pi"
     done
   fi
   for isl in $ISLANDS; do
-    if [ "$tisl" = "$isl" ] || grep -qiE "${TRES[$i]}" <<< "$title"; then
+    if [ "$tisl" = "$isl" ] || [ -n "${TMATCH["$isl:$ix"]:-}" ] \
+       || { case "$title" in *$'\n'*) grep -qiE "${TRES[$i]}" <<< "$title";; *) false;; esac; }; then
       printf '%s' "$isl"; return 0
     fi
     i=$((i + 1))
@@ -385,59 +388,127 @@ now="${INTAKE_NOW:-$(date -u +%s)}"
 # membership predicates — a wait differs from a candidate only in which label/ruling it carries.
 REREAD=0; [ "$SOURCE" = pile ] && REREAD=1
 REREAD_AGE_D="${INTAKE_REREAD_AGE_D:-3}"
-cands='[]'; rereads='[]'
 count="$(printf '%s' "$issues" | jq 'length')"
+
+# Every per-issue field the walk reads, in ONE jq pass and ONE parser run (no fork per issue or
+# per field). Each field is exactly what `jq -r <expr>` printed into "$(…)" (trailing newlines
+# stripped). The fields the walk reads only
+# for SOME issues (life, ruling, since, author) carry a `=` prefix, or `!` when their expression
+# errors — the walk dies as the per-field read did (jq's error line, exit 5) only on reaching one.
+# shellcheck disable=SC2016  # a jq program, not a shell expansion
+JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\n") | not; .[:-1]);
+  def lazy(e): try ("=" + (e | r)) catch ("!" + tostring);
+  . as $all | range(0; length) as $i | $all[$i]
+  | "F_num[\($i)]=\(.number | r | @sh); F_title[\($i)]=\(.title | r | @sh); "
+  + "F_life[\($i)]=\(lazy([.labels[].name] as $l
+      | if ($l | index("task/goal")) then "other"
+        elif ($l | index("agent/blocked")) then "blocked"
+        elif ($l | any(startswith("agent/"))) then "other" else "none" end) | @sh); "
+  + "F_bot[\($i)]=\(if (try ((.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))) catch false) then 1 else "" end | @sh); "
+  + "F_ruling[\($i)]=\(lazy([.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // "") | @sh); "
+  + "F_since[\($i)]=\(lazy(([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
+      | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt) | @sh); "
+  + "F_author[\($i)]=\(lazy(.author.login) | @sh); F_created[\($i)]=\(.createdAt | r | @sh)"'
+# Touches of every issue through the ONE body parser (agents/issue_body.py's `get`, imported):
+# what `jq -r '.body // ""' | python3 issue_body.py get Touches` printed, "" when it failed.
+# shellcheck disable=SC2016
+PY_TOUCHES='import json, shlex, sys
+sys.path.insert(0, sys.argv[1])
+try:
+    import issue_body
+except Exception:
+    sys.exit(0)
+for i, row in enumerate(json.load(sys.stdin)):
+    body = row.get("body") if isinstance(row, dict) else None
+    if body is None or body is False:
+        body = ""
+    elif not isinstance(body, str):
+        body = json.dumps(body)
+    try:
+        v = issue_body.get(body + "\n", "Touches")
+    except Exception:
+        v = None
+    v = (v or "").rstrip("\n")
+    if v:
+        print("F_touches[%d]=%s" % (i, shlex.quote(v)))'
+F_num=(); F_title=(); F_life=(); F_bot=(); F_ruling=(); F_since=(); F_author=(); F_created=(); F_touches=()
+fields="$(printf '%s' "$issues" | jq -r "$JQ_FIELDS")"
+eval "$fields"
+eval "$(printf '%s' "$issues" | python3 -I -c "$PY_TOUCHES" "$ROOT/agents" 2>/dev/null || true)"
+
+# The title rows, matched once per island over every title (grep -iE, as island_of_issue reads
+# them): TMATCH[<island>:<index>] = 1. A multi-line title is matched on its own (island_of_issue).
+load_table
+declare -A TMATCH=()
+_ti=0
+for isl in $ISLANDS; do
+  while IFS=: read -r ln _; do TMATCH["$isl:$((ln - 1))"]=1; done < <(
+    for t in "${F_title[@]}"; do case "$t" in *$'\n'*) echo;; *) printf '%s\n' "$t";; esac; done \
+      | { grep -anE -i "${TRES[$_ti]}" || true; })
+  _ti=$((_ti + 1))
+done
+
+lazy() { # <value> → the field, or jq's own error line + exit 5 where the per-field read would have died
+  case "$1" in =*) printf '%s' "${1#=}";; *) echo "jq: error (at <stdin>:0): ${1#!}" >&2; exit 5;; esac
+}
+cand_args=(); reread_args=()
 i=0
 while [ "$i" -lt "$count" ]; do
-  row="$(printf '%s' "$issues" | jq -c ".[$i]")"; i=$((i + 1))
-  num="$(printf '%s' "$row" | jq -r .number)"
-  title="$(printf '%s' "$row" | jq -r .title)"
+  ix=$i; i=$((i + 1))
+  num="${F_num[$ix]}"
+  title="${F_title[$ix]}"
   # containers and lifecycle-labelled items are never candidates
   case "$title" in post-launch:*|stint:*) continue;; esac
   # lifecycle: none | blocked (`agent/blocked` — a wait, the reread's) | other (a Goal, or any other
   # `agent/*` label: the loop's own state, nobody's input)
-  life="$(printf '%s' "$row" | jq -r '[.labels[].name] as $l
-    | if ($l | index("task/goal")) then "other"
-      elif ($l | index("agent/blocked")) then "blocked"
-      elif ($l | any(startswith("agent/"))) then "other" else "none" end')"
+  life="$(lazy "${F_life[$ix]}")" || exit 5
   case "$life" in other) continue;; blocked) [ "$REREAD" = 1 ] || continue;; esac
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
-  touches="$(printf '%s' "$row" | jq -r '.body // ""' | python3 "$PARSER" get Touches --ref "${REPO}#${num}" 2>/dev/null || true)"
+  touches="${F_touches[$ix]:-}"
   kind=member
-  case "$(island_of_issue "$title" "$touches")" in
+  case "$(island_of_issue "$title" "$touches" "$ix")" in
     "$ISLAND") ;;
     "") # nobody's: an attribution input for ATTRIBUTION_ISLAND when bot-filed (not author type User)
       [ "$ISLAND" = "$ATTRIBUTION_ISLAND" ] || continue
-      printf '%s' "$row" | jq -e '(.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))' >/dev/null || continue
+      [ -n "${F_bot[$ix]}" ] || continue
       kind=attribution;;
     *) continue;;
   esac
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
-  ruling="$(printf '%s' "$row" | jq -r '[.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // ""')"
+  ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
   if [ "$life" = blocked ] || [ -n "$ruling" ]; then
     # ruled or blocked: never a candidate; a reread when it is a member's WAIT, old enough
     [ "$REREAD" = 1 ] && [ "$kind" = member ] || continue
     wait_kind=""
-    [ "$(printf '%s' "$ruling" | sed -E 's/^intake:[[:space:]]*//' | awk '{print $1}')" = seat ] && wait_kind=seat
+    w="${ruling#intake:}"; w="${w#"${w%%[![:space:]]*}"}"; read -r w _ <<< "$w" || true
+    [ "$w" = seat ] && wait_kind=seat
     [ "$life" = blocked ] && wait_kind=agent/blocked
     [ -n "$wait_kind" ] || continue
-    since="$(printf '%s' "$row" | jq -r '([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
-        | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt')"
+    since="$(lazy "${F_since[$ix]}")" || exit 5
     sts="$(date -u -d "$since" +%s 2>/dev/null || echo "$now")"
     wait_d=$(( (now - sts) / 86400 ))
     [ "$wait_d" -ge "$REREAD_AGE_D" ] || continue
-    rereads="$(printf '%s' "$rereads" | jq -c --argjson n "$num" --arg id "${REPO}#${num}" --arg t "$title" \
-      --arg au "$(printf '%s' "$row" | jq -r '.author.login')" --arg w "$wait_kind" --arg s "$since" --argjson d "$wait_d" --arg r "$ruling" \
-      '. + [{id: $id, kind: "reread", number: $n, title: $t, author: $au, wait: $w, since: $s, wait_d: $d, parked_by: $r}]')"
+    author="$(lazy "${F_author[$ix]}")" || exit 5
+    reread_args+=("${REPO}#${num}" "$num" "$title" "$author" "$wait_kind" "$since" "$wait_d" "$ruling")
     continue
   fi
-  created="$(printf '%s' "$row" | jq -r .createdAt)"
+  created="${F_created[$ix]}"
   cts="$(date -u -d "$created" +%s 2>/dev/null || echo "$now")"
   age_h=$(( (now - cts) / 3600 ))
-  cands="$(printf '%s' "$cands" | jq -c --argjson n "$num" --argjson a "$age_h" \
-    --arg t "$title" --arg au "$(printf '%s' "$row" | jq -r '.author.login')" --arg k "$kind" \
-    '. + [{number: $n, age_h: $a, author: $au, title: $t, kind: $k}]')"
+  author="$(lazy "${F_author[$ix]}")" || exit 5
+  cand_args+=("$num" "$age_h" "$title" "$author" "$kind")
 done
+# The selections, built once from the walk's rows (the per-row `--argjson` reads are `fromjson`
+# here). Each value rides as an `x`-prefixed positional, so a leading `-` is never an option.
+rows_json() { # <width> <jq object over the row .[0..]> <values…>
+  local w="$1" obj="$2"; shift 2
+  [ $# -gt 0 ] || { printf '[]'; return 0; }
+  jq -nc --argjson w "$w" "\$ARGS.positional | map(.[1:]) | [range(0; length; \$w) as \$k | .[\$k:\$k + \$w] | $obj]" --args "${@/#/x}"
+}
+cands="$(rows_json 5 '{number: (.[0] | fromjson), age_h: (.[1] | fromjson), author: .[3], title: .[2], kind: .[4]}' \
+  ${cand_args[@]+"${cand_args[@]}"})"
+rereads="$(rows_json 8 '{id: .[0], kind: "reread", number: (.[1] | fromjson), title: .[2], author: .[3], wait: .[4],
+  since: .[5], wait_d: (.[6] | fromjson), parked_by: .[7]}' ${reread_args[@]+"${reread_args[@]}"})"
 
 if [ "$SOURCE" = pile ]; then
   dmax="${INTAKE_DAILY_MAX:-2}"; every="${INTAKE_REREAD_EVERY_D:-7}"
