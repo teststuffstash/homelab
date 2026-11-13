@@ -138,6 +138,11 @@ if ! vendor_out="$(bash "$VENDOR" --check 2>&1)"; then
   { echo "== policy/component/ vendored copy out of sync with kyverno/policies $KYVERNO_POLICIES_REF @ ${KYVERNO_POLICIES_SHA:0:12} (run scripts/vendor-kyverno-policies.sh):"; printf '%s\n' "$vendor_out" | sed -n '1,12p'; } >> "$TOOLERR"
   nerr=$((nerr+1))
 fi
+# same for the one vendored CHART: what ArgoCD renders must be what its pin + patches produce
+if ! vendor_out="$(bash "$HERE/vendor-garage-chart.sh" --check 2>&1)"; then
+  { echo "== argocd/charts/garage out of sync with its pin (run scripts/vendor-garage-chart.sh):"; printf '%s\n' "$vendor_out" | sed -n '1,12p'; } >> "$TOOLERR"
+  nerr=$((nerr+1))
+fi
 
 # render_chart <app> <idx> <source-json> <dest-ns> <outfile>
 render_chart() {

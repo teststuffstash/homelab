@@ -5,7 +5,7 @@ point for the sleep-tracking pipeline (ADR-045). Longhorn and CNPG backups do NO
 go to a separate single-node backup Garage outside Longhorn ([`longhorn-backup.md`](longhorn-backup.md)).
 
 - **Deploy:** `argocd/platform/garage.yaml` (ArgoCD, since 2026-08-04 — FU-136; chart vendored at
-  `argocd/charts/garage`, Garage **v2.3.0**). `tofu/garage.tf` keeps only the namespace, two
+  `argocd/charts/garage`; the version is the pin in `scripts/vendor-garage-chart.sh`). `tofu/garage.tf` keeps only the namespace, two
   Secrets and the VIP Service.
 - **Access model: LAN-only.** In-cluster clients use the ClusterIP Service; LAN clients use
   `https://s3.teststuff.net` (OPNsense HAProxy → BGP VIP **192.168.40.16**:3900). No Cloudflare
@@ -78,9 +78,12 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 - **rpc_secret** is pinned in tofu state (`random_id.garage_rpc`) so applies don't churn it.
 - Chart is kept **chart-shaped** (homelab adds only the LoadBalancer Service); the ArgoCD
   re-point happened 2026-08-04 (FU-136).
-- Updating Garage: re-vendor the chart at the new tag (see `argocd/charts/garage/VENDORED.md`),
-  bump values in `argocd/platform/garage.yaml`, ArgoCD syncs (steps:
-  [`garage-bulk-migration.md`](garage-bulk-migration.md)).
+- Updating Garage: Renovate bumps the tag pin in `scripts/vendor-garage-chart.sh` and the script
+  rebuilds the vendored chart on that branch (`argocd/charts/garage/VENDORED.md`;
+  [`dependency-upgrades.md`](dependency-upgrades.md) class 20). A patch merges through review; a
+  minor is read as a major and merged by a person. ArgoCD syncs (steps:
+  [`garage-bulk-migration.md`](garage-bulk-migration.md)). The backup LXC's `garage_version`
+  ([`longhorn-backup.md`](longhorn-backup.md)) follows by hand.
 
 ## Durability — what actually stands between you and losing all of it
 

@@ -23,7 +23,7 @@
   "separateMinorPatch": true,
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$", "^bash scripts/vendor-kyverno-policies\\.sh$"],
+  "allowedCommands": ["^bash scripts/upstream-alerts-refresh\\.sh$", "^bash scripts/vendor-kyverno-policies\\.sh$", "^bash scripts/vendor-garage-chart\\.sh$"],
   "prHourlyLimit": 3,
 
   "argocd": {
@@ -130,7 +130,7 @@
       "description": "Regex-managed pins (the customManagers below: devbox/nix in the arc-runner image, s5cmd in the coordinator image) patch/minor — a pinned download the image build exercises in `ci` (push: false), so CI is the gate → mechanical automerge; the cluster image pin is the revert. Until 2026-09-27 these bumps had NO lane (an un-armed `dependencies` PR nobody owned — the #1988 unlabelled class). Majors → the catch-all (human lane). The VERSION-SET partner (the crossplane engine digest) is excluded so its grouped PR rides the argocd lane's labels (cloudflared in tofu/cloudflare was the second until 2026-10-26: the ha retrofit moved that connector into the PublicRoute composition, and the root carries no pin). Operator ruling the same day: pin only what Renovate updates — a pin Renovate cannot bump is worse than a weekly float. Two later members: (1) the helm the G12 refresh script installs at runtime (`HELM_VERSION` in `scripts/upstream-alerts-refresh.sh`, helm/helm, one customManager below — class 17): no CI exercises it and the next kube-prometheus-stack branch's postUpgradeTasks run is its proof; `scripts/` carries no codeowner row, so THIS lane is its gate (2026-10-22 — until then the pin lived in this file under the `/.github/` row and #2804 parked on a patch); (2) `matchDatasources: !helm` keeps the class-4 tofu charts (the `# renovate:` annotation manager below) OUT of this lane — they ride the `deps-review` rule after the next one.",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["!helm"],
-      "matchPackageNames": ["!crossplane/crossplane"],
+      "matchPackageNames": ["!crossplane/crossplane", "!deuxfleurs/garage"],
       "matchUpdateTypes": ["patch", "minor", "digest", "pin"],
       "addLabels": ["automerge"],
       "automerge": true
@@ -313,6 +313,32 @@
       }
     },
     {
+      "description": "In-cluster Garage, the vendored chart (class 20 — docs/dependency-upgrades.md §The dependency inventory): a bump of the tag pin in scripts/vendor-garage-chart.sh RIDES WITH the rebuilt chart — the script re-fetches `script/helm/garage` at the new tag and re-applies the local patches on the Renovate branch (the G12 shape, third consumer; the kyverno rule above is the sibling). A patch anchor that no longer exists upstream fails the command, the branch is born without the rebuilt chart, and `argocd-validate-pins` (its `--verify` leg) reds it. The command string must match `allowedCommands` exactly.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["deuxfleurs/garage"],
+      "postUpgradeTasks": {
+        "commands": ["bash scripts/vendor-garage-chart.sh"],
+        "fileFilters": ["argocd/charts/garage/**"],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "Garage PATCH → the `deps-review` lane, armed — the class-1 chart shape (the merge is the deploy: ArgoCD auto-sync rolls the StatefulSet one zone at a time behind `minReadySeconds`). Excluded by name from the generic custom.regex automerge rule above: this pin deploys a stateful service, CI alone is not its gate.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["deuxfleurs/garage"],
+      "matchUpdateTypes": ["patch"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "Garage MINOR (and a re-pointed tag: `digest`/`pin`) is handled as a MAJOR: `major`-labelled, NOT armed — the migration lens reads the upstream upgrade notes and the human-gated coordinator lane owns it. Blast class decides, not semver: Garage is the data layer, a minor may change the metadata format, and a downgrade across that is not a revert (docs/dependency-classes.yaml class 20, `revert`). A real major lands in the same lane through the `major` catch-all below.",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["deuxfleurs/garage"],
+      "matchUpdateTypes": ["minor", "digest", "pin"],
+      "addLabels": ["major"],
+      "automerge": false
+    },
+    {
       "description": "kyverno-policies chart pin in scripts/component-check.sh (component-check, homelab#2911): patch/minor automerge — the chart only renders the Pod Security policies the checker REPORTS on (nothing deploys), so a bump can only change a report; majors keep the human lane like every chart. Named because the generic custom.regex automerge rule above excludes the helm datasource; the class-4 helm rule above excludes it by name (`addLabels` accumulates — matching both put automerge AND deps-review on one PR, the lane lint's `two-lanes`).",
       "matchManagers": ["custom.regex"],
       "matchDatasources": ["helm"],
@@ -389,6 +415,17 @@
       "depNameTemplate": "kyverno/policies",
       "packageNameTemplate": "https://github.com/kyverno/policies",
       "datasourceTemplate": "git-refs"
+    },
+    {
+      "description": "In-cluster Garage (class 20): the vendored chart at argocd/charts/garage is BUILT from the upstream tag pinned in scripts/vendor-garage-chart.sh — `GARAGE_CHART_TAG=vX.Y.Z` and, on the next line, `GARAGE_CHART_SHA=<the commit that tag points at>`. Upstream is a Forgejo instance, so the datasource is `gitea-tags` (release timestamps for the cooldown, the tag's commit as the digest). The chart's own `appVersion` is the image tag, so this one pin moves chart and image together.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts\\/vendor-garage-chart\\.sh$/"],
+      "matchStrings": ["GARAGE_CHART_TAG=(?<currentValue>v[0-9.]+)\\s*\\n\\s*GARAGE_CHART_SHA=(?<currentDigest>[0-9a-f]{40})"],
+      "depNameTemplate": "deuxfleurs/garage",
+      "packageNameTemplate": "Deuxfleurs/garage",
+      "datasourceTemplate": "gitea-tags",
+      "registryUrlTemplate": "https://git.deuxfleurs.fr",
+      "versioningTemplate": "semver"
     },
     {
       "description": "component-check (homelab#2911): the kyverno-policies Helm chart the checker renders at run time for Pod Security `restricted` — `KYVERNO_POLICIES_CHART_VERSION` in scripts/component-check.sh, annotated with the class-4 `# renovate:` comment one line above (same comment grammar as class 4, different file).",

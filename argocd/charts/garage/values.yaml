@@ -106,9 +106,6 @@ initImage:
   repository: busybox
   tag: stable
   pullPolicy: IfNotPresent
-# -- LOCAL PATCH (not upstream, see VENDORED.md): resources for the chart's own `garage-init`
-# init container (upstream sets none). Requests + a memory limit are the platform standard.
-initResources: {}
 
 # -- set if you need credentials to pull your custom image
 imagePullSecrets: []
@@ -251,13 +248,6 @@ environment: {}
 extraVolumes: {}
 
 extraVolumeMounts: {}
-# -- LOCAL PATCH (not upstream, see VENDORED.md): extra init containers rendered verbatim after the
-# chart's own garage-init. Used for the metadata rotation seed (docs/garage.md §Metadata reclamation).
-extraInitContainers: []
-# -- LOCAL PATCH (see VENDORED.md): StatefulSet minReadySeconds — the rollout waits this long
-# after a pod is Ready before touching the next, so a restarted quorum member has rejoined its
-# peers before another goes down (2026-09-09 07:22Z: all three cycled in 31 s, quorum lost).
-minReadySeconds: 0
 
 monitoring:
   metrics:
@@ -278,3 +268,16 @@ monitoring:
   tracing:
     # -- specify a sink endpoint for OpenTelemetry Traces, eg. `http://localhost:4317`
     sink: ""
+
+# ---------------------------------------------------------------------------------------------------
+# LOCAL PATCHES (not upstream, see VENDORED.md) — appended by scripts/vendor-garage-chart.sh.
+# -- resources for the chart's own `garage-init` init container (upstream sets none). Requests + a
+# memory limit are the platform standard.
+initResources: {}
+# -- extra init containers rendered verbatim after the chart's own garage-init. Used for the metadata
+# rotation seed (docs/garage.md §Metadata reclamation).
+extraInitContainers: []
+# -- StatefulSet minReadySeconds — the rollout waits this long after a pod is Ready before touching
+# the next, so a restarted quorum member has rejoined its peers before another goes down
+# (2026-09-09 07:22Z: all three cycled in 31 s, quorum lost).
+minReadySeconds: 0
