@@ -145,10 +145,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ OPERATOR-OWED (one list, re-verified 2026-10-24):**
   (1) the claude-jail HOST REBUILD — the Dockerfile reads the stamp (claude-jail#10); `VersionSetMembersDisagree` +
   `VersionSetBehindPin` (seat 2.1.301) still fire and clear on it.
-  (2) RULING: the Argo half of 10-11 — Garage's own image has no Renovate lane (vendored chart `appVersion`,
-  `argocd/charts/garage/Chart.yaml`); shape if ruled: regex customManager on `appVersion` → docker
-  `dxflrs/amd64_garage`, patch/minor mechanical, majors human, re-vendor stays a hand step. Arms unattended restarts of
-  the one unrecoverable release, and `.github/renovate-global.json` is operator-gated — not a seat call.
+  (2) Garage's Renovate lane: RULED 2026-11-13 ("just start building it") — homelab#3341 builds the vendored chart
+  from a pin Renovate bumps (class 20; patch armed on review, minor/major un-armed). Owed after it merges: read the
+  first `renovate/deuxfleurs-garage-2.x` PR (2.3.0 → 2.5.0) and merge it by hand; sleep-tracking#218 clears with it.
   (3) Reads owed: #2183's three calls (`MgmtApplyDeferredByWindow` at 6 h; reconciler node windows hold the apply loop;
   `--admit-apply` apart from `--admit-reconciler` — the DEFERRED path is proven live 10-05); the `fu-mint-gate` trial
   verdict (replace it if it doesn't change behaviour); the ADR-142 re-read **2026-10-28** (gate-change PRs, lens
