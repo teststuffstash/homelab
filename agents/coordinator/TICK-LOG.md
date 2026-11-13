@@ -15298,3 +15298,21 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Seen, not fixed: `goal-lint` exits 0 when a GitHub call 401s mid-walk (reported 1 of 3 children); intake children
   name only new `src` modules in `Touches` (the sitting may not read `src/`); CI flakes — mermaid npm fetch, uv cache
   lock `Input/output error` on the runner (cleared on re-run, volume not inspected).
+
+## 2026-11-12/13 — agent images leave public ghcr (FU-274)
+
+- **Condition**: `ghcr.io/teststuffstash/agent-base` and `agent-coordinator` were PUBLIC packages and both bundle the
+  proprietary Claude Code binary (anonymous pull worked).
+- **Done**: both images publish to `registry.teststuff.net` only (homelab #3330, agent-runtime#191,
+  agent-coordinator#32 — seat-reviewed, operator admin-merged; `pin-only-lint` red by design). Pinned tags seeded with
+  skopeo first (digests equal), `build-image` workflows disabled across the merge, `REGISTRY_PUSH_TOKEN` synced by the
+  operator, workflows re-enabled. First builds green end to end (runs 43401914422, 43401919826): push, `:latest`,
+  keep-set step, deploy-pin (#3339 merged, #3340 armed). Operator deleted both ghcr packages; anonymous tag list now
+  denied (controls `cchv-server`, `agent-runtime/devbox-cache` still 200).
+- **Retention**: `scripts/registry-keep-set.sh` (pins anywhere in the tree + newest 5 + non-build tags; delete by
+  digest, fail closed) runs after each push; the daily registry GC reclaims. Self-test is a `ci` gate.
+- **Trap found and fixed**: `git push` from a LINKED WORKTREE exports `GIT_DIR` to `githooks/pre-push`; replay suites
+  that `git init` scratch repos then wrote into the real repo (shared checkout flipped to `core.bare = true`, stray
+  commits on the worktree HEAD). The hook now unsets git's local env vars first.
+- **Open**: loop images have no upstream fallback — a registry outage blocks pulls of a tag a node does not hold.
+  FU-274 stays open for the two oracle images.
