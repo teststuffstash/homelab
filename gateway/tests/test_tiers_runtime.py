@@ -208,7 +208,7 @@ async def test_failed_input(gw, app, mcp, clock, settings, policy, secrets, revi
 # ── The manual rows on the derivation ────────────────────────────────────────────────────────
 MANUAL_ROWS = [
     pytest.param("a file", "FXE = 90", "claude/fxe 90", "used anthropic/claude-fxe-1.0 · retired none · refused none",
-                 id="a manual row scores an id the feed lacks ⚖"),
+                 id="the derivation scores a manual row for an alias the feed lacks ⚖"),
     pytest.param("a file", "FXD = 95", "claude/fxd 80", "used none · retired anthropic/claude-fxd-1.0 · refused none",
                  id="a row the feed carries is reported retired and does not score ⚖"),
     pytest.param("none", "FXE = 90", "claude/fxd 80", "used none · retired none · refused none", id="no file, no manual rows"),

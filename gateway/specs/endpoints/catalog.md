@@ -444,7 +444,8 @@ that the config does not list is shown with `listed: false` and its limit — th
 page's fact, the listing the catalog's.
 
 **The plan.** The policy names the plan (`rails.opencode.plan`: `go` | `go-plus`, required) because
-no vendor API says which plan a key is on (ruling 4). What the policy no longer holds (ruling 5):
+no vendor API says which plan a key is on (ruling 4). `plan` belongs to the opencode rail only: a
+`plan` key under any other `rails.<rail>` refuses the load, naming `rails.<rail>.plan`. What the policy no longer holds (ruling 5):
 the vendor facts live in the snapshot, so a policy that still carries one refuses to load — a
 stale hand copy can never shadow the catalog. `rails.<rail>.admission.latch_scope` takes `account`
 (the default — a 429 latches the whole rail) or `model` (a 429 cools only that model's cell); any
@@ -1512,7 +1513,7 @@ derived heavy list with the score behind each id; `manual?` = the view's `manual
 
 | description | file | manual_row | anthropic_heavy? | manual? |
 |---|---|---|---|---|
-| a manual row scores an id the feed lacks ⚖ | a file | FXE = 90 | claude/fxe 90 | used anthropic/claude-fxe-1.0 · retired none · refused none |
+| the derivation scores a manual row for an alias the feed lacks ⚖ | a file | FXE = 90 | claude/fxe 90 | used anthropic/claude-fxe-1.0 · retired none · refused none |
 | a row the feed carries is reported retired and does not score ⚖ | a file | FXD = 95 | claude/fxd 80 | used none · retired anthropic/claude-fxd-1.0 · refused none |
 | no file, no manual rows | none | FXE = 90 | claude/fxd 80 | used none · retired none · refused none |
 | a malformed file is refused whole and the derivation runs without it ⚖ | a file | no source | claude/fxd 80 | used none · retired none · refused naming source_url |
