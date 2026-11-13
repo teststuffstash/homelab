@@ -33,7 +33,8 @@
 #                   <task>`; prose and recorded data excluded: *.md, *.json, *.txt, fixtures/,
 #                   worlds/); any other key → every row
 #     devbox.lock   every row except the gateway island's (its tasks run in gateway/'s own devbox;
-#                   the root closure is proven by the warm step every run pays)
+#                   any task whose script runs `cd gateway &&`; the root closure is proven by
+#                   the warm step every run pays)
 #     diff-ci.sh    the rows whose task or regex differ from the base's (`--dump-map` below)
 #   The base side is origin/master in a full clone, else the PR base via the API
 #   (GITHUB_BASE_REF + GITHUB_REPOSITORY + GH_TOKEN, all present in ci.yaml's diff step).
@@ -288,7 +289,7 @@ if [ "${1:-}" = "--ci-outputs" ]; then
     task="${entry%%:*}"; regex="${entry#*:}"; v=false
     if $all || grep -qE "$regex" "$match" \
        || grep -qxF -- "${task%% *}" <<<"$tasks" || grep -qxF -- "$task" <<<"$maprows"; then v=true
-    elif $lock && ! jq -e --arg t "${task%% *}" '.shell.scripts[$t] | tostring | test("cd gateway && exec devbox run")' devbox.json >/dev/null 2>&1; then v=true
+    elif $lock && ! jq -e --arg t "${task%% *}" '.shell.scripts[$t] | tostring | test("cd gateway &&")' devbox.json >/dev/null 2>&1; then v=true
     fi
     echo "$(ci_key "$task")=$v"
   done
