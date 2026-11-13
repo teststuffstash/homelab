@@ -50,6 +50,9 @@
       "specs-site-e2e": [
         "bash scripts/e2e-specs-site.sh"
       ],
+      "specs-site-prepull": [
+        "bash scripts/e2e-specs-site.sh --prepull"
+      ],
       "join-ratchet": [
         "sh -c '. scripts/lib/snippets.sh && allure_snippets_python scripts/spec-join-ratchet.py \"$@\"' -- \"$@\""
       ],
