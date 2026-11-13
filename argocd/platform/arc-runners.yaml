@@ -1,5 +1,5 @@
 # The runner scale set — ephemeral GitHub Actions runners registered org-wide on teststuffstash.
-# Workflows target them with `runs-on: homelab-ephemeral`. One warm runner (minRunners 1, settled
+# Workflows target them with `runs-on: homelab-ephemeral`. Three warm runners (minRunners 3 since 2026-11-13; 1 settled
 # 2026-08-30 — see the readout at the field below); each job's pod is ephemeral: it runs, then it's
 # torn down and a fresh one pre-warms. Pinned to the ephemeral laptop tier so CI
 # noise/privilege stays off the service nodes (same tier as the Forgejo runner).
@@ -41,7 +41,15 @@ spec:
         # 1 → median 3s / p90 3s / max 7s. The warm runner deletes the cold-start tail (pod spin-up
         # + registration, minutes at p90) for ~2.5Gi resident on the ephemeral tier. Revisit only
         # if the tier needs the RAM back.
-        minRunners: 1
+        # minRunners 3 (2026-11-13): minRunners is an IDLE buffer (listener target = minRunners +
+        # assigned jobs), and a merge starts a BURST — the master push run plus the PR runs that
+        # update-pr-branch re-triggers. Over 30 days of homelab CI, PR job pickup by position in
+        # the burst (homelab jobs created in the 2 min before): 0 → median 3 s; 1 → 23 s; 2 → 44 s;
+        # 3+ → 57 s (p90 242 s). 96 % of post-merge bursts are ≤ 3 homelab jobs, so three warm runners
+        # take the cold start off nearly every one. Cost: two more idle pods at ~2.5Gi requested,
+        # which land on nx-01 (61.5 GiB, 29 % requested at the change). Numbers:
+        # docs/spikes/ci-runtime-2026-11.md.
+        minRunners: 3
         # Capacity is RAM placement, not slots (FU-218): a runner pod REQUESTS ~2.5Gi incl. dind
         # and an 8 GB ephemeral node fits exactly one (wk-metal-01/-02, ~6.3Gi allocatable minus
         # DaemonSets). 2026-09-08: wk-03 grew to 16Gi (~5 runners) → 6 = 1 + 1 + ~4, sized to the

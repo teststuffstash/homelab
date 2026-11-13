@@ -50,6 +50,24 @@ The runner pod sets no CPU request or ephemeral-storage request (`argocd/platfor
 Splitting the job costs about 11 s fixed per extra job plus pickup, but each push then takes several
 of the 8 runner slots.
 
+## What waiting on CI costs: the post-merge burst
+
+Runner-minutes are free (the pool is idle most of the time). The cost is **PR job pickup**. ARC's
+`minRunners` is an idle buffer, and a merge starts a burst: the master push run plus the PR runs
+update-pr-branch re-triggers. PR job pickup by position in the burst (homelab `CI` jobs created in the
+2 min before; 613 PR runs with a Prometheus queue sample):
+
+| jobs just ahead | n | median | p90 |
+|---|---|---|---|
+| 0 | 279 | 3 s | 77 s |
+| 1 | 187 | 23 s | 162 s |
+| 2 | 78 | 44 s | 142 s |
+| 3+ | 69 | 57 s | 242 s |
+
+96% of post-merge bursts are ≤ 3 homelab jobs, and nothing on the merge path waits on the push run
+itself. So the push run's cost in waiting is one warm slot per burst. `minRunners: 3` (from 1,
+2026-11-13) addresses it for every job in such a burst.
+
 ## What could be dropped from a run (runner-min / 30 d)
 
 1. **The full master-push run on a squash merge whose tree a green PR run already tested: up to
