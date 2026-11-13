@@ -110,7 +110,7 @@ DERIVE_ROWS = [
     pytest.param("a derivation at T0", "GLM intelligence 30 → 48", "openrouter", "T0 + 21600 s",
                  "heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4", "none", "none", "heavy false · standard false · light false",
                  id="the feed moves, the lists move with no commit ⚖"),
-    pytest.param("a derivation at T0 with openrouter light decided", "every openrouter price null", "openrouter", "T0 + 21600 s",
+    pytest.param("a derivation at T0: heavy V4 · standard V41, V4 · light GLM, V41, V4", "every openrouter price null", "openrouter", "T0 + 21600 s",
                  "heavy V4 · standard V41, V4 · light GLM, V41, V4", "heavy, standard, light", "none", "heavy false · standard true · light false",
                  id="a tier with no priced candidate is undecided and keeps its last derived list ⚖"),
     pytest.param("catalogs at T0", "GLM intelligence null", "openrouter", "T0 + 21600 s",
