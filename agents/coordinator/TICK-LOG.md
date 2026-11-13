@@ -15316,3 +15316,30 @@ updates or reverts as much as possible — mechanical revert or a responder."
   commits on the worktree HEAD). The hook now unsets git's local env vars first.
 - **Open**: loop images have no upstream fallback — a registry outage blocks pulls of a tag a node does not hold.
   FU-274 stays open for the two oracle images.
+
+## 2026-11-13 — seat: sleep-tracking's red PRs were its own Grafana OOM; Garage gets a proposer and goes 2.3.0 → 2.5.0
+
+- **sleep-tracking #226–#229** (required `system-test` red since 11-09): the itest Grafana is OOM-killed at its own
+  320Mi limit while the browser loads the dashboard — kernel cgroup OOM lines on both runner VMs inside every red
+  render leg; `OOMKilled` in two runs' uploaded evidence. Not runners, mirrors or images. Filed sleep-tracking#230;
+  corrected homelab#3287 (its `ERR_EMPTY_RESPONSE` headline was one run of five). Loop faults seen: the fixer recipe
+  dispatched onto a `devbox.lock` PR (#226), "needs a human" with no escalation (#227), a mirror-timeout misread
+  (#228), the fleet issue only at the fourth PR — and no ride read `kubectl-describe-pods.txt`.
+- **Garage had no proposer** (the chart a hand copy, image tag from `appVersion`; parked in meta-state as an
+  operator-owed ruling, no class row). Ruled "just start building it": **#3341** `scripts/vendor-garage-chart.sh`
+  (pin → rebuilt chart + 5 anchored patches, `--check`, `--verify` as a leg of `argocd-validate-pins`), a `gitea-tags`
+  manager, class 20. **#3345** `scripts/garage-upgrade.sh preflight|verify`.
+- **First bump, #3344 (2.3.0 → 2.5.0)**: Renovate opened it with the chart rebuilt on the branch (16 files). The
+  migration lens blocked on a real finding — v2.5.0's notes forbid a downgrade, and #3345's docs said a minor reverts;
+  the coordinator arbitrated, a worker pushed the docs fix, the lens approved, `major/awaiting-human`. Operator: a
+  one-way release = stop and escalate, which the loop did; go one-way, attended; v2 → v3 stays human.
+- **The window** `seat-1794586637-9172`: preflight refused twice on `garage:disruption_allowed` = 0 (resync spikes,
+  cleared in ~10 min each). Second real run: snapshot on garage-2 finished in 5 m 28 s, past the CLI's 5-min timeout
+  → "Error: Timeout" for a snapshot that completed, and peers logged garage-2 not connected ~2 min (16:41–16:43Z; no
+  restart, no alert). Merged 17:17:47Z (`--admin`: third time behind an unrelated master; CI green at head, both
+  approvals). Roll: garage-2 17:18:11Z, garage-1 17:23:41Z, garage-0 17:29:08Z; `verify --to v2.5.0` confirmed
+  17:29:50Z and again 17:33Z on the new revision; no Garage alert. Handed off, not mine: `NodeDiskIOSaturation`
+  (nx-01), `ContainerMemoryNearLimit` (longhorn-manager on hp-01).
+- Owed: preflight snapshots node by node and reads completion from the node; `verify` waits for the new revision
+  before `statefulset-settled`; the Garage rule's description still says "not a format risk"; the backup LXC is
+  still v2.3.0; sleep-tracking#218 is now inside the ADR-158 window.
