@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import contextvars
 import functools
@@ -29,6 +30,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import tempfile
 import time
 import warnings
 import zlib
@@ -50,6 +53,42 @@ from agent_gateway.credentials import StaticSecrets
 from agent_gateway.liveness import StaticPods
 from agent_gateway.pull import StaticTokenReviews
 from agent_gateway.store import Store
+
+# Store template (test-speed only; production Store is untouched). A Store opened on a NEW file runs
+# _SCHEMA statement by statement under autocommit — one WAL fsync per DDL, ~165 ms per test. Instead,
+# every Store a test opens on a path that does not exist yet starts from a byte copy (~2 ms) of one
+# schema-complete database, so `CREATE … IF NOT EXISTS` + _migrate then write nothing.
+# - Current schema: the template is built by the real Store.__init__ on first use in each pytest
+#   process, from the code under test — it can never be stale.
+# - Isolation: the template is only ever read (copied); each test gets its own file. A path that
+#   already exists (restart/migration/corrupt/read-only cases) and ":memory:" take the real path.
+# - Parallel workers: built per process in its own mkdtemp dir, so xdist workers never share it.
+#   Lazy, so a spawned child that imports this module but opens no Store (test_codex_sqlite's
+#   crash worker, which leaves by os._exit and skips atexit) builds nothing and leaks nothing.
+# - A failed copy (unwritable/missing dir) falls through to the real __init__ and its fail-open.
+_store_init = Store.__init__
+
+
+@functools.cache
+def _store_template() -> str:
+    tmp = tempfile.mkdtemp(prefix="gw-store-template-")
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
+    path = os.path.join(tmp, "template.db")
+    template = object.__new__(Store)
+    _store_init(template, path)
+    assert template.mode == "pvc", "the Store template must be a file-backed DB"
+    template.close()  # the last connection closing checkpoints the WAL into the file the copies read
+    return path
+
+
+def _store_init_from_template(self: Store, path: str) -> None:
+    if path != ":memory:" and not os.path.exists(path):
+        with contextlib.suppress(OSError):
+            shutil.copyfile(_store_template(), path)
+    _store_init(self, path)
+
+
+Store.__init__ = _store_init_from_template  # type: ignore[method-assign]
 
 HERE = Path(__file__).resolve().parent
 ISLAND = HERE.parent
