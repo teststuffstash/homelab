@@ -63,4 +63,4 @@ configurations:
 
 images:
   - name: registry.teststuff.net/agent-coordinator
-    newTag: 2026.11.12-g7b51771a868d
+    newTag: 2026.11.13-g703b436ee38d
