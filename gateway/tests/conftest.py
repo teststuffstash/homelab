@@ -54,10 +54,11 @@ from agent_gateway.liveness import StaticPods
 from agent_gateway.pull import StaticTokenReviews
 from agent_gateway.store import Store
 
-# Store template (test-speed only; production Store is untouched). A Store opened on a NEW file runs
-# _SCHEMA statement by statement under autocommit — one WAL fsync per DDL, ~165 ms per test. Instead,
-# every Store a test opens on a path that does not exist yet starts from a byte copy (~2 ms) of one
-# schema-complete database, so `CREATE … IF NOT EXISTS` + _migrate then write nothing.
+# Store template (test-speed only; production Store is untouched). A Store opened on a NEW file
+# applies _SCHEMA in one transaction (Store._apply_schema) — still ~40 ms per test for its commit's
+# fsyncs, ~30 s over the suite. Instead, every Store a test opens on a path that does not exist yet
+# starts from a byte copy (~2 ms) of one schema-complete database, so `CREATE … IF NOT EXISTS` +
+# _migrate then write nothing.
 # - Current schema: the template is built by the real Store.__init__ on first use in each pytest
 #   process, from the code under test — it can never be stale.
 # - Isolation: the template is only ever read (copied); each test gets its own file. A path that

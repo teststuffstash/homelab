@@ -7,6 +7,7 @@ reports `db: memory` so the belt sees it.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import json
 import logging
@@ -133,7 +134,6 @@ CREATE TABLE IF NOT EXISTS capacity_marks (
 );
 """
 _STRIKES_REBUILD = """
-BEGIN;
 CREATE TABLE strikes_v2 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   stack TEXT NOT NULL,
@@ -155,7 +155,6 @@ INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, so
 DROP TABLE strikes;
 ALTER TABLE strikes_v2 RENAME TO strikes;
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
-COMMIT;
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
@@ -184,6 +183,25 @@ _ADDED_COLUMNS = {
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
 UNMINTED_PREFIX = "unminted:"
+
+
+def _statements(script: str) -> list[str]:
+    """A DDL script as single statements, for `execute()` inside the open-time transaction:
+    `executescript()` cannot run there — it COMMITs any open transaction first (Python 3.15, even
+    with isolation_level=None). Splits on `sqlite3.complete_statement`, so a ';' inside a quoted
+    default never cuts a statement."""
+    out, buf = [], ""
+    for line in script.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            out.append(buf.strip())
+            buf = ""
+    assert not buf.strip(), f"incomplete trailing statement: {buf!r}"
+    return out
+
+
+_SCHEMA_STATEMENTS = _statements(_SCHEMA)
+_STRIKES_REBUILD_STATEMENTS = _statements(_STRIKES_REBUILD)
 
 
 @dataclass(frozen=True)
@@ -303,18 +321,36 @@ class Store:
                 (integrity,) = self._db.execute("PRAGMA quick_check").fetchone()
                 if integrity != "ok":
                     raise sqlite3.DatabaseError(f"quick_check: {integrity}")
-            self._db.executescript(_SCHEMA)
-            self._migrate()
+            self._apply_schema(migrate=True)
         except sqlite3.Error as e:
             if self.mode == "memory":
                 raise
             log.error("db: memory — FAIL-OPEN, sessions do not survive a restart (%s unusable: %s)", path, e)
             self.mode = "memory"
             self._db = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
-            self._db.executescript(_SCHEMA)
+            self._apply_schema(migrate=False)
         else:
             log.info("db: %s %s", self.mode, path)
         self._db.row_factory = sqlite3.Row
+
+    def _apply_schema(self, migrate: bool) -> None:
+        """_SCHEMA (+ _migrate on a file) in ONE transaction: one commit, one WAL fsync, instead of
+        one per DDL statement under autocommit (~150 → ~40 ms for a fresh file). All or nothing —
+        a crash or error midway rolls back to the schema the file had, never a partial one. The
+        journal_mode / quick_check pragmas run before it: journal_mode cannot change inside a
+        transaction."""
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            for stmt in _SCHEMA_STATEMENTS:
+                self._db.execute(stmt)
+            if migrate:
+                self._migrate()
+            self._db.execute("COMMIT")
+        except BaseException:
+            if self._db.in_transaction:
+                with contextlib.suppress(sqlite3.Error):
+                    self._db.execute("ROLLBACK")
+            raise
 
     def _migrate(self) -> None:
         for table, cols in _ADDED_COLUMNS.items():
@@ -327,7 +363,8 @@ class Store:
         # provider it tried, in the same class): a table built with the old UNIQUE is rebuilt once.
         (sql,) = self._db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strikes'").fetchone()
         if "UNIQUE (session_id, class, source)" in sql:
-            self._db.executescript(_STRIKES_REBUILD)
+            for stmt in _STRIKES_REBUILD_STATEMENTS:
+                self._db.execute(stmt)
             log.info("db: migrated strikes — the unique key now carries provider")
 
     # -- sessions -------------------------------------------------------------------------------

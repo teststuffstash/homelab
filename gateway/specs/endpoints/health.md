@@ -62,7 +62,9 @@ for writing, or whose file fails SQLite's integrity check falls open to an in-me
 the mode in `db` for the process's whole life. The answer is always `200 {ok: true, db}`, nothing
 more and nothing less, and the probe reads no credential. A `pvc` store keeps its sessions across a
 restart and adds the columns a newer schema needs on open (additive only — the 2026-10-16 schema
-without the cache columns opens and its sessions ride); a `memory` store forgets everything at
+without the cache columns opens and its sessions ride). The schema and its migration apply in one
+transaction: a crash or error midway leaves the file at the schema it had, never a partial one
+(the error falls open like any other; unverified — no row drives a mid-migration error). A `memory` store forgets everything at
 restart, so a pod's session token is `session-unknown` to its successor.
 
 **World: [policy-default](../worlds/README.md#policy-worlds)** — `GATEWAY_DB=<tmp>/data/gateway.db`
