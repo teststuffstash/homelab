@@ -12,7 +12,12 @@
 #                                                # healthy and writable; exit 1 at the budget's end
 #   common: [--kubeconfig <path>]                # default: in-cluster ServiceAccount
 #   env:    PROM_URL        Prometheus base URL; unset = through the API server's service proxy
-#           CHECK_BUDGET_S  verify's retry budget (default 2400: three zones, each waits minReadySeconds)
+#           CHECK_BUDGET_S  verify's ONE retry budget for all its checks (default 2400: three zones, each
+#                           waits minReadySeconds)
+#           REJOIN_WAIT_S   preflight: how long a node may take to rejoin after its snapshot (default 300)
+#           SIGNAL_WAIT_S   preflight: how long the signal may take to reopen after the snapshots and the
+#                           repair (default 1800). Each preflight wait has its OWN budget, started when the
+#                           wait starts — the snapshots before it may run for an hour
 #           SNAP_WAIT_S     how long one node's snapshot may take (default 900; the CLI itself gives up
 #                           at 5 min while the node keeps writing — 5 m 28 s on wk-metal-01, 2026-11-13)
 #
@@ -31,6 +36,8 @@ SIGNAL="${SIGNAL:-garage:disruption_allowed}"
 BUDGET="${CHECK_BUDGET_S:-2400}"
 PROBE_MAX_AGE_S="${PROBE_MAX_AGE_S:-300}"
 SNAP_WAIT_S="${SNAP_WAIT_S:-900}"
+REJOIN_WAIT_S="${REJOIN_WAIT_S:-300}"
+SIGNAL_WAIT_S="${SIGNAL_WAIT_S:-1800}"
 KUBE=()
 die() { printf 'garage-upgrade: %s\n' "$*" >&2; exit 2; }
 
@@ -123,11 +130,13 @@ once() {   # once <name> <fn…> — one attempt; a failure ends the run
   if out="$("$@" 2>&1)"; then echo "ok   $name — $out"; else echo "FAIL $name — $out"; echo "garage-upgrade $VERB: REFUSED at $name"; exit 1; fi
 }
 deadline=$((SECONDS + BUDGET))
-retry() {  # retry <name> <fn…> — every 20 s inside the ONE shared budget
+arm() { deadline=$((SECONDS + $1)); budget_s="$1"; }   # arm <seconds> — a fresh budget for the retries that follow
+budget_s="$BUDGET"
+retry() {  # retry <name> <fn…> — every 20 s until the armed deadline
   local name="$1" out; shift
   while :; do
     if out="$("$@" 2>&1)"; then echo "ok   $name — $out"; return 0; fi
-    if [ "$SECONDS" -ge "$deadline" ]; then echo "FAIL $name — $out"; echo "garage-upgrade verify: NOT confirmed at $name after ${BUDGET}s"; exit 1; fi
+    if [ "$SECONDS" -ge "$deadline" ]; then echo "FAIL $name — $out"; echo "garage-upgrade $VERB: NOT confirmed at $name after ${budget_s}s"; exit 1; fi
     sleep 20
   done
 }
@@ -145,12 +154,14 @@ case "$VERB" in
     n="$(kc -n "$NS" get statefulset "$STS" -o jsonpath='{.spec.replicas}')" || { echo "FAIL meta-snapshot — could not read the StatefulSet"; exit 1; }
     for i in $(seq 0 $((n - 1))); do
       once "meta-snapshot-$STS-$i" snapshot_node "$STS-$i"
+      arm "$REJOIN_WAIT_S"
       retry "nodes-agree-after-$STS-$i" nodes_on ""
     done
     # upstream's pre-step for a minor upgrade: a full sync of the metadata tables on every node
     out="$(garage repair --all-nodes --yes tables)" || { echo "FAIL repair-tables — the launch failed: $out"; echo "garage-upgrade preflight: REFUSED at repair-tables"; exit 1; }
     echo "ok   repair-tables — launched on all nodes"
     # the repair and the snapshot are load: the roll starts from the same signal they were launched on
+    arm "$SIGNAL_WAIT_S"
     retry disruption-signal-after signal_open
     echo "garage-upgrade preflight: a roll may start"
     ;;
