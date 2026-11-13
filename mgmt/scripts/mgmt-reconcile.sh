@@ -373,14 +373,13 @@ diff_nodes() {  # <targets-file> <out>
     bash "$REPO/mgmt/scripts/mgmt-probe.sh" >/dev/null 2>&1
   [ -s "$2" ]
 }
-diff_nodes "$tf.auto" "$df" || { log "FATAL the node diff produced nothing — no tick"; emit; exit 1; }
 # <node> <axis> → drift|ok|"": the second tab field of the FIRST line whose first field is "<node> <axis>".
-# Read from AX, which holds the whole of $df parsed once (AX_OK); whoever rewrites $df clears AX_OK.
-# A key with a backslash goes to awk, whose -v would unescape it.
-declare -A AX=(); AX_OK=""
+# AX holds $df parsed once, by ax_load in THIS shell right after each diff (axis runs inside $(…), so a
+# load there would die with the subshell). A key with a backslash goes to awk, whose -v would unescape it.
+declare -A AX=()
 ax_load() {
   local line k rest
-  AX=(); AX_OK=1
+  AX=()
   while IFS= read -r line || [ -n "$line" ]; do
     k="${line%%$'\t'*}"; [ -n "$k" ] || continue
     if [ "$k" = "$line" ]; then rest=""; else rest="${line#*$'\t'}"; rest="${rest%%$'\t'*}"; fi
@@ -389,9 +388,10 @@ ax_load() {
 }
 axis() {
   case "$1 $2" in *\\*) awk -F'\t' -v k="$1 $2" '$1 == k {print $2; exit}' "$df"; return ;; esac
-  [ -n "$AX_OK" ] || ax_load
   printf '%s' "${AX[$1 $2]-}"; [ -z "${AX[$1 $2]+x}" ] || printf '\n'
 }
+diff_nodes "$tf.auto" "$df" || { log "FATAL the node diff produced nothing — no tick"; emit; exit 1; }
+ax_load
 
 # ── 5. per node: idle / parked-on-this-key / candidate ──────────────────────────────────────────
 # INSYNC (diff zero) and BEHIND (a readable, non-zero diff — parked ones included) feed the rollout.
@@ -795,8 +795,10 @@ else ( cd "$REPO" && bash scripts/node-maintenance.sh upgrade "$n" ) || rc=$?; f
 case "$rc" in
   0)
     # Completion is the DIFF, not the verb's word: re-read this node the same way the tick did.
-    jq -c --arg n "$n" '{($n): .[$n]}' "$tf" >"$tf.auto"; : >"$df"; AX_OK=""
-    if diff_nodes "$tf.auto" "$df" && [ "$(axis "$n" version)" = ok ] && [ "$(axis "$n" schematic)" = ok ]; then
+    jq -c --arg n "$n" '{($n): .[$n]}' "$tf" >"$tf.auto"; : >"$df"
+    diff_ok=0; diff_nodes "$tf.auto" "$df" && diff_ok=1
+    ax_load   # whatever the re-diff left, read or not: the park line below reads it, as it always did
+    if [ "$diff_ok" = 1 ] && [ "$(axis "$n" version)" = ok ] && [ "$(axis "$n" schematic)" = ok ]; then
       set_node "$n" idle "$key" "synced $(date -u +%FT%TZ)"; log "$n: SYNCED — diff zero at $key"
       if [ "$rollout_on" = true ] && [ -n "$RO" ]; then
         # The rollout's record of this node, and its pressure lifted now rather than next tick.
