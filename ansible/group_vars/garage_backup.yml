@@ -7,7 +7,7 @@ ansible_ssh_private_key_file: /home/node/.claude/homelab-pve-ssh/id_ed25519
 ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
 
 # --- garage ---
-# Kept in lockstep with the in-cluster Garage (argocd/charts/garage, v2.3.0) so one CLI and one
+# Kept in lockstep with the in-cluster Garage (the pin in scripts/vendor-garage-chart.sh) so one CLI and one
 # set of operational notes (docs/garage.md) covers both. The musl build is a static binary.
 garage_version: v2.3.0
 garage_sha256: f98d317942bb341151a2775162016bb50cf86b865d0108de03eb5db16e2120cd

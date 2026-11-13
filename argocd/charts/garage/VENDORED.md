@@ -9,11 +9,21 @@ depends on git.deuxfleurs.fr being reachable (boot-from-git principle).
 - Commit: 7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa
 - Chart:  0.9.3  (appVersion Garage v2.3.0)
 
-To update: re-clone the desired tag, copy `script/helm/garage/` over this dir,
-bump the values in `argocd/platform/garage.yaml` (`helm.valuesObject`), and update the
-tag/commit above.
+**This directory is GENERATED** by [`scripts/vendor-garage-chart.sh`](../../../scripts/vendor-garage-chart.sh)
+from the two pin lines in that script — never hand-edit a file here except this one's prose. The
+three lines above are rewritten by the script. Upstream's `tests/` and `complex-values.yaml` (the
+helm-unittest suite) are left out; nothing renders them.
 
-## Local patches (re-apply after every update)
+To update: Renovate proposes the pin and the script rebuilds this directory on the same branch
+(docs/dependency-upgrades.md, class 20). By hand: edit `GARAGE_CHART_TAG` + `GARAGE_CHART_SHA`, run
+the script, then `--verify`. A new upstream value the platform needs goes in
+`argocd/platform/garage.yaml` (`helm.valuesObject`) in the same PR.
+
+## Local patches (the script re-applies them on every rebuild)
+
+Each patch is an insertion next to one exact upstream line; if that line is gone at a new tag the
+script stops and names it. `--verify` (a leg of `devbox run argocd-validate-pins`, required `ci`)
+renders the chart with the Application's values and asserts each patch below in the output.
 
 - `templates/workload.yaml` + `values.yaml`: `extraInitContainers` (rendered after `garage-init`).
   Carries the `meta-rotate` init container that seeds a zone's metadata from its own finished

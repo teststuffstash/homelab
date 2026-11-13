@@ -541,6 +541,20 @@ def extract_renovate_tools():
     return rows
 
 
+def extract_garage_chart():
+    """Class 20 — the in-cluster Garage: the upstream tag argocd/charts/garage is built from,
+    `GARAGE_CHART_TAG=<vX.Y.Z>` + `GARAGE_CHART_SHA=<40-hex>` in scripts/vendor-garage-chart.sh (the
+    gitea-tags manager's pair). The chart's appVersion is the image tag, so this is the one pin."""
+    path = os.path.join(ROOT, "scripts", "vendor-garage-chart.sh")
+    if not os.path.exists(path):
+        return []
+    pins = shell_assignments(read(path), ("GARAGE_CHART_TAG", "GARAGE_CHART_SHA"))
+    if not (pins["GARAGE_CHART_TAG"] and pins["GARAGE_CHART_SHA"]):
+        return []
+    return [{"name": "deuxfleurs/garage (in-cluster chart)", "version": pins["GARAGE_CHART_TAG"],
+             "where": [rel(path)], "match": ["deuxfleurs/garage", "GARAGE_CHART_TAG="]}]
+
+
 def extract_policy_inputs():
     """Class 18: the two check-time pins component-check evaluates against — the kyverno-policies
     chart version in scripts/component-check.sh (`KYVERNO_POLICIES_CHART_VERSION=<x.y.z>`, the helm
@@ -605,6 +619,7 @@ def extract_all(registry):
         "opnsense_firmware": extract_opnsense_firmware,
         "matchbox": extract_matchbox,
         "garage_backup": extract_garage_backup,
+        "garage_chart": extract_garage_chart,
         "arc_runner": extract_arc_runner,
         "deno": extract_deno,
         "renovate_tools": extract_renovate_tools,
