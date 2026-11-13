@@ -15343,3 +15343,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Owed: preflight snapshots node by node and reads completion from the node; `verify` waits for the new revision
   before `statefulset-settled`; the Garage rule's description still says "not a format risk"; the backup LXC is
   still v2.3.0; sleep-tracking#218 is now inside the ADR-158 window.
+- 18:06Z **#3358** merged: preflight snapshots node by node and reads completion from the node's log; each preflight
+  wait arms its own budget (the reviewer's catch — the shared deadline would have refused after slow snapshots);
+  `verify` waits for the target version first; the Garage rule, class 20 and garage.md carry the one-way ruling.
+  Still owed: the node-by-node snapshot's first live run, the verbs as hooks (stop and page), the backup LXC.

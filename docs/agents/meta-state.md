@@ -147,8 +147,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `VersionSetBehindPin` (seat 2.1.301) still fire and clear on it.
   (2) Garage: prod is on **v2.5.0** since 2026-11-13 17:29Z (#3341 proposer, #3345 verbs, #3344 the bump —
   ONE-WAY, attended). Rulings: a one-way release = stop and escalate; v2 → v3 stays human. Owed by the seat: the
-  preflight/verify fixes (TICK-LOG 2026-11-13), then the verbs as PreSync/PostSync hooks with stop-and-page, no
-  revert lease. Owed by a person: the backup LXC (`ansible/garage-backup.yml`, still v2.3.0).
+  verbs as PreSync/PostSync hooks with stop-and-page, no revert lease (#3358 fixed preflight/verify; its
+  node-by-node snapshot has not run live yet). Owed by a person: the backup LXC (`ansible/garage-backup.yml`, still v2.3.0).
   (3) Reads owed: #2183's three calls (`MgmtApplyDeferredByWindow` at 6 h; reconciler node windows hold the apply loop;
   `--admit-apply` apart from `--admit-reconciler` — the DEFERRED path is proven live 10-05); the `fu-mint-gate` trial
   verdict (replace it if it doesn't change behaviour); the ADR-142 re-read **2026-10-28** (gate-change PRs, lens
