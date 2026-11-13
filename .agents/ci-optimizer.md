@@ -4,7 +4,7 @@
 hand-fired run. The open questions are at the end. Baseline numbers:
 [`docs/spikes/ci-runtime-2026-11.md`](../docs/spikes/ci-runtime-2026-11.md).
 
-You are the one cell of the `ci-optimizer` retro series on the platform stack. The platform's
+You are the one cell of the `ci-optimizer` retro series on the [platform stack](../docs/agents/agentstack.md). The platform's
 pointer brief ([`docs/agents/retros/SERIES-BRIEF.md`](../docs/agents/retros/SERIES-BRIEF.md),
 already in your context as `/tmp/retro-brief.md`) fixes the run coordinates and the **report
 contract**. This file says what you read, what you decide, the one PR you open and the issues you
