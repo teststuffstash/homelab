@@ -67,6 +67,9 @@ PROBE_ROWS = [
     pytest.param("wire-codex", "the lifecycle refuses", "T0", "none", "no-credential", "—", id="no usable credential, no fetch ⚖"),
     pytest.param("wire-codex, the fake answers 503", "a valid credential", "T0", "as the first row", "fetch-failed", "account",
                  id="an upstream error is counted and recorded as the failure"),
+    pytest.param("`GATEWAY_WIRE` names a path that does not exist", "a valid credential", "T0", "none", "—", "—", id="a missing path, nothing read ⚖"),
+    pytest.param("wire-codex, a no-credential tick at T0", "the lifecycle refuses", "a second tick at T0 + 60 s", "none", "no-credential", "—",
+                 id="no credential is not retried inside the interval ⚖"),
     pytest.param("wire-codex, a record at T0", "a valid credential", "restart at T0 + 3600 s", "none", "—", "account",
                  id="a restart inside the interval probes nothing at start"),
 ]
@@ -79,13 +82,20 @@ async def test_a_declared_probe_is_read(tmp_path, settings, secrets, store, cloc
     world("policy-codex", upstream="wire-codex")
     row(declarations=declarations, lifecycle=lifecycle, at=at)
     text = {"wire-codex": WIRE_CODEX, "wire-codex, the fake answers 503": WIRE_CODEX, "wire-codex, a record at T0": WIRE_CODEX,
-            "`{}`": "{}", "`GATEWAY_WIRE` unset": None}[declarations]
+            "`{}`": "{}", "`GATEWAY_WIRE` unset": None, "`GATEWAY_WIRE` names a path that does not exist": None,
+            "wire-codex, a no-credential tick at T0": WIRE_CODEX}[declarations]
     fake = FakeModels()
     if "503" in declarations:
         fake.status = 503
     if lifecycle == "the lifecycle refuses":
         exchange.fault = RuntimeError("DUMMY-SECRET exchange refused")  # the stored credential is near expiry: acquire must exchange
     app, client = build(tmp_path, settings, secrets, store, clock, codex_store, exchange, fake, text)
+    if "does not exist" in declarations:  # the same app, GATEWAY_WIRE naming a path nothing is at
+        await client.aclose()
+        s2 = dataclasses.replace(settings, upstreams={**settings.upstreams, "codex": CODEX_BASE}, wire_path=str(tmp_path / "absent.json"))
+        client = httpx.AsyncClient(transport=httpx.MockTransport(fake.handler))
+        app = create_app(s2, policy=Policy.load(CODEX_POLICY), source=secrets, store=store, client=client, clock=clock,
+                         codex_backend=CodexBackend(codex_store, exchange))
     if text:
         attach_json("declarations", json.loads(text))
     restart = at.startswith("restart")
@@ -100,8 +110,16 @@ async def test_a_declared_probe_is_read(tmp_path, settings, secrets, store, cloc
         app, probe = app2, app2.state.wire_probe
         await client.aclose()
         client = client2
+    if at.startswith("a second tick"):
+        with given("a no-credential tick at T0"):
+            first = await probe.tick()
+            assert first.get("codex-models") == "no-credential"
+        clock.t = T0 + at_offset(at.removeprefix("a second tick at "))
     with when(f"the probe schedule runs at {at}"):
         outcomes = await probe.tick()
+    if at.startswith("a second tick"):
+        assert outcomes == {}  # nothing probed again; the counter stays at the first tick's 1
+        outcomes = first
     metrics = app.state.metrics.render()
     rec = app.state.store.wire_get("codex-models") or {}
     await client.aclose()

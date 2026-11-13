@@ -200,7 +200,7 @@ never a refresh of its own — and is recorded as an `account` source, so its an
 lengths. The bytes are opaque to the probe: it assumes no shape. GET only, never an inference path, never
 a host the rail does not already reach: the loader refuses a rail the policy does not declare, an absolute
 URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …) and any key that is not
-`rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file, or an empty one, means no
+`rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file (unset, or a path that does not exist), or an empty one, means no
 probe goes out and no account string is kept ⚖. A probe reads at start unless its record is younger than
 its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
 read with no usable credential fetches nothing and counts `no-credential` ⚖. `gateway_wire_probe_total{source, outcome}`
@@ -236,6 +236,8 @@ read; `at` = the clock when the schedule runs; `request?` = what the fake upstre
 | an empty file, nothing read | `{}` | a valid credential | T0 | none | — | — |
 | no usable credential, no fetch ⚖ | wire-codex | the lifecycle refuses | T0 | none | no-credential | — |
 | an upstream error is counted and recorded as the failure | wire-codex, the fake answers 503 | a valid credential | T0 | as the first row | fetch-failed | account |
+| a missing path, nothing read ⚖ | `GATEWAY_WIRE` names a path that does not exist | a valid credential | T0 | none | — | — |
+| no credential is not retried inside the interval ⚖ | wire-codex, a no-credential tick at T0 | the lifecycle refuses | a second tick at T0 + 60 s | none | no-credential | — |
 | a restart inside the interval probes nothing at start | wire-codex, a record at T0 | a valid credential | restart at T0 + 3600 s | none | — | account |
 
 #### What a probe may be

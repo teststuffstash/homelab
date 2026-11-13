@@ -238,10 +238,13 @@ def parse_declarations(doc, rails: Iterable[str]) -> Declarations:
 
 
 def load_declarations(path: str, rails: Iterable[str]) -> Declarations:
-    """No path, a missing-name or an empty file = no declarations. A malformed one raises (refuse to start, like the policy)."""
+    """No path, a path that does not exist or an empty file = no declarations. A malformed one raises (refuse to start, like the policy)."""
     if not path:
         return Declarations()
-    text = Path(path).read_text(encoding="utf-8")
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return Declarations()
     if not text.strip():
         return Declarations()
     try:
@@ -260,6 +263,7 @@ class WireProbe:
                  wire: WireRecorder, clock: Callable[[], float]):
         self.decl, self.rails, self.upstreams, self.client, self.wire, self.clock = declarations, rails, upstreams, client, wire, clock
         self.counts: dict[tuple[str, str], int] = {}
+        self.last_attempt: dict[str, float] = {}  # in memory: every outcome, so a no-credential probe waits its interval too
 
     @property
     def enabled(self) -> bool:
@@ -272,9 +276,9 @@ class WireProbe:
         return out
 
     def due_at(self, probe: Probe) -> float:
-        """The next read: the last attempt (answer or failure) + the interval; a source never read is due now."""
+        """The next read: the last attempt (answer, failure or no credential) + the interval; a source never attempted is due now."""
         row = self.wire.store.wire_get(probe.name)
-        last = max((t for t in ((row or {}).get("fetched_at"), (row or {}).get("last_error_at")) if t is not None), default=None)
+        last = max((t for t in ((row or {}).get("fetched_at"), (row or {}).get("last_error_at"), self.last_attempt.get(probe.name)) if t is not None), default=None)
         return self.clock() if last is None else last + probe.interval_s
 
     async def tick(self) -> dict[str, str]:
@@ -298,7 +302,9 @@ class WireProbe:
         self.counts[(name, outcome)] = self.counts.get((name, outcome), 0) + 1
 
     async def probe(self, probe: Probe) -> str:
+        self.last_attempt[probe.name] = self.clock()
         outcome = await self._probe(probe)
+        self.last_attempt[probe.name] = self.clock()
         self._count(probe.name, outcome)
         (log.info if outcome == "ok" else log.warning)("wire probe %s: %s", probe.name, outcome)
         return outcome
