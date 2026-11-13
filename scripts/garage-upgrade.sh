@@ -5,13 +5,16 @@
 # nodes one by one — a bump inside one major keeps protocols and data structures), plus this
 # platform's own "may a zone go now" signal and a fresh metadata snapshot as the restore point.
 #
-#   garage-upgrade.sh preflight [--dry-run]      # refuse (exit 1) unless a roll may start; then run the
-#                                                # table repair and take the snapshot (--dry-run: checks only)
+#   garage-upgrade.sh preflight [--dry-run]      # refuse (exit 1) unless a roll may start; then snapshot the
+#                                                # metadata ONE NODE AT A TIME and run the table repair
+#                                                # (--dry-run: checks only)
 #   garage-upgrade.sh verify --to <vX.Y.Z>       # retry until every node runs <vX.Y.Z> and the store is
 #                                                # healthy and writable; exit 1 at the budget's end
 #   common: [--kubeconfig <path>]                # default: in-cluster ServiceAccount
 #   env:    PROM_URL        Prometheus base URL; unset = through the API server's service proxy
 #           CHECK_BUDGET_S  verify's retry budget (default 2400: three zones, each waits minReadySeconds)
+#           SNAP_WAIT_S     how long one node's snapshot may take (default 900; the CLI itself gives up
+#                           at 5 min while the node keeps writing — 5 m 28 s on wk-metal-01, 2026-11-13)
 #
 # CALLERS: the seat, by hand, around the merge of a Garage bump (docs/garage.md §Upgrading); later the
 # Garage Application's PreSync / PostSync hooks — the same file, no second implementation. The roll
@@ -27,6 +30,7 @@ PROM_SVC="${PROM_SVC:-monitoring/services/kube-prometheus-stack-prometheus:9090}
 SIGNAL="${SIGNAL:-garage:disruption_allowed}"
 BUDGET="${CHECK_BUDGET_S:-2400}"
 PROBE_MAX_AGE_S="${PROBE_MAX_AGE_S:-300}"
+SNAP_WAIT_S="${SNAP_WAIT_S:-900}"
 KUBE=()
 die() { printf 'garage-upgrade: %s\n' "$*" >&2; exit 2; }
 
@@ -97,6 +101,23 @@ writable() {
   echo "write probe green ${age%.*} s ago"
 }
 
+# One node's metadata snapshot, judged by the NODE, not by the CLI: `garage meta snapshot` returns
+# "Timeout" after 5 min while the node finishes anyway, so a failed call is not a failed snapshot —
+# the node's own log line is ("Metadata db snapshot finished", after this call's start).
+snapshot_node() {   # snapshot_node <pod>
+  local pod="$1" since out end
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if out="$(kc -n "$NS" exec "$pod" -c garage -- /garage meta snapshot 2>/dev/null)"; then echo "created"; return 0; fi
+  end=$((SECONDS + SNAP_WAIT_S))
+  while [ "$SECONDS" -lt "$end" ]; do
+    if kc -n "$NS" logs "$pod" -c garage --since-time="$since" 2>/dev/null | grep -q 'Metadata db snapshot finished'; then
+      echo "finished after the CLI gave up ($(printf '%s' "$out" | tr '\n' ' ' | cut -c1-80))"; return 0
+    fi
+    sleep 15
+  done
+  echo "no 'Metadata db snapshot finished' in $pod's log within ${SNAP_WAIT_S}s of $since"; return 1
+}
+
 once() {   # once <name> <fn…> — one attempt; a failure ends the run
   local name="$1" out; shift
   if out="$("$@" 2>&1)"; then echo "ok   $name — $out"; else echo "FAIL $name — $out"; echo "garage-upgrade $VERB: REFUSED at $name"; exit 1; fi
@@ -118,21 +139,26 @@ case "$VERB" in
     once nodes-agree nodes_on ""
     once write-probe writable
     if [ "$DRY" = 1 ]; then echo "garage-upgrade preflight: checks hold (dry run — no repair launched, no snapshot taken)"; exit 0; fi
+    # the restore point: a compacted metadata snapshot on every node, taken now (the 6 h auto snapshot
+    # may be hours old) — ONE NODE AT A TIME, each rejoined before the next starts: `--all` on top of
+    # the table repair made the slowest zone unreachable to its peers for ~2 min (2026-11-13 16:41Z).
+    n="$(kc -n "$NS" get statefulset "$STS" -o jsonpath='{.spec.replicas}')" || { echo "FAIL meta-snapshot — could not read the StatefulSet"; exit 1; }
+    for i in $(seq 0 $((n - 1))); do
+      once "meta-snapshot-$STS-$i" snapshot_node "$STS-$i"
+      retry "nodes-agree-after-$STS-$i" nodes_on ""
+    done
     # upstream's pre-step for a minor upgrade: a full sync of the metadata tables on every node
     out="$(garage repair --all-nodes --yes tables)" || { echo "FAIL repair-tables — the launch failed: $out"; echo "garage-upgrade preflight: REFUSED at repair-tables"; exit 1; }
     echo "ok   repair-tables — launched on all nodes"
-    # the restore point: a compacted metadata snapshot on every node, taken now (the 6 h auto
-    # snapshot may be hours old). The command returns when every node has answered.
-    out="$(garage meta snapshot --all)" || { echo "FAIL meta-snapshot — $out"; echo "garage-upgrade preflight: REFUSED at meta-snapshot"; exit 1; }
-    echo "ok   meta-snapshot — $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
     # the repair and the snapshot are load: the roll starts from the same signal they were launched on
     retry disruption-signal-after signal_open
     echo "garage-upgrade preflight: a roll may start"
     ;;
   verify)
     [[ "$TO" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "verify needs --to vX.Y.Z"
-    retry statefulset-settled pods_ready
+    # the target version first: before the sync starts the OLD revision reads as settled too
     retry nodes-on-target nodes_on "$TO"
+    retry statefulset-settled pods_ready
     retry cluster-healthy cluster_healthy
     retry write-probe writable
     echo "garage-upgrade verify: confirmed — every node on $TO, healthy, writable"
