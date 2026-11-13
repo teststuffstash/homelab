@@ -25,7 +25,17 @@
 #   key = ci_key(task) below. Every ci.yaml gate step reads its own key with
 #   `if: steps.diff.outputs.<key> != 'false'` — absent (push / dispatch: the diff step is skipped)
 #   means RUN, so master pushes run everything (the net). Fails open: an empty/unreadable list,
-#   or a change to devbox.json/lock, ci.yaml or this file, prints true for every row.
+#   or a change to ci.yaml, prints true for every row. The three other shared inputs are read for
+#   WHAT changed (2026-11-13 — ~40 % of the full runs were a one-task edit; numbers in
+#   docs/spikes/ci-runtime-2026-11.md), each failing open when the base side cannot be read:
+#     devbox.json   only `shell.scripts` entries changed → the rows of those tasks, of every task
+#                   whose script calls one, and of every tracked non-markdown file that calls one
+#                   (`devbox run <task>`); any other key → every row
+#     devbox.lock   every row except the gateway island's (its tasks run in gateway/'s own devbox;
+#                   the root closure is proven by the warm step every run pays)
+#     diff-ci.sh    the rows whose task or regex differ from the base's (`--dump-map` below)
+#   The base side is origin/master in a full clone, else the PR base via the API
+#   (GITHUB_BASE_REF + GITHUB_REPOSITORY + GH_TOKEN, all present in ci.yaml's diff step).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -210,13 +220,74 @@ if [ "${1:-}" = "--coverage-only" ]; then COVERAGE_ONLY=true; shift; fi
 # ci_key <task> — the GITHUB_OUTPUT key for a MAP row's task: non-alnum runs → '-', trimmed
 # (`mgmt-policy-test` → itself, `estimate-budget -- --self-test` → `estimate-budget-self-test`).
 ci_key() { printf '%s' "$1" | tr -cs 'a-zA-Z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//'; }
+# --dump-map: one `task<TAB>regex` line per MAP row — what --ci-outputs diffs a base copy of this
+# script against when the PR edits the MAP.
+if [ "${1:-}" = "--dump-map" ]; then
+  for entry in "${MAP[@]}"; do printf '%s\t%s\n' "${entry%%:*}" "${entry#*:}"; done
+  exit 0
+fi
+# base_file <path> — the base side's copy on stdout; non-zero when it cannot be read (→ fail open).
+base_file() {
+  local ref="${DIFF_CI_BASE_GIT_REF:-origin/master}"
+  if git cat-file -e "$ref:$1" 2>/dev/null; then git show "$ref:$1"; return; fi
+  [ -n "${GITHUB_BASE_REF:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] || return 1
+  gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/$1?ref=$GITHUB_BASE_REF"
+}
+# devbox_changed_tasks <base devbox.json> — the changed script names + every task whose script calls
+# one, transitively; exit 3 when anything outside shell.scripts differs (→ every row).
+devbox_changed_tasks() {
+  python3 - "$1" devbox.json <<'PY'
+import json, re, sys
+base, head = (json.load(open(p)) for p in sys.argv[1:3])
+def rest(d):
+    d = json.loads(json.dumps(d)); d.get("shell", {}).pop("scripts", None); return d
+if rest(base) != rest(head):
+    sys.exit(3)
+bs, hs = base.get("shell", {}).get("scripts", {}), head.get("shell", {}).get("scripts", {})
+changed = {k for k in set(bs) | set(hs) if bs.get(k) != hs.get(k)}
+text = {k: json.dumps(v) for k, v in hs.items()}
+grew = True
+while grew:
+    grew = False
+    for k, t in text.items():
+        if k not in changed and any(re.search(r"devbox run (-- )?%s\b" % re.escape(c), t) for c in changed):
+            changed.add(k); grew = True
+print("\n".join(sorted(changed)))
+PY
+}
 if [ "${1:-}" = "--ci-outputs" ]; then
-  list="${2:-}"; all=false
+  list="${2:-}"; all=false; lock=false; tasks=""; maprows=""
+  match=$(mktemp); trap 'rm -f "$match" "$match".*' EXIT
   if [ -z "$list" ] || [ ! -s "$list" ]; then all=true
-  elif grep -qE '^(devbox\.(json|lock)|\.github/workflows/ci\.yaml|scripts/diff-ci\.sh)$' "$list"; then all=true; fi
+  elif grep -qE '^\.github/workflows/ci\.yaml$' "$list"; then all=true
+  else
+    grep -vE '^devbox\.json$' "$list" >"$match" || true
+    grep -qE '^devbox\.lock$' "$list" && lock=true
+    if ! $all && grep -qE '^devbox\.json$' "$list"; then
+      if base_file devbox.json >"$match.dj" 2>/dev/null && tasks=$(devbox_changed_tasks "$match.dj"); then
+        # a tracked file that calls a changed task counts as changed (the mgmt fixtures' nested
+        # `devbox run yq` class); prose and recorded data (markdown, JSON/text captures, replay
+        # fixtures and worlds) mention task names without running them
+        for t in $tasks; do
+          git grep -lE "devbox run (-- )?$t([^a-zA-Z0-9-]|\$)" -- ':!*.md' ':!*.json' ':!*.txt' \
+            ':!**/fixtures/**' ':!**/worlds/**' >>"$match" 2>/dev/null || true
+        done
+      else all=true; fi
+    fi
+    if ! $all && grep -qE '^scripts/diff-ci\.sh$' "$list"; then
+      if base_file scripts/diff-ci.sh >scripts/.diff-ci-base.sh 2>/dev/null \
+         && maprows=$(bash scripts/.diff-ci-base.sh --dump-map 2>/dev/null) && [ -n "$maprows" ]; then
+        maprows=$(comm -13 <(printf '%s\n' "$maprows" | sort) <(bash "$0" --dump-map | sort) | cut -f1)
+      else all=true; fi
+      rm -f scripts/.diff-ci-base.sh
+    fi
+  fi
   for entry in "${MAP[@]}"; do
     task="${entry%%:*}"; regex="${entry#*:}"; v=false
-    if $all || grep -qE "$regex" "$list"; then v=true; fi
+    if $all || grep -qE "$regex" "$match" \
+       || grep -qxF -- "${task%% *}" <<<"$tasks" || grep -qxF -- "$task" <<<"$maprows"; then v=true
+    elif $lock && ! jq -e --arg t "${task%% *}" '.shell.scripts[$t] | tostring | test("cd gateway && exec devbox run")' devbox.json >/dev/null 2>&1; then v=true
+    fi
     echo "$(ci_key "$task")=$v"
   done
   exit 0
