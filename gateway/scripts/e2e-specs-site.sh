@@ -90,7 +90,14 @@ fi
 
 t0=$(date +%s)
 local_before=no; docker image inspect "$PLAYWRIGHT_IMAGE" >/dev/null 2>&1 && local_before=yes
-docker pull -q "$PLAYWRIGHT_IMAGE" >/dev/null
+# On a CI runner the dind is fresh per job, so a local image IS this job's --prepull: re-pulling it
+# only re-validates the tag through the mirror (~30 s measured, homelab#3349's run). Elsewhere a
+# local copy may be stale, so pull as before.
+if [ "$local_before" = yes ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+  :
+else
+  docker pull -q "$PLAYWRIGHT_IMAGE" >/dev/null
+fi
 echo "e2e-specs-site: $PLAYWRIGHT_IMAGE ready in $(( $(date +%s) - t0 ))s (already local: $local_before)"
 vol="gw-specs-site-check-$$-$RANDOM"
 docker volume create "$vol" >/dev/null

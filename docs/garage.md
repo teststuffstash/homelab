@@ -735,8 +735,12 @@ size (§above), which is the fill this loop exists to clear.
 ## Upgrading
 
 Upstream splits upgrades in two (`doc/book/operations/upgrading.md`). Inside one major
-(v2.3 → v2.5) protocols and data structures stay the same: check health, run
-`garage repair --all-nodes --yes tables`, then replace nodes one at a time, no downtime. A major
+(v2.3 → v2.5) protocols and data structures stay compatible, so a running cluster may mix v2.x
+versions: check health, run `garage repair --all-nodes --yes tables`, then replace nodes one at a
+time, no downtime. Compatibility is not reversibility: a minor can be one-way — v2.5.0's release
+notes say once a node is upgraded it must not be downgraded, so `git revert` is not a rollback
+there (a forward fix, or the `preflight` snapshot, a human decides; read each release's notes for
+that line). A major
 (v2 → v3) changes the RPC protocol or the metadata format and has its own migration guide.
 
 - **A patch** merges on the bot's review; ArgoCD's sync rolls the StatefulSet.
@@ -744,7 +748,8 @@ Upstream splits upgrades in two (`doc/book/operations/upgrading.md`). Inside one
   1. `devbox run -- bash scripts/garage-upgrade.sh preflight --kubeconfig tofu/kubeconfig` —
      refuses unless `garage:disruption_allowed` is 1, the StatefulSet is settled, every node
      reports one version and the write probe is green; then launches the table repair and takes a
-     metadata snapshot on every node (the restore point).
+     metadata snapshot on every node (the restore point for a one-way release, and across a major;
+     writes made since the snapshot are lost).
   2. Merge the Renovate PR. The sync rolls one zone at a time behind readiness and
      `minReadySeconds`. The roll does not wait for the resync backlog (§Voluntary disruption, "Not
      gated by it").
