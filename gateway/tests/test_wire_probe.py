@@ -186,9 +186,9 @@ MAY_ROWS = [
     pytest.param("path `/models?x=1`", "refused, naming path", id="a query rides `query`, not the path"),
     pytest.param("path `//elsewhere.test/models`", "refused, naming path", id="a scheme-relative path is a host"),
     pytest.param("path `/../responses`", "refused, naming path", id="a dot-dot segment is refused"),
-    pytest.param("`interval_s: 5`", "refused, naming interval_s", id="an interval under a minute is refused"),
+    pytest.param("`interval_s: 5`", "refused, naming interval_s", id="an interval under a minute is refused ⚖"),
     pytest.param("`query: {a: 1}`", "refused, naming query", id="a query value is a string"),
-    pytest.param("probe named `go-docs`", "refused, naming go-docs", id="a name the gateway already reads is refused"),
+    pytest.param("probe named `go-docs`", "refused, naming go-docs", id="a name the gateway already reads is refused ⚖"),
     pytest.param("top-level `surprise`", "refused, naming surprise", id="an unknown key of the file is refused"),
     pytest.param("`[]`", "refused, naming object", id="a file that is not an object is refused"),
 ]

@@ -61,7 +61,7 @@ candidate model, so it keeps the last model's answer) and `codex-usage` (the usa
 
 A source is `public` when the read sent no credential and no account header: the answer's bytes are
 kept verbatim. Every other read is `account`: the answer is sanitised structurally before it is
-persisted — keys, numbers, booleans and nulls stay, every string becomes `{"len": n}` ⚖ (an unseen
+persisted — keys, numbers, booleans and nulls stay, every string not under an allowlisted key ([GW-WIRE-PROBE](#gw-wire-probe)'s `keep_keys`; a credential-shaped value stays a length) becomes `{"len": n}` ⚖ (an unseen
 payload can carry identity nobody listed, so a scrub of known values is rejected). The class is
 decided by what the read sent, not by the caller's declaration: a read that carried a credential is
 never `public`. Only the latest answer is kept, one row per source; a failed read (a non-200, an
@@ -205,7 +205,7 @@ probe goes out and no account string is kept ⚖. A probe reads at start unless 
 its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
 read with no usable credential fetches nothing and counts `no-credential` ⚖. `gateway_wire_probe_total{source, outcome}`
 counts each probe (`ok`, `no-credential`, `fetch-failed`); `source` only takes names the file declares. A
-`wire` key in the policy refuses the load ⚖. A malformed declarations file refuses to start, like a
+`wire` key in the policy refuses the load ⚖. A probe may not take the name of a source the gateway already registers ([GW-WIRE-RECORD](#gw-wire-record)'s list), and the loader refuses it naming that name ⚖. A malformed declarations file refuses to start, like a
 malformed policy ⚖. The same file holds the account class's allowlist (`keep_keys`): the string values
 under those keys are kept verbatim ⚖, every other string stays its length, and a value that matches a
 credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key. An allowlist
@@ -214,8 +214,7 @@ password-, credential- or authorization-named — the floor ⚖).
 
 Unverified — expected to hold, no row yet: the identity-key set beyond the floor — the usage payload's
 identity fields are the one observed case; whether `chatgpt-account-id` is needed on `/models` (the
-2026-10-29 hand probe went through the data plane's headers, so the probe sends it); a malformed
-declarations file at start refuses it; the real `/models` shape is not asserted here — it is what the
+2026-10-29 hand probe went through the data plane's headers, so the probe sends it); the real `/models` shape is not asserted here — it is what the
 deployed probe will record. Only the `codex` rail has a credential lifecycle a probe can ride; the loader
 refuses another rail naming it.
 
@@ -255,9 +254,9 @@ Legend: `probe` = the declaration under test; `load?` = whether the declarations
 | a query rides `query`, not the path | path `/models?x=1` | refused, naming path |
 | a scheme-relative path is a host | path `//elsewhere.test/models` | refused, naming path |
 | a dot-dot segment is refused | path `/../responses` | refused, naming path |
-| an interval under a minute is refused | `interval_s: 5` | refused, naming interval_s |
+| an interval under a minute is refused ⚖ | `interval_s: 5` | refused, naming interval_s |
 | a query value is a string | `query: {a: 1}` | refused, naming query |
-| a name the gateway already reads is refused | probe named `go-docs` | refused, naming go-docs |
+| a name the gateway already reads is refused ⚖ | probe named `go-docs` | refused, naming go-docs |
 | an unknown key of the file is refused | top-level `surprise` | refused, naming surprise |
 | a file that is not an object is refused | `[]` | refused, naming object |
 

@@ -402,7 +402,8 @@ what the in-memory logic would already have let go
 
 One vendor read the gateway makes, named (`go-models-dev`, `codex-usage`, …) and classed `public`
 (the read sent no credential and no account header — its bytes are kept verbatim) or `account`
-(anything else — kept as structure with every string reduced to its length). Each source has one
+(anything else — kept as structure with every string not under an allowlisted key
+([GW-WIRE-PROBE](endpoints/wire.md#gw-wire-probe)'s `keep_keys`; a credential-shaped value stays a length) reduced to its length). Each source has one
 [wire record](#wire-record)
 ([GW-WIRE-RECORD](endpoints/wire.md#gw-wire-record)).
 
