@@ -14,3 +14,15 @@ SITE_URL="${GATEWAY_SPECS_SITE_URL:-https://gateway-specs.homelab.teststuff.net}
 SITE_PREFIX="${SITE_PREFIX:-}"
 SITE_BASE_URL="${SITE_URL}${SITE_PREFIX:+/$SITE_PREFIX}"
 REPORT_URL="${SITE_BASE_URL}/report/index.html"
+
+# site_build_stamp — what a specs-site/ build is keyed on WITHIN one CI job, so the e2e leg can reuse
+# the build the publish step just made instead of rendering a third identical site
+# (scripts/specs-build.sh writes it to .specs-site.stamp, scripts/e2e-specs-site.sh compares).
+# The source tree cannot change inside a job; what does change between the job's builds is the
+# evidence fragments (ci.sh's build runs before scripts/gateway-evidence.sh writes them) — so the
+# key is the run id + those fragments. Outside CI it prints nothing: no stamp, always rebuild.
+site_build_stamp() {
+  [ -n "${GITHUB_RUN_ID:-}" ] || return 0
+  printf '%s-%s %s\n' "$GITHUB_RUN_ID" "${GITHUB_RUN_ATTEMPT:-1}" \
+    "$(find allure-evidence -maxdepth 1 -name 'GW-*.md' 2>/dev/null | LC_ALL=C sort | xargs -r cat | sha256sum | cut -d' ' -f1)"
+}
