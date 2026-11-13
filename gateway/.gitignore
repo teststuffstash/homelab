@@ -5,6 +5,7 @@ allure-evidence/
 # the specs site build (scripts/specs-build.sh): the staged docs root + the rendered site
 .site-src/
 specs-site/
+.specs-site.stamp
 .devbox/
 .venv/
 __pycache__/
