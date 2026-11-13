@@ -37,7 +37,7 @@ mgmt/scripts/mgmt-probe-test.sh SC2034 3
 mgmt/scripts/mgmt-probe.sh SC1090 1
 mgmt/scripts/mgmt-reconcile-test.sh SC2034 1
 mgmt/scripts/mgmt-reconcile.sh SC1010 4
-mgmt/scripts/mgmt-reconcile.sh SC2034 5
+mgmt/scripts/mgmt-reconcile.sh SC2034 4
 mgmt/scripts/mgmt-reconcile.sh SC2046 4
 mgmt/scripts/mgmt-reconcile.sh SC2100 1
 mgmt/scripts/mgmt-root-env/cloudflare.sh SC2148 1
