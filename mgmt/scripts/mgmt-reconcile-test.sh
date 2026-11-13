@@ -9,7 +9,13 @@
 # evidence wait and its timeout, CPs last, halt/resume, the pressure taints, supersede, revert, and
 # the switch going off mid-rollout. No cluster, no box.
 #   devbox run mgmt-reconcile-test
+# MGMT_RECONCILE_PART=legacy|rollout|hold|verify runs one of its four independent parts (the
+# switch-off suite twice · the fleet rollout · its workload-health hold · the workload-health read +
+# node verify), so mgmt-policy-test-all.sh can run them concurrently; unset = all four, as before.
 set -uo pipefail
+case "${MGMT_RECONCILE_PART:-}" in ""|legacy|rollout|hold|verify) ;;
+  *) echo "mgmt-reconcile-test: unknown MGMT_RECONCILE_PART=$MGMT_RECONCILE_PART (legacy|rollout|hold|verify)"; exit 2 ;; esac
+want() { [ -z "${MGMT_RECONCILE_PART:-}" ] || [ "$MGMT_RECONCILE_PART" = "$1" ]; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export RECONCILE_DIR="$T/state" MGMT_TEXTFILE_DIR="$T/text"
@@ -253,9 +259,11 @@ machines "[$M]"; tick
 check "a node leaving auto leaves the state + metrics" eval '[ "$(st wk-03)" = none ] && ! grep -q "wk-03" "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom"'
 check "switch off: no rollout record, no rollout series, kubectl never called" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && ! grep -q mgmt_reconcile_rollout "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom" && [ ! -s "$KCALLS" ]'
 }
+if want legacy; then
 SUFFIX="" SWITCH="" legacy_suite
 SUFFIX=" [switch off]" SWITCH='"reconcile_rollout":{"enabled":false}' legacy_suite
 unset SUFFIX SWITCH
+fi
 
 # ═══ THE FLEET ROLLOUT (switch ON, FU-273) ═══════════════════════════════════════════════════════
 # An eight-node fleet: four worker TYPES (class × role × schematic × storage) and two control planes.
@@ -331,6 +339,7 @@ behind()  { jq -r --arg n "$1" '[.[$n][]? | select(.key == "homelab.io/talos-beh
 other_taints_intact() { [ "$(jq '[.[][] | select(.key == "homelab.io/other")] | length' "$TAINTS")" = 8 ]; }
 lastcall() { tail -1 "$CALLS" 2>/dev/null; }
 
+if want rollout; then
 # ── the pilot: switch OFF with every node auto → only the pilot moves, exactly as before ──
 rreset; fleet_machines '"reconcile_rollout":{"enabled":false,"pilot":["wk-03"]}'; fleet_targets v2; fleet_live v1; tick
 check "switch off + pilot: only the pilot syncs; nothing else gets state" eval '[ "$(calls)" = 1 ] && [ "$(lastcall)" = "upgrade wk-03" ] && [ "$(st nx-01)" = none ] && [ "$(st cp-01)" = none ]'
@@ -435,6 +444,9 @@ rreset; fleet_machines; fleet_targets v2; fleet_live v1; tick
 fleet_machines '"reconcile_rollout":{"enabled":false,"pilot":["wk-03"]}'; tick
 check "switch off mid-rollout → talos-behind lifted everywhere, rollout.json gone" eval '[ ! -f "$RECONCILE_DIR/rollout.json" ] && [ -z "$(behind nx-01)" ] && other_taints_intact && ! grep -q mgmt_reconcile_rollout "$MGMT_TEXTFILE_DIR/mgmt_reconcile.prom"'
 
+fi
+
+if want hold; then
 # ═══ FU-278: the workload-health hold ═══════════════════════════════════════════════════════════
 PF='forgejo/Deployment/forgejo'; SI='oracle-fleet/Deployment/oracle-fleet-ingester'; SS='circles/Deployment/circles-page'
 OLD='monitoring/StatefulSet/broken-before'
@@ -512,7 +524,9 @@ rreset; fleet_machines; fleet_targets v2; fleet_live v1
 WH_AT=t0945 RECONCILE_WORKLOAD_HEALTH_CMD="bash $T/wh-replay.sh" tick
 WH_AT=t1030 RECONCILE_WORKLOAD_HEALTH_CMD="bash $T/wh-replay.sh" tick
 check "replay: 10:30:45Z (before wk-metal-04's window) → HOLD on garage/StatefulSet/garage — garage-2 not Ready 23 min after its zone's window" eval '[ "$(ro "[.wh.held[].key] | join(\",\")")" = garage/StatefulSet/garage ] && grep -q "garage-2: not Ready for 23m" "$T/out"'
+fi
 
+if want verify; then
 # ═══ the READ: node-maintenance.sh workload-health (FU-278) against synthetic dumps ═════════════════
 WD="$T/whd"; mkdir -p "$WD"
 NOW=1790085000   # 2026-09-22T13:50:00Z
@@ -618,6 +632,7 @@ rm -f "$VF"/*; touch "$VF/all-fail"; vrun
 check "verify: the API unreachable → exit 1, never 0" eval '[ "$(cat $T/rc)" = 1 ]'
 echo '{"wk-03":{"version":"v3","schematic":"s","role":"worker"}}' >"$T/vtargets.json"; rm -f "$VF"/*; vrun
 check "verify: live version is not the declared one → exit 1" eval '[ "$(cat $T/rc)" = 1 ] && grep -q "declared v3" "$T/out"'
+fi
 
-echo "mgmt-reconcile-test: $pass passed, $fail failed"
-[ "$fail" = 0 ]
+echo "mgmt-reconcile-test${MGMT_RECONCILE_PART:+ [$MGMT_RECONCILE_PART]}: $pass passed, $fail failed"
+[ "$fail" = 0 ] && [ "$pass" -gt 0 ]
