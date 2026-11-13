@@ -192,7 +192,7 @@ if [ -n "${LOOP_NS_ARG:-}" ]; then
 fi
 # <<<REPLAY:loop-fetch-guard<<<
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
-IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
+IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-registry.teststuff.net/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"
 REVIEWER_GIT="${REVIEWER_GIT:-reviewer-git}"   # Secret w/ the review-bot App token — MUST differ from the PR author's App
 # STEP 0 resolves its own identity from THIS literal, substituted into the prompt below — never at

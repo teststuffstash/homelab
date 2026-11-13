@@ -31,7 +31,7 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           containers:
             - name: reader
-              image: ghcr.io/teststuffstash/agent-coordinator
+              image: registry.teststuff.net/agent-coordinator
               command: ["bash", "/scripts/reader.sh"]
               env:
                 - { name: LEASE_NS, value: agent-coordinator }

@@ -130,7 +130,7 @@ done
 # deploy-pin sweep rewrote only the two kustomize-reachable files. A stale literal is invisible:
 # ArgoCD reports Synced+Healthy and the CronWorkflow runs a two-month-old toolchain.
 #
-# The rule: every TAGGED `ghcr.io/teststuffstash/agent-coordinator:<tag>` literal in the repo's
+# The rule: every TAGGED `registry.teststuff.net/agent-coordinator:<tag>` literal in the repo's
 # manifests equals agents/coordinator/kustomization.yaml's newTag for that image. Scope is the
 # manifests (*.yaml/*.yml) plus any images.env — the pin homes the sweep writes. Deliberately NOT in
 # scope, each for a reason:
@@ -140,8 +140,8 @@ done
 #     not a pin, and not a manifest.
 #   * UNTAGGED references (agents/coordinator/*.yaml, chart-revert, the lease hooks) — kustomize
 #     supplies those tags; there is no literal to compare.
-COORD_IMAGE='ghcr.io/teststuffstash/agent-coordinator'
-COORD_IMAGE_RE='ghcr\.io/teststuffstash/agent-coordinator'
+COORD_IMAGE='registry.teststuff.net/agent-coordinator'
+COORD_IMAGE_RE='registry\.teststuff\.net/agent-coordinator'
 COORD_KUSTOMIZATION='agents/coordinator/kustomization.yaml'
 
 # coord_pin_newtag <root> — the kustomize newTag for the coordinator image (empty if absent).

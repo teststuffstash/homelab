@@ -80,7 +80,7 @@ spec:
       metadata:
         labels: { app: specs-review }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |

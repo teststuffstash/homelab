@@ -836,7 +836,7 @@
       "key": "1:argo-rollouts",
       "last_proven": null,
       "name": "argo-rollouts",
-      "version": "2.43.8",
+      "version": "2.43.9",
       "where": [
         "argocd/platform/argo-rollouts.yaml"
       ]
@@ -1013,7 +1013,7 @@
       "key": "2:cloudflare/cloudflared",
       "last_proven": "2026-10-30T18:20:42Z",
       "name": "cloudflare/cloudflared",
-      "version": "2026.10.7@sha256:4955524aeaa3",
+      "version": "2026.11.0@sha256:b94b96edf2c9",
       "where": [
         "argocd/resources/publicroute/composition.yaml"
       ]
@@ -1243,7 +1243,7 @@
       "key": "3:agent-base",
       "last_proven": "2026-10-30T18:48:04Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.11.11-gb111711ac6a7; 1 manifest ref(s)",
+      "version": "`AGENT_BASE_IMAGE`=2026.11.12-g195b3c38eeaf; 1 manifest ref(s)",
       "where": [
         "agents/images.env",
         "argocd/resources/agentstack/composition.yaml"
@@ -1257,7 +1257,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-10-31T15:52:39Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.11-g0ba770de8d02; 34 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.12-g7b51771a868d; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1293,7 +1293,7 @@
       "key": "3:agent-gateway",
       "last_proven": "2026-10-30T18:27:21Z",
       "name": "agent-gateway",
-      "version": "2026.11.11-g477495f15753 (×1)",
+      "version": "2026.11.12-gddddd5dfb54b (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -1318,7 +1318,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-10-30T19:02:39Z",
       "name": "homelab/arc-runner",
-      "version": "2026.11.10-g9ca9f3195fa2 (×3)",
+      "version": "2026.11.12-ga225e011070e (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -2090,7 +2090,7 @@
       "key": "8:docker/login-action",
       "last_proven": "2026-10-30T18:14:09Z",
       "name": "docker/login-action",
-      "version": "81c6f93d4bc991e510b342a00b419b3bb4efc5c6 (v4)",
+      "version": "8aa5831fb8d48d8f76594c7ddde61ae58019f550 (v4)",
       "where": [
         ".github/workflows/devbox-cache.reusable.yml",
         ".github/workflows/gateway-image.yaml",

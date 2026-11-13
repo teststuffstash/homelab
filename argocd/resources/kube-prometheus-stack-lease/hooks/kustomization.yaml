@@ -17,5 +17,5 @@ resources:
 # security context below. The deploy-pin job does not know this file; a stable tool image makes
 # the drift harmless.
 images:
-  - name: ghcr.io/teststuffstash/agent-coordinator
+  - name: registry.teststuff.net/agent-coordinator
     newTag: 2026.10.5-gca94f4a2dd99

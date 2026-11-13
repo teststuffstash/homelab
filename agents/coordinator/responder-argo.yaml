@@ -261,7 +261,7 @@ spec:
         retryPolicy: OnFailure
         backoff: { duration: "10m" }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
           - { name: GRACE_ATTEMPT, value: "{{retries}}" }
@@ -341,7 +341,7 @@ spec:
         semaphores:
           - configMapKeyRef: { name: subscription-capacity, key: claude }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }

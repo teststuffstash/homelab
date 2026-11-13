@@ -289,7 +289,7 @@ IMG = cr.TARGETS["AgentLoopWorkflowsFailing"]
 KUST = "agents/coordinator/kustomization.yaml"
 ISHA = "df99ff4a58ae1e0e31ff9b7cada5be41554de570"
 T_OLD, T_NEW = "2026.10.28-g950b7f0b8201", "2026.10.30-g4944d7039514"
-REF = "ghcr.io/teststuffstash/agent-coordinator"
+REF = "registry.teststuff.net/agent-coordinator"
 
 
 def _img_patch(line_fmt):
@@ -298,7 +298,7 @@ def _img_patch(line_fmt):
 
 COMMIT_3040 = [
     {"filename": KUST, "status": "modified", "patch": _img_patch("    newTag: {}")},
-    {"filename": "agents/images.env", "status": "modified", "patch": "@@ -17,7 +17,7 @@\n # agent-base — worker/fixer pods (agent-runtime's deploy-pin).\n AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:2026.10.28-g2a1ab2455a9c.122\n # agent-coordinator — coordinator/reviewer/reflex pods (agent-coordinator's deploy-pin).\n" + f"-AGENT_COORDINATOR_IMAGE={REF}:{T_OLD}\n+AGENT_COORDINATOR_IMAGE={REF}:{T_NEW}\n # dind sidecar"},
+    {"filename": "agents/images.env", "status": "modified", "patch": "@@ -17,7 +17,7 @@\n # agent-base — worker/fixer pods (agent-runtime's deploy-pin).\n AGENT_BASE_IMAGE=registry.teststuff.net/agent-base:2026.10.28-g2a1ab2455a9c.122\n # agent-coordinator — coordinator/reviewer/reflex pods (agent-coordinator's deploy-pin).\n" + f"-AGENT_COORDINATOR_IMAGE={REF}:{T_OLD}\n+AGENT_COORDINATOR_IMAGE={REF}:{T_NEW}\n # dind sidecar"},
     {"filename": "argocd/resources/agentstack/composition.yaml", "status": "modified",
      "patch": "\n".join([_img_patch("                      image: " + REF + ":{}")] * 4)},
     {"filename": "argocd/resources/registry-cache/gc-mirrors.yaml", "status": "modified", "patch": _img_patch("              image: " + REF + ":{}")},
@@ -338,7 +338,7 @@ class ImageClassify(unittest.TestCase):
 
     def test_other_image_or_other_newtag_is_not_pin_only(self):
         # agent-base moving in the same commit is ANOTHER consumer's pin — outside this revert
-        base = COMMIT_3040 + [{"filename": "agents/images.env", "patch": "@@ -1 +1 @@\n-AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:a\n+AGENT_BASE_IMAGE=ghcr.io/teststuffstash/agent-base:b"}]
+        base = COMMIT_3040 + [{"filename": "agents/images.env", "patch": "@@ -1 +1 @@\n-AGENT_BASE_IMAGE=registry.teststuff.net/agent-base:a\n+AGENT_BASE_IMAGE=registry.teststuff.net/agent-base:b"}]
         with self.assertRaises(cr.Outcome):
             cr.classify_image_commit(base, IMG)
         # a newTag in ANOTHER kustomization (agent-gateway's) is not this image's pin

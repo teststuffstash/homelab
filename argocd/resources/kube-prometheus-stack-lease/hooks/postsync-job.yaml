@@ -28,7 +28,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: postsync
-          image: ghcr.io/teststuffstash/agent-coordinator
+          image: registry.teststuff.net/agent-coordinator
           command: ["bash", "/scripts/postsync.sh"]
           env:
             - { name: SUBJECT, value: argocd/platform/kube-prometheus-stack.yaml }

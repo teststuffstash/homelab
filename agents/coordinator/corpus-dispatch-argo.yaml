@@ -121,7 +121,7 @@ spec:
       metadata:
         labels: { app: corpus-dispatch-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
