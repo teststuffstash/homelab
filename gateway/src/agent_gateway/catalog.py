@@ -537,6 +537,7 @@ class GoCatalog:
         self.api_key = api_key
         self.clock = clock
         self.refresh_s = refresh_s
+        self.on_refresh = None  # called after every good refresh of a source (GW-MODEL-TIERS: the derivation runs)
         rail = policy.rails.get("opencode")
         self.plan = rail.plan if rail else None
         ids = ([m for tier in rail.models.values() for m in tier] + list(rail.side_models)) if rail else []
@@ -573,6 +574,11 @@ class GoCatalog:
         outcome = await self._refresh(source, now)
         self.refreshes[(source, outcome)] += 1
         self.last_outcome[source] = outcome
+        if outcome == "ok" and self.on_refresh is not None:
+            try:
+                self.on_refresh()
+            except Exception:  # noqa: BLE001 — a hook never fails the refresh
+                log.exception("catalog: the post-refresh hook raised")
         return outcome
 
     async def _refresh(self, source: str, now: float) -> str:

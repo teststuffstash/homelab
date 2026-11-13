@@ -168,6 +168,7 @@ class OpenRouterCatalog:
         self.mcp_url = mcp_url
         self.clock = clock
         self.refresh_s = refresh_s
+        self.on_refresh = None  # called after every good refresh (GW-MODEL-TIERS: the derivation runs)
         rail = policy.rails.get("openrouter")
         self.catalog = rail.catalog if rail else None
         self.canary = rail.canary if rail else None
@@ -198,6 +199,11 @@ class OpenRouterCatalog:
             outcome = "fetch-failed"
         self.refreshes[outcome] += 1
         self.last_outcome = outcome
+        if outcome == "ok" and self.on_refresh is not None:
+            try:
+                self.on_refresh()
+            except Exception:  # noqa: BLE001 — a hook never fails the refresh
+                log.exception("orcatalog: the post-refresh hook raised")
         return outcome
 
     async def _refresh(self, now: float) -> str:

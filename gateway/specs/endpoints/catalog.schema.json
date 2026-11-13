@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://teststuff.net/agent-gateway/specs/endpoints/catalog.schema.json",
-  "$comment": "MACHINE half of GET /catalog/opencode, GET /catalog/openrouter and of the normalised snapshots the two catalog legs keep in their store; the HUMAN half is catalog.md. GW-CATALOG-OR owns `openrouter_output`, `$defs.openrouter_snapshot` (the endpoint rows are openai-chat.schema.json $defs.endpoint_row), `$defs.catalog_block` and `$defs.canary_block` (the policy's two openrouter blocks), `$defs.cell_state`. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
+  "$comment": "MACHINE half of GET /catalog/opencode, GET /catalog/openrouter and of the normalised snapshots the two catalog legs keep in their store; the HUMAN half is catalog.md. GW-CATALOG-OR owns `openrouter_output`, `$defs.openrouter_snapshot` (the endpoint rows are openai-chat.schema.json $defs.endpoint_row), `$defs.catalog_block` and `$defs.canary_block` (the policy's two openrouter blocks), `$defs.cell_state`. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns `tiers_output` (GET /catalog/tiers — the lists the gateway derived at its last good refresh, beside the lists the admission walks), $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
   "x-endpoint": "catalog",
   "x-use-cases": ["UC-1"],
   "$defs": {
@@ -195,6 +195,28 @@
             }
           }
         }
+      },
+      "x-requirements": ["GW-MODEL-TIERS"]
+    },
+    "derived_tier": {
+      "type": "object", "additionalProperties": false, "required": ["list", "evidence", "equals_walked"],
+      "properties": {
+        "list": { "type": "array", "items": { "type": "string" }, "description": "the derived policy ids, cheapest per clean ride first (score ascending on a subscription rail), capped" },
+        "evidence": {
+          "type": "object",
+          "description": "per id of `list`, the evidence row behind it",
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false, "required": ["aa_id", "score", "price", "basis", "score_source", "rides"],
+            "properties": {
+              "aa_id": { "type": ["string", "null"] }, "score": { "type": ["number", "null"], "description": "the value on the policy's score axis" },
+              "price": { "$ref": "#/$defs/rate", "description": "$ per 1M output tokens; null on a subscription rail" },
+              "basis": { "$ref": "#/$defs/price_basis" },
+              "score_source": { "enum": ["feed", "manual"] },
+              "rides": { "$ref": "#/$defs/rides" }
+            }
+          }
+        },
+        "equals_walked": { "type": "boolean", "description": "the list is the same ids in the same order as the policy's `rails.<rail>.models.<tier>` the admission walks (false when the policy holds none)" }
       },
       "x-requirements": ["GW-MODEL-TIERS"]
     },
@@ -446,6 +468,45 @@
       }
     },
     "x-requirements": ["GW-CATALOG-GO", "GW-CATALOG-GO-PARSE"]
+  },
+  "tiers_output": {
+    "$comment": "GET /catalog/tiers — the runtime derivation (GW-MODEL-TIERS §The derivation at a refresh): the per-(rail, tier) lists agent_gateway.tiers derives from the store's own evidence at each good catalog refresh, the evidence behind each id, and whether each list equals the one the admission walks. No auth, no error codes; no derivation yet = `derived_at` null and no rails. The last good derivation is stored and survives a restart.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["derived_at", "benchmarks_as_of", "openrouter_fetched_at", "opencode_fetched_at", "manual", "rails"],
+    "properties": {
+      "derived_at": { "$ref": "#/$defs/timestamp", "description": "when the last good derivation ran; null = none yet" },
+      "benchmarks_as_of": { "type": ["string", "null"], "description": "the benched set's as_of (GET /catalog/openrouter sources.benchmarks.as_of) the derivation read" },
+      "openrouter_fetched_at": { "$ref": "#/$defs/timestamp", "description": "the OpenRouter catalog's fetched_at the derivation read" },
+      "opencode_fetched_at": { "$ref": "#/$defs/timestamp", "description": "the Go catalog's fetched_at the derivation read; null = no Go catalog then (the opencode rail is held)" },
+      "manual": {
+        "type": "object", "additionalProperties": false, "required": ["used", "retired", "refused"],
+        "description": "the manual benchmark rows (GATEWAY_BENCHMARKS_MANUAL; none when unset or no file)",
+        "properties": {
+          "used": { "type": "array", "items": { "type": "string" }, "description": "the manual ids that scored a candidate (the feed lacks them)" },
+          "retired": { "type": "array", "items": { "type": "string" }, "description": "the manual ids the feed carries now — the feed's scores stand" },
+          "refused": { "type": ["string", "null"], "description": "why the whole file was refused (parse_manual's message); the derivation ran without it; null = not refused" }
+        }
+      },
+      "rails": {
+        "type": "object",
+        "description": "per rail the derivation ran for; a rail with no input (no Go catalog for opencode) or no policy block is absent — held",
+        "additionalProperties": {
+          "type": "object", "additionalProperties": false, "required": ["tiers", "undecided", "unscored"],
+          "properties": {
+            "tiers": {
+              "type": "object", "additionalProperties": false, "required": ["light", "standard", "heavy"],
+              "properties": {
+                "light": { "$ref": "#/$defs/derived_tier" }, "standard": { "$ref": "#/$defs/derived_tier" }, "heavy": { "$ref": "#/$defs/derived_tier" }
+              }
+            },
+            "undecided": { "type": "array", "items": { "enum": ["light", "standard", "heavy"] }, "description": "the tiers whose derivation was empty at the last derivation (no priced, benched candidate reaches the band): each keeps its last derived list" },
+            "unscored": { "type": "array", "items": { "type": "string" }, "description": "benched candidates with no value on the score axis: in no tier" }
+          }
+        }
+      }
+    },
+    "x-requirements": ["GW-MODEL-TIERS"]
   },
   "errors": {}
 }

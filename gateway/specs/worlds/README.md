@@ -195,6 +195,33 @@ builds the snapshot, and every cell enters as `candidate`.
 | `endpoints_behaviour[model]` = `endpoints-null-uptime` | the fixture with its first endpoint's `uptime_last_1d` set to `null` (what the vendor answers for a fresh or idle endpoint — read live 2026-10-20 under `anthropic/claude-opus-5`) | the no-uptime row |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime@<tag>` | the same, on the endpoint whose `tag` is named (`endpoints-null-uptime@inference-net/fp8`: the one M endpoint every harness could otherwise pin) | the floors-verdict rows (`pinnable` / `floor`) |
 
+## The tier derivation world
+
+[GW-MODEL-TIERS §The derivation at a refresh](../endpoints/catalog.md#the-derivation-at-a-refresh) runs
+over the store's evidence. No existing world carries both the Go catalog's snapshots and the benched rows
+a ⚖ choice, so the world is composed two ways, and each row says which:
+
+- **Real legs** — the `policy-default` world's seeded Go catalog (`catalog-ok` + `docs-ok`, T0 =
+  Fri 2027-01-15 08:00:00Z) plus the [openrouter-catalog world](#the-openrouter-catalog-world)'s fake MCP
+  and endpoints, refreshed through `app.state.orcatalog.refresh()` / `app.state.catalog.refresh_source()`:
+  the trigger, the failed-input and the restart rows. With the fixtures' benched rows only `claude/opus`
+  and `opencode-go/deepseek-v4.1-flash` have a score on a rail the policy declares, and no cell has passed
+  the canary (every openrouter price null).
+- **A hand-written openrouter view** — the derivation's `or_view` input replaced by a fixed document,
+  the Go catalog still the real seeded snapshots: benched set `deepseek/deepseek-v4-flash` 50,
+  `deepseek/deepseek-v4.1-flash` 40, `z-ai/glm-5.3-flash` 30, the aliases `claude/fxa` … `claude/fxd`
+  20 / 40 / 60 / 80 (`anthropic/claude-fx<a-d>-1.0`) — no row for `claude/fxe` — and one selected
+  endpoint per openrouter model (`deepseek/deepseek-v4-flash` out $0.3/M, `deepseek/deepseek-v4.1-flash`
+  $0.2, `z-ai/glm-5.3-flash` $0.1; uptime 100, no rides). The legs' own refresh hook is the call under
+  test (`on_refresh`), the leg's fetch is not. The derivation rows' policy lists are edits to
+  `policy-default`: `rails.openrouter.models` heavy `deepseek/deepseek-v4.1-flash`, standard
+  `deepseek/deepseek-v4.1-flash, deepseek/deepseek-v4-flash`, light `deepseek/deepseek-v4-flash,
+  deepseek/deepseek-v4.1-flash`; for the subscription row and the manual rows `rails.anthropic.models`
+  light `claude/fxa, claude/fxb`, standard `claude/fxc`, heavy `claude/fxd` (the manual rows add
+  `claude/fxe`).
+
+The manual file is a tmp file the settings' `benchmarks_manual_path` names (`GATEWAY_BENCHMARKS_MANUAL`).
+
 ## The fake TokenReview (`StaticTokenReviews`)
 
 The kube TokenReview API is a seam (`TokenReviewer` protocol). `StaticTokenReviews` maps a
