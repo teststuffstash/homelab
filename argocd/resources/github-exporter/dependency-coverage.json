@@ -1270,7 +1270,7 @@
       "key": "3:agent-base",
       "last_proven": "2026-11-13T10:22:26Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.11.12-g195b3c38eeaf; 1 manifest ref(s)",
+      "version": "`AGENT_BASE_IMAGE`=2026.11.13-gcf846e507131; 1 manifest ref(s)",
       "where": [
         "agents/images.env",
         "argocd/resources/agentstack/composition.yaml"
@@ -1284,7 +1284,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-11-13T09:45:39Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.12-g7b51771a868d; 34 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.13-g703b436ee38d; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",

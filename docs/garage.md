@@ -80,9 +80,7 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
   re-point happened 2026-08-04 (FU-136).
 - Updating Garage: Renovate bumps the tag pin in `scripts/vendor-garage-chart.sh` and the script
   rebuilds the vendored chart on that branch (`argocd/charts/garage/VENDORED.md`;
-  [`dependency-upgrades.md`](dependency-upgrades.md) class 20). A patch merges through review; a
-  minor is read as a major and merged by a person. ArgoCD syncs (steps:
-  [`garage-bulk-migration.md`](garage-bulk-migration.md)). The backup LXC's `garage_version`
+  [`dependency-upgrades.md`](dependency-upgrades.md) class 20). How a bump rolls: [§Upgrading](#upgrading). The backup LXC's `garage_version`
   ([`longhorn-backup.md`](longhorn-backup.md)) follows by hand.
 
 ## Durability — what actually stands between you and losing all of it
@@ -733,6 +731,31 @@ controller's gate refuses for the resync's whole duration (queues) — verified 
 20:05Z rotation of garage-0 onto the 7600p (ledger §The rf=3 build-out as run). **Never** use `repair tables`
 alone as the reclamation: measured 2026-09-09, a natively re-synced env is 3–4× the compacted
 size (§above), which is the fill this loop exists to clear.
+
+## Upgrading
+
+Upstream splits upgrades in two (`doc/book/operations/upgrading.md`). Inside one major
+(v2.3 → v2.5) protocols and data structures stay the same: check health, run
+`garage repair --all-nodes --yes tables`, then replace nodes one at a time, no downtime. A major
+(v2 → v3) changes the RPC protocol or the metadata format and has its own migration guide.
+
+- **A patch** merges on the bot's review; ArgoCD's sync rolls the StatefulSet.
+- **A minor** is merged by a person for now, inside a declared maintenance window:
+  1. `devbox run -- bash scripts/garage-upgrade.sh preflight --kubeconfig tofu/kubeconfig` —
+     refuses unless `garage:disruption_allowed` is 1, the StatefulSet is settled, every node
+     reports one version and the write probe is green; then launches the table repair and takes a
+     metadata snapshot on every node (the restore point).
+  2. Merge the Renovate PR. The sync rolls one zone at a time behind readiness and
+     `minReadySeconds`. The roll does not wait for the resync backlog (§Voluntary disruption, "Not
+     gated by it").
+  3. `… garage-upgrade.sh verify --to <version> --kubeconfig tofu/kubeconfig` — retries until
+     every node runs the target version, every partition has all replicas up and the write probe
+     is green.
+
+  These two verbs are what the Garage Application's PreSync / PostSync hooks will run under an
+  upgrade lease ([ADR-150](adr.md)); the minor arms once that chain is drilled.
+- **A major** is a person's decision (operator, 2026-11-13): read upstream's migration guide for
+  that version first.
 
 ## Static-website serving (3902, live 2026-07-14)
 
