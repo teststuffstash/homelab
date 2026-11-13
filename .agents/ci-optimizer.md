@@ -48,8 +48,11 @@ to cut**. You can. **Your output is measured runtime changes, never a weaker gat
    "effective": no post-merge runs means "insufficient evidence".
 1. **Population, last 7 days.** `gh run list -R teststuffstash/homelab --workflow CI --created
    '>=<since>' --limit 1000 --json databaseId,event,headSha,headBranch,conclusion,createdAt,updatedAt`.
-   Compute runs, success rate, and median/p90 wall split by `pull_request` and `push`, plus
-   runner-minutes. Show the trend against the previous run's report. Check that the workflow
+   Compute runs, success rate, and median/p90 wall split by `pull_request` and `push`. Add **PR job
+   pickup by burst position**: for each PR job, its queue time (job `created_at` → `started_at`)
+   against how many homelab `CI` jobs were created in the 2 minutes before it. A merge starts a
+   burst (the push run plus update-pr-branch's re-runs), and `minRunners` is the idle buffer that
+   serves it. Show the trend against the previous run's report. Check that the workflow
    still has one `ci` job. If it does not, say so and score per job.
 2. **Stage ranking.** Fetch `actions/runs/<id>/jobs` for ~25 green master pushes (every gate runs
    there) and ~40 green PR runs stratified across the week. Rank steps by median and by total
@@ -65,7 +68,8 @@ to cut**. You can. **Your output is measured runtime changes, never a weaker gat
    - the master-push duplicate share: push runs re-testing a tree a green PR head already tested,
      split into gates the PR also ran and gates the PR skipped. Count what the push leg caught:
      red push runs, and whether the failing gate could see the commit's paths (catch vs flake).
-4. **One deep dive.** Take the top grower, or else the top stage by weekly seconds. Profile where
+4. **One deep dive.** Take the top grower, or else the stage with the most PR-wait seconds per week
+   (its median × the PR runs that selected it). Profile where
    its time goes (process spawns per item, nested `devbox run`, serial independent subtests,
    network pulls, fsync, repeated builds) and prototype the fix in your checkout. Measure it under
    rule 3.
@@ -82,15 +86,22 @@ to cut**. You can. **Your output is measured runtime changes, never a weaker gat
 
 ## Cost model
 
-Denominate in this order. First, **PR wall time**: it is what the operator and the merge path wait
-on, including master-push queueing that delays the next merge. Second, **runner-minutes**: the
-8-slot capacity is shared with every stack. Third, **flake cost**: a red push that a re-run
-turns green is an operator touch. A change that saves runner-minutes but lengthens PR wall says so.
+**Waiting is the cost; runner-minutes are not.** The runners are idle most of the time. Denominate
+in this order:
+
+1. **Time someone waits on a PR**: PR job pickup plus the PR run's wall time. A master-push run
+   counts only through what it does to the next PR job, such as holding a warm runner in a burst.
+2. **Flake cost**: a red master push that a re-run turns green fires `GithubWorkflowRunFailed` and
+   starts a dig. That is an operator touch.
+
+Never propose dropping work only because it burns runner-minutes. A change that saves
+runner-minutes but adds PR wait is a regression. Report runner-minutes, if at all, as context.
 
 ## Report body (inside the SERIES-BRIEF headings)
 
 - **Coverage**: window, run counts, sampled job count, calls spent, sources you could not reach.
-- **Summary**: PR/push median and p90 and runner-minutes, with the week-over-week deltas.
+- **Summary**: PR wall median/p90, PR pickup by burst position, push median, red-push flakes, with
+  the week-over-week deltas.
 - **Decisions**: the PR, issues filed, issues extended.
 - **Proposals ⚖**: the master-push net cost vs catches, ci.yaml-only changes, runner/job topology.
 - Tables for steps 1–3. The predecessor score from step 0. The detector check from step 5.
