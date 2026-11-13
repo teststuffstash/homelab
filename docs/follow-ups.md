@@ -267,17 +267,14 @@ six OVERSIZE items pointer-ized into
       ingress VIP). **Next (operator):** shorten the path (registry-fs beside the ingress, or in-cluster pullers
       off the VIP) vs accept ~21 MB/s per pve node; separately, `intel1` co-location (registry-data beside
       garage-0). Evidence: [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-14 re-measure.
-- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
-      tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
-      2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
-      that TTL nearly filled it (720h left over from FU-196 v0; #1870 set 168h + 150Gi). Serve
-      first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
-      third-party images only. **Next:** per-repo keep-sets there first (only oracle-fleet has a
-      retention policy; the store is the 150Gi filesystem volume since FU-280's 2026-09-24 cutover, not
-      the 48Gi bucket), then dual-publish → pin flip per image. **`agent-base` + `agent-coordinator` moved
-      2026-11-12** (pins on `registry.teststuff.net/agent-*`, keep-set `scripts/registry-keep-set.sh`) — forced,
-      not scheduled: both carry the Claude Code binary and their ghcr packages were public. The two oracle
-      images remain. Relates FU-196, FU-203, FU-280.
+- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its biggest tenants
+      were ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
+      2026-09-22), so our release churn sets the mirror's size, and its only size knob is the TTL (#1870:
+      168h + 150Gi). Serve first-party images from `registry.teststuff.net` (ADR-121's "later"); the mirror
+      then holds third-party images only. **Done 2026-11-13:** `agent-base` + `agent-coordinator` publish
+      there only (#3330, keep-set `scripts/registry-keep-set.sh`; forced — both carry the Claude Code binary
+      and their public ghcr packages are now deleted). **Next:** the two oracle images — reuse the keep-set
+      script, then dual-publish → pin flip per image. Relates FU-196, FU-203, FU-280.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
