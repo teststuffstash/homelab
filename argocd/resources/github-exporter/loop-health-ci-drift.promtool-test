@@ -1,301 +1,251 @@
-# Behaviour fixture for GithubCiWallTimeDrift (prometheusrule.yaml, group github-ci-drift — the
-# group comment there is the alert's one home for WHY; this file pins WHAT it does).
+# Behaviour fixture for GithubCiWallTimeDrift + GithubCiWallTimeDriftBlind (prometheusrule.yaml,
+# group github-ci-drift — the group comment there is the alerts' one home for WHY; this file pins
+# WHAT they do). GENERATED: every expectation is derived by a simulator of the expr; regenerate
+# rather than hand-edit (loop-health-ci-drift.promtool-gen.py beside this file).
 #
 #   devbox run -- promtool test rules argocd/resources/github-exporter/loop-health-ci-drift.promtool-test
 #
-# Its own pair, not loop-health.promtool-test: the 21–28-day baseline puts the eval clock at
-# 1008h (6 weeks), and promtool evaluates every rule in rule_files at every step out to that.
 # evaluation_interval 1h = the production group's `interval: 1h`, so the `for: 6h` edge below is
 # pinned at the cadence it really runs at.
 #
 # INPUT SCHEME (every series below follows it — check any expectation against it):
-#   run i starts at hour h(i) = 8i + 1 and its series carries 3 hourly samples (h, h+1, h+2)
-#   (a real run's series lives ~24h in the poll window; its length does not matter, because
-#   max_over_time collapses each series to one value). One series per run id, labels trimmed to
-#   the ones the expr reads (+ pod where the dedupe is the point).
-#   A window "(T−7d, T]" contains run i iff h(i)+2 > T−168 and h(i) ≤ T (ranges are left-open).
-#
-# CLOCK: promtool's test clock starts at 0, so `offset 21d` before day 21 reads nothing.
+#   run i starts at hour h(i) = 8i + 1 and its series carries 3 hourly samples (h, h+1, h+2);
+#   max_over_time collapses each series to one value. One series per run id, labels trimmed to
+#   the ones the expr reads (+ pod where the dedupe is the point). 21 runs per 168h week.
+#   A window "(T−7d, T]" contains run i iff h(i)+2 > T−168 and h(i) ≤ T (ranges are left-open);
+#   the baseline is the same window ending T−168h (`offset 7d`).
 rule_files:
   - loop-health-ci-drift.promtool-rules
 
 evaluation_interval: 1h
 
 tests:
-  # ── 1 — THE W33→W41 SHAPE: weekly medians 100 → 125 → 155 → 190 → 235 → 290 s ─────────────
-  # Week w = hours [168w, 168w+168); a run takes its week's value. 126 runs, i = 0..125.
-  #  • 656h: baseline (−16h, 152h] holds runs with h(i) ≤ 152 → i = 0..18 = 19 runs < 20 —
-  #    silent on the RUN-COUNT GUARD, though the ratio is already 1.9×.
-  #  • 657h: i = 0..19 = 20 runs → guard met. Baseline median 100 (all week 0); current
-  #    (489h, 657h] = i = 61..82: 2 × 155 (week 2) + 20 × 190 (week 3) → median 190 > 1.5 × 100,
-  #    > 120 floor, current count 22 ≥ 20 → condition TRUE, pending.
-  #  • 662h: pending 5h < for: 6h → not yet. 663h: firing. Value: current (495h, 663h] =
-  #    i = 62..82: 1 × 155 + 20 × 190 → 190 s = "3m 10s".
-  #  • 1008h (day 42): current (840h, 1008h] = i = 105..125, all week 5 → 290 s ("4m 50s");
-  #    baseline (336h, 504h] = i = 42..62, all week 2 → 155 s; 290 > 232.5 → firing.
+  # ── 1 — A WEEK-OVER-WEEK CREEP: weekly medians 200 → 200 → 240 → 320 → 320 s ──────────────
+  #  • 504h: week 2 (240) vs week 1 (200) = 1.2× < 1.25 — silent on the RATIO.
+  #  • 585h: the condition first holds (week 3's 320 s runs outweigh 240 in the current median).
+  #  • 590h: pending 5h < for: 6h → not yet. 591h: firing at 5m 20s.
+  #  • 672h: week 3 (320) vs week 2 (240) = 1.33× → still firing at 5m 20s.
   - interval: 1h
-    name: "a W33→W41-shaped creep fires once both windows hold 20 runs, after for: 6h"
+    name: "a week-over-week creep fires once it passes 1.25x, after for: 6h; a 1.2x week stays silent"
     input_series:
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10000",status="completed",conclusion="success"}'
-        values: "_x1 100x2"
+        values: "_x1 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10001",status="completed",conclusion="success"}'
-        values: "_x9 100x2"
+        values: "_x9 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10002",status="completed",conclusion="success"}'
-        values: "_x17 100x2"
+        values: "_x17 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10003",status="completed",conclusion="success"}'
-        values: "_x25 100x2"
+        values: "_x25 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10004",status="completed",conclusion="success"}'
-        values: "_x33 100x2"
+        values: "_x33 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10005",status="completed",conclusion="success"}'
-        values: "_x41 100x2"
+        values: "_x41 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10006",status="completed",conclusion="success"}'
-        values: "_x49 100x2"
+        values: "_x49 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10007",status="completed",conclusion="success"}'
-        values: "_x57 100x2"
+        values: "_x57 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10008",status="completed",conclusion="success"}'
-        values: "_x65 100x2"
+        values: "_x65 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10009",status="completed",conclusion="success"}'
-        values: "_x73 100x2"
+        values: "_x73 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10010",status="completed",conclusion="success"}'
-        values: "_x81 100x2"
+        values: "_x81 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10011",status="completed",conclusion="success"}'
-        values: "_x89 100x2"
+        values: "_x89 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10012",status="completed",conclusion="success"}'
-        values: "_x97 100x2"
+        values: "_x97 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10013",status="completed",conclusion="success"}'
-        values: "_x105 100x2"
+        values: "_x105 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10014",status="completed",conclusion="success"}'
-        values: "_x113 100x2"
+        values: "_x113 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10015",status="completed",conclusion="success"}'
-        values: "_x121 100x2"
+        values: "_x121 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10016",status="completed",conclusion="success"}'
-        values: "_x129 100x2"
+        values: "_x129 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10017",status="completed",conclusion="success"}'
-        values: "_x137 100x2"
+        values: "_x137 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10018",status="completed",conclusion="success"}'
-        values: "_x145 100x2"
+        values: "_x145 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10019",status="completed",conclusion="success"}'
-        values: "_x153 100x2"
+        values: "_x153 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10020",status="completed",conclusion="success"}'
-        values: "_x161 100x2"
+        values: "_x161 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10021",status="completed",conclusion="success"}'
-        values: "_x169 125x2"
+        values: "_x169 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10022",status="completed",conclusion="success"}'
-        values: "_x177 125x2"
+        values: "_x177 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10023",status="completed",conclusion="success"}'
-        values: "_x185 125x2"
+        values: "_x185 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10024",status="completed",conclusion="success"}'
-        values: "_x193 125x2"
+        values: "_x193 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10025",status="completed",conclusion="success"}'
-        values: "_x201 125x2"
+        values: "_x201 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10026",status="completed",conclusion="success"}'
-        values: "_x209 125x2"
+        values: "_x209 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10027",status="completed",conclusion="success"}'
-        values: "_x217 125x2"
+        values: "_x217 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10028",status="completed",conclusion="success"}'
-        values: "_x225 125x2"
+        values: "_x225 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10029",status="completed",conclusion="success"}'
-        values: "_x233 125x2"
+        values: "_x233 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10030",status="completed",conclusion="success"}'
-        values: "_x241 125x2"
+        values: "_x241 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10031",status="completed",conclusion="success"}'
-        values: "_x249 125x2"
+        values: "_x249 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10032",status="completed",conclusion="success"}'
-        values: "_x257 125x2"
+        values: "_x257 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10033",status="completed",conclusion="success"}'
-        values: "_x265 125x2"
+        values: "_x265 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10034",status="completed",conclusion="success"}'
-        values: "_x273 125x2"
+        values: "_x273 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10035",status="completed",conclusion="success"}'
-        values: "_x281 125x2"
+        values: "_x281 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10036",status="completed",conclusion="success"}'
-        values: "_x289 125x2"
+        values: "_x289 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10037",status="completed",conclusion="success"}'
-        values: "_x297 125x2"
+        values: "_x297 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10038",status="completed",conclusion="success"}'
-        values: "_x305 125x2"
+        values: "_x305 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10039",status="completed",conclusion="success"}'
-        values: "_x313 125x2"
+        values: "_x313 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10040",status="completed",conclusion="success"}'
-        values: "_x321 125x2"
+        values: "_x321 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10041",status="completed",conclusion="success"}'
-        values: "_x329 125x2"
+        values: "_x329 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10042",status="completed",conclusion="success"}'
-        values: "_x337 155x2"
+        values: "_x337 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10043",status="completed",conclusion="success"}'
-        values: "_x345 155x2"
+        values: "_x345 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10044",status="completed",conclusion="success"}'
-        values: "_x353 155x2"
+        values: "_x353 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10045",status="completed",conclusion="success"}'
-        values: "_x361 155x2"
+        values: "_x361 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10046",status="completed",conclusion="success"}'
-        values: "_x369 155x2"
+        values: "_x369 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10047",status="completed",conclusion="success"}'
-        values: "_x377 155x2"
+        values: "_x377 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10048",status="completed",conclusion="success"}'
-        values: "_x385 155x2"
+        values: "_x385 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10049",status="completed",conclusion="success"}'
-        values: "_x393 155x2"
+        values: "_x393 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10050",status="completed",conclusion="success"}'
-        values: "_x401 155x2"
+        values: "_x401 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10051",status="completed",conclusion="success"}'
-        values: "_x409 155x2"
+        values: "_x409 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10052",status="completed",conclusion="success"}'
-        values: "_x417 155x2"
+        values: "_x417 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10053",status="completed",conclusion="success"}'
-        values: "_x425 155x2"
+        values: "_x425 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10054",status="completed",conclusion="success"}'
-        values: "_x433 155x2"
+        values: "_x433 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10055",status="completed",conclusion="success"}'
-        values: "_x441 155x2"
+        values: "_x441 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10056",status="completed",conclusion="success"}'
-        values: "_x449 155x2"
+        values: "_x449 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10057",status="completed",conclusion="success"}'
-        values: "_x457 155x2"
+        values: "_x457 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10058",status="completed",conclusion="success"}'
-        values: "_x465 155x2"
+        values: "_x465 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10059",status="completed",conclusion="success"}'
-        values: "_x473 155x2"
+        values: "_x473 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10060",status="completed",conclusion="success"}'
-        values: "_x481 155x2"
+        values: "_x481 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10061",status="completed",conclusion="success"}'
-        values: "_x489 155x2"
+        values: "_x489 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10062",status="completed",conclusion="success"}'
-        values: "_x497 155x2"
+        values: "_x497 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10063",status="completed",conclusion="success"}'
-        values: "_x505 190x2"
+        values: "_x505 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10064",status="completed",conclusion="success"}'
-        values: "_x513 190x2"
+        values: "_x513 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10065",status="completed",conclusion="success"}'
-        values: "_x521 190x2"
+        values: "_x521 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10066",status="completed",conclusion="success"}'
-        values: "_x529 190x2"
+        values: "_x529 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10067",status="completed",conclusion="success"}'
-        values: "_x537 190x2"
+        values: "_x537 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10068",status="completed",conclusion="success"}'
-        values: "_x545 190x2"
+        values: "_x545 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10069",status="completed",conclusion="success"}'
-        values: "_x553 190x2"
+        values: "_x553 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10070",status="completed",conclusion="success"}'
-        values: "_x561 190x2"
+        values: "_x561 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10071",status="completed",conclusion="success"}'
-        values: "_x569 190x2"
+        values: "_x569 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10072",status="completed",conclusion="success"}'
-        values: "_x577 190x2"
+        values: "_x577 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10073",status="completed",conclusion="success"}'
-        values: "_x585 190x2"
+        values: "_x585 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10074",status="completed",conclusion="success"}'
-        values: "_x593 190x2"
+        values: "_x593 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10075",status="completed",conclusion="success"}'
-        values: "_x601 190x2"
+        values: "_x601 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10076",status="completed",conclusion="success"}'
-        values: "_x609 190x2"
+        values: "_x609 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10077",status="completed",conclusion="success"}'
-        values: "_x617 190x2"
+        values: "_x617 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10078",status="completed",conclusion="success"}'
-        values: "_x625 190x2"
+        values: "_x625 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10079",status="completed",conclusion="success"}'
-        values: "_x633 190x2"
+        values: "_x633 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10080",status="completed",conclusion="success"}'
-        values: "_x641 190x2"
+        values: "_x641 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10081",status="completed",conclusion="success"}'
-        values: "_x649 190x2"
+        values: "_x649 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10082",status="completed",conclusion="success"}'
-        values: "_x657 190x2"
+        values: "_x657 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10083",status="completed",conclusion="success"}'
-        values: "_x665 190x2"
+        values: "_x665 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10084",status="completed",conclusion="success"}'
-        values: "_x673 235x2"
+        values: "_x673 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10085",status="completed",conclusion="success"}'
-        values: "_x681 235x2"
+        values: "_x681 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10086",status="completed",conclusion="success"}'
-        values: "_x689 235x2"
+        values: "_x689 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10087",status="completed",conclusion="success"}'
-        values: "_x697 235x2"
+        values: "_x697 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10088",status="completed",conclusion="success"}'
-        values: "_x705 235x2"
+        values: "_x705 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10089",status="completed",conclusion="success"}'
-        values: "_x713 235x2"
+        values: "_x713 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10090",status="completed",conclusion="success"}'
-        values: "_x721 235x2"
+        values: "_x721 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10091",status="completed",conclusion="success"}'
-        values: "_x729 235x2"
+        values: "_x729 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10092",status="completed",conclusion="success"}'
-        values: "_x737 235x2"
+        values: "_x737 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10093",status="completed",conclusion="success"}'
-        values: "_x745 235x2"
+        values: "_x745 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10094",status="completed",conclusion="success"}'
-        values: "_x753 235x2"
+        values: "_x753 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10095",status="completed",conclusion="success"}'
-        values: "_x761 235x2"
+        values: "_x761 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10096",status="completed",conclusion="success"}'
-        values: "_x769 235x2"
+        values: "_x769 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10097",status="completed",conclusion="success"}'
-        values: "_x777 235x2"
+        values: "_x777 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10098",status="completed",conclusion="success"}'
-        values: "_x785 235x2"
+        values: "_x785 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10099",status="completed",conclusion="success"}'
-        values: "_x793 235x2"
+        values: "_x793 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10100",status="completed",conclusion="success"}'
-        values: "_x801 235x2"
+        values: "_x801 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10101",status="completed",conclusion="success"}'
-        values: "_x809 235x2"
+        values: "_x809 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10102",status="completed",conclusion="success"}'
-        values: "_x817 235x2"
+        values: "_x817 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10103",status="completed",conclusion="success"}'
-        values: "_x825 235x2"
+        values: "_x825 320x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10104",status="completed",conclusion="success"}'
-        values: "_x833 235x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10105",status="completed",conclusion="success"}'
-        values: "_x841 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10106",status="completed",conclusion="success"}'
-        values: "_x849 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10107",status="completed",conclusion="success"}'
-        values: "_x857 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10108",status="completed",conclusion="success"}'
-        values: "_x865 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10109",status="completed",conclusion="success"}'
-        values: "_x873 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10110",status="completed",conclusion="success"}'
-        values: "_x881 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10111",status="completed",conclusion="success"}'
-        values: "_x889 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10112",status="completed",conclusion="success"}'
-        values: "_x897 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10113",status="completed",conclusion="success"}'
-        values: "_x905 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10114",status="completed",conclusion="success"}'
-        values: "_x913 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10115",status="completed",conclusion="success"}'
-        values: "_x921 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10116",status="completed",conclusion="success"}'
-        values: "_x929 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10117",status="completed",conclusion="success"}'
-        values: "_x937 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10118",status="completed",conclusion="success"}'
-        values: "_x945 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10119",status="completed",conclusion="success"}'
-        values: "_x953 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10120",status="completed",conclusion="success"}'
-        values: "_x961 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10121",status="completed",conclusion="success"}'
-        values: "_x969 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10122",status="completed",conclusion="success"}'
-        values: "_x977 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10123",status="completed",conclusion="success"}'
-        values: "_x985 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10124",status="completed",conclusion="success"}'
-        values: "_x993 290x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="ci",event="push",id="10125",status="completed",conclusion="success"}'
-        values: "_x1001 290x2"
+        values: "_x833 320x2"
     alert_rule_test:
-      - eval_time: 656h
+      - eval_time: 504h
         alertname: GithubCiWallTimeDrift
         exp_alerts: []
-      - eval_time: 662h
+      - eval_time: 590h
         alertname: GithubCiWallTimeDrift
         exp_alerts: []
-      - eval_time: 663h
+      - eval_time: 591h
         alertname: GithubCiWallTimeDrift
         exp_alerts:
           - exp_labels:
@@ -307,8 +257,8 @@ tests:
               event: push
             exp_annotations:
               summary: "CI wall time drifting up: homelab ci (push)"
-              description: "The median successful ci run on homelab (push events) took 3m 10s over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo=\"homelab\",workflow=\"ci\"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo=\"homelab\",workflow=\"ci\",event=\"push\",status=\"completed\",conclusion=\"success\"}[7d] offset 21d)))."
-      - eval_time: 1008h
+              description: "The median successful ci run on homelab (push events) took 5m 20s over the last 7 days — more than 1.25× the median of the 7 days before that (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo=\"homelab\",workflow=\"ci\"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo=\"homelab\",workflow=\"ci\",event=\"push\",status=\"completed\",conclusion=\"success\"}[7d] offset 7d)))."
+      - eval_time: 672h
         alertname: GithubCiWallTimeDrift
         exp_alerts:
           - exp_labels:
@@ -320,26 +270,61 @@ tests:
               event: push
             exp_annotations:
               summary: "CI wall time drifting up: homelab ci (push)"
-              description: "The median successful ci run on homelab (push events) took 4m 50s over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo=\"homelab\",workflow=\"ci\"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo=\"homelab\",workflow=\"ci\",event=\"push\",status=\"completed\",conclusion=\"success\"}[7d] offset 21d)))."
+              description: "The median successful ci run on homelab (push events) took 5m 20s over the last 7 days — more than 1.25× the median of the 7 days before that (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo=\"homelab\",workflow=\"ci\"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo=\"homelab\",workflow=\"ci\",event=\"push\",status=\"completed\",conclusion=\"success\"}[7d] offset 7d)))."
 
-  # ── 2 — THE SILENT SHAPES, each beside the contrast that proves its guard is what holds it ────
-  # All at 1008h, so baseline (336h, 504h] = i = 42..62 and current (840h, 1008h] = i = 105..125
-  # (21 runs each — over the guard) unless noted. One workflow label per shape.
-  #  • flat: i even → 95 s, odd → 105 s. Baseline 11 × 95 + 10 × 105 → 95; current 10 × 95 +
-  #    11 × 105 → 105; 105 / 95 = 1.105 < 1.5. PLUS 21 FAILED runs at 3000 s in the current
-  #    window: with the conclusion filter dropped the current median is the mean of the 21st and
-  #    22nd of 42 sorted values = (105 + 3000) / 2 = 1552.5 — it would fire.
-  #  • outlier: 100 s everywhere except i = 115 at 2000 s. Median 100 (21 values, one high);
-  #    the MEAN would be (20 × 100 + 2000) / 21 = 190.476… > 150 — avg_over_time would fire.
-  #  • mild: 100 s → 140 s: 1.4× < 1.5 — silent on the ratio.
-  #  • tiny: 40 s → 100 s: 2.5× but 100 < the 120 s floor — silent on the floor.
-  #  • few: 100 s → 290 s (2.9×, over the floor) but only i = 53..62 and 116..125 — 10 runs per
-  #    window, each scraped by TWO exporter pods: 20 SERIES per window, 10 RUNS. A count over
-  #    series would pass the guard; the per-id count is 10 — silent.
+  # ── 2 — THE SILENT SHAPES at 504h, each beside the contrast that proves its guard holds it ─────
+  #  • flat: 95/105 alternating → medians 105 → 95. PLUS 21 FAILED runs at 3000 s in the
+  #    current window: without the conclusion filter the current median is 1552.5 — it would fire.
+  #  • outlier: 100 s everywhere except one 2000 s run → median 100; the MEAN would be 190.476.
+  #  • mild: 200 → 240 s = 1.2× < 1.25 — silent on the ratio.
+  #  • tiny: 40 → 100 s = 2.5× but 100 < the 120 s floor — silent on the floor.
+  #  • few: 100 → 290 s (2.9×) but 10 runs per window, each scraped by TWO exporter pods: 20 SERIES,
+  #    10 RUNS. A count over series would pass the guard; the per-id count is 10 — silent.
   - interval: 1h
-    name: "flat, failed-run storm, single outlier, 1.4×, under-floor and 10-run shapes stay silent"
+    name: "flat, failed-run storm, single outlier, 1.2x, under-floor and 10-run shapes stay silent"
     input_series:
-      # flat — 95/105 alternating in both windows; plus 21 FAILED runs at 3000 s (current window)
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20021",status="completed",conclusion="success"}'
+        values: "_x169 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20022",status="completed",conclusion="success"}'
+        values: "_x177 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20023",status="completed",conclusion="success"}'
+        values: "_x185 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20024",status="completed",conclusion="success"}'
+        values: "_x193 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20025",status="completed",conclusion="success"}'
+        values: "_x201 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20026",status="completed",conclusion="success"}'
+        values: "_x209 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20027",status="completed",conclusion="success"}'
+        values: "_x217 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20028",status="completed",conclusion="success"}'
+        values: "_x225 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20029",status="completed",conclusion="success"}'
+        values: "_x233 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20030",status="completed",conclusion="success"}'
+        values: "_x241 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20031",status="completed",conclusion="success"}'
+        values: "_x249 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20032",status="completed",conclusion="success"}'
+        values: "_x257 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20033",status="completed",conclusion="success"}'
+        values: "_x265 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20034",status="completed",conclusion="success"}'
+        values: "_x273 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20035",status="completed",conclusion="success"}'
+        values: "_x281 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20036",status="completed",conclusion="success"}'
+        values: "_x289 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20037",status="completed",conclusion="success"}'
+        values: "_x297 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20038",status="completed",conclusion="success"}'
+        values: "_x305 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20039",status="completed",conclusion="success"}'
+        values: "_x313 105x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20040",status="completed",conclusion="success"}'
+        values: "_x321 95x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20041",status="completed",conclusion="success"}'
+        values: "_x329 105x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20042",status="completed",conclusion="success"}'
         values: "_x337 95x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20043",status="completed",conclusion="success"}'
@@ -382,91 +367,90 @@ tests:
         values: "_x489 105x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20062",status="completed",conclusion="success"}'
         values: "_x497 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20105",status="completed",conclusion="success"}'
-        values: "_x841 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20106",status="completed",conclusion="success"}'
-        values: "_x849 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20107",status="completed",conclusion="success"}'
-        values: "_x857 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20108",status="completed",conclusion="success"}'
-        values: "_x865 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20109",status="completed",conclusion="success"}'
-        values: "_x873 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20110",status="completed",conclusion="success"}'
-        values: "_x881 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20111",status="completed",conclusion="success"}'
-        values: "_x889 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20112",status="completed",conclusion="success"}'
-        values: "_x897 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20113",status="completed",conclusion="success"}'
-        values: "_x905 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20114",status="completed",conclusion="success"}'
-        values: "_x913 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20115",status="completed",conclusion="success"}'
-        values: "_x921 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20116",status="completed",conclusion="success"}'
-        values: "_x929 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20117",status="completed",conclusion="success"}'
-        values: "_x937 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20118",status="completed",conclusion="success"}'
-        values: "_x945 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20119",status="completed",conclusion="success"}'
-        values: "_x953 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20120",status="completed",conclusion="success"}'
-        values: "_x961 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20121",status="completed",conclusion="success"}'
-        values: "_x969 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20122",status="completed",conclusion="success"}'
-        values: "_x977 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20123",status="completed",conclusion="success"}'
-        values: "_x985 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20124",status="completed",conclusion="success"}'
-        values: "_x993 95x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="20125",status="completed",conclusion="success"}'
-        values: "_x1001 105x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21105",status="completed",conclusion="failure"}'
-        values: "_x841 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21106",status="completed",conclusion="failure"}'
-        values: "_x849 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21107",status="completed",conclusion="failure"}'
-        values: "_x857 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21108",status="completed",conclusion="failure"}'
-        values: "_x865 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21109",status="completed",conclusion="failure"}'
-        values: "_x873 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21110",status="completed",conclusion="failure"}'
-        values: "_x881 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21111",status="completed",conclusion="failure"}'
-        values: "_x889 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21112",status="completed",conclusion="failure"}'
-        values: "_x897 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21113",status="completed",conclusion="failure"}'
-        values: "_x905 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21114",status="completed",conclusion="failure"}'
-        values: "_x913 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21115",status="completed",conclusion="failure"}'
-        values: "_x921 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21116",status="completed",conclusion="failure"}'
-        values: "_x929 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21117",status="completed",conclusion="failure"}'
-        values: "_x937 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21118",status="completed",conclusion="failure"}'
-        values: "_x945 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21119",status="completed",conclusion="failure"}'
-        values: "_x953 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21120",status="completed",conclusion="failure"}'
-        values: "_x961 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21121",status="completed",conclusion="failure"}'
-        values: "_x969 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21122",status="completed",conclusion="failure"}'
-        values: "_x977 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21123",status="completed",conclusion="failure"}'
-        values: "_x985 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21124",status="completed",conclusion="failure"}'
-        values: "_x993 3000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21125",status="completed",conclusion="failure"}'
-        values: "_x1001 3000x2"
-      # outlier — flat 100 s; ONE current-window run at 2000 s
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21042",status="completed",conclusion="failure"}'
+        values: "_x337 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21043",status="completed",conclusion="failure"}'
+        values: "_x345 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21044",status="completed",conclusion="failure"}'
+        values: "_x353 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21045",status="completed",conclusion="failure"}'
+        values: "_x361 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21046",status="completed",conclusion="failure"}'
+        values: "_x369 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21047",status="completed",conclusion="failure"}'
+        values: "_x377 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21048",status="completed",conclusion="failure"}'
+        values: "_x385 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21049",status="completed",conclusion="failure"}'
+        values: "_x393 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21050",status="completed",conclusion="failure"}'
+        values: "_x401 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21051",status="completed",conclusion="failure"}'
+        values: "_x409 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21052",status="completed",conclusion="failure"}'
+        values: "_x417 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21053",status="completed",conclusion="failure"}'
+        values: "_x425 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21054",status="completed",conclusion="failure"}'
+        values: "_x433 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21055",status="completed",conclusion="failure"}'
+        values: "_x441 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21056",status="completed",conclusion="failure"}'
+        values: "_x449 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21057",status="completed",conclusion="failure"}'
+        values: "_x457 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21058",status="completed",conclusion="failure"}'
+        values: "_x465 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21059",status="completed",conclusion="failure"}'
+        values: "_x473 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21060",status="completed",conclusion="failure"}'
+        values: "_x481 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21061",status="completed",conclusion="failure"}'
+        values: "_x489 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="flat",event="push",id="21062",status="completed",conclusion="failure"}'
+        values: "_x497 3000x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30021",status="completed",conclusion="success"}'
+        values: "_x169 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30022",status="completed",conclusion="success"}'
+        values: "_x177 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30023",status="completed",conclusion="success"}'
+        values: "_x185 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30024",status="completed",conclusion="success"}'
+        values: "_x193 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30025",status="completed",conclusion="success"}'
+        values: "_x201 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30026",status="completed",conclusion="success"}'
+        values: "_x209 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30027",status="completed",conclusion="success"}'
+        values: "_x217 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30028",status="completed",conclusion="success"}'
+        values: "_x225 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30029",status="completed",conclusion="success"}'
+        values: "_x233 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30030",status="completed",conclusion="success"}'
+        values: "_x241 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30031",status="completed",conclusion="success"}'
+        values: "_x249 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30032",status="completed",conclusion="success"}'
+        values: "_x257 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30033",status="completed",conclusion="success"}'
+        values: "_x265 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30034",status="completed",conclusion="success"}'
+        values: "_x273 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30035",status="completed",conclusion="success"}'
+        values: "_x281 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30036",status="completed",conclusion="success"}'
+        values: "_x289 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30037",status="completed",conclusion="success"}'
+        values: "_x297 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30038",status="completed",conclusion="success"}'
+        values: "_x305 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30039",status="completed",conclusion="success"}'
+        values: "_x313 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30040",status="completed",conclusion="success"}'
+        values: "_x321 100x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30041",status="completed",conclusion="success"}'
+        values: "_x329 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30042",status="completed",conclusion="success"}'
         values: "_x337 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30043",status="completed",conclusion="success"}'
@@ -488,7 +472,7 @@ tests:
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30051",status="completed",conclusion="success"}'
         values: "_x409 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30052",status="completed",conclusion="success"}'
-        values: "_x417 100x2"
+        values: "_x417 2000x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30053",status="completed",conclusion="success"}'
         values: "_x425 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30054",status="completed",conclusion="success"}'
@@ -509,356 +493,347 @@ tests:
         values: "_x489 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30062",status="completed",conclusion="success"}'
         values: "_x497 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30105",status="completed",conclusion="success"}'
-        values: "_x841 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30106",status="completed",conclusion="success"}'
-        values: "_x849 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30107",status="completed",conclusion="success"}'
-        values: "_x857 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30108",status="completed",conclusion="success"}'
-        values: "_x865 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30109",status="completed",conclusion="success"}'
-        values: "_x873 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30110",status="completed",conclusion="success"}'
-        values: "_x881 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30111",status="completed",conclusion="success"}'
-        values: "_x889 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30112",status="completed",conclusion="success"}'
-        values: "_x897 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30113",status="completed",conclusion="success"}'
-        values: "_x905 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30114",status="completed",conclusion="success"}'
-        values: "_x913 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30115",status="completed",conclusion="success"}'
-        values: "_x921 2000x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30116",status="completed",conclusion="success"}'
-        values: "_x929 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30117",status="completed",conclusion="success"}'
-        values: "_x937 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30118",status="completed",conclusion="success"}'
-        values: "_x945 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30119",status="completed",conclusion="success"}'
-        values: "_x953 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30120",status="completed",conclusion="success"}'
-        values: "_x961 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30121",status="completed",conclusion="success"}'
-        values: "_x969 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30122",status="completed",conclusion="success"}'
-        values: "_x977 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30123",status="completed",conclusion="success"}'
-        values: "_x985 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30124",status="completed",conclusion="success"}'
-        values: "_x993 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="outlier",event="push",id="30125",status="completed",conclusion="success"}'
-        values: "_x1001 100x2"
-      # mild — 100 s -> 140 s (1.4x, under the 1.5x ratio)
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40021",status="completed",conclusion="success"}'
+        values: "_x169 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40022",status="completed",conclusion="success"}'
+        values: "_x177 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40023",status="completed",conclusion="success"}'
+        values: "_x185 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40024",status="completed",conclusion="success"}'
+        values: "_x193 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40025",status="completed",conclusion="success"}'
+        values: "_x201 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40026",status="completed",conclusion="success"}'
+        values: "_x209 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40027",status="completed",conclusion="success"}'
+        values: "_x217 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40028",status="completed",conclusion="success"}'
+        values: "_x225 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40029",status="completed",conclusion="success"}'
+        values: "_x233 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40030",status="completed",conclusion="success"}'
+        values: "_x241 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40031",status="completed",conclusion="success"}'
+        values: "_x249 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40032",status="completed",conclusion="success"}'
+        values: "_x257 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40033",status="completed",conclusion="success"}'
+        values: "_x265 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40034",status="completed",conclusion="success"}'
+        values: "_x273 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40035",status="completed",conclusion="success"}'
+        values: "_x281 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40036",status="completed",conclusion="success"}'
+        values: "_x289 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40037",status="completed",conclusion="success"}'
+        values: "_x297 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40038",status="completed",conclusion="success"}'
+        values: "_x305 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40039",status="completed",conclusion="success"}'
+        values: "_x313 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40040",status="completed",conclusion="success"}'
+        values: "_x321 200x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40041",status="completed",conclusion="success"}'
+        values: "_x329 200x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40042",status="completed",conclusion="success"}'
-        values: "_x337 100x2"
+        values: "_x337 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40043",status="completed",conclusion="success"}'
-        values: "_x345 100x2"
+        values: "_x345 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40044",status="completed",conclusion="success"}'
-        values: "_x353 100x2"
+        values: "_x353 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40045",status="completed",conclusion="success"}'
-        values: "_x361 100x2"
+        values: "_x361 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40046",status="completed",conclusion="success"}'
-        values: "_x369 100x2"
+        values: "_x369 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40047",status="completed",conclusion="success"}'
-        values: "_x377 100x2"
+        values: "_x377 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40048",status="completed",conclusion="success"}'
-        values: "_x385 100x2"
+        values: "_x385 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40049",status="completed",conclusion="success"}'
-        values: "_x393 100x2"
+        values: "_x393 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40050",status="completed",conclusion="success"}'
-        values: "_x401 100x2"
+        values: "_x401 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40051",status="completed",conclusion="success"}'
-        values: "_x409 100x2"
+        values: "_x409 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40052",status="completed",conclusion="success"}'
-        values: "_x417 100x2"
+        values: "_x417 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40053",status="completed",conclusion="success"}'
-        values: "_x425 100x2"
+        values: "_x425 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40054",status="completed",conclusion="success"}'
-        values: "_x433 100x2"
+        values: "_x433 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40055",status="completed",conclusion="success"}'
-        values: "_x441 100x2"
+        values: "_x441 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40056",status="completed",conclusion="success"}'
-        values: "_x449 100x2"
+        values: "_x449 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40057",status="completed",conclusion="success"}'
-        values: "_x457 100x2"
+        values: "_x457 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40058",status="completed",conclusion="success"}'
-        values: "_x465 100x2"
+        values: "_x465 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40059",status="completed",conclusion="success"}'
-        values: "_x473 100x2"
+        values: "_x473 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40060",status="completed",conclusion="success"}'
-        values: "_x481 100x2"
+        values: "_x481 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40061",status="completed",conclusion="success"}'
-        values: "_x489 100x2"
+        values: "_x489 240x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40062",status="completed",conclusion="success"}'
-        values: "_x497 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40105",status="completed",conclusion="success"}'
-        values: "_x841 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40106",status="completed",conclusion="success"}'
-        values: "_x849 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40107",status="completed",conclusion="success"}'
-        values: "_x857 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40108",status="completed",conclusion="success"}'
-        values: "_x865 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40109",status="completed",conclusion="success"}'
-        values: "_x873 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40110",status="completed",conclusion="success"}'
-        values: "_x881 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40111",status="completed",conclusion="success"}'
-        values: "_x889 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40112",status="completed",conclusion="success"}'
-        values: "_x897 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40113",status="completed",conclusion="success"}'
-        values: "_x905 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40114",status="completed",conclusion="success"}'
-        values: "_x913 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40115",status="completed",conclusion="success"}'
-        values: "_x921 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40116",status="completed",conclusion="success"}'
-        values: "_x929 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40117",status="completed",conclusion="success"}'
-        values: "_x937 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40118",status="completed",conclusion="success"}'
-        values: "_x945 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40119",status="completed",conclusion="success"}'
-        values: "_x953 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40120",status="completed",conclusion="success"}'
-        values: "_x961 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40121",status="completed",conclusion="success"}'
-        values: "_x969 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40122",status="completed",conclusion="success"}'
-        values: "_x977 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40123",status="completed",conclusion="success"}'
-        values: "_x985 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40124",status="completed",conclusion="success"}'
-        values: "_x993 140x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="mild",event="push",id="40125",status="completed",conclusion="success"}'
-        values: "_x1001 140x2"
-      # tiny — 40 s -> 100 s (2.5x, but under the 120 s floor)
+        values: "_x497 240x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50021",status="completed",conclusion="success"}'
+        values: "_x169 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50022",status="completed",conclusion="success"}'
+        values: "_x177 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50023",status="completed",conclusion="success"}'
+        values: "_x185 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50024",status="completed",conclusion="success"}'
+        values: "_x193 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50025",status="completed",conclusion="success"}'
+        values: "_x201 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50026",status="completed",conclusion="success"}'
+        values: "_x209 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50027",status="completed",conclusion="success"}'
+        values: "_x217 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50028",status="completed",conclusion="success"}'
+        values: "_x225 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50029",status="completed",conclusion="success"}'
+        values: "_x233 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50030",status="completed",conclusion="success"}'
+        values: "_x241 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50031",status="completed",conclusion="success"}'
+        values: "_x249 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50032",status="completed",conclusion="success"}'
+        values: "_x257 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50033",status="completed",conclusion="success"}'
+        values: "_x265 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50034",status="completed",conclusion="success"}'
+        values: "_x273 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50035",status="completed",conclusion="success"}'
+        values: "_x281 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50036",status="completed",conclusion="success"}'
+        values: "_x289 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50037",status="completed",conclusion="success"}'
+        values: "_x297 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50038",status="completed",conclusion="success"}'
+        values: "_x305 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50039",status="completed",conclusion="success"}'
+        values: "_x313 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50040",status="completed",conclusion="success"}'
+        values: "_x321 40x2"
+      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50041",status="completed",conclusion="success"}'
+        values: "_x329 40x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50042",status="completed",conclusion="success"}'
-        values: "_x337 40x2"
+        values: "_x337 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50043",status="completed",conclusion="success"}'
-        values: "_x345 40x2"
+        values: "_x345 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50044",status="completed",conclusion="success"}'
-        values: "_x353 40x2"
+        values: "_x353 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50045",status="completed",conclusion="success"}'
-        values: "_x361 40x2"
+        values: "_x361 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50046",status="completed",conclusion="success"}'
-        values: "_x369 40x2"
+        values: "_x369 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50047",status="completed",conclusion="success"}'
-        values: "_x377 40x2"
+        values: "_x377 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50048",status="completed",conclusion="success"}'
-        values: "_x385 40x2"
+        values: "_x385 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50049",status="completed",conclusion="success"}'
-        values: "_x393 40x2"
+        values: "_x393 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50050",status="completed",conclusion="success"}'
-        values: "_x401 40x2"
+        values: "_x401 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50051",status="completed",conclusion="success"}'
-        values: "_x409 40x2"
+        values: "_x409 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50052",status="completed",conclusion="success"}'
-        values: "_x417 40x2"
+        values: "_x417 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50053",status="completed",conclusion="success"}'
-        values: "_x425 40x2"
+        values: "_x425 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50054",status="completed",conclusion="success"}'
-        values: "_x433 40x2"
+        values: "_x433 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50055",status="completed",conclusion="success"}'
-        values: "_x441 40x2"
+        values: "_x441 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50056",status="completed",conclusion="success"}'
-        values: "_x449 40x2"
+        values: "_x449 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50057",status="completed",conclusion="success"}'
-        values: "_x457 40x2"
+        values: "_x457 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50058",status="completed",conclusion="success"}'
-        values: "_x465 40x2"
+        values: "_x465 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50059",status="completed",conclusion="success"}'
-        values: "_x473 40x2"
+        values: "_x473 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50060",status="completed",conclusion="success"}'
-        values: "_x481 40x2"
+        values: "_x481 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50061",status="completed",conclusion="success"}'
-        values: "_x489 40x2"
+        values: "_x489 100x2"
       - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50062",status="completed",conclusion="success"}'
-        values: "_x497 40x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50105",status="completed",conclusion="success"}'
-        values: "_x841 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50106",status="completed",conclusion="success"}'
-        values: "_x849 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50107",status="completed",conclusion="success"}'
-        values: "_x857 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50108",status="completed",conclusion="success"}'
-        values: "_x865 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50109",status="completed",conclusion="success"}'
-        values: "_x873 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50110",status="completed",conclusion="success"}'
-        values: "_x881 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50111",status="completed",conclusion="success"}'
-        values: "_x889 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50112",status="completed",conclusion="success"}'
-        values: "_x897 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50113",status="completed",conclusion="success"}'
-        values: "_x905 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50114",status="completed",conclusion="success"}'
-        values: "_x913 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50115",status="completed",conclusion="success"}'
-        values: "_x921 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50116",status="completed",conclusion="success"}'
-        values: "_x929 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50117",status="completed",conclusion="success"}'
-        values: "_x937 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50118",status="completed",conclusion="success"}'
-        values: "_x945 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50119",status="completed",conclusion="success"}'
-        values: "_x953 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50120",status="completed",conclusion="success"}'
-        values: "_x961 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50121",status="completed",conclusion="success"}'
-        values: "_x969 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50122",status="completed",conclusion="success"}'
-        values: "_x977 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50123",status="completed",conclusion="success"}'
-        values: "_x985 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50124",status="completed",conclusion="success"}'
-        values: "_x993 100x2"
-      - series: 'github_workflow_run_duration_seconds{repo="homelab",workflow="tiny",event="push",id="50125",status="completed",conclusion="success"}'
-        values: "_x1001 100x2"
-      # few — 100 s -> 290 s, only 10 runs per window, each scraped by TWO exporter pods (20 series)
+        values: "_x497 100x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60053",status="completed",conclusion="success"}'
-        values: "_x425 100x2"
+        values: "_x425 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60053",status="completed",conclusion="success"}'
-        values: "_x425 100x2"
+        values: "_x425 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60054",status="completed",conclusion="success"}'
-        values: "_x433 100x2"
+        values: "_x433 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60054",status="completed",conclusion="success"}'
-        values: "_x433 100x2"
+        values: "_x433 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60055",status="completed",conclusion="success"}'
-        values: "_x441 100x2"
+        values: "_x441 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60055",status="completed",conclusion="success"}'
-        values: "_x441 100x2"
+        values: "_x441 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60056",status="completed",conclusion="success"}'
-        values: "_x449 100x2"
+        values: "_x449 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60056",status="completed",conclusion="success"}'
-        values: "_x449 100x2"
+        values: "_x449 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60057",status="completed",conclusion="success"}'
-        values: "_x457 100x2"
+        values: "_x457 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60057",status="completed",conclusion="success"}'
-        values: "_x457 100x2"
+        values: "_x457 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60058",status="completed",conclusion="success"}'
-        values: "_x465 100x2"
+        values: "_x465 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60058",status="completed",conclusion="success"}'
-        values: "_x465 100x2"
+        values: "_x465 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60059",status="completed",conclusion="success"}'
-        values: "_x473 100x2"
+        values: "_x473 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60059",status="completed",conclusion="success"}'
-        values: "_x473 100x2"
+        values: "_x473 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60060",status="completed",conclusion="success"}'
-        values: "_x481 100x2"
+        values: "_x481 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60060",status="completed",conclusion="success"}'
-        values: "_x481 100x2"
+        values: "_x481 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60061",status="completed",conclusion="success"}'
-        values: "_x489 100x2"
+        values: "_x489 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60061",status="completed",conclusion="success"}'
-        values: "_x489 100x2"
+        values: "_x489 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60062",status="completed",conclusion="success"}'
-        values: "_x497 100x2"
+        values: "_x497 290x2"
       - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60062",status="completed",conclusion="success"}'
-        values: "_x497 100x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60116",status="completed",conclusion="success"}'
-        values: "_x929 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60116",status="completed",conclusion="success"}'
-        values: "_x929 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60117",status="completed",conclusion="success"}'
-        values: "_x937 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60117",status="completed",conclusion="success"}'
-        values: "_x937 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60118",status="completed",conclusion="success"}'
-        values: "_x945 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60118",status="completed",conclusion="success"}'
-        values: "_x945 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60119",status="completed",conclusion="success"}'
-        values: "_x953 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60119",status="completed",conclusion="success"}'
-        values: "_x953 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60120",status="completed",conclusion="success"}'
-        values: "_x961 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60120",status="completed",conclusion="success"}'
-        values: "_x961 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60121",status="completed",conclusion="success"}'
-        values: "_x969 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60121",status="completed",conclusion="success"}'
-        values: "_x969 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60122",status="completed",conclusion="success"}'
-        values: "_x977 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60122",status="completed",conclusion="success"}'
-        values: "_x977 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60123",status="completed",conclusion="success"}'
-        values: "_x985 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60123",status="completed",conclusion="success"}'
-        values: "_x985 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60124",status="completed",conclusion="success"}'
-        values: "_x993 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60124",status="completed",conclusion="success"}'
-        values: "_x993 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60125",status="completed",conclusion="success"}'
-        values: "_x1001 290x2"
-      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60125",status="completed",conclusion="success"}'
-        values: "_x1001 290x2"
+        values: "_x497 290x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60032",status="completed",conclusion="success"}'
+        values: "_x257 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60032",status="completed",conclusion="success"}'
+        values: "_x257 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60033",status="completed",conclusion="success"}'
+        values: "_x265 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60033",status="completed",conclusion="success"}'
+        values: "_x265 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60034",status="completed",conclusion="success"}'
+        values: "_x273 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60034",status="completed",conclusion="success"}'
+        values: "_x273 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60035",status="completed",conclusion="success"}'
+        values: "_x281 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60035",status="completed",conclusion="success"}'
+        values: "_x281 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60036",status="completed",conclusion="success"}'
+        values: "_x289 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60036",status="completed",conclusion="success"}'
+        values: "_x289 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60037",status="completed",conclusion="success"}'
+        values: "_x297 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60037",status="completed",conclusion="success"}'
+        values: "_x297 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60038",status="completed",conclusion="success"}'
+        values: "_x305 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60038",status="completed",conclusion="success"}'
+        values: "_x305 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60039",status="completed",conclusion="success"}'
+        values: "_x313 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60039",status="completed",conclusion="success"}'
+        values: "_x313 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60040",status="completed",conclusion="success"}'
+        values: "_x321 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60040",status="completed",conclusion="success"}'
+        values: "_x321 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-5c6d9f4f76-kcmdn",repo="homelab",workflow="few",event="push",id="60041",status="completed",conclusion="success"}'
+        values: "_x329 100x2"
+      - series: 'github_workflow_run_duration_seconds{pod="github-exporter-6d7e8a9b1c-p7t2r",repo="homelab",workflow="few",event="push",id="60041",status="completed",conclusion="success"}'
+        values: "_x329 100x2"
     alert_rule_test:
-      - eval_time: 1008h
+      - eval_time: 504h
         alertname: GithubCiWallTimeDrift
         exp_alerts: []
     promql_expr_test:
       # flat: the medians the alert compares, then the failed-run storm without the conclusion filter
       - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="flat", status="completed", conclusion="success"}[7d])))
-        eval_time: 1008h
-        exp_samples:
-          - labels: '{workflow="flat"}'
-            value: 105
-      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="flat", status="completed", conclusion="success"}[7d] offset 21d)))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="flat"}'
             value: 95
+      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="flat", status="completed", conclusion="success"}[7d] offset 7d)))
+        eval_time: 504h
+        exp_samples:
+          - labels: '{workflow="flat"}'
+            value: 105
       - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="flat", status="completed"}[7d])))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="flat"}'
             value: 1552.5
       # outlier: the median holds at 100; the mean would not
       - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="outlier", status="completed", conclusion="success"}[7d])))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="outlier"}'
             value: 100
       - expr: avg by (workflow) (max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="outlier", status="completed", conclusion="success"}[7d])))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="outlier"}'
             value: 190.47619047619048
-      # mild: the ratio is under 1.5
-      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="mild", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="mild", status="completed", conclusion="success"}[7d] offset 21d)))
-        eval_time: 1008h
+      # mild: the ratio is under 1.25
+      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="mild", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="mild", status="completed", conclusion="success"}[7d] offset 7d)))
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="mild"}'
-            value: 1.4
+            value: 1.2
       # tiny: the ratio WOULD trip — only the floor holds it
-      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="tiny", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="tiny", status="completed", conclusion="success"}[7d] offset 21d)))
-        eval_time: 1008h
+      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="tiny", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="tiny", status="completed", conclusion="success"}[7d] offset 7d)))
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="tiny"}'
             value: 2.5
       # few: 20 series, 10 runs — the guard counts runs
       - expr: count by (workflow) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d]))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="few"}'
             value: 20
       - expr: count by (workflow) (max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d])))
-        eval_time: 1008h
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="few"}'
             value: 10
-      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d] offset 21d)))
-        eval_time: 1008h
+      - expr: quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d]))) / quantile by (workflow) (0.5, max by (workflow, id) (max_over_time(github_workflow_run_duration_seconds{workflow="few", status="completed", conclusion="success"}[7d] offset 7d)))
+        eval_time: 504h
         exp_samples:
           - labels: '{workflow="few"}'
-            value: 2.9
+            value: 2.8999999999999999
+
+  # ── 3 — THE BLIND BELT: Prometheus's oldest sample is at t=0, so the history held = the eval time.
+  #  • 5h: under 15 days but for: 6h not yet met → silent. 6h: firing (history 6h).
+  #  • 359h (14d 23h): still under 15 days → firing. 366h: 15d 6h of history → silent.
+  - interval: 1h
+    name: "the blind belt fires while Prometheus holds under 15 days of history"
+    input_series:
+      - series: 'prometheus_tsdb_lowest_timestamp_seconds{pod="prometheus-kube-prometheus-stack-prometheus-0"}'
+        values: "0x400"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: GithubCiWallTimeDriftBlind
+        exp_alerts: []
+      - eval_time: 6h
+        alertname: GithubCiWallTimeDriftBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: dig
+            exp_annotations:
+              summary: "Prometheus holds 6h 0m 0s of history — GithubCiWallTimeDrift's 14-day lookback is blind"
+              description: "The oldest sample Prometheus holds is 6h 0m 0s old. GithubCiWallTimeDrift compares the last 7 days against the 7 days before them, so under 14 days of history its baseline reads nothing and it can never fire. Grow `retentionSize` (argocd/platform/values/kube-prometheus-stack.yaml) or cut series count; shortening the alert's windows is the last resort. Check: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) / 86400."
+      - eval_time: 359h
+        alertname: GithubCiWallTimeDriftBlind
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: dig
+            exp_annotations:
+              summary: "Prometheus holds 14d 23h 0m 0s of history — GithubCiWallTimeDrift's 14-day lookback is blind"
+              description: "The oldest sample Prometheus holds is 14d 23h 0m 0s old. GithubCiWallTimeDrift compares the last 7 days against the 7 days before them, so under 14 days of history its baseline reads nothing and it can never fire. Grow `retentionSize` (argocd/platform/values/kube-prometheus-stack.yaml) or cut series count; shortening the alert's windows is the last resort. Check: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) / 86400."
+      - eval_time: 366h
+        alertname: GithubCiWallTimeDriftBlind
+        exp_alerts: []

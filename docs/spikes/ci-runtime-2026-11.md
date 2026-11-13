@@ -89,8 +89,12 @@ retention window. TICK-LOG shows two early firings (10-11, about 10-19), neither
 self-hosted `ci` job. No series anywhere carries step-level time, so nothing can say which step
 grew. That is why the weekly series reads the jobs API itself.
 
+**Fixed 2026-11-13:** the baseline is now the previous week (`offset 7d`, a 14-day lookback) at
+1.25×, sized on the live week-over-week ratios: homelab push held 1.18–1.33 from 11-08 to 11-13,
+every other (repo, workflow, event) 0.82–1.16. `GithubCiWallTimeDriftBlind` fires while Prometheus
+holds under 15 days, so the lookback cannot go silently blind again.
+
 ## What would settle it
 
-- A drift window that fits retention (e.g. `offset 7d`), and a promtool case replaying 11-02 → 11-13.
 - A CI number for `clause-replay` before anyone counts the in-stage savings past about 5 min.
 - A ruling on item 1: what the full-push net is for, now that its catch rate is measured.
