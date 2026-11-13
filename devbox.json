@@ -503,7 +503,7 @@
         "python3 argocd/resources/openrouter-proxy/openrouter-proxy.py --self-test"
       ],
       "gateway-ci": [
-        "sh -c '[ -d gateway ] || { echo \"gateway-ci: no gateway/ on this ref — nothing to gate\"; exit 0; }; cd gateway && exec devbox run ci'"
+        "sh -c '[ -d gateway ] || { echo \"gateway-ci: no gateway/ on this ref — nothing to gate\"; exit 0; }; cd gateway && { devbox run specs-site-prepull || true; } && exec devbox run ci'"
       ],
       "gateway-evidence": [
         "sh -c '[ -d gateway ] || { echo \"gateway-evidence: no gateway/ on this ref\"; exit 0; }; cd gateway && exec devbox run evidence'"
