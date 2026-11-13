@@ -24,7 +24,7 @@
         "last_error": { "type": ["string", "null"], "description": "the latest failed read beside the kept answer: `status <n>`, `unreachable`, `withheld`, `over-bound`" },
         "last_error_at": { "$ref": "#/$defs/timestamp" }
       },
-      "x-requirements": ["GW-WIRE-RECORD", "GW-WIRE-VIEW"]
+      "x-requirements": ["GW-WIRE-RECORD", "GW-WIRE-VIEW", "GW-WIRE-QUARRY"]
     }
   },
   "index_output": {

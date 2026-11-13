@@ -20,6 +20,7 @@ error code; the service **imports it**. A member's body is the stored bytes, not
 |---|---|---|---|
 | [GW-WIRE-RECORD](#gw-wire-record) | `$defs.provenance` | — | v0 — declared probes and the account class's allowlist are the sibling rule (`GW-WIRE-PROBE`, not yet written) |
 | [GW-WIRE-VIEW](#gw-wire-view) | `index_output`, `member_headers` | `wire-not-recorded` (404) | v0 |
+| [GW-WIRE-QUARRY](#gw-wire-quarry) | — (a client of the two reads above) | — | v0 — `⚑ gap`, see the index |
 
 ## Flow overview
 
@@ -34,7 +35,10 @@ flowchart LR
   R --> P["the parser (unchanged)"]
   T --> D["GET /wire · GET /wire/‹source›"]
   click W href "#gw-wire-record" "GW-WIRE-RECORD" _self
+  D --> Q["wire-quarry.py\n(list · show · find · cut)"]
+  Q --> F["a fixture + its provenance sidecar"]
   click D href "#gw-wire-view" "GW-WIRE-VIEW" _self
+  click Q href "#gw-wire-quarry" "GW-WIRE-QUARRY" _self
 ```
 
 ## Requirement index
@@ -43,6 +47,7 @@ flowchart LR
 |---|---|---|
 | [GW-WIRE-RECORD](#gw-wire-record) | the recorder | v0 |
 | [GW-WIRE-VIEW](#gw-wire-view) | the door | v0 |
+| [GW-WIRE-QUARRY](#gw-wire-quarry) | the quarry tool | ⚑ gap (2026-11-13, PR #3303's PR → work: a provenance lint for fixtures, not yet filed): fixtures cut before the tool carry no provenance sidecar; no lint requires one |
 
 ## GW-WIRE-RECORD
 
@@ -151,5 +156,61 @@ Legend: `recorded` = the answers on file at T0; `call` = the request made; `answ
 <details markdown="1"><summary>Evidence — latest run</summary>
 
 --8<-- "GW-WIRE-VIEW.md"
+
+</details>
+
+## GW-WIRE-QUARRY
+
+`gateway/scripts/wire-quarry.py` is the loop's hand on the door: a standard-library tool that reads
+`GET /wire` and `GET /wire/<source>` and nothing else, so a fixture is mined from a recorded answer, never
+hand-copied. It takes the door's base URL from `WIRE_DOOR_URL` (default: the cluster Service,
+`http://agent-gateway.agent-egress.svc.cluster.local:8080`) and holds and sends no credential. `show <source>`
+prints the stored bytes unchanged on stdout and one provenance line on stderr; `list` prints the index, one
+line per source (name, class, status, age); `find --key <name>` prints each JSON member's source and the
+path of every occurrence of that key; `cut <source> --path <a.b.c> --out <file>` writes that subtree of the
+recorded answer (values and key order as recorded — no wrapper key ⚖) to `<file>` and a sidecar
+`<file stem>.provenance.json` beside it (source, class, url, sha256 of the whole answer, fetched_at, path). A
+key containing a dot (`deepseek-v4.1-flash`) is matched whole. Exit codes ⚖: `3` the door is silent, `4` the
+source is not recorded, `5` the path is not in the answer or the member is not JSON, `6` the record is
+truncated (`complete: false`). Whatever the exit, a failed `cut` writes no file: the door not answering is
+never an empty or invented fixture. `devbox run wire-quarry -- <verb>` runs it from `gateway/`.
+
+Unverified — expected to hold, no row yet: the tool sends no credential and imports the standard library
+only; `--path` is JSON-only (the Go page, `go-docs`, is read with `show`); `cut` on an `account` source
+cuts its sanitised structure.
+
+**World: [policy-codex](../worlds/README.md#policy-worlds)** — the door holds `go-models-dev`, the
+`catalog-ok` bytes at T0.
+
+#### Reading the door
+
+Legend: `door` = what the door holds (`unreachable` = nothing listens at its URL); `command` = the tool's
+arguments; `exit?`, `stdout?`, `stderr?` = what the process returns.
+
+| description | door | command | exit? | stdout? | stderr? |
+|---|---|---|---|---|---|
+| `show` prints one member verbatim and one provenance line | `go-models-dev at T0` | `show go-models-dev` | `0` | the stored bytes, byte-identical | `wire: source=go-models-dev class=public sha256=<…> fetched_at=T0` |
+| `list` prints the index | `go-models-dev at T0` | `list` | `0` | one line per source: name, class, status, age | — |
+| `find` names the sources that have a key, with its path ⚖ | `go-models-dev at T0` | `find --key cost` | `0` | `go-models-dev` and each JSON path ending in `cost` | — |
+| a key no source has is an empty answer, not an error | `go-models-dev at T0` | `find --key nothing-has-this` | `0` | nothing | — |
+| a door with no record lists nothing | `nothing recorded` | `list` | `0` | nothing | — |
+| a source nobody recorded is an error, never an empty answer | `go-models-dev at T0` | `show codex-models` | `4` | nothing | `wire: codex-models not recorded` |
+| a silent door is an error that names the door ⚖ | `unreachable` | `show go-models-dev` | `3` | nothing | `wire: door unreachable: <url>` |
+
+#### Cutting a fixture
+
+Legend: `door` and `command` as above (`<dir>` = a fresh directory); `fixture?` = the file the command
+was told to write; `sidecar?` = the file beside it.
+
+| description | door | command | exit? | fixture? | sidecar? |
+|---|---|---|---|---|---|
+| `cut` writes the fragment's values unchanged and a sidecar ⚖ | `go-models-dev at T0` | `cut go-models-dev --path opencode-go.models.deepseek-v4-pro --out <dir>/m.json` | `0` | that subtree, values and key order as recorded | `<dir>/m.provenance.json`: source, class, url, sha256 of the whole answer, fetched_at, path |
+| a path the answer does not have writes nothing | `go-models-dev at T0` | `cut go-models-dev --path opencode-go.models.nope --out <dir>/m.json` | `5` | no file | no file |
+| a truncated record is never cut | `go-models-dev, complete: false` | `cut go-models-dev --path opencode-go --out <dir>/m.json` | `6` | no file | no file |
+| a silent door writes nothing | `unreachable` | `cut go-models-dev --path opencode-go --out <dir>/m.json` | `3` | no file | no file |
+
+<details markdown="1"><summary>Evidence — latest run</summary>
+
+--8<-- "GW-WIRE-QUARRY.md"
 
 </details>

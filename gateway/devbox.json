@@ -32,6 +32,9 @@
       "serve": [
         "uv run --frozen python -m agent_gateway"
       ],
+      "wire-quarry": [
+        "uv run --frozen python scripts/wire-quarry.py \"$@\""
+      ],
       "tiers": [
         "uv run --frozen python scripts/tiers.py \"$@\""
       ],
