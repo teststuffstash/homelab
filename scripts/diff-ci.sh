@@ -29,14 +29,16 @@
 #   WHAT changed (2026-11-13 — ~40 % of the full runs were a one-task edit; numbers in
 #   docs/spikes/ci-runtime-2026-11.md), each failing open when the base side cannot be read:
 #     devbox.json   only `shell.scripts` entries changed → the rows of those tasks, of every task
-#                   whose script calls one, and of every tracked non-markdown file that calls one
-#                   (`devbox run <task>`); any other key → every row
+#                   whose script calls one, and of every tracked file that calls one (`devbox run
+#                   <task>`; prose and recorded data excluded: *.md, *.json, *.txt, fixtures/,
+#                   worlds/); any other key → every row
 #     devbox.lock   every row except the gateway island's (its tasks run in gateway/'s own devbox;
 #                   the root closure is proven by the warm step every run pays)
 #     diff-ci.sh    the rows whose task or regex differ from the base's (`--dump-map` below)
 #   The base side is origin/master in a full clone, else the PR base via the API
 #   (GITHUB_BASE_REF + GITHUB_REPOSITORY + GH_TOKEN, all present in ci.yaml's diff step).
 set -euo pipefail
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute: --ci-outputs re-invokes itself after the cd
 cd "$(dirname "$0")/.."
 
 # Single-line assignments — ci.yaml `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"`s
@@ -144,7 +146,7 @@ MAP=(
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
   # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
-  "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
+  "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
@@ -263,7 +265,7 @@ if [ "${1:-}" = "--ci-outputs" ]; then
   else
     grep -vE '^devbox\.json$' "$list" >"$match" || true
     grep -qE '^devbox\.lock$' "$list" && lock=true
-    if ! $all && grep -qE '^devbox\.json$' "$list"; then
+    if grep -qE '^devbox\.json$' "$list"; then
       if base_file devbox.json >"$match.dj" 2>/dev/null && tasks=$(devbox_changed_tasks "$match.dj"); then
         # a tracked file that calls a changed task counts as changed (the mgmt fixtures' nested
         # `devbox run yq` class); prose and recorded data (markdown, JSON/text captures, replay
@@ -277,7 +279,7 @@ if [ "${1:-}" = "--ci-outputs" ]; then
     if ! $all && grep -qE '^scripts/diff-ci\.sh$' "$list"; then
       if base_file scripts/diff-ci.sh >scripts/.diff-ci-base.sh 2>/dev/null \
          && maprows=$(bash scripts/.diff-ci-base.sh --dump-map 2>/dev/null) && [ -n "$maprows" ]; then
-        maprows=$(comm -13 <(printf '%s\n' "$maprows" | sort) <(bash "$0" --dump-map | sort) | cut -f1)
+        maprows=$(comm -13 <(printf '%s\n' "$maprows" | sort) <(bash "$SELF" --dump-map | sort) | cut -f1)
       else all=true; fi
       rm -f scripts/.diff-ci-base.sh
     fi
@@ -367,6 +369,9 @@ EOF_STEPS
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
   echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption, and every MAP step gates on its own skip key)"
+  # The --ci-outputs selection's pinned cases ride this invocation: CI already runs it, and its
+  # row matches both files, so a selection edit can never skip its own test.
+  bash scripts/diff-ci-test.sh
   exit 0
 fi
 
