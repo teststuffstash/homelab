@@ -671,6 +671,9 @@ class Policy:
     def from_dict(d: dict) -> Policy:
         if not isinstance(d, dict):
             raise PolicyError("policy: top level must be an object")
+        if "wire" in d:  # GW-WIRE-PROBE: probes and the key allowlist are the operator's read — their own file (GATEWAY_WIRE)
+            raise PolicyError("policy: a `wire` key is refused — probe declarations and the account allowlist live in the "
+                              "declarations file GATEWAY_WIRE names, never in the policy")
         stacks: dict[str, StackPolicy] = {}
         for name, s in (d.get("stacks") or {}).items():
             if not isinstance(s, dict) or not s.get("loop_ns"):
@@ -802,6 +805,9 @@ class Settings:
     benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
     # GW-WIRE-RECORD: the byte bound of one kept vendor answer (an over-bound answer is cut and marked incomplete).
     wire_max_bytes: int = 1_048_576
+    # GW-WIRE-PROBE: the declarations file (probes + the account class's key allowlist). Unset or empty = no
+    # probe goes out and no account string is kept. Its own file, never the policy.
+    wire_path: str = ""
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -834,4 +840,5 @@ class Settings:
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
             wire_max_bytes=int(e.get("GATEWAY_WIRE_MAX_BYTES", "1048576")),
+            wire_path=e.get("GATEWAY_WIRE", "").strip(),
         )

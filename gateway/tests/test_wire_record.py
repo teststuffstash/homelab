@@ -20,6 +20,7 @@ from agent_gateway.codex import CodexBackend, CodexRail
 from agent_gateway.codex_usage import UsagePoll
 from agent_gateway.config import Policy
 from agent_gateway.metrics import Metrics
+from agent_gateway.wire import WireDeclarationError, parse_declarations
 
 from ._catalog_rows import T0, at_offset
 from ._catalog_world import catalog_doc
@@ -211,3 +212,97 @@ async def test_the_credential_never_lands_in_a_record(cworld, vendor, caplog, so
     got_error = rec.get("last_error")
     verdicts(source_class=(rec.get("class"), expected_source_class), last_error=("none" if got_error is None else got_error, expected_last_error),
              record_fields_with_key=(in_record, expected_record_fields_with_key), log_lines_with_key=(lines, expected_log_lines_with_key))
+
+
+# ── The account class's allowlist (GW-WIRE-PROBE's declarations file) ────────────────────────
+async def _probe_answer(tmp_path, settings, secrets, store, clock, codex_store, exchange, keep_keys, answer: str):
+    import dataclasses
+
+    from agent_gateway.app import create_app
+    from agent_gateway.codex import CodexBackend
+
+    from .test_wire_probe import WIRE_CODEX
+    doc = json.loads(WIRE_CODEX)
+    doc["keep_keys"] = {"codex-models": keep_keys}
+    f = tmp_path / "wire.json"
+    f.write_text(json.dumps(doc), encoding="utf-8")
+    client = httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, headers={"content-type": "application/json"}, content=answer.encode())))
+    s = dataclasses.replace(settings, upstreams={**settings.upstreams, "codex": CODEX_BASE}, wire_path=str(f))
+    app = create_app(s, policy=Policy.load(CODEX_POLICY), source=secrets, store=store, client=client, clock=clock,
+                     codex_backend=CodexBackend(codex_store, exchange))
+    attach_json("declarations", doc)
+    await app.state.wire_probe.tick()
+    await client.aclose()
+    return app
+
+
+SLUG = '`{"slug": "fixture-model", "note": "hello"}`'
+UNSET = "`GATEWAY_WIRE` unset, source `codex-usage`"
+# the stored? cell -> the document the record must hold
+STORED = {
+    '`"slug": "fixture-model"`, `"note": {"len": 5}`': {"slug": "fixture-model", "note": {"len": 5}},
+    "both strings as lengths": {"slug": {"len": 13}, "note": {"len": 5}},
+    '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}`': {"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]},
+    "the value as its length": {"slug": {"len": 25}},
+}
+ALLOW_ROWS = [
+    pytest.param("`[slug]`", SLUG, '`"slug": "fixture-model"`, `"note": {"len": 5}`', "loads", id="an allowlisted key keeps its string, every other string its length ⚖"),
+    pytest.param("`[]`", SLUG, "both strings as lengths", "loads", id="no allowlist keeps no string"),
+    pytest.param("`[slug]`", '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}`',
+                 '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}`', "loads", id="an allowlisted key is kept at any depth and in a list"),
+    pytest.param(UNSET, "the observed usage shape", "every string as its length", "—", id="no declarations file keeps no string ⚖"),
+    pytest.param("`[slug]`", '`{"slug": "sk-ant-oat-FAKE…"}`', "the value as its length", "loads",
+                 id="an allowlisted value that matches a credential pattern is still withheld ⚖"),
+]
+
+
+@pytest.mark.parametrize(("keep_keys", "answer", "expected_stored", "expected_load"), ALLOW_ROWS, ids=[p.id for p in ALLOW_ROWS])
+async def test_the_account_classs_allowlist(tmp_path, settings, secrets, store, clock, codex_store, exchange, keep_keys, answer, expected_stored, expected_load):
+    world("policy-codex", upstream="wire-codex")
+    row(keep_keys=keep_keys, answer=answer)
+    if keep_keys == UNSET:
+        from agent_gateway.app import create_app
+        app = create_app(settings, policy=Policy.load(CODEX_POLICY), source=secrets, store=store, clock=clock)
+        raw = json.dumps(usage_doc(clock)).encode()
+        client = httpx.AsyncClient(transport=httpx.MockTransport(
+            lambda r: httpx.Response(200, headers={"content-type": "application/json"}, content=raw)))
+        rail = CodexRail(Policy.load(CODEX_POLICY).rails["codex"], clock, CodexBackend(codex_store, exchange), CODEX_BASE)
+        with when("the codex usage poll reads the account's usage with no declarations file"):
+            await UsagePoll(rail, client, CODEX_USAGE_URL, Metrics(["platform"]), clock, app.state.wire).poll()
+        await client.aclose()
+        stored = _strings_only_as_len(json.loads(app.state.store.wire_get("codex-usage")["body"]))
+        verdicts(stored=("every string as its length" if stored else "a string kept", expected_stored), load=("—", expected_load))
+        return
+    keys = [k.strip() for k in keep_keys.strip("`[]").split(",") if k.strip()]
+    text = answer.strip("`").replace("…", "0123456789")
+    with when(f"the codex-models probe reads an answer with keep_keys {keys}"):
+        app = await _probe_answer(tmp_path, settings, secrets, store, clock, codex_store, exchange, keys, text)
+    stored = json.loads(app.state.store.wire_get("codex-models")["body"])
+    attach_json("the stored record", stored)
+    verdicts(stored=(stored, STORED[expected_stored]), load=("loads", expected_load))
+
+
+# ── What an allowlist may not name ───────────────────────────────────────────────────────────
+NAME_ROWS = [
+    pytest.param("`[email]`", "refused, naming email", id="an identity key can never be allowlisted ⚖"),
+    pytest.param("`[account_id]`", "refused, naming account_id", id="an account id is an identity key"),
+    pytest.param("`[user_id]`", "refused, naming user_id", id="a user id is an identity key"),
+    pytest.param("`[access_token]`", "refused, naming access_token", id="a token-named key is never allowlisted"),
+    pytest.param("`[Set-Cookie]`", "refused, naming Set-Cookie", id="a cookie-named key is never allowlisted"),
+    pytest.param("`[client_secret]`", "refused, naming client_secret", id="a secret-named key is never allowlisted"),
+]
+
+
+@pytest.mark.parametrize(("keep_keys", "expected_load"), NAME_ROWS, ids=[p.id for p in NAME_ROWS])
+def test_what_an_allowlist_may_not_name(keep_keys, expected_load):
+    world("policy-codex", upstream="wire-codex")
+    row(keep_keys=keep_keys)
+    key = keep_keys.strip("`[]")
+    with when(f"a declarations file allowlists {key}"):
+        try:
+            parse_declarations({"keep_keys": {"codex-usage": [key]}}, ["codex"])
+            got = "loads"
+        except WireDeclarationError as e:
+            got = f"refused, naming {key}" if key in str(e) else "refused"
+    verdicts(load=(got, expected_load))

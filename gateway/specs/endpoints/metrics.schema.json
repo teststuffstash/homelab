@@ -415,6 +415,26 @@
         "GW-SESSIONS-ADMIT"
       ]
     },
+    "gateway_wire_probe_total": {
+      "type": "counter",
+      "labels": {
+        "source": {
+          "type": "string",
+          "description": "a probe name the declarations file declares (GW-WIRE-PROBE) — never a free value"
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "no-credential",
+            "fetch-failed"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-WIRE-PROBE"
+      ]
+    },
     "gateway_codex_usage_poll_total": {
       "type": "counter",
       "labels": {

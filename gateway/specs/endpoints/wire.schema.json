@@ -7,6 +7,36 @@
   "$defs": {
     "source_class": { "enum": ["public", "account"], "x-requirements": ["GW-WIRE-RECORD"] },
     "timestamp": { "type": ["string", "null"], "format": "date-time" },
+    "wire_declarations": {
+      "type": "object",
+      "$comment": "The declarations file GATEWAY_WIRE names (GW-WIRE-PROBE): the ONE home of a probe and of the account class's key allowlist — never the policy (a `wire` key there refuses the load), never code. No file, or an empty one, declares nothing. `_`-prefixed keys are comments.",
+      "additionalProperties": false,
+      "patternProperties": { "^_": {} },
+      "properties": {
+        "probes": {
+          "type": "object",
+          "description": "source name -> one GET on a declared rail's upstream, read through the rail's own credential lifecycle and recorded as an `account` source",
+          "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rail", "path", "interval_s"],
+            "properties": {
+              "rail": { "type": "string", "description": "a rail the policy declares (today: codex)" },
+              "path": { "type": "string", "pattern": "^/(?!/)[^?#]*$", "description": "a path on the rail's upstream — no host, no query, never an inference path" },
+              "query": { "type": "object", "additionalProperties": { "type": "string" } },
+              "interval_s": { "type": "integer", "minimum": 60 }
+            }
+          }
+        },
+        "keep_keys": {
+          "type": "object",
+          "description": "account source -> the keys whose string values are kept verbatim (every other string becomes its length); never an identity key, and a credential-shaped value is still withheld",
+          "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      },
+      "x-requirements": ["GW-WIRE-PROBE", "GW-WIRE-RECORD"]
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
