@@ -996,7 +996,7 @@
       "key": "1:kube-prometheus-stack",
       "last_proven": "2026-11-12T23:19:42Z",
       "name": "kube-prometheus-stack",
-      "version": "92.21.1",
+      "version": "92.21.2",
       "where": [
         "argocd/platform/kube-prometheus-stack.yaml"
       ]
@@ -1062,7 +1062,7 @@
       "key": "2:docker.io/grafana/loki",
       "last_proven": "2026-10-21T03:03:16Z",
       "name": "docker.io/grafana/loki",
-      "version": "3.7.9",
+      "version": "3.7.10",
       "where": [
         "argocd/resources/loki/loki.yaml"
       ]
@@ -2344,7 +2344,7 @@
       "key": "20:deuxfleurs/garage (in-cluster chart)",
       "last_proven": null,
       "name": "deuxfleurs/garage (in-cluster chart)",
-      "version": "v2.3.0",
+      "version": "v2.5.0",
       "where": [
         "scripts/vendor-garage-chart.sh"
       ]

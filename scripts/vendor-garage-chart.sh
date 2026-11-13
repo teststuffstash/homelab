@@ -27,8 +27,8 @@
 # PINS — read by Renovate (gitea-tags, depName deuxfleurs/garage) and by scripts/dependency-coverage.py
 # (class 20, docs/dependency-classes.yaml). Keep TAG first, SHA next, no blank line between, bare
 # 40-hex value. SHA is the commit the tag points at; the fetched archive must carry exactly that id.
-GARAGE_CHART_TAG=v2.3.0
-GARAGE_CHART_SHA=7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa
+GARAGE_CHART_TAG=v2.5.0
+GARAGE_CHART_SHA=586726edb0170bb46f604e84fba09e5659610649
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DEST=argocd/charts/garage
