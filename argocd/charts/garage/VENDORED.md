@@ -5,9 +5,9 @@ This is the official Garage Helm chart, vendored into the repo so an ArgoCD sync
 depends on git.deuxfleurs.fr being reachable (boot-from-git principle).
 
 - Source: https://git.deuxfleurs.fr/Deuxfleurs/garage  `script/helm/garage`
-- Tag:    v2.3.0
-- Commit: 7b119c0b4fa58ab3cb6d5db435fe52d990f6a7aa
-- Chart:  0.9.3  (appVersion Garage v2.3.0)
+- Tag:    v2.5.0
+- Commit: 586726edb0170bb46f604e84fba09e5659610649
+- Chart:  0.10.4  (appVersion Garage v2.5.0)
 
 **This directory is GENERATED** by [`scripts/vendor-garage-chart.sh`](../../../scripts/vendor-garage-chart.sh)
 from the two pin lines in that script — never hand-edit a file here except this one's prose. The
