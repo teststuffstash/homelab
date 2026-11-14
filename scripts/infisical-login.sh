@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # SOURCED, never run: a per-run USER login to the in-cluster Infisical as the super admin.
-# Callers: scripts/infisical-harden.sh, tofu/infisical/apply.sh (scripts/infisical-secret.sh
-# carries the same pattern inline, #3375). Run from the repo root with `set -euo pipefail`.
+# Callers: scripts/infisical-secret.sh, scripts/infisical-harden.sh, tofu/infisical/apply.sh.
+# Run from the repo root with `set -euo pipefail`.
 #
 # Why a login and not a stored token: Infisical >= chart 1.12 rejects exp-less tokens past
 # LEGACY_IDENTITY_ACCESS_TOKEN_EXPIRATION_ENFORCED_AT + 90d and caps every machine-identity token
@@ -31,8 +31,9 @@ done
 [ -n "$INF_KP" ] || inf_die "KeePass wallet not found — bash scripts/keepass-init.sh"
 inf_kp_get() { devbox run --quiet -- keepassxc-cli show -q --no-password -k "$INF_KP/homelab.keyx" -a Password "$INF_KP/homelab.kdbx" "$1" 2>/dev/null; }
 
-# RESOLVED binaries: two concurrent `devbox run`s (the backgrounded port-forward + the readiness
-# loop) race on .devbox/gen/scripts/.cmd.sh (2026-10-22, see infisical-secret.sh).
+# RESOLVED binaries, not `devbox run`: two devbox runs at once (the backgrounded port-forward +
+# the readiness loop) race on .devbox/gen/scripts/.cmd.sh and one gets `eval: kubectl: not found`
+# (the port-forward died that way on the host, 2026-10-22).
 KUBECTL="$(devbox run --quiet -- sh -c 'command -v kubectl')"
 CURL="$(devbox run --quiet -- sh -c 'command -v curl')"
 INFISICAL="$(devbox run --quiet -- sh -c 'command -v infisical')"
