@@ -36,10 +36,12 @@
   deliverable is a tests root under `islands/launch/` whose `rule("LAUNCH-…")`-labelled tests run
   the named fixtures; a component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Key rows`), never re-authored.
-- **Gate / deploy**: CI + the code reviewer. On master (2026-11-14) no specs reviewer reads
-  `islands/*/specs` (the claim's `specs` field holds one pair per repo, homelab's = the gateway's)
-  and `gateway/scripts/spec_gate.py` reads `gateway/specs` only — say so in the body so nobody
-  expects a second approval. **Nothing deploys**: no pod, manifest or image reads `islands/`.
+- **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
+  `islands/launch/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
+  this root. No tests root is declared and no evidence exists, so the review sees none: an
+  unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark. `gateway/scripts/spec_gate.py`
+  reads `gateway/specs` only (no spec gate or join ratchet here). A worker whose `Touches:`
+  reaches this root gets the pinned spec process mounted, versioned by `islands/launch/specs/README.md`. **Nothing deploys**: no pod, manifest or image reads `islands/`.
 - **Switch-over is `seat`**, never `queue`/`goal`: making any live caller (a scan, a workflow, a
   launcher, a Sensor) read or call the new component — or retiring an old member — is a separate
   change the seat designs against the old component's slice.

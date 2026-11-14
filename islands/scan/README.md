@@ -111,9 +111,9 @@ unless its build adds an image; its detector + revert drill are unbuilt (⚑
 
 ## Open
 
-- **The spec root has no reader.** On master (2026-11-14) the claim's `specs` field admits one
-  `{root, tests}` pair per repo and homelab's names the gateway's;
-  no specs reviewer reads these pages until it becomes a list.
+- **The spec root has a rows review, no evidence.** homelab's claim lists `islands/scan/specs`
+  under `extraSpecs` (#3379): the specs reviewer reviews these pages' rows, with no tests root and
+  no evidence, so an unproven row needs its `🚧 WIP` / `⚑ gap` mark.
 - **No evidence pipeline.** The replay harness asserts action streams, not Allure stories; every
   requirement is `🚧 WIP` until a `rule()`-labelled runner exists (P4/P5 of §The plan, #1224) —
   the first deliverable of the build.
