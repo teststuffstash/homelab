@@ -189,7 +189,10 @@ devbox run github-secrets-sync -- --check   # inventory + source probe (jail-saf
 ```
 
 A stack that grows a publish/release workflow adds its ROW to the script's mapping in the same
-change (new-stack.sh step G says so). After any Garage metadata restore, run the sync — copies
+change (new-stack.sh step G says so). **Forgejo Actions copies ride the same table**: a row whose
+repo is `forgejo:<owner>/<repo>` is written through the Forgejo API with the wallet's
+`forgejo-api-token`, so those rows run from the jail (`devbox run github-secrets-sync -- --forge
+forgejo`), and `--check` lists their secret names as proof the copy exists. After any Garage metadata restore, run the sync — copies
 are the one consumer class no reconcile heals (docs/garage.md §metadata-restore sweep).
 
 The jail PAT deliberately lacks the Secrets permission (verified 403 again 2026-08-04, on both
