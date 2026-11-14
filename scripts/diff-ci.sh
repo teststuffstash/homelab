@@ -162,6 +162,11 @@ MAP=(
   # §Gate A); its only input is the script. Its ci.yaml step lands operator-direct, like the row above.
   "pr-open-self-test:^agents/pr-open\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
+  # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
+  # as rule()-labelled cases + the stub control; enters the island's own devbox). GitHub CI has no step
+  # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
+  # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
+  "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
   # *.md/*.sh/*.py/*.yaml/*.yml (code comments included) and resolve them against living .md,

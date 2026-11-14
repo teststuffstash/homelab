@@ -32,8 +32,8 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 | Requirement | section | Status |
 |---|---|---|
-| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP — no evidence pipeline yet (fixture: `gateway-admit`); the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP — no evidence pipeline yet (fixtures: `gateway-admit`, `gateway-sessions`) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
+| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3393 (fixture: `gateway-admit` — its 9 rows run locally in `islands/launch/tests` against the old member `agents/gateway-admit.sh`); the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3393 (fixtures: `gateway-admit` — 3 rows run locally against the old member; `gateway-sessions`) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
 | [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP — no evidence pipeline yet (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap: every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
@@ -75,14 +75,14 @@ all empty).
 
 | description | world | args | reply | rc? | outputs? |
 |---|---|---|---|---|---|
-| bound-dispatch | gw-dispatch-bound | `--role coordinator --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, prelude set |
-| unbound-dispatch | gw-dispatch-unbound | `--role responder --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
-| defer | gw-defer | `--role coordinator --round 3 --attempt 2 --bind …/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
-| http-503 | gw-error | `--role responder --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
+| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
+| unbound-dispatch | gw-dispatch-unbound | `--role responder --task 'respond homelab#7' --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
+| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind …/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
+| http-503 | gw-error | `--role responder --task t --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
 | no-mode | launcher-vars | `--role responder --task t` | — | 2 | — |
-| both-modes | launcher-vars | `--env-file F --bind a/b/c` | — | 2 | — |
-| bad-bind | launcher-vars | `--bind platform-agents/p1` | — | 2 | — |
-| bad-round | launcher-vars | `--round x --bind a/b/c` | — | 2 | — |
+| both-modes | launcher-vars | `--role responder --task t --env-file F --bind a/b/c` | — | 2 | — |
+| bad-bind | launcher-vars | `--role coordinator --task t --bind platform-agents/p1` | — | 2 | — |
+| bad-round | launcher-vars | `--role coordinator --task t --round x --bind a/b/c` | — | 2 | — |
 | missing-role | launcher-vars | `--task t --env-file F` | — | 2 | — |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
