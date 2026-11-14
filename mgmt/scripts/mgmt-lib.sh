@@ -898,6 +898,22 @@ mgmt_runner_rest() {
   awk -F'\t' 'NR == FNR { n = split($6, c, " "); for (i = 1; i <= n; i++) cov[c[i]] = 1; next }
               $1 != "" && !($1 in cov)' <(printf '%s\n' "$1") -
 }
+# mgmt_runner_admit <policy> <root> <plan-out> <active candidate lines> <changes on stdin> → may the box
+# recreate a candidate VM this tick? Only when the rest of the plan (what the candidates' `covered` sets do
+# not take) is the box's anyway: the Talos precondition clean, every remaining change inside the allowlist.
+# A pending admitted helm release does NOT stand it down: the scoped `-target` apply never reaches it, and
+# the helm bracket's `helm-not-alone` rule can only hold AFTER the last VM — standing down for it deadlocks
+# both. rc 0 admitted · rc 1 not admitted (stdout: why) · rc 2 unreadable (stdout: what) — the caller
+# refuses on 2, never reads it as "not admitted".
+mgmt_runner_admit() {
+  local pol="$1" root="$2" out="$3" ract="$4" rest outside thits
+  rest="$(mgmt_runner_rest "$ract")"
+  thits="$(mgmt_talos_gate "$pol" "$root" "$out")" || { echo "Talos precondition unreadable"; return 2; }
+  outside="$(printf '%s\n' "$rest" | mgmt_apply_allowed "$pol" "$root")" || { echo "apply allowlist unreadable"; return 2; }
+  [ -z "$thits" ] || { echo "Talos precondition: $(head -1 <<<"$thits" | cut -f1)"; return 1; }
+  [ -z "$outside" ] || { echo "outside the allowlist: $(cut -f1 <<<"$outside" | tr '\n' ' ' | sed 's/ $//')"; return 1; }
+  return 0
+}
 # mgmt_runner_scope <policy> <root> <vm-address> <covered> <scoped changes on stdin> → the box's own
 # read of the SCOPED plan before it hands the plan id to the verb (the verb re-checks its VM half):
 # one hit per offending change, "rule<TAB>address<TAB>detail"; empty = in scope.
