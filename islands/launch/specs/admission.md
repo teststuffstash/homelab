@@ -118,7 +118,7 @@ the entire `GW_DEFER_REASON` with no such prefix.
 |---|---|---|---|---|---|
 | credential-in-answer ⚖ | gw-dispatch-bound | `session.token` + `env` in a bound answer, no `env_keys` / `pull_url`; harness `opencode` | yes | 1 (exit) | `a credential in a bound answer, env_keys, pull_url, env_keys lacks OPENCODE_CONFIG_CONTENT` |
 | bad-pull-url | gw-dispatch-bound | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
-| unusable-env | gw-dispatch-bound | `env_keys` lacks the opencode model key | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
+| unusable-env | gw-dispatch-bound | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
 | harness-not-run | gw-dispatch-bound | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
 | unbound-answer-bound | gw-dispatch-unbound | an unbound call answered without `env` | yes | 3 | `env` |
 | unbound-env-newline | gw-dispatch-unbound | an `env` value with a newline | yes | 3 | `env` |
