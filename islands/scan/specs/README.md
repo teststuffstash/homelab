@@ -30,19 +30,21 @@ What this island adds, by rule:
 
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
-  ⚑ gap: no reader today — the claim's `specs` field admits ONE `{root, tests}` pair per repo and
-  homelab's names the gateway's (`agents/specs-reviewer-session.sh` `pack_roots`); this root is
-  invisible to the specs reviewer until the field becomes a list.
+  The specs reviewer reviews this root through `extraSpecs`; its pack carries no evidence.
 - **Rule 3 (IDs):** the prefix is `SCAN-`; areas `WAKE`, `CLAUSE`, `HOLD`, `LANE`, `DISPATCH`,
   `GH`, `UPDATER`, `REFLEX`, `HANDOFF`, `SIGNAL`.
-- **Rule 5 (evidence):** ⚑ **none is generated.** The proving tests are the replay fixtures under
-  `agents/replay/fixtures/` (the tests-root candidate; P4/P5 of §The plan, #1224). The harness
-  asserts an *action stream* per fixture — it emits no Allure story, carries no `rule()` label and
-  no `git.commit` stamp. So every requirement whose fixture exists carries the evidence-block
-  shell AND `🚧 WIP — no evidence pipeline yet (fixture: <dir>)` in its index Status; a
-  requirement with no fixture carries the unverified marker. Verified-ness is derived, never
-  declared: today nothing on these pages is verified in rule 5's sense, even where the fixture is
-  green in `ci`.
+- **Rule 5 (evidence):** The tests root is `islands/scan/tests/`, run by
+  `islands/scan/scripts/ci.sh` at the worker's `pr-open` through `diff-ci`. GitHub CI does not
+  run it yet (seat issue #3391).
+  A case drives the island's code through one replay row of the fixture the requirement names,
+  carries `rule("SCAN-…")` and the row id, and writes raw Allure results locally. Nothing is
+  published, and no `git.commit` stamp is attached.
+  A requirement with rule-labelled tests says `🚧 WIP → #3389 — rule-labelled tests in <file>;
+  no evidence publisher for this root (fixture: <dir>)` in its Status. A requirement whose
+  fixture exists but has no tests yet keeps `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`.
+  A requirement with no fixture keeps the unverified marker.
+  Verified-ness is derived, never declared: nothing on these pages is verified in rule 5's sense
+  until an evidence publisher exists for this root.
 - **Rule 7 (coupling):** each page's sibling schema annotates paths with `x-requirements`. ⚑ gap:
   no spec gate reads them (the gateway's `gateway/scripts/spec_gate.py` is scoped to `gateway/`).
 - **Rows ⇄ fixtures (CONVENTIONS § The intent column):** a table's `description` cell is the
@@ -129,8 +131,8 @@ Start here: **[use-cases/uc-1-queued-issue.md](use-cases/uc-1-queued-issue.md)**
 | [SCAN-REFLEX-BREAKER](review-reflex.md#scan-reflex-breaker) | review-reflex | an impossible verdict count trips `agent/error`; the round cap escalates to `agent/arbitrate` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-breaker`) |
 | [SCAN-REFLEX-REARM](review-reflex.md#scan-reflex-rearm) | review-reflex | a worker PR that arrived un-armed is armed (C9), never a major or a stacked PR | 🚧 WIP — no evidence pipeline yet (fixture: `c9-rearm`) |
 | [SCAN-REFLEX-DECORRELATE](review-reflex.md#scan-reflex-decorrelate) | review-reflex | the reviewer is told the model the fix rode on · `⚑ gap`: read from the old proxy's `/report/latest` | 🚧 WIP — no evidence pipeline yet (fixture: `decorrelate-resolution`) |
-| [SCAN-HANDOFF-GATE](major-handoff.md#scan-handoff-gate) | major-handoff | `major/awaiting-human` only with the bot's APPROVED at head carrying the four headings; exit 0/3/4/5 | 🚧 WIP — no evidence pipeline yet (fixture: `major-handoff`) |
-| [SCAN-HANDOFF-ARM](major-handoff.md#scan-handoff-arm) | major-handoff | a packaging-only chart major arms instead of parking | 🚧 WIP — no evidence pipeline yet (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-GATE](major-handoff.md#scan-handoff-gate) | major-handoff | `major/awaiting-human` only with the bot's APPROVED at head carrying the four headings; exit 0/3/4/5 | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-ARM](major-handoff.md#scan-handoff-arm) | major-handoff | a packaging-only chart major arms instead of parking | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
 | [SCAN-SIGNAL-PHASE](signals.md#scan-signal-phase) | signals | the scan's phase marker, and the wedge alert's two branches | 🚧 WIP — no evidence pipeline yet (fixture: `scan-phase-marker`, `scan-wedge-alert`) |
 | [SCAN-SIGNAL-DISPATCH](signals.md#scan-signal-dispatch) | signals | dispatch latency rows and the edge/cron wake gauges | 🚧 WIP — no evidence pipeline yet (fixture: `dispatch-phase`) |
 | [SCAN-SIGNAL-CLASS](signals.md#scan-signal-class) | signals | one `agent_item_class` row per item per pass, its since-timestamp carried | 🚧 WIP — no evidence pipeline yet (fixture: `item-class`, `item-class-batch`) |
