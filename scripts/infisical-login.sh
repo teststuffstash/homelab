@@ -38,11 +38,13 @@ CURL="$(devbox run --quiet -- sh -c 'command -v curl')"
 INFISICAL="$(devbox run --quiet -- sh -c 'command -v infisical')"
 [ -x "$KUBECTL" ] && [ -x "$CURL" ] && [ -x "$INFISICAL" ] || inf_die "could not resolve kubectl/curl/infisical from the devbox env"
 
-# Org = the homelab project's org (a user login needs it; the DB is the one reader that has it).
+# Org = the autoBootstrap org (a user login needs it; the DB is the one reader that has it). Keyed
+# on organizations, NOT the homelab project: tofu/infisical creates that project, so a day-1
+# rebuild would have no row to read.
 INF_PGPOD="$("$KUBECTL" "${INF_KC[@]}" -n infisical get pods -l cnpg.io/cluster=infisical-pg -o jsonpath='{.items[0].metadata.name}')"
 INF_ORG_ID="$("$KUBECTL" "${INF_KC[@]}" -n infisical exec "$INF_PGPOD" -c postgres -- \
-  psql -U postgres -d infisical -tAc "select \"orgId\" from projects where slug='homelab';" | tr -d '[:space:]')"
-[ -n "$INF_ORG_ID" ] || inf_die "homelab project's org not found in the Infisical DB"
+  psql -U postgres -d infisical -tAc 'select id from organizations order by "createdAt" limit 1;' | tr -d '[:space:]')"
+[ -n "$INF_ORG_ID" ] || inf_die "no organization in the Infisical DB — is autoBootstrap done?"
 
 INF_STAGE="$(umask 077; mktemp -d)"
 mkdir -m 700 "$INF_STAGE/.home"
@@ -66,5 +68,5 @@ INF_ADMIN_PASSWORD="$(inf_kp_get infisical-admin-password)" || INF_ADMIN_PASSWOR
 INF_TOKEN="$(HOME="$INF_STAGE/.home" INFISICAL_EMAIL="$INF_ADMIN_EMAIL" INFISICAL_PASSWORD="$INF_ADMIN_PASSWORD" \
   INFISICAL_ORGANIZATION_ID="$INF_ORG_ID" "$INFISICAL" login --method=user \
   --domain "$INF_HOST/api" --plain --silent)" || INF_TOKEN=""
-unset INF_ADMIN_PASSWORD
+unset INF_ADMIN_PASSWORD INF_ADMIN_EMAIL
 [ -n "$INF_TOKEN" ] || inf_die "admin login failed (wallet creds stale? Infisical down?)"
