@@ -357,7 +357,10 @@ spec:
               (the brief's outcomes; \`unchanged\` = a \`reread:\` input whose wait still holds — you wrote
               nothing; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap; \`read\` = an
               \`escape:\` PR you read); <refs> is a comma-separated list of the issue/PR refs you wrote or
-              relied on (owner/repo#n), or \`-\`. For every \`## Escape records\` record also print
+              relied on (owner/repo#n), or \`-\`. An issue you FILED this sitting (a \`file\`, a parity issue, a
+              split part) is listed in the \`<refs>\` of the input it came from AND gets its own line with its own
+              ruling — \`INTAKE-RULED: <owner/repo>#<n> queue|goal|seat|standing|close <refs>\` (dry-run: \`#new-<k>\`);
+              a filed queue/goal issue is reviewed and labelled like any other. For every \`## Escape records\` record also print
                 INTAKE-ESCAPE: <pr id> <finding id> <class A|B|C|D|E|X> <the intake check it names, one line>
               In dry-run mode print the lines you WOULD print.
               BRIEF
@@ -404,7 +407,22 @@ spec:
                         | select(.outcome | IN("queue","goal","seat","fold","close","requeue","standing","split","file","unchanged","deferred","read")) ]
                     | unique_by(.input)' > /tmp/ruled.json 2>/dev/null || echo '[]' > /tmp/ruled.json
               NR="$(jq '[.[] | select(.outcome != "deferred")] | length' /tmp/ruled.json)"
-              NQ="$(jq '[.[] | select(.outcome == "queue" or .outcome == "goal" or .outcome == "requeue")] | length' /tmp/ruled.json)"
+              # an issue this sitting FILED and ruled in the same pass (a `file`, a parity issue, a split part — its id is a
+              # ref of an input's ruling) carries its own ruling line: not a ledger entry (only inputs re-present), but a
+              # queue/goal ruling the review stage, the labels and the bell must see
+              grep -oE '^ *INTAKE-RULED: [^ ]+ [a-z-]+( [^ ]+)?' /tmp/intake.log | sed 's/^ *INTAKE-RULED: //' \
+                | jq -R -s --slurpfile r /tmp/ruled.json '
+                    ([$r[0][] | .refs[]] | unique) as $filed | ([$r[0][] | .input]) as $ins
+                    | [ split("\n")[] | select(length > 0) | split(" ")
+                        | {input: .[0], outcome: .[1], refs: ((.[2] // "-") | if . == "-" then [] else split(",") end)}
+                        | select(.input as $i | ($filed | index($i)) and ($ins | index($i) | not))
+                        | select(.outcome | IN("queue","goal","seat","standing","close")) ] | unique_by(.input)' > /tmp/ruled-filed.json 2>/dev/null || echo '[]' > /tmp/ruled-filed.json
+              jq -s '.[0] + .[1]' /tmp/ruled.json /tmp/ruled-filed.json > /tmp/ruled-q.json 2>/dev/null || cp /tmp/ruled.json /tmp/ruled-q.json
+              # queued = queue-class rulings of inputs + of filed issues no input's queue-class ruling already names (no double count)
+              NQ="$(jq -n --slurpfile r /tmp/ruled.json --slurpfile f /tmp/ruled-filed.json '
+                    def q: select(.outcome == "queue" or .outcome == "goal" or .outcome == "requeue");
+                    ([$r[0][] | q]) as $rq | ([$rq[] | .refs[]]) as $named
+                    | ($rq | length) + ([$f[0][] | q | select(.input as $i | $named | index($i) | not)] | length)')"
               # the escape read's records: one per blocking finding of an escape input of THIS run
               grep -oE '^ *INTAKE-ESCAPE: [^ ]+ [^ ]+ [A-EX]( .*)?$' /tmp/intake.log | sed 's/^ *INTAKE-ESCAPE: //' \
                 | jq -R -s --slurpfile sel /tmp/sel.json '
@@ -428,7 +446,7 @@ spec:
               REPO_SLUG="${ORG:-teststuffstash}/homelab"
               _re_repo="$(printf '%s' "$REPO_SLUG" | sed 's/\./\\./g')"
               grep -oE '^ *INTAKE-HOLD: [^ ]+ add=[^ ]+' /tmp/intake.log | sed 's/^ *INTAKE-HOLD: //' \
-                | jq -R -s --arg re "^${_re_repo}#([0-9]+|new-[0-9]+)\$" --slurpfile ruled /tmp/ruled.json '
+                | jq -R -s --arg re "^${_re_repo}#([0-9]+|new-[0-9]+)\$" --slurpfile ruled /tmp/ruled-q.json '
                     ([ $ruled[0][] | select(.outcome | IN("queue","goal")) | . as $r | ([.input] + .refs)[] | {ref: ., outcome: $r.outcome} ]) as $refs
                     | [ split("\n")[] | select(length > 0) | capture("^(?<ref>[^ ]+) add=(?<add>[^ ]+)$")
                         | select(.ref | test($re)) | . as $h
@@ -438,7 +456,7 @@ spec:
                 > /tmp/holds.json 2>/dev/null || echo '[]' > /tmp/holds.json
               # the review units: kind, issue keys (the first is the unit's head — a Goal, or the one issue), base
               grep -oE '^[ >*`-]*(unit|rows): [^ `]+( +#[^ `]+)* +base=[0-9a-f]{7,40}' /tmp/intake.log | sed -E 's/^[ >*`-]*//' \
-                | jq -R -s --arg re "^${_re_repo}#([0-9]+|new-[0-9]+)\$" --slurpfile ruled /tmp/ruled.json '
+                | jq -R -s --arg re "^${_re_repo}#([0-9]+|new-[0-9]+)\$" --slurpfile ruled /tmp/ruled-q.json '
                     ([ $ruled[0][] | select(.outcome | IN("queue","goal")) | ([.input] + .refs)[] | select(test($re)) | sub(".*#"; "") ]) as $keys
                     | [ split("\n")[] | select(length > 0)
                         | capture("^(?<kind>unit|rows): (?<head>[^ ]+)(?<rest>( +#[^ ]+)*) +base=(?<base>[0-9a-f]+)$")
@@ -698,7 +716,7 @@ spec:
               done < <(jq -r '.[] | [.ref, .key, (.add | join(",")), .outcome] | @tsv' /tmp/holds.json)
               # a queue/goal ruling none of whose refs is held: nothing labels it (review-repair only)
               UNHELD="$(jq -c --slurpfile h /tmp/holds.json '[ .[] | select(.outcome | IN("queue","goal"))
-                  | select(([.input] + .refs) as $r | [$h[0][].ref] | any(. as $x | $r | index($x)) | not) | .input ]' /tmp/ruled.json 2>/dev/null)" || UNHELD='[]'
+                  | select(([.input] + .refs) as $r | [$h[0][].ref] | any(. as $x | $r | index($x)) | not) | .input ]' /tmp/ruled-q.json 2>/dev/null)" || UNHELD='[]'
               [ -n "$UNHELD" ] || UNHELD='[]'
               [ "$REVIEW" = review-repair ] && [ "$UNHELD" != "[]" ] && echo "⚠ island-intake: queue/goal ruling(s) with no INTAKE-HOLD line — the launcher cannot label them: $UNHELD"
               # the report's `## Escape records` section, verbatim (the receipt carries it beside the parsed lines)
@@ -709,12 +727,12 @@ spec:
                     --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" \
                     --arg review "$REVIEW" --arg ps "$P_STATUS" --arg pr "$P_RAIL" --arg pm "$P_MODEL" \
                     --argjson labelled "$NL" --argjson unheld "$UNHELD" --rawfile escmd /tmp/escape-records.md \
-                    --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json --slurpfile holds /tmp/holds.json \
+                    --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json --slurpfile filed /tmp/ruled-filed.json --slurpfile holds /tmp/holds.json \
                     --slurpfile units /tmp/units.json --slurpfile lenses /tmp/lenses.json \
                     --slurpfile findings /tmp/findings.json --slurpfile escapes /tmp/escapes.json \
                     '{schema: "island-intake-receipt/v1", island: $island, mode: $mode, ts: $ts, run: $run,
                       session_ran: true, model: $model, rail: $rail,
-                      inputs: ($sel[0].inputs | map(.id)), counts: $sel[0].counts, ruled: $ruled[0],
+                      inputs: ($sel[0].inputs | map(.id)), counts: $sel[0].counts, ruled: $ruled[0], ruled_filed: $filed[0],
                       review: {mode: $review, held: [$holds[0][].ref], units: $units[0], labelled: $labelled, unheld: $unheld,
                                lenses: [$lenses[0][] | del(.output)],
                                ran: ([$lenses[0][] | select(.status == "ran")] | length > 0),

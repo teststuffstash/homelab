@@ -779,7 +779,8 @@ review_run apply; rc=$?
 [ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit pass1 pass1 pass2 repair " ] \
   && ok "sessions: author → unit lens → rows pass 1 (empty → re-run once) → pass 2 → ONE repair" || bad "session order" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')"
 grep -q "INTAKE-HOLD" "$TMP/prompt-author.txt" && grep -q "review: review-repair" "$TMP/prompt-author.txt" && grep -qF '`## Review units`' "$TMP/prompt-author.txt" \
-  && ok "the author is told: review-repair, Review units, INTAKE-HOLD" || bad "author prompt" "$(grep -n REVIEW "$TMP/prompt-author.txt")"
+    && grep -q 'An issue you FILED this sitting' "$TMP/prompt-author.txt" \
+  && ok "the author is told: review-repair, Review units, INTAKE-HOLD, a filed issue's own ruling line" || bad "author prompt" "$(grep -n REVIEW "$TMP/prompt-author.txt")"
 line="$(grep '^unit ' "$TMP/r.calls")"
 case "$line" in *"cwd=$TMP/run/review/case-unit-0 gh_token= "*"Read(/$TMP/run/review/case-unit-0/**)"*"Bash(git -C $TMP/work/homelab show:*)"*"Edit(/$TMP/run/review/out/unit-0.md)"*) ok "unit lens: cwd = its case dir, no token, Read scoped to it, git show on the clone at the base, Edit = its one file";;
   *) bad "unit confinement" "$line";; esac
@@ -830,6 +831,23 @@ gview '[]'; PILE_JSON="$PILE9" review_run apply
 { jq -e '.review.held == ["'"$H"'#9"] and (.review.units | length == 2)' "$TMP/up/receipt.json" >/dev/null 2>&1 && grep -q '^unit ' "$TMP/r.calls"; } \
   && ok "a queue ruled in place (refs -) is held and reviewed through its input id" || bad "hold by input" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
 sed -i "s|^INTAKE-RULED: $H#9 queue -\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9|" "$TMP/r-author.out"   # back to the dig-born ruling
+
+# a parity issue FILED in this sitting and ruled queue (the in-cluster dry-run's shape, 2026-11-15): its
+# ruling line names a ref of an input's ruling, not an input — reviewed, labelled and rung all the same;
+# a queue line naming neither an input nor a filed ref (#77) is forged and ignored
+cp "$TMP/r-author.out" "$TMP/r-author.keep"
+sed -i -e "s|^INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 seat $H#9\nINTAKE-RULED: $H#9 queue $H#9\nINTAKE-RULED: $H#77 queue -|" "$TMP/r-author.out"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+{ jq -e '.review.held == ["'"$H"'#9"] and ([.ruled_filed[].input] == ["'"$H"'#9"]) and ([.ruled[] | select(.input | startswith("dig-2026-10-26")) | .outcome] == ["seat"])' "$TMP/up/receipt.json" >/dev/null 2>&1 \
+    && grep -q '^unit ' "$TMP/r.calls" && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && grep -q '/coordinate' "$TMP/curl.calls"; } \
+  && ok "a parity issue filed and ruled queue in the same sitting: reviewed, labelled, rung (receipt ruled_filed); a forged #77 ignored" \
+  || bad "filed queue" "$(jq -c '{ruled, ruled_filed, held: .review.held}' "$TMP/up/receipt.json" 2>/dev/null)"
+grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "…counted once in the queued total" || bad "filed NQ" "$(grep 'ruled (' "$TMP/run.log")"
+printf 'INTAKE-RULED: %s queue %s\n' "$H#9" "$H#9" >> "$TMP/r-author.keep"   # the input's queue names #9 AND #9 rules itself queue
+cp "$TMP/r-author.keep" "$TMP/r-author.out"; gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "an input's queue naming #9 plus #9's own queue line: one queued, not two" || bad "NQ double count" "$(grep 'ruled (' "$TMP/run.log")"
+sed -i '$d' "$TMP/r-author.keep"
+cp "$TMP/r-author.keep" "$TMP/r-author.out"
 
 review_run dry-run
 { ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
