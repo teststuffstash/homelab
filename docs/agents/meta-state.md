@@ -18,9 +18,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** OPERATOR-OWED: admin-merge **#3348** (`minRunners` 1 → 3;
-  `pin-only-lint` red by design, seat review APPROVE posted on the PR): `gh pr merge 3348 --repo teststuffstash/homelab --squash --admin`.
-  ~7 days after it syncs: re-run the burst-pickup table (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) —
+- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** **#3348** (`minRunners` 1 → 3) merged + synced
+  2026-11-14 09:35Z (live ARS reads 3). On/after **2026-11-21**: re-run the burst-pickup table (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) —
   PR job pickup by jobs-just-ahead should flatten toward ~3 s; if not, raise again or read the listener. Also expect
   `GithubCiWallTimeDrift` (week-over-week since #3360) to fire once on homelab push (1.30 at the change) — a true positive
   about the pre-speedup creep; it clears as the week's median falls. #3362 (reconciler: batched reads, identical output
