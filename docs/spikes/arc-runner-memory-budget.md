@@ -90,7 +90,7 @@ What that settles, question by question:
    accepts a resize before any container runs, and the kubelet starts the container at the new
    size. Bind → runner start is ~5 s live (dind at +3 s, runner at +5 s). The cold-start race
    closes without RBAC: the runner command waits (≤ ~20 s) while
-   `/sys/fs/cgroup/memory.max` reads `max`. The warm runner (`minRunners: 1`) is resized long
+   `/sys/fs/cgroup/memory.max` reads `max`. The warm runners (`minRunners`) are resized long
    before a job arrives.
 2. **QoS:** adding a limit keeps a Burstable pod Burstable, which is allowed. The forbidden moves
    are QoS changes, removing a request or limit, and touching a BestEffort pod. **The template
