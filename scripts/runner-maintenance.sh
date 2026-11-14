@@ -92,6 +92,7 @@ MGMT_TF="${MGMT_TF:-$ROOT/mgmt/scripts/mgmt-tf.sh}"
 # (registrations online with every label, the exporter up) plus the cluster compare; a runner change
 # that breaks a stack's build surfaces as that stack's red CI, which the stack reports or fixes itself
 # (version bumps on its side, never a migration). Declared, not silenced: the responder still sees them.
+# The window opens `--no-ci` for the same reason: its close skips the stranded-CI probe (gh; the box has none).
 CI_OUTCOME_ALERTS="GithubWorkflowRunFailed"
 MAINT="${MAINT_WINDOW:-$ROOT/scripts/maintenance-window.sh}"
 SEATWIN="${SEAT_WINDOW:-$ROOT/agents/seat-window.sh}"
@@ -322,7 +323,7 @@ cmd_run() { # <plan-id> <vm>
   mkdir -p "$dir"; log "evidence → $dir"
   local hours=$(( (${DRAIN_TIMEOUT:-3600} + ${VERIFY_TIMEOUT:-1800} + ${COMPARE_SETTLE:-600} + 1800 + 3599) / 3600 ))
   bash "$MAINT" open --reason "ci-runner VM replace: $vm, plan $plan — scripts/runner-maintenance.sh" \
-    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" --expect "$CI_OUTCOME_ALERTS" \
+    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" --expect "$CI_OUTCOME_ALERTS" --no-ci \
     > "$dir/window-open.log" 2>&1 || { cat "$dir/window-open.log" >&2; log "run: window did not open — not draining"; exit 3; }
   local wid; wid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' "$dir/window-open.log")"; wid="${wid%%$'\n'*}"
   [ -n "$wid" ] || { log "run: could not read the window id from 'open' — not draining ('devbox run maint -- list')"; exit 3; }

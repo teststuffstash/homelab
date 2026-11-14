@@ -829,6 +829,18 @@ out="$(FAKE_ALERTS="Watchdog Det Other" mw9 close --id w4)"; rc=$?
 [ "$rc" -eq 0 ] && [ ! -e "$S9/state/w4" ] && ok "close succeeds with only declared alerts off baseline" || bad "declared close rc=$rc: $out"
 out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "bad" --expect 'Det Other')"; rc=$?
 [ "$rc" -eq 64 ] && ok "open --expect refuses anything but comma-separated names" || bad "bad --expect rc=$rc: $out"
+# 9c'. `open --no-ci`: check/close skip the stranded-CI probe — a failing gh (the box has none) neither
+# blocks nor prints UNREADABLE; a window opened without it still reads CI (and blocks on a dead gh).
+out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "no-ci" --no-ci)"; rc=$?
+nid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' <<<"$out" | head -1)"
+[ "$rc" -eq 0 ] && [ -n "$nid" ] && [ "$(jq -r .no_ci "$S9/state/$nid/meta.json")" = true ] && ok "open --no-ci records it in the slot" || bad "open --no-ci rc=$rc id=$nid: $out"
+out="$(FAKE_GH_FAIL=1 FAKE_ALERTS="Watchdog" mw9 close --id "$nid")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "CI probe skipped" <<<"$out" && ! grep -q "CI status UNREADABLE" <<<"$out" && [ ! -e "$S9/state/$nid" ] \
+  && ok "close of a --no-ci window succeeds with gh failing" || bad "no-ci close rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "with-ci")"; nid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' <<<"$out" | head -1)"
+out="$(FAKE_GH_FAIL=1 FAKE_ALERTS="Watchdog" mw9 check --id "$nid")"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "CI status UNREADABLE" <<<"$out" && ok "…without --no-ci a dead gh still blocks (strict by default)" || bad "with-ci check rc=$rc: $out"
+FAKE_ALERTS="Watchdog" mw9 close --id "$nid" --force >/dev/null
 
 # 9d. node-maintenance `up` on a VM: no MAC in the DHCP source, so the node is STARTED on the
 # hypervisor var.nodes declares (`qm start <vmid>` over ssh, as host-maintenance.sh's hv()), then the

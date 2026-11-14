@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply] [--expect A,B]
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply] [--expect A,B] [--no-ci]
 #   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease; new-alert diff drops Watchdog/InfoInhibitor + the window's claims
 #   bash scripts/maintenance-window.sh watch [--id <window-id>] [--replace] [--tick <s>] [--ticks <n>]   # the background alert watch: one per window, prints each NEW name once, renews the lease every tick
 #   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — `watch` calls it every tick
@@ -349,7 +349,7 @@ baseline_readable() { # <snapshot-file>
 }
 
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply="" expect=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply="" expect="" no_ci=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=1; shift ;;
@@ -359,6 +359,7 @@ cmd_open() {
       --hours)  hours="$2";  shift 2 ;;
       --node)   node="$2";   shift 2 ;;
       --expect) expect="${2:-}"; shift 2 ;;   # names check/close report EXPECTED (declared) — header §EXPECTED ALERTS
+      --no-ci)  no_ci=true; shift ;;          # check/close skip the stranded-CI probe (needs gh; not every act's signal)
       *) echo "unknown arg: $1" >&2; exit 64 ;;
     esac
   done
@@ -405,8 +406,8 @@ cmd_open() {
   printf '%s' "$id" > "$pend/window-id"
   jq -n --arg id "$id" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg until "$until_" --argjson lease "$([ -n "$hours" ] && echo false || echo true)" \
-        --arg node "$node" --argjson expect "$expect_j" \
-        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease, node:$node, expect:$expect}' > "$pend/meta.json"
+        --arg node "$node" --argjson expect "$expect_j" --argjson no_ci "$no_ci" \
+        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease, node:$node, expect:$expect, no_ci:$no_ci}' > "$pend/meta.json"
   mv "$pend" "$STATE_DIR/$id"
   echo "  maintenance-window slot: $id — pass '--id $id' to check/renew/claim/close if any other session may have a window open"
   [ "$expect_j" = '[]' ] || echo "  expecting $(jq -r 'join(", ")' <<<"$expect_j") — check/close report them EXPECTED (declared), not blocking; NOT a silence, the responder still sees them"
@@ -526,11 +527,12 @@ classify_off_baseline() { # <baseline-json> <now-json>
 # The slot's recorded context for the gate: claimed names (cmd_claim appends), the `--expect` list
 # and the `--node` (cmd_open writes meta.json). Idempotent; `watch` calls it every tick for claims.
 load_slot_meta() {
-  CLAIMED='[]'
+  CLAIMED='[]'; NO_CI=false
   [ ! -s "$STATE_DIR/$SLOT/claimed" ] || CLAIMED="$(jq -Rsc 'split("\n")|map(select(length>0))|unique' "$STATE_DIR/$SLOT/claimed")"
   [ ! -f "$STATE_DIR/$SLOT/meta.json" ] || {
     EXPECTED="$(jq -c '.expect // []' "$STATE_DIR/$SLOT/meta.json")"
-    WIN_NODE="$(jq -r '.node // ""' "$STATE_DIR/$SLOT/meta.json")"; }
+    WIN_NODE="$(jq -r '.node // ""' "$STATE_DIR/$SLOT/meta.json")"
+    NO_CI="$(jq -r '.no_ci // false' "$STATE_DIR/$SLOT/meta.json")"; }
 }
 
 # The cluster half of `check`: probes 1–4 of <now> against <baseline>, one ok/⚠ line each.
@@ -604,6 +606,9 @@ cmd_check() {
   echo "== check vs baseline ($(jq -r .at <<<"$b"), window $SLOT) =="
   compare_snapshots "$b" "$now" || rc=$?
 
+  # `open --no-ci`: the act's own verb owns its health and CI outcomes are not its signal (the runner
+  # verb: docs/management-box.md §Non-Talos VMs) — and the box, which runs it unattended, has no gh.
+  if [ "$NO_CI" = true ]; then echo "  ok  CI probe skipped (window opened --no-ci)"; return $rc; fi
   local ci_all ci ci_unread; ci_all="$(stranded_ci 600)"
   ci_unread="$(printf '%s\n' "$ci_all" | sed -n 's/^UNREADABLE://p' | tr '\n' ' ' | sed 's/ *$//')"
   ci="$(printf '%s\n' "$ci_all" | grep -v '^UNREADABLE:' || true)"
@@ -802,5 +807,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file> [--expect A,B]" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] [--no-ci] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file> [--expect A,B]" >&2; exit 64 ;;
 esac
