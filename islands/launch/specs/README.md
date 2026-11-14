@@ -35,11 +35,12 @@ What this island adds, by rule:
 - **Rule 5 (evidence):** raw Allure results are generated locally by `islands/launch/tests/` (run by
   `islands/launch/scripts/ci.sh`, gated at the worker's `pr-open` through `diff-ci`, not by GitHub
   CI). A labelled case runs one replay row with `agents/replay/run.sh` from a temporary copy of the
-  harness in which the old member's path holds the file under test, and records that file as its
+  harness in which the path `agents/gateway-admit.sh` (today's helper, the one being replaced) holds
+  the file under test, and records that file as its
   target. Nothing is published, so every row stays unproven to the specs reviewer. The Status-cell
-  form: a requirement an OPEN issue builds or proves says `🚧 WIP → #<issue>` (rule 10), with what
-  runs locally and against which target in parentheses; a requirement no issue covers keeps
-  `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`. The proving harness is the clause-replay harness
+  forms (rule 10) are the only two: a requirement an OPEN issue builds or proves says
+  `🚧 WIP → #<issue>`, with what runs locally and against which target in parentheses; a gap says
+  `⚑ gap (<date>, PR #<n> → work #<m>): <line>`. The proving harness is the clause-replay harness
   ([`agents/replay/`](../../../agents/replay/README.md)): it extracts the real clause between its
   `>>>REPLAY:<name>>>>` sentinels, runs it against recorded worlds, and diffs the action stream.
   It runs in `ci` on every PR; a requirement with no fixture says so. Every requirement carries the
