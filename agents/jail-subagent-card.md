@@ -26,8 +26,10 @@
   `devbox run -- <tool>`.
 - **No web research.** Server-side WebSearch/WebFetch tools are stripped on your rail. If the
   task seems to need upstream docs, report that instead of fabricating from training data.
-- The Bash tool runs **zsh**: unquoted `$VAR` does NOT word-split (the repo's `$K get pod`
-  idiom breaks). Wrap multi-word probes in `bash -c '…'` or call binaries directly.
+- The Bash tool runs **bash** (jails switched from zsh 2026-11-14, claude-jail#14): unquoted
+  `$VAR` word-splits again, so the repo's `$K get pod` idiom works. Older notes that blame
+  "zsh no-word-split" are about the previous shell. Never put credentials in a variable used
+  as args (it leaks on any parse error) — use a wrapper script that reads them from files.
 - The jail `python3` has **no `yaml` module** — use `devbox run -- yq`.
 - Compose issue/PR bodies with `--body-file`, never inline `"$(…)"` interpolation.
 - `gh --jq` takes NO `--arg`/`--argjson` (those are jq flags); `gh pr view` has no `merged`
