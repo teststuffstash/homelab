@@ -41,3 +41,60 @@ def test_arm(row):
 @pytest.mark.parametrize("row", cases({"handoff-graphql-drained"}))
 def test_family_completeness(row):
     check(row)
+
+
+# Behaviours of agents/major-handoff.sh that no replay row can express (reviewer, PR #3411).
+def _fake_gh(monkeypatch, body, delete_stderr=""):
+    import json
+    import subprocess
+
+    from scan_island import gh
+
+    pr = {
+        "state": "OPEN",
+        "labels": [{"name": "major"}],
+        "reviews": [{"author": {"login": "homelab-reviewer"}, "state": "APPROVED", "submittedAt": "2026-09-25T12:00:00Z", "body": body}],
+        "commits": [{"committedDate": "2026-09-25T11:00:00Z", "messageHeadline": "bump"}],
+    }
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        out, err, rc = "", "", 0
+        if args[0] == "pr" and args[1] == "view":
+            out = json.dumps(pr)
+        elif args[:3] == ("api", "-X", "DELETE") and delete_stderr:
+            err, rc = delete_stderr, 1
+        elif args[0] == "api" and "--jq" in args:
+            out = "true " if args[1].startswith("repos/o/r/pulls") else "major/awaiting-human\n"
+        return subprocess.CompletedProcess(["gh", *args], rc, out, err)
+
+    monkeypatch.setattr(gh, "run", run)
+    return calls
+
+
+HEADINGS = "## Upstream\n## Known issues\n## Platform compatibility\n## Evidence\n"
+ABSENT = "gh: Label does not exist (HTTP 404)"
+
+
+@pytest.mark.parametrize("extra", ["", "appVersion: unchanged\n"], ids=["park", "arm"])
+def test_absent_claim_label_is_success(monkeypatch, extra):
+    from scan_island import major_handoff
+
+    _fake_gh(monkeypatch, HEADINGS + extra, ABSENT)
+    assert major_handoff.main("o/r", "1") == 0
+
+
+def test_other_delete_failure_still_exits_5(monkeypatch):
+    from scan_island import major_handoff
+
+    _fake_gh(monkeypatch, HEADINGS, "gh: Server Error (HTTP 500)")
+    assert major_handoff.main("o/r", "1") == 5
+
+
+@pytest.mark.parametrize("extra", ["", "appVersion: unchanged\r\n"], ids=["park", "arm"])
+def test_crlf_body_is_handed_off(monkeypatch, extra):
+    from scan_island import major_handoff
+
+    _fake_gh(monkeypatch, (HEADINGS + extra).replace("\n", "\r\n"))
+    assert major_handoff.main("o/r", "1") == 0
