@@ -53,6 +53,14 @@ The dispatch prompt names them:
   untouched — a re-read that changes nothing writes nothing. The morning sitting gets these
   together with its `dig` inputs and the island's unruled `issues:`; there an unchanged wait is
   the receipt line `unchanged`, which keeps it from being re-read for `INTAKE_REREAD_EVERY_D` days.
+- `gap:` `<specs page>#<REQ>` … — `⚑ gap` / `🚧 WIP` rows of the island's own specs that the
+  selector offers. Each is ruled like a `text:` input whose source is the spec row: it becomes an
+  issue (`file`) only when its ruling would be `queue`, `goal` or `seat`; `standing` or `close` is
+  report-only — the row keeps its flag.
+- `escape:` `<owner/repo>#<pr>` … — PRs of issues this island's intake queued that drew
+  CHANGES_REQUESTED. Not ruled through the outcome table: read through step E (§The procedure),
+  their product is records, and a `file` when a class repeats. `escape-prior:` lines, when the
+  prompt carries them, are earlier sittings' records (from their receipts) — read, never re-classified.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and
   label you WOULD write, verbatim, so a reader can grade the ruling before it is live.
 
@@ -71,6 +79,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
 | The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` ruling's own trigger |
+| For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
 Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
@@ -82,8 +91,8 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 
 | Outcome | When | Writes (apply mode) |
 |---|---|---|
-| **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body), labels `agent-fix` + `task/fix` or `task/build` + `agent/queued`; one `intake: queue — <reason>` comment |
-| **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; `agent/queued` on the CHILDREN only; one `intake: goal — <reason>` comment on each absorbed input |
+| **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths — paths the island's facts file adds to every issue, its bookkeeping files, do not count), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body); then §Review and repair; then labels `agent-fix` + `task/fix` or `task/build` + `agent/queued`; one `intake: queue — <reason>` comment |
+| **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; then §Review and repair; then `agent/queued` on the CHILDREN only; one `intake: goal — <reason>` comment on each absorbed input |
 | **seat** | a human fact is missing — or the item waits only on another issue (step 3): a ruling the body says is pending, a credential, a maintenance window, an operator-only path (`classify_touches` → `codeowner-author`), a scope you cannot pin, or a Goal above the ceiling | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <what is needed, one line>` and, on its own line, `blocked-on: human` — or `blocked-on: issue=<n>` when nothing human remains and the wait is that issue (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
 | **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate (§Hard limits — whose issue it is) |
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; §Hard limits — whose issue it is) |
@@ -153,11 +162,62 @@ you tested and where. Never restate a wait in a second comment. Step 3's parity 
 re-read too: a wait that narrows (one of its facts filed as a parity gap) has changed, and gets
 the one comment naming what remains.
 
+**E. An `escape:` input — what intake let through.** Follow
+[`intake-escape.md`](intake-escape.md) on the PR: classify each blocking review finding of each
+round (A written into the body / B body silent, fact in the read set / C decidable before the
+ride, outside the read set / D worker / E reviewer process) and write one record per finding into
+the report's `## Escape records` (the receipt carries them). A class — the letter plus the intake
+check the record names — sighted on two inputs (this sitting's, or an `escape-prior:` record) is
+`file`d as one issue against the file that would carry the fix: this brief, a lens brief, or the
+island's facts file; `Touches` = that file, `Origin` = the PRs, both records quoted — filed, not
+ruled here (the sitting of the island that owns that file rules it). Only A, B and
+C are intake's; D and E records stay report-only. A class already filed whose target file has not
+changed since writes nothing — the open issue is the record.
+
 Cap: **at most 3 `queue` outcomes (`requeue` included) per sitting; one Goal's children count as
 one.** The cap limits `queue`, not
 ruling: rule EVERY input. Only an input whose ruling would be `queue` and arrives over the cap is
 left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
 `deferred (cap)`.
+
+## Review and repair — before any label
+
+A `queue` or `goal` ruling (a parity issue you `file` and rule `queue` included) is reviewed once
+before the loop can see it, by sessions that never wrote its bodies. Rulings that are not `queue`
+or `goal` are not reviewed. **The review never holds the queue:** the repair pass ends in the
+labels whatever the findings say, and the ruling stands.
+
+1. **Write, do not label.** Write every body of the ruling (for a Goal: the Goal, its branch, its
+   children, edges, dispositions, `goal-lint` PASS) and leave it there — no label, no `intake:`
+   comment yet.
+   The report lists the review units under `## Review units`, one line each:
+   - `unit: <owner/repo>#<n> [#<child> …] base=<sha>` — one issue, or a Goal with every child;
+     `base` is the default-branch commit your reads stood on;
+   - `rows: <owner/repo>#<n> base=<sha>` — each body of the unit that carries rows
+     (`## Spec changes` or `## Key rows`).
+2. **Two lenses, once each.** The launcher runs [`intake-review-unit.md`](intake-review-unit.md)
+   on each `unit:` line and [`intake-review-rows.md`](intake-review-rows.md) on each `rows:` line,
+   each as a separate session. You never run a lens and never review your own bodies. A rows
+   review whose `## Pass 1 (frozen)` section is empty (no line at all — `- none` is a line), or a
+   lens run that wrote no findings file, is a failed run: it is re-run once, and a second failure
+   skips that lens for that body.
+3. **One repair pass.** Its prompt carries your first-pass report and every lens's findings
+   file. Answer every finding by its id, once:
+   `changed: <what you edited>` or `declined: <reason, with the source that decides it — a page
+   line, a pin, a recorded ruling>`. Edits go through the same writer and gate (§A queue-ready
+   body). The lenses do not run again on the repaired bodies — two runs of one brief agree on
+   about half their findings, so a loop until approval does not converge.
+4. **Post, label, rule — in that order.** On each issue of the unit, ONE comment:
+   ```
+   intake: review — <n> findings: <k> changed, <j> declined
+   <one line per declined finding and per advisory: id — the finding — your answer>
+   ```
+   (a skipped lens adds the line `<unit|rows> review skipped — failed twice` under the first).
+   That list is for the worker. Then the labels, then the ruling comment, so the latest `intake:`
+   line on the issue is the ruling.
+
+In dry-run nothing is posted, so nothing is reviewed live; the report still carries
+`## Review units` and the bodies, and a harness may run the lenses on them.
 
 ## A queue-ready body — the spec is written into the issue (rule 2)
 
@@ -201,8 +261,18 @@ Unverified: <what you did not read on the wire — "verify during implementation
 - The worker's PR body carries the `Spec changes:` heading (rule 1); its recipe
   (`.agents/fix.yaml` §Specs are the pinned process) already knows the ratchet
   (`spec-join-ratchet.py` + `spec-hygiene-ratchet.py`, their baselines). You do not restate the process; you state the rows.
-- `⚖` on any row with a plausible alternative (rule 4). A row you could not ground in the page or
-  a merged PR is marked `verify during implementation` (rule 10), never asserted.
+- **Which ⚖ is which.** In an issue body `⚖` marks a row or pin with a plausible alternative
+  (rule 4) — a flag for the specs reviewer on a choice already made, never an open question. A
+  fork only the operator can take is not a `⚖` in the body: it is `seat`. An island's facts file
+  may tighten this (e.g. `⚖` for operator forks only, row alternatives written under
+  `Unverified`). A row you could not ground in the page or a merged PR is marked
+  `verify during implementation` (rule 10), never asserted.
+- **Quote before you author.** Where an existing row, a sibling's row or the page's own text
+  already says it, copy it verbatim and name where it came from; author a new table only for what
+  no row says yet.
+- **An exception names the universal it breaks.** When a row adds an exception to a universal
+  sentence elsewhere (a sibling's Deliverable, requirement prose, a glossary row), the body names
+  that sentence's edit and its file is in `Touches`.
 - **A `⚑ gap` flag whose `→ work #M` is closed with the shortfall still real** has two honest
   fixes, and you choose: `file` the successor work issue (rule it in the same sitting — usually
   `standing`) and re-point the flag at it, or re-point at the closed issue's comment that names
@@ -230,6 +300,7 @@ Follow the consumer card's three acts exactly, with these pins:
   sub-issues (`sub_issues` POST); ordered by native `blockedBy` edges where one must land first;
   `epic_dispositions.py set <slug> <goal> <child> adopted --by checkpoint` for each.
 - `devbox run goal-lint -- <slug> <n>` PASS **before any label**. A FAIL is fixed on the issue.
+  The labels then wait for §Review and repair (the Goal and every child are one unit).
 - **`agent/queued` on the children only. Never on the Goal.** Breaker #1 refuses a Goal queued by
   a loop identity, by design; the human gate on a Goal is its verdict (and the assembly's
   codeowner read where its paths have an owner), and this sitting runs inside that gate, not
@@ -254,7 +325,8 @@ Follow the consumer card's three acts exactly, with these pins:
   an item carrying any `agent/*` label or a standing ruling is not yours this sitting — unless it
   came as a `reread:` input, where `agent/blocked` or the `seat` ruling is exactly what you test.
 - **One comment per ruling**, first line `intake: <outcome> — <reason, one line>`; a `seat` adds
-  `blocked-on: human` — or `blocked-on: issue=<n>` (step 3) — on its own line. No second comment to "clarify".
+  `blocked-on: human` — or `blocked-on: issue=<n>` (step 3) — on its own line. A reviewed ruling
+  adds exactly one `intake: review` comment before it (§Review and repair). No second comment to "clarify".
 - **Rate.** REST reads only, each item once; never poll. The sitting is one pass.
 - **No credential, ever, in a body or comment** — the repo is public.
 
@@ -263,7 +335,9 @@ Follow the consumer card's three acts exactly, with these pins:
 ```
 | input | outcome | written (labels / issue ids / branch) | reason (one line) |
 ```
-then, verbatim, **every body you posted or would post**, then **Facts I lacked:** one line each —
+then, verbatim, **every body you posted or would post**, then `## Review units` (§Review and
+repair; the repair pass adds each finding id with its `changed:` / `declined:` answer), then
+`## Escape records` (step E), then **Facts I lacked:** one line each —
 the fact, where you looked. That list is the spike's evidence (which reads the brief is missing);
 never pad it, never leave it out.
 

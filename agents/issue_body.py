@@ -103,7 +103,9 @@ GRAMMAR_DOC = {
     "Verdict-authority": "human | kpi",
     "Production-leg": "free text — what production validates",
     "Revert": "free text — the pin rollback or revert commit",
-    "Origin": "`<repo>#<n>` the filing came from (block-only; no reader today)",
+    "Origin": "where the filing came from: `<owner/repo>#<n>` (an issue or PR), else a non-issue "
+    "source as written by the filer's brief — `FU-NNN`, `meta-state`, `handoff`, `operator`, a dig "
+    "finding id, `alert:<AlertName>@<instant>`, or prose (block-only; no reader today)",
     "Size": "free text estimate (block-only; no reader today)",
     "Capability": "free text capability fingerprint (ADR-119 platform-request)",
     "alert-fp": "the responder's alert fingerprint",
