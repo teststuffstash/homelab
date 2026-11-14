@@ -114,10 +114,10 @@ check_names() {
   have=$(curl -sf -H @"$FJ_HDR" "$FORGEJO_API/repos/${1#forgejo:}/actions/secrets?limit=100" | jq -r '.[].name') \
     || { echo "  ✗ could not list $1 secrets" >&2; return 1; }
   shift
-  for n in "$@"; do printf '%s\n' "$have" | grep -qx "$n" || miss="$miss $n"; done
+  for n in "$@"; do grep -qx -- "$n" <<< "$have" || miss="$miss $n"; done
   if [ -n "$miss" ]; then echo "  ⚠ copy MISSING on the forge:$miss"; else echo "  ✓ copies present on the forge"; fi
 }
-if [ "$FORGE" != github ] && printf '%s\n%s\n' "$MAPPING" "$SINGLES" | grep -q '^ *forgejo:'; then
+if [ "$FORGE" != github ] && grep -q '^ *forgejo:' <<< "$MAPPING$SINGLES"; then
   fj_header
 fi
 FAIL_HINT_GH="403 = this gh auth lacks Secrets write; run on the HOST — docs/github-setup.md"
