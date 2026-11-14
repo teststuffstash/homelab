@@ -299,4 +299,4 @@ apply_vm_recreate:          # proxmox VMs the box may RECREATE unattended throug
   main:
     - address: "proxmox_virtual_environment_vm.ci_runner*"
       verb: runner-maintenance
-      mode: "shadow"        # operator trial 2026-11-14 (shadow, then on)
+      mode: "on"            # operator: on 2026-11-14 after a clean shadow tick
