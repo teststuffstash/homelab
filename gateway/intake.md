@@ -6,7 +6,7 @@
 > island's lives in its own repo (ADR-160) —
 > [agent-loop](../docs/intake/agent-loop.md), [substrate](../docs/intake/substrate.md),
 > [dependency-upgrades](../docs/intake/dependency-upgrades.md), [mgmt-box](../docs/intake/mgmt-box.md),
-> [router-pair](../docs/intake/router-pair.md). A sitting for another island reads this brief, then
+> [router-pair](../docs/intake/router-pair.md), [scan](../docs/intake/scan.md), [launch](../docs/intake/launch.md), [retro](../docs/intake/retro.md) (facts only — not yet selector rows). A sitting for another island reads this brief, then
 > that file IN PLACE OF §Island facts and the gateway rows of §What you read (`README.md`,
 > `specs/`, `src/`); membership is `intake-select.sh --island <island>`. Design, evidence and the open
 > questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is

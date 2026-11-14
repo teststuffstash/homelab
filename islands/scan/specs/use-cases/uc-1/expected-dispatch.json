@@ -1,0 +1,14 @@
+{
+  "argv": {
+    "stack": "platform",
+    "repos": "agent-runtime agent-coordinator homelab openrouter-operator",
+    "main_repo": "homelab",
+    "loop_ns": "platform-agents",
+    "model": "«coordinatorModel» — ⚑ gap: absent from argv_redrawn",
+    "wip": 1,
+    "detach": true,
+    "item": "repo=homelab item=issue-4242 clause=queued-dispatch class=fix"
+  },
+  "pod": "coordinator-homelab-issue-4242",
+  "exit": 0
+}
