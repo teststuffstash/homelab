@@ -18,6 +18,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The box recreates ci-runners unattended
+  (`apply_vm_recreate` mode `on`); the verb's gate is scoped to the VM since #3372 — the NEXT runner template change is
+  the first run expected to need no seat close (read its journal: window closed by the verb, `management-apply=success`).
+  `MgmtRunnerSeedDrift` live and silent. Handoff inbox unclaimed: oracle ×3 (in-pod kind e2e timeout — its CI half was
+  #3313's mirror env, now live on both runners; KubeJobFailed AnalysisRun exclusion; intake island wiring), circles ×1.
 - **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** **#3348** (`minRunners` 1 → 3) merged + synced
   2026-11-14 09:35Z (live ARS reads 3). On/after **2026-11-21**: re-run the burst-pickup table (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) —
   PR job pickup by jobs-just-ahead should flatten toward ~3 s; if not, raise again or read the listener. Also expect
