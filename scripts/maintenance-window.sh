@@ -41,7 +41,7 @@
 # parser), renewing the lease every tick, and exiting when the slot is gone (`close`).
 #
 # EXPECTED ALERTS do not block (GAPS maintenance-window-G4/G5, 2026-10-26). Two bins beside CLAIMED:
-#   declared         `open --expect A,B` — names the seat KNOWS the act produces (the detector it
+#   declared         `open --expect A,B` (or `compare <file> --expect A,B`) — names the seat KNOWS the act produces (the detector it
 #                    is firing on purpose). Recorded in the slot, NOT an Alertmanager silence: the
 #                    responder still sees the alert; only this tool's gate stops blocking on it.
 #   node consequence a window opened `--node <n>`: an alert whose NAME is in CONSEQUENCE_ALERTS and
@@ -750,6 +750,14 @@ cmd_snapshot() {
 cmd_compare() {
   [ -s "${1:-}" ] || { echo "compare: no baseline file '${1:-}'" >&2; return 1; }
   local b; b="$(cat "$1")"
+  # `--expect A,B`: the declared bin for the unattended pair — a verb names what its own act structurally
+  # makes noise on, exactly as `open --expect` does for a window (no slot here, so it rides the call).
+  case "${2:-}" in
+    "") ;;
+    --expect) case "${3:-}" in ""|*[!A-Za-z0-9_,]*) echo "compare: --expect takes alert NAMES, comma-separated (got '${3:-}')" >&2; return 64 ;; esac
+              EXPECTED="$(jq -cn --arg e "$3" '$e|split(",")|map(select(length>0))')" ;;
+    *) echo "compare: unknown arg '$2'" >&2; return 64 ;;
+  esac
   echo "== compare vs baseline ($(jq -r .at <<<"$b")) =="
   compare_snapshots "$b" "$(snapshot)"
 }
@@ -794,5 +802,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file> [--expect A,B]" >&2; exit 64 ;;
 esac

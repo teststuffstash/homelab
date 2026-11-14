@@ -86,6 +86,13 @@ SILENCE="${SILENCE:-1}"
 SLOTS="${RUNNER_SLOTS:-2}"   # cloud-init's `<vm>` + `<vm>-2`
 POLL="${RUNNER_POLL:-20}"
 MGMT_TF="${MGMT_TF:-$ROOT/mgmt/scripts/mgmt-tf.sh}"
+# CI-OUTCOME alerts are not this verb's health signal (operator ruling, docs/management-box.md §Non-Talos
+# VMs): a red run anywhere in the fleet is routine and says nothing about the replaced VM, and a green
+# one would need a known-good job re-run on it — still not proof. The verb's health is its own `verify`
+# (registrations online with every label, the exporter up) plus the cluster compare; a runner change
+# that breaks a stack's build surfaces as that stack's red CI, which the stack reports or fixes itself
+# (version bumps on its side, never a migration). Declared, not silenced: the responder still sees them.
+CI_OUTCOME_ALERTS="GithubWorkflowRunFailed"
 MAINT="${MAINT_WINDOW:-$ROOT/scripts/maintenance-window.sh}"
 SEATWIN="${SEAT_WINDOW:-$ROOT/agents/seat-window.sh}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -315,7 +322,7 @@ cmd_run() { # <plan-id> <vm>
   mkdir -p "$dir"; log "evidence → $dir"
   local hours=$(( (${DRAIN_TIMEOUT:-3600} + ${VERIFY_TIMEOUT:-1800} + ${COMPARE_SETTLE:-600} + 1800 + 3599) / 3600 ))
   bash "$MAINT" open --reason "ci-runner VM replace: $vm, plan $plan — scripts/runner-maintenance.sh" \
-    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" \
+    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" --expect "$CI_OUTCOME_ALERTS" \
     > "$dir/window-open.log" 2>&1 || { cat "$dir/window-open.log" >&2; log "run: window did not open — not draining"; exit 3; }
   local wid; wid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' "$dir/window-open.log")"; wid="${wid%%$'\n'*}"
   [ -n "$wid" ] || { log "run: could not read the window id from 'open' — not draining ('devbox run maint -- list')"; exit 3; }
@@ -357,7 +364,7 @@ cmd_run() { # <plan-id> <vm>
   # `up` returns — compare until clean, like the box loop's post-check.
   end=$(( $(date +%s) + ${COMPARE_SETTLE:-600} )); ok=0
   while :; do
-    if bash "$MAINT" compare "$dir/health-before.json" > "$dir/health-compare.txt" 2>&1; then ok=1; break; fi
+    if bash "$MAINT" compare "$dir/health-before.json" --expect "$CI_OUTCOME_ALERTS" > "$dir/health-compare.txt" 2>&1; then ok=1; break; fi
     [ "$(date +%s)" -lt "$end" ] || break
     sleep 30
   done

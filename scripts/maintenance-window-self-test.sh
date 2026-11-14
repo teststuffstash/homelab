@@ -371,6 +371,18 @@ grep -q "CI runs" <<<"$out" && bad "compare ran the CI probe (the box has no gh)
 out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
 [ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown" <<<"$out" && ok "compare exits 2 naming a new firing alert" \
   || bad "compare rc=$rc on a new alert: $out"
+# `compare --expect`: the unattended pair's declared bin — the named alert prints EXPECTED and passes,
+# any other new name still blocks, and a malformed list is a usage error, never a silent pass.
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog GithubWorkflowRunFailed" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" --expect GithubWorkflowRunFailed 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "EXPECTED GithubWorkflowRunFailed (declared)" <<<"$out" && ok "compare --expect passes a declared new alert" \
+  || bad "compare --expect rc=$rc on a declared alert: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog GithubWorkflowRunFailed KubeAPIDown" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" --expect GithubWorkflowRunFailed 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: KubeAPIDown$" <<<"$out" && ok "…and still blocks on an undeclared one, named alone" \
+  || bad "compare --expect rc=$rc with an undeclared alert beside: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog GithubWorkflowRunFailed" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && ok "…without --expect the same alert is NEW (the default stays strict)" || bad "compare rc=$rc without --expect: $out"
+FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" --expect 'a b' >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 64 ] && ok "compare --expect rejects a malformed list (rc 64)" || bad "compare --expect malformed rc=$rc"
 # The stock meta-alerts are never NEW (GAPS maintenance-window-G4): InfoInhibitor flaps with any
 # `info` alert and landed between open and check in window after window; the route drops it, so does the diff.
 jq '.alerts=[]' "$TMP/base.json" > "$TMP/base-nometa.json"
