@@ -73,6 +73,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# A typo'd forge would skip every row and still print "done" — the stale-copy failure this exists to prevent.
+case "$FORGE" in ""|github|forgejo) ;; *) echo "✗ --forge must be github or forgejo, got '$FORGE'" >&2; exit 2 ;; esac
 
 FORGEJO_API="${FORGEJO_API:-https://forgejo.teststuff.net/api/v1}"
 FJ_HDR=""
@@ -120,7 +122,13 @@ check_names() {
 if [ "$FORGE" != github ] && grep -q '^ *forgejo:' <<< "$MAPPING$SINGLES"; then
   fj_header
 fi
-FAIL_HINT_GH="403 = this gh auth lacks Secrets write; run on the HOST — docs/github-setup.md"
+# fail_hint <repo> — what a failed write most likely means, per forge.
+fail_hint() {
+  case "$1" in
+    forgejo:*) echo "see the HTTP status above; 401/403 = forgejo-api-token lacks admin on the repo" ;;
+    *) echo "403 = this gh auth lacks Secrets write; run on the HOST — docs/github-setup.md" ;;
+  esac
+}
 
 printf '%s\n' "$MAPPING" | while IFS='|' read -r repo ns conn pair prefix; do
   # trim whitespace; skip blanks/comments
@@ -148,7 +156,7 @@ printf '%s\n' "$MAPPING" | while IFS='|' read -r repo ns conn pair prefix; do
   if [ "$ok" = "1" ]; then
     echo "✓ $repo  ${prefix}_* ← $ns/$conn ${pair} pair (id ${id:0:6}…)"
   else
-    echo "✗ $repo  ${prefix}_* — secret write FAILED ($FAIL_HINT_GH)" >&2
+    echo "✗ $repo  ${prefix}_* — secret write FAILED ($(fail_hint "$repo"))" >&2
     exit 41
   fi
 done
@@ -172,7 +180,7 @@ printf '%s\n' "$SINGLES" | while IFS='|' read -r repo ns sec key ghname; do
   if printf '%s' "$val" | put_secret "$repo" "$ghname"; then
     echo "✓ $repo  $ghname ← $ns/$sec .$key (${val:0:4}…)"
   else
-    echo "✗ $repo  $ghname — secret write FAILED ($FAIL_HINT_GH)" >&2
+    echo "✗ $repo  $ghname — secret write FAILED ($(fail_hint "$repo"))" >&2
     exit 41
   fi
 done
