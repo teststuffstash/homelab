@@ -60,16 +60,17 @@ F1_REPL="$(rc_ "$F1" "$REPL")"; F2_REPL="$(rc_ "$F2" "$REPL")"
 CM="$(rc_ kubernetes_config_map.x "$UPD")"
 # the policy as committed, and the same row flipped (the operator's two later states)
 POL_ON="$T/pol-on.yaml";     _yq '.apply_vm_recreate.main[0].mode = "on"' "$POL" >"$POL_ON"
+POL_OFF="$T/pol-off.yaml"; _yq '.apply_vm_recreate.main[0].mode = "off"' "$POL" >"$POL_OFF"
 POL_SHADOW="$T/pol-sh.yaml"; _yq '.apply_vm_recreate.main[0].mode = "shadow"' "$POL" >"$POL_SHADOW"
 POL_NONE="$T/pol-none.yaml"; _yq 'del(.apply_vm_recreate)' "$POL" >"$POL_NONE"
 
-# ── 1. the committed row: one glob, the one verb, shipped OFF ──────────────────────────────────────
-eq row-committed-off "proxmox_virtual_environment_vm.ci_runner*|runner-maintenance|off" \
-  "$(mgmt_policy_get "$POL" '.apply_vm_recreate.main[0] | .address + "|" + .verb + "|" + .mode')"
+# ── 1. the committed row: one glob, the one verb, a valid mode (the operator flips it — never pinned here)
+eq row-committed "proxmox_virtual_environment_vm.ci_runner*|runner-maintenance|valid" \
+  "$(mgmt_policy_get "$POL" '.apply_vm_recreate.main[0] | .address + "|" + .verb + "|" + (if (.mode | test("^(off|shadow|on)$")) then "valid" else .mode end)')"
 
-# the loop's off-switch: the committed policy has no live row (the recreate path is not read at all);
+# the loop's off-switch: an off row is not live (the recreate path is not read at all);
 # shadow and on are live; no rows at all is 0
-eq live-committed 0 "$(mgmt_runner_live "$POL" main)"
+eq live-off 0 "$(mgmt_runner_live "$POL_OFF" main)"
 eq live-on 1 "$(mgmt_runner_live "$POL_ON" main)"
 eq live-shadow 1 "$(mgmt_runner_live "$POL_SHADOW" main)"
 eq live-no-rows 0 "$(mgmt_runner_live "$POL_NONE" main)"
@@ -81,8 +82,8 @@ eq live-no-rows 0 "$(mgmt_runner_live "$POL_NONE" main)"
 digest "$T/p-both" "[$VM1_NOOP, $F1_REPL, $VM2_NOOP, $F2_REPL, $CM]" >/dev/null
 eq cand-template-edit-both "$V1	ci-runner-01	seed	on	runner-maintenance	$V1 $F1
 $V2	ci-runner-02	seed	on	runner-maintenance	$V2 $F2" "$(mgmt_runner_candidates "$POL_ON" main "$T/p-both")"
-# the committed policy reports the same candidates with mode off (the caller then does nothing new)
-eq cand-mode-off "off off" "$(mgmt_runner_candidates "$POL" main "$T/p-both" | cut -f4 | tr '\n' ' ' | sed 's/ $//')"
+# an off row reports the same candidates with mode off (the caller then does nothing new)
+eq cand-mode-off "off off" "$(mgmt_runner_candidates "$POL_OFF" main "$T/p-both" | cut -f4 | tr '\n' ' ' | sed 's/ $//')"
 # one snippet only (the second runner's, left pending by the first tick's -target) → one candidate
 digest "$T/p-one" "[$VM1_NOOP, $VM2_NOOP, $F2_REPL]" >/dev/null
 eq cand-second-left "$V2" "$(mgmt_runner_candidates "$POL_ON" main "$T/p-one" | cut -f1)"
