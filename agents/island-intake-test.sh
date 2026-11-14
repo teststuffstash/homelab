@@ -682,9 +682,10 @@ cat > "$RBIN/claude" <<EOF
 #!/bin/bash
 T="$TMP"
 p=""; prev=""; allow=""; inallow=0; for a in "\$@"; do
-  [ "\$prev" = -p ] && p="\$a"
+  [ "\$prev" = -p ] && case "\$a" in --*) ;; *) p="\$a";; esac
   case "\$a" in --allowedTools) inallow=1;; --*) inallow=0;; *) [ "\$inallow" = 1 ] && allow="\$allow \$a";; esac
   prev="\$a"; done
+[ -n "\$p" ] || p="\$(cat)"   # \`claude -p\` with no prompt argument reads it from stdin (the repair's brief)
 case "\$p" in
   *"REPAIR PASS"*) s=repair;; *"ISLAND INTAKE sitting"*) s=author;; *"Unit review"*) s=unit;;
   *"PASS 1 of a staged read"*) s=pass1;; *"PASS 2 of a staged read"*) s=pass2;; *) s=other;;
@@ -706,7 +707,7 @@ cat > "$RBIN/gh" <<EOF
 #!/bin/bash
 echo "gh \$*" >> "$TMP/gh.calls"
 case "\$1 \$2" in
-  "issue view") case "\$*" in *labels*) cat "$TMP/gh-labels" 2>/dev/null;; *title,body*) cat "$TMP/body-9.md";; esac;;
+  "issue view") case "\$*" in *labels,comments*) cat "$TMP/gh-view.json" 2>/dev/null;; *title,body*) cat "$TMP/body-9.md";; esac;;
   "issue comment") prev=""; for a in "\$@"; do [ "\$prev" = --body-file ] && cat "\$a" >> "$TMP/gh.comments"; prev="\$a"; done;;
 esac
 exit 0
@@ -762,15 +763,17 @@ INTAKE-HOLD: $H#9 add=agent-fix,task/fix,agent/queued,agent/approved
 INTAKE-HOLD: $H#999 add=agent/queued
 EOF
 cat > "$TMP/r-repair.out" <<'EOF'
-INTAKE-REPAIR: U1 changed fixed the acceptance
-INTAKE-REPAIR: R10/9/r1.1 declined the row is right
+INTAKE-REPAIR: unit#0:U1 changed fixed the acceptance
+INTAKE-REPAIR: rows#1:R10/9/r1.1 declined the row is right
 EOF
 review_run() { # <mode> [env…]
   rm -f "$TMP/r.calls" "$TMP/gh.calls" "$TMP/gh.comments" "$TMP"/prompt-*.txt
   RUN_PATH="$RBIN:$BIN" RUN_ENV="INTAKE_SNIPPETS_DIR=$TMP/snip ${*:2}" run_script "$1"
 }
 rm -rf "$TS/homelab/intake-gateway-2026-10-27"
-touch "$TMP/pass1-empty-once"; echo "" > "$TMP/gh-labels"
+gview() { # <labels-json> <comment bodies…> — the issue as the belt reads it back; comments dated inside this run
+  local l="$1"; shift; jq -n --argjson l "$l" '{labels: ($l | map({name: .})), comments: [$ARGS.positional[] | {body: ., createdAt: "2099-01-01T00:00:00Z"}]}' --args "$@" > "$TMP/gh-view.json"; }
+touch "$TMP/pass1-empty-once"; gview '[]' "intake: review — 3 findings: 1 changed, 1 declined" "intake: queue — one ride"   # the repair posted, but did not label
 review_run apply; rc=$?
 [ "$rc" = 0 ] && ok "apply run with review-repair exits 0" || bad "review run" "rc=$rc $(tail -5 "$TMP/run.log")"
 [ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit pass1 pass1 pass2 repair " ] \
@@ -778,31 +781,32 @@ review_run apply; rc=$?
 grep -q "INTAKE-HOLD" "$TMP/prompt-author.txt" && grep -q "review: review-repair" "$TMP/prompt-author.txt" && grep -qF '`## Review units`' "$TMP/prompt-author.txt" \
   && ok "the author is told: review-repair, Review units, INTAKE-HOLD" || bad "author prompt" "$(grep -n REVIEW "$TMP/prompt-author.txt")"
 line="$(grep '^unit ' "$TMP/r.calls")"
-case "$line" in *"cwd=$TMP/work/homelab gh_token= "*"Read(/$TMP/run/review/case-unit-0/**)"*"Bash(git show:*)"*"Write(/$TMP/run/review/out/unit-0.md)"*) ok "unit lens: no token, Read scoped to its case dir, git show at the base, Write to its one file";;
+case "$line" in *"cwd=$TMP/run/review/case-unit-0 gh_token= "*"Read(/$TMP/run/review/case-unit-0/**)"*"Bash(git -C $TMP/work/homelab show:*)"*"Edit(/$TMP/run/review/out/unit-0.md)"*) ok "unit lens: cwd = its case dir, no token, Read scoped to it, git show on the clone at the base, Edit = its one file";;
   *) bad "unit confinement" "$line";; esac
 [ "$(grep -c '^unit ' "$TMP/r.calls")" = 1 ] && ok "a unit line whose issue no queue/goal ruling names (#999) gets no lens" || bad "forged unit" "$(grep -c '^unit ' "$TMP/r.calls")"
 { grep -q 'r1.1' "$TMP/pass1-world.txt" 2>/dev/null || grep -q '9.md' "$TMP/pass1-world.txt"; } && ! grep -q 'issues' "$TMP/pass1-world.txt" \
   && ! grep -rq SECRET-DESCRIPTION "$TMP/run/review/rows-pass1-1/" && grep -q '| r1.1 |' "$TMP/run/review/rows-pass1-1/masked/9.md" \
   && ok "rows pass 1 sees masked/ + process/ only: the description is keyed (r1.1), the body is out of reach" || bad "pass 1 world" "$(cat "$TMP/pass1-world.txt" | head -12)"
-grep -q "^pass2 cwd=$TMP/work/homelab gh_token= " "$TMP/r.calls" && ok "rows pass 2 runs on the base repo, no token" || bad "pass 2" "$(grep pass2 "$TMP/r.calls")"
+grep -q "^pass2 cwd=$TMP/run/review/case-rows-1 gh_token= .*Bash(git -C $TMP/work/homelab show:\*)" "$TMP/r.calls" && ok "rows pass 2 runs in its case dir, the base through git -C, no token" || bad "pass 2" "$(grep pass2 "$TMP/r.calls")"
 grep -q -- '- 9/r1.1' "$TMP/run/review/out/rows-1.md" && grep -q 'R10/9/r1.1' "$TMP/run/review/out/rows-1.md" \
   && ok "the rows file keeps its frozen Pass 1 and gains pass 2's findings" || bad "rows file" "$(cat "$TMP/run/review/out/rows-1.md")"
 grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LENS FINDINGS FILE: rows-1.md' "$TMP/prompt-repair.txt" && grep -q 'Review units' "$TMP/prompt-repair.txt" \
-  && ok "the repair prompt carries the first-pass report and every lens's findings file" || bad "repair prompt" "$(grep -c FINDINGS "$TMP/prompt-repair.txt")"
-[ "$(jq -c '[.findings[] | [.id, .lens, .posture, .fate]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["R10/9/r1.1","rows","blocking","declined"],["U1","unit","blocking","changed"],["U2","unit","advisory","unanswered"]]' ] \
-  && ok "receipt: one record per finding — id, lens, posture, changed/declined/unanswered" || bad "receipt findings" "$(jq -c .findings "$TMP/up/receipt.json" 2>/dev/null)"
+    && grep -q 'unit#0:U1' "$TMP/prompt-repair.txt" \
+  && ok "the repair prompt (on stdin) carries the first-pass report, every lens's findings file and the keyed ids" || bad "repair prompt" "$(grep -c FINDINGS "$TMP/prompt-repair.txt")"
+[ "$(jq -c '[.findings[] | [.id, .lens, .posture, .fate]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["rows#1:R10/9/r1.1","rows","blocking","declined"],["unit#0:U1","unit","blocking","changed"],["unit#0:U2","unit","advisory","unanswered"]]' ] \
+  && ok "receipt: one record per finding, keyed <lens>#<unit>:<id> (two units' U1 never collide) — lens, posture, changed/declined/unanswered" || bad "receipt findings" "$(jq -c .findings "$TMP/up/receipt.json" 2>/dev/null)"
 [ "$(jq -c '[.review.lenses[] | [.lens, .status, .runs]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["unit","ran",1],["rows","ran",2]]' ] && jq -e '.review.repair.status == "ran" and .review.held == ["'"$H"'#9"]' "$TMP/up/receipt.json" >/dev/null \
   && ok "receipt: each lens's status and runs, the repair, the held set (#999 forged → dropped)" || bad "receipt review" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
 grep -qF "gh api -X POST repos/$H/issues/9/labels -f labels[]=agent-fix -f labels[]=task/fix -f labels[]=agent/queued" "$TMP/gh.calls" && ! grep -q 'agent/approved' "$TMP/gh.calls" && ! grep -q 'issues/999' "$TMP/gh.calls" \
   && ok "the belt labels #9 the repair left unlabelled — brief labels only (agent/approved dropped), no forged ref" || bad "belt labels" "$(grep labels "$TMP/gh.calls")"
-[ ! -s "$TMP/gh.comments" ] && ok "…and posts no comment of its own when the repair ran (the repair posts them)" || bad "belt comments" "$(cat "$TMP/gh.comments")"
+[ ! -s "$TMP/gh.comments" ] && ok "…and posts no comment the repair already posted in this run" || bad "belt comments" "$(cat "$TMP/gh.comments")"
 grep -q '/coordinate' "$TMP/curl.calls" && ok "the queue rings /coordinate after the labels" || bad "review ring" "$(cat "$TMP/curl.calls")"
 
-echo "agent-fix,task/fix,agent/queued" > "$TMP/gh-labels"
+gview '["agent-fix","task/fix","agent/queued"]' "intake: review — x" "intake: queue — y"
 review_run apply
 ! grep -q '/labels' "$TMP/gh.calls" && ok "an issue the repair already labelled is left alone" || bad "belt idempotent" "$(grep labels "$TMP/gh.calls")"
 
-echo "" > "$TMP/gh-labels"; touch "$TMP/unit-fail" "$TMP/repair-fail"
+gview '[]'; touch "$TMP/unit-fail" "$TMP/repair-fail"
 review_run apply
 { jq -e '[.review.lenses[] | select(.lens == "unit")][0] | .status == "skipped: failed twice (no findings file)" and .runs == 2' "$TMP/up/receipt.json" >/dev/null \
   && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && head -1 "$TMP/gh.comments" | grep -q '^intake: review — 1 findings: 0 changed, 0 declined' \
@@ -810,6 +814,22 @@ review_run apply
   && ok "a unit lens that writes no file twice + a repair that fails: still labelled; review comment (skipped line) first, ruling LAST" \
   || bad "lens failure" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null) | $(cat "$TMP/gh.comments" 2>/dev/null)"
 rm -f "$TMP/unit-fail" "$TMP/repair-fail"
+
+gview '[]' "intake: review — 3 findings: 1 changed, 1 declined"; touch "$TMP/repair-fail"   # the repair posted its review comment, then died
+review_run apply
+{ [ "$(grep -c '^intake: review' "$TMP/gh.comments" 2>/dev/null || true)" = 0 ] && grep -q '^intake: queue — queued as authored' "$TMP/gh.comments" \
+    && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
+  && ok "a repair that posted its review comment and died: the belt adds labels + the ruling, never a second review comment" \
+  || bad "belt partial" "$(cat "$TMP/gh.comments" 2>/dev/null)"
+rm -f "$TMP/repair-fail"
+
+# a queue ruling in place (refs \`-\`): its INPUT is the held issue (the contract allows refs \`-\`)
+sed -i "s|^INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9\$|INTAKE-RULED: $H#9 queue -|" "$TMP/r-author.out"
+PILE9="$TMP/pile9.json"; jq -n '[{number:9, title:"gateway: in place", body:"x", labels:[], createdAt:"2026-10-20T00:00:00Z", updatedAt:"2026-10-20T00:00:00Z", author:{login:"rsoot"}, comments:[]}]' > "$PILE9"
+gview '[]'; PILE_JSON="$PILE9" review_run apply
+{ jq -e '.review.held == ["'"$H"'#9"] and (.review.units | length == 2)' "$TMP/up/receipt.json" >/dev/null 2>&1 && grep -q '^unit ' "$TMP/r.calls"; } \
+  && ok "a queue ruled in place (refs -) is held and reviewed through its input id" || bad "hold by input" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
+sed -i "s|^INTAKE-RULED: $H#9 queue -\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9|" "$TMP/r-author.out"   # back to the dig-born ruling
 
 review_run dry-run
 { ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
