@@ -47,7 +47,7 @@
 #               VMs ignore their seed id, so a template edit plans no VM diff) runs mgmt/scripts/mgmt-runner.sh
 #               for ONE VM: a scoped `-target/-replace` plan → scripts/runner-maintenance.sh run <id> <vm>
 #               (window, drain, apply, verify). No stamp: the next tick re-plans (the next VM, or the
-#               final unscoped apply that stamps). Row `mode: off` (shipped) = refused as before; `shadow`
+#               final unscoped apply that stamps). Row `mode: off` = refused as before; `shadow`
 #               = the scoped plan + scope check in the journal, then refused as before
 #   MGMT_SHADOW=1  plan + check, log the would-be apply, no apply, no status, no stamp
 # Usage: mgmt/scripts/mgmt-apply.sh   (the timer's unit). Env: mgmt/scripts/mgmt-lib.sh + MGMT_APPLY_DIR.

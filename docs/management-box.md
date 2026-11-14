@@ -1037,7 +1037,7 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | manual: seat API calls, test VM 9110 first (ruling 2026-09-29, [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (prod by hand 2026-09-29/30) | class 14 in `dependency-upgrades.md` | ADR-152 program step 4 (test VM → BACKUP → MASTER under one lease) — ROADMAP §Deploy paths; not built |
 | Router BACKUP certificate carry (`scripts/opnsense-cert-carry.sh`) | manual: a seat verb | — | FU-297 | FU-297 next (1): a nightly box timer |
 | OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-08 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
-| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **built, disabled — operator trial pending** (`mode: "off"`) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below | the operator's shadow → `on` flip, then the first unattended success |
+| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is in **shadow** since 2026-11-14 (`mode: "shadow"`, homelab#3366 — journals the scoped plan, still refuses to a human apply) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below; the box's live plan yields both as `seed` candidates (2026-11-14) | the operator's `on` flip, then the first unattended success |
 | Proxmox host maintenance (`host-maintenance`, nx-02 / pve) | attended: `devbox run host-maint -- preflight\|down\|up <host>` | 2026-10-09 (attended, nx-02) | §Hypervisor below | box wiring not built, no tracking item (2026-11-12); FU-288 for the BMC power path |
 | Upgrade-lease revert for an ArgoCD chart whose cone holds its own detector (`mgmt-lease`, §MB5) | unattended | 2026-10-10 (drill) | revert #2441 opened by the box, merged with zero hand acts — [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end | — |
 | The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-10 (`mgmt-confirm` gate 5/5, `mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
@@ -1067,9 +1067,10 @@ baseline and the drain it also opens Alertmanager silences (`instance=~"<ip>(:[0
 `TargetDown{job="ci-runner-node"}`, which is job-wide), owner-tagged so close expires only its own;
 a failure leaves them with the window, and `silence-close <vm>` expires them once you have finished.
 
-**The box wiring is built and ships OFF** (`apply_vm_recreate.main` in `policy/mgmt/plan-input.yaml`,
-`mode: "off"`); until the operator flips it the box refuses a runner template change to a human
-apply exactly as before, and the [runbook recipe](runbook.md#replacing-a-ci-runner-vm--drained-one-at-a-time)
+**The box wiring is the operator's toggle** (`apply_vm_recreate.main` `mode` in
+`policy/mgmt/plan-input.yaml`; its current value is the capability-ledger row above). Under `off` and
+`shadow` the box refuses a runner template change to a human apply exactly as before (shadow first
+journals the scoped plan and its scope check), and the [runbook recipe](runbook.md#replacing-a-ci-runner-vm--drained-one-at-a-time)
 is the path. Mechanism: [`mgmt/scripts/mgmt-runner.sh`](../mgmt/scripts/mgmt-runner.sh) (its header is
 the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `_scope`), fixtures in
 `mgmt-runner-test` (inside `mgmt-policy-test`). The shape:
