@@ -306,26 +306,25 @@ for root in "${apply_roots[@]}"; do
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ] && [ -z "$outs" ]; then log "$root: no changes"; continue; fi
   # Non-Talos VM recreates (mgmt-runner.sh): admitted only when EVERYTHING else in the plan is the box's
-  # anyway — the rest inside the allowlist, the Talos precondition clean, no helm change (the helm bracket
-  # demands to be alone). The rest is applied by the final unscoped tick, after the last VM.
-  # Rows all `off` (as shipped) → not read at all: the loop is byte-for-byte the old one.
+  # anyway (mgmt_runner_admit — a pending helm release does not stand it down). The rest is applied by
+  # the following unscoped ticks, after the last VM.
+  # Rows all `off` → not read at all: the loop is byte-for-byte the old one.
   rlive="$(mgmt_runner_live "$POL" "$root")" || rlive=unreadable
   if [ -n "$changes" ] && [ "$rlive" != 0 ]; then
     [ "$rlive" = unreadable ] && { refuse "$sha" "$root: apply_vm_recreate unreadable — human apply"; exit 0; }
     rcand="$(mgmt_runner_candidates "$POL" "$root" "$out")" || { refuse "$sha" "$root: VM recreate candidates unreadable (plan JSON or apply_vm_recreate) — human apply"; exit 0; }
     ract="$(awk -F'\t' '$4 == "on" || $4 == "shadow"' <<<"$rcand")"
     if [ -n "$ract" ]; then
-      rrest="$(printf '%s\n' "$changes" | mgmt_runner_rest "$ract")"
-      routside="$(printf '%s\n' "$rrest" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
-      rthits="$(mgmt_talos_gate "$POL" "$root" "$out")" || { refuse "$sha" "$root: Talos precondition unreadable — human apply"; exit 0; }
-      if [ -z "$routside" ] && [ -z "$rthits" ] && [ ! -s "$out.helm" ]; then
+      rwhy="$(printf '%s\n' "$changes" | mgmt_runner_admit "$POL" "$root" "$out" "$ract")"; arc=$?
+      [ $arc = 2 ] && { refuse "$sha" "$root: $rwhy — human apply"; exit 0; }
+      if [ $arc = 0 ]; then
         runner_bracket "$POL" "$root" "$sha" "$rel" "$ract"; brc=$?
         case "$brc" in
           0|3) exit 0 ;;     # one VM recreated (no stamp — the next tick re-plans) / REFUSED
           1) exit 1 ;;       # PROBE-FAIL
         esac                 # 4: not taken (shadow) — the ordinary path below refuses the seed file as before
       else
-        log "$root: VM recreate pending ($(cut -f2 <<<"$ract" | tr '\n' ' ' | sed 's/ $//')) but the rest of the plan is not the box's alone — the ordinary path decides"
+        log "$root: VM recreate pending ($(cut -f2 <<<"$ract" | tr '\n' ' ' | sed 's/ $//')) but the rest of the plan is not the box's alone ($rwhy) — the ordinary path decides"
       fi
     fi
   fi

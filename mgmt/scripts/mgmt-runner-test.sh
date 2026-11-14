@@ -123,6 +123,21 @@ eq rest-both "kubernetes_config_map.x	update" "$(printf '%s\n' "$CH" | mgmt_runn
 # with only the first candidate, F2 stays in the rest (and is outside the allowlist → ordinary refusal)
 eq rest-first-only "$F2	delete+create
 kubernetes_config_map.x	update" "$(printf '%s\n' "$CH" | mgmt_runner_rest "$(head -1 <<<"$CANDS")")"
+# the admit (mgmt-apply.sh's gate before the bracket): a pending admitted helm release beside the snippets
+# is ADMITTED — its own bracket runs after the last VM (standing down for it deadlocked both, 2026-11-14:
+# the pre-fix `[ ! -s $out.helm ]` leg refuses this row). Controls: a release with no apply_helm row, and
+# a Talos precondition hit, are not admitted; an unreadable side channel is rc 2, never "not admitted".
+HR="$(rc_ helm_release.argocd "$UPD")"
+CHH="$(digest "$T/p-helm" "[$VM1_NOOP, $F1_REPL, $VM2_NOOP, $F2_REPL, $HR]")"
+eq admit-helm-side-channel-set yes "$([ -s "$T/p-helm.helm" ] && echo yes)"
+admit() { local w; w="$(printf '%s\n' "$2" | mgmt_runner_admit "$POL_ON" main "$1" "$(mgmt_runner_candidates "$POL_ON" main "$1")")"; echo "$?|$w"; }
+eq admit-helm-row "0|" "$(admit "$T/p-helm" "$CHH")"
+CHC="$(digest "$T/p-cilium" "[$VM1_NOOP, $F1_REPL, $VM2_NOOP, $F2_REPL, $(rc_ helm_release.cilium "$UPD")]")"
+eq admit-helm-no-row "1|outside the allowlist: helm_release.cilium" "$(admit "$T/p-cilium" "$CHC")"
+CHT="$(digest "$T/p-talos" "[$VM1_NOOP, $F1_REPL, $VM2_NOOP, $F2_REPL, $(rc_ talos_machine_configuration_apply.worker "$UPD")]")"
+eq admit-talos-hit "1|Talos precondition: talos-apply-mode" "$(admit "$T/p-talos" "$CHT")"
+cp "$T/p-helm.json" "$T/p-nochan.json"
+eq admit-unreadable "2|Talos precondition unreadable" "$(admit "$T/p-nochan" "$CHH")"
 scope() { printf '%b' "$2" | mgmt_runner_scope "$POL_ON" main "$V1" "$V1 $F1" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//'; : "$1"; }
 # the -target plan: V1 replaced, its snippet re-created, the seed image (allowlisted) → in scope
 eq scope-ok "" "$(scope ok "$V1\tdelete+create\n$F1\tdelete+create\nproxmox_download_file.debian_cloud[0]\tupdate\n")"
