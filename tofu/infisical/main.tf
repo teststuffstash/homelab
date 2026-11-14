@@ -1,8 +1,8 @@
 # Infisical content-as-code — closes the ESO loop declaratively (the day-1.5 step).
 #
-# Authenticates as the bootstrap-created **Instance Admin Identity** (token auth; the
-# token is non-expiring and lives in the in-cluster `infisical-bootstrap-secret`, read
-# by apply.sh). From there it creates, in git:
+# Authenticates with a per-run super-admin session token (token auth; apply.sh logs in
+# via scripts/infisical-login.sh — the bootstrap instance-admin token is dead since
+# chart 1.12, docs/secrets.md). From there it creates, in git:
 #   * the `homelab` project (+ default dev/staging/prod envs),
 #   * an `eso-reader` Universal-Auth machine identity scoped to read that project,
 #   * the ESO credential secret in the cluster (clientId/clientSecret),
