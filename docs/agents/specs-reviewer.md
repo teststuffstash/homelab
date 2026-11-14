@@ -317,7 +317,7 @@ read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the 
 every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
 same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
 pack name one set of roots. A repo with several roots lists the rest under `repos[].extraSpecs`
-(reviewer-only: one pack and one pass per touched root, one verdict —
+(one pack and one pass per touched root, one verdict; the worker mount follows the root's README pin —
 [agentstack.md §The spec process](agentstack.md#the-spec-process-rides-with-the-worker-reposspecs-adr-156)).
 The author brief itself ships with the snippets release (since v0.6.6).
 
