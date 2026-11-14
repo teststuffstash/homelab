@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/major-handoff.schema.json",
+  "title": "major-handoff.sh — invocation, the evidence it requires, the exit contract",
+  "type": "object",
+  "x-requirements": {
+    "/properties/invocation": ["SCAN-HANDOFF-GATE"],
+    "/properties/evidence": ["SCAN-HANDOFF-GATE"],
+    "/properties/evidence/properties/upstream_line": ["SCAN-HANDOFF-ARM"],
+    "/properties/exit": ["SCAN-HANDOFF-GATE", "SCAN-HANDOFF-ARM"]
+  },
+  "properties": {
+    "invocation": {
+      "type": "object",
+      "required": ["slug", "pr"],
+      "properties": {
+        "slug": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
+        "pr": {"type": "integer"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["state", "labels_include", "approval_at_head", "headings"],
+      "properties": {
+        "state": {"const": "OPEN"},
+        "labels_include": {"const": "major"},
+        "approval_at_head": {"description": "reviewer bot ([bot] suffix normalized) APPROVED, submittedAt > newest non-merge commit"},
+        "headings": {"const": ["Upstream", "Known issues", "Platform compatibility", "Evidence"], "description": "each a line-anchored `## …` heading or `**…**` label, case-insensitive"},
+        "upstream_line": {"type": "string", "pattern": "^(?i)appVersion: (unchanged \\(.+\\)|.+ → .+)$", "description": "`unchanged (<v>)` arms; anything else, or absent, parks"}
+      }
+    },
+    "exit": {
+      "oneOf": [
+        {"const": 0, "description": "handed off (major/awaiting-human added, agent/in-progress removed, re-read) OR armed (packaging-only chart major)"},
+        {"const": 3, "description": "REFUSED — nothing written; the migration evidence is missing"},
+        {"const": 4, "description": "UNREADABLE — a probe failed before any write"},
+        {"const": 5, "description": "end state NOT PROVEN — writes issued, re-read does not show them"}
+      ]
+    }
+  }
+}

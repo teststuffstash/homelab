@@ -1,0 +1,11 @@
+[
+  {
+    "number": 4242,
+    "title": "scan: report the lane in the WIP-ceiling hold line",
+    "state": "OPEN",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/queued"}],
+    "blockedBy": {"nodes": []},
+    "parent": null,
+    "body": "---\nTouches: agents/coordinator-scan.sh\nClass: fix\n---\n\nThe `⏳ project WIP at ceiling` line names the repo but not the lane (ADR-125); add the base.\n"
+  }
+]

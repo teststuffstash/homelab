@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/pipeline.schema.json",
+  "$comment": "MACHINE half of retro_pipeline.py and the _retro/ store; the HUMAN half is pipeline.md.",
+  "x-interface": "pipeline",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "cli": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": { "enum": ["collect", "prepare", "publish", "reconcile", "accept"] },
+        "store": { "type": "string", "description": "local directory instead of S3 (rehearsal)" },
+        "series": { "type": "string", "pattern": "^[a-z0-9-]+$", "default": "platform" },
+        "now": { "type": "string", "format": "date-time" },
+        "min_tasks": { "type": "integer", "minimum": 0, "default": 8, "x-requirements": ["RETRO-BUNDLE-FROZEN"] },
+        "no_ledger": { "type": "boolean", "x-requirements": ["RETRO-BUNDLE-FROZEN"] },
+        "bundle": { "type": "string" },
+        "report": { "type": "array", "items": { "type": "string", "pattern": "^[^=]+=.+$" } },
+        "pr": { "type": "string" },
+        "decisions": { "type": "string" },
+        "batch": { "type": "string" },
+        "apply": { "type": "boolean" }
+      }
+    },
+    "exit": {
+      "enum": [0, 1, 2, 3],
+      "description": "0 ok; 1 refused/failed (ValueError, KeyError, OSError, a failed subprocess); 2 usage; 3 quiet window (prepare only)",
+      "x-requirements": ["RETRO-WINDOW-CUTOFF", "RETRO-BUNDLE-FROZEN", "RETRO-PUBLISH-CHECKPOINT", "RETRO-STORE-READ"]
+    }
+  },
+  "$defs": {
+    "timestamp": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "window": {
+      "type": "object",
+      "required": ["since", "until"],
+      "properties": { "since": { "$ref": "#/$defs/timestamp" }, "until": { "$ref": "#/$defs/timestamp", "description": "a Monday 00:00 UTC" } },
+      "x-requirements": ["RETRO-WINDOW-CUTOFF"]
+    },
+    "checkpoint": {
+      "description": "_retro/<series>/checkpoint.json",
+      "type": "object",
+      "required": ["until", "covered_at", "bundle_id", "run_id", "report_pr"],
+      "properties": {
+        "until": { "$ref": "#/$defs/timestamp" },
+        "covered_at": { "type": "string" },
+        "bundle_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "run_id": { "type": "string", "pattern": "^r[1-9][0-9]*$" },
+        "report_pr": { "type": "string" }
+      },
+      "x-requirements": ["RETRO-WINDOW-CUTOFF", "RETRO-PUBLISH-CHECKPOINT"]
+    },
+    "bundle": {
+      "description": "_retro/<series>/runs/<until digits>/bundle.json — the frozen bundle; also the guard's evidence artifact",
+      "type": "object",
+      "required": ["schema_version", "window", "ledger", "run_id", "source_revision", "prepared_at", "series", "storage_key", "bundle_id"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "version": { "const": 1 },
+        "window": { "$ref": "#/$defs/window" },
+        "guard": { "const": "external", "description": "present only on a --no-ledger bundle" },
+        "population": { "type": "object", "description": "activity population counters (activity.schema.json#/$defs/bundle_population)" },
+        "tasks": { "type": "array", "description": "the worst-K activity sample (activity.schema.json#/$defs/task)" },
+        "late_arrivals": { "type": "array" },
+        "ledger": {
+          "type": "object",
+          "required": ["population", "rows"],
+          "properties": {
+            "population": {
+              "type": "object",
+              "required": ["task_count"],
+              "properties": {
+                "rows_emitted": { "type": "integer" }, "task_count": { "type": "integer" },
+                "snapshot_tasks": { "type": "integer" }, "by_terminal_label": { "type": "object" },
+                "round_entries": { "type": "integer" }, "by_exit_status": { "type": "object" },
+                "by_error_class": { "type": "object" }, "first_touch_by_model": { "type": "object" }
+              }
+            },
+            "rows": { "type": "array", "maxItems": 25, "items": { "type": "object", "properties": { "key": { "type": "string" }, "rounds": { "type": "array", "items": { "type": "array", "minItems": 4, "maxItems": 4 } } } } },
+            "row_fields": { "type": "string" }
+          },
+          "x-requirements": ["RETRO-LEDGER-WINDOW"]
+        },
+        "previous_findings": { "type": "array", "maxItems": 30 },
+        "previous_findings_total": { "type": "integer" },
+        "run_id": { "type": "string", "pattern": "^r[1-9][0-9]*$" },
+        "source_revision": { "type": "string" },
+        "prepared_at": { "type": "string" },
+        "series": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "storage_key": { "type": "string" },
+        "selected_task_count": { "type": "integer" },
+        "bundle_id": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of the sorted-key JSON of every other field" }
+      },
+      "x-max-serialized-bytes": 60000,
+      "x-requirements": ["RETRO-BUNDLE-FROZEN"]
+    },
+    "publication": {
+      "description": "_retro/<series>/runs/<until digits>/publication.json",
+      "type": "object",
+      "required": ["bundle_id", "window", "report_pr", "published_at", "reports", "findings"],
+      "properties": {
+        "bundle_id": { "type": "string" },
+        "window": { "$ref": "#/$defs/window" },
+        "report_pr": { "type": "string" },
+        "published_at": { "type": "string" },
+        "reports": { "type": "object", "additionalProperties": { "type": "string" }, "description": "report filename → markdown" },
+        "findings": { "$ref": "findings.schema.json#/$defs/state" }
+      },
+      "x-requirements": ["RETRO-PUBLISH-CHECKPOINT"]
+    },
+    "store_keys": {
+      "description": "the keys under s3://agent-transcripts/_retro/ (or --store); _ledger.jsonl sits at the bucket root beside it",
+      "type": "object",
+      "properties": {
+        "activity.json": { "description": "shared by every series — activity.schema.json#/$defs/state" },
+        "<series>/checkpoint.json": { "$ref": "#/$defs/checkpoint" },
+        "<series>/runs/<until>/bundle.json": { "$ref": "#/$defs/bundle" },
+        "<series>/runs/<until>/publication.json": { "$ref": "#/$defs/publication" },
+        "<series>/findings.json": { "$ref": "findings.schema.json#/$defs/state" },
+        "<series>/decisions.json": { "type": "object", "additionalProperties": { "$ref": "findings.schema.json#/$defs/decision" } },
+        "<series>/acceptance-receipts.json": { "type": "object", "additionalProperties": { "type": "string" } },
+        "<series>/acceptance.json": { "type": "object" }
+      },
+      "x-requirements": ["RETRO-STORE-READ"]
+    }
+  }
+}

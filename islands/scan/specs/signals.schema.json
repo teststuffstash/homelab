@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/signals.schema.json",
+  "title": "The scan's pushgateway families — grouping keys, metric names, labels",
+  "type": "object",
+  "x-requirements": {
+    "/properties/agent_scan_phase": ["SCAN-SIGNAL-PHASE"],
+    "/properties/agent_dispatch_phase": ["SCAN-SIGNAL-DISPATCH"],
+    "/properties/agent_board": ["SCAN-SIGNAL-CLASS"]
+  },
+  "$defs": {
+    "family": {
+      "type": "object",
+      "required": ["grouping", "metrics"],
+      "properties": {
+        "grouping": {"type": "string"},
+        "metrics": {"type": "object", "additionalProperties": {"type": "object", "properties": {"type": {"const": "gauge"}, "labels": {"type": "array", "items": {"type": "string"}}, "value": {"type": "string"}}}}
+      }
+    }
+  },
+  "properties": {
+    "agent_scan_phase": {
+      "$ref": "#/$defs/family",
+      "examples": [{
+        "grouping": "/metrics/job/agent_scan_phase/namespace/<ns>",
+        "metrics": {
+          "agent_scan_phase_start_timestamp": {"type": "gauge", "labels": ["pod"], "value": "unix epoch of the current phase's start"},
+          "agent_scan_in_deterministic": {"type": "gauge", "labels": ["pod"], "value": "1 deterministic | 0 blocked on a dispatched session"}
+        }
+      }]
+    },
+    "agent_dispatch_phase": {
+      "$ref": "#/$defs/family",
+      "examples": [{
+        "grouping": "/metrics/job/agent_dispatch_phase/project/<main-repo>/role/coordinator-scan[/base/<lane-base>] (clause series: …/clause/<clause>)",
+        "metrics": {
+          "agent_dispatch_phase_seconds": {"type": "gauge", "labels": ["phase"], "value": "seconds; phase ∈ ring-to-scan (edge wakes only) | scan"},
+          "agent_dispatch_edge_woken_timestamp": {"type": "gauge", "labels": [], "value": "epoch of the last edge-woken dispatch"},
+          "agent_dispatch_cron_woken_timestamp": {"type": "gauge", "labels": [], "value": "epoch of the last cron-woken dispatch"},
+          "agent_dispatch_wake_clause_timestamp": {"type": "gauge", "labels": [], "value": "epoch of the last dispatch of this clause"}
+        }
+      }]
+    },
+    "agent_board": {
+      "$ref": "#/$defs/family",
+      "examples": [{
+        "grouping": "/metrics/job/agent_board/namespace/<ns>",
+        "metrics": {
+          "agent_item_class": {"type": "gauge", "labels": ["repo", "item", "class", "who", "base"], "value": "1"},
+          "agent_item_class_since_timestamp_seconds": {"type": "gauge", "labels": ["repo", "item", "class", "who", "base"], "value": "epoch of the first pass with this exact label set"}
+        }
+      }],
+      "properties": {
+        "class_enum": {"enum": ["riding", "phantom", "strike-held", "parked-blocked", "parked-infeasible", "arbitrate-standing", "queued-held", "queued-held-by-ghost", "queued-held-malformed-block", "queued-ready", "deferred-capacity", "guarded-path", "orphan-unarmed", "container", "backlog-aggregate", "footprint-held", "cap-held", "blockpark", "ci-red-held"]},
+        "who_enum": {"enum": ["operator", "machine", "none"]}
+      }
+    }
+  }
+}

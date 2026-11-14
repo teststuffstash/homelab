@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agents/islands/launch/specs/dispatch.schema.json",
+  "$comment": "MACHINE half of the launcher CLI (dispatch.md is the human half). The launcher is bash, so nothing imports this file yet (rule 7 ⛑ gap: the coupling is by annotation only). `argv` is the parsed flag set, `exit` the code vocabulary, `derived` the facts the launcher computes instead of being told (ADR-094), `stderr` the verdict-line grammar a caller may match.",
+  "x-interface": "dispatch",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "argv": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo"],
+      "x-requirements": ["LAUNCH-DISPATCH-ARGV"],
+      "properties": {
+        "repo": { "type": "string", "minLength": 1, "description": "the claim's repos[].name; also the pod namespace" },
+        "task": {
+          "type": "string",
+          "pattern": "^(issue-[0-9]+|pr-[0-9]+|research-[0-9]+-[a-z0-9-]+|adhoc.*)$",
+          "description": "absent = adhoc-<UTC stamp>",
+          "x-requirements": ["LAUNCH-DISPATCH-ARGV", "LAUNCH-PREFLIGHT-BODY"]
+        },
+        "round": { "type": "integer", "minimum": 0, "default": 1 },
+        "recipe": { "type": "string", "description": "path in the dispatcher's clone; mutually exclusive with run", "x-requirements": ["LAUNCH-DISPATCH-RECIPE"] },
+        "run": { "type": "string", "description": "a raw pod command (drills); mutually exclusive with recipe" },
+        "work_branch": { "type": "string", "description": "resume this PR branch (a fix round)", "x-requirements": ["LAUNCH-PREFLIGHT-DUPLICATE", "LAUNCH-PREFLIGHT-ARM"] },
+        "ref": { "type": "string", "default": "master", "description": "explicit base; wins over a declared Base:" },
+        "max_turns": { "type": "integer", "minimum": 1, "description": "exports GOOSE_MAX_TURNS and CLAUDE_MAX_TURNS both" },
+        "context_repo": { "type": "array", "items": { "type": "string", "pattern": "^https://" } },
+        "harness": { "enum": ["goose", "opencode", "claude", "codex"], "description": "operator override; on a gateway ride it narrows the walk to the harness's dialect" },
+        "model": { "type": "string", "description": "operator override on the old path; a refusal (exit 2) on a gateway ride" },
+        "docker": { "type": "boolean", "description": "override; else derived from repos[].fixer.docker" },
+        "size": { "enum": ["standard", "large"], "description": "override; else derived from repos[].fixer.rideSize" },
+        "no_arm": { "type": "boolean", "description": "override; else derived (derived.arm)" },
+        "openrouter_secret": { "type": "string", "description": "old path: a per-session key Secret name" },
+        "no_attach": { "type": "boolean" }
+      }
+    },
+    "exit": {
+      "enum": [0, 1, 2, 3],
+      "x-meaning": {
+        "0": "the ride ran; or a deferral by an unreadable read / an old-path capacity gate",
+        "1": "a refusal about the work (malformed block, goal over budget, chainless without verdict); or a gateway / router defer",
+        "2": "a usage refusal (argv, recipe missing or unparseable, --model or interactive under the gateway, argv over the element ceiling)",
+        "3": "a refusal about the cluster (duplicate PR or pod, WIP cap, poisoned devbox.lock, expiring key, pr-open missing, lost create race)"
+      },
+      "x-requirements": ["LAUNCH-DISPATCH-EXIT", "LAUNCH-PREFLIGHT-BODY", "LAUNCH-PREFLIGHT-DUPLICATE", "LAUNCH-PREFLIGHT-GOAL-BUDGET"]
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string", "description": "argv.ref, else the issue's Base:, else master", "x-requirements": ["LAUNCH-PREFLIGHT-BODY"] },
+        "arm": {
+          "type": "boolean",
+          "description": "false (NO_ARM=1 → AGENT_ARM_PR=0) for a non-protected base, a research recipe outside goal/**, an un-armed major PR's branch, an unreadable PR list, or argv.no_arm",
+          "x-requirements": ["LAUNCH-PREFLIGHT-ARM"]
+        },
+        "goal": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "number": { "type": "integer" },
+            "hops": { "type": "integer", "minimum": 0 },
+            "verdict": { "enum": ["within", "exhausted", "terminal", "unfunded"] },
+            "ledger_degraded": { "type": "boolean" }
+          },
+          "x-requirements": ["LAUNCH-PREFLIGHT-GOAL-BUDGET"]
+        },
+        "recipe": { "type": "string", "description": "argv.recipe, or its .agents/<class>.yaml sibling for a task/<class> label", "x-requirements": ["LAUNCH-DISPATCH-RECIPE"] }
+      }
+    },
+    "stderr": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^unknown arg: ", "x-requirements": ["LAUNCH-DISPATCH-ARGV"] },
+        { "pattern": "^PREFLIGHT REFUSED: malformed machine block on ", "x-requirements": ["LAUNCH-PREFLIGHT-BODY"] },
+        { "pattern": "^LEGACY-GRAMMAR [A-Za-z-]+ [^ ]+#[0-9]+$", "x-requirements": ["LAUNCH-PREFLIGHT-BODY"] },
+        { "pattern": "^PREFLIGHT REFUSED( \\(atomic\\))?: ", "x-requirements": ["LAUNCH-PREFLIGHT-DUPLICATE", "LAUNCH-DISPATCH-EXIT"] },
+        { "pattern": "^PREFLIGHT REFUSED: the decomposition of goal #[0-9]+ overruns its Budget\\.$", "x-requirements": ["LAUNCH-PREFLIGHT-GOAL-BUDGET"] },
+        { "pattern": "^FATAL: .* is not parseable YAML", "x-requirements": ["LAUNCH-DISPATCH-RECIPE"] },
+        { "pattern": "^→ dispatch deferred — ", "x-requirements": ["LAUNCH-DISPATCH-EXIT"] }
+      ]
+    },
+    "goal_refusal_comment": {
+      "type": "string",
+      "pattern": "^<!-- agent-budget-refusal -->\\nAGENT_BUDGET_REFUSED: ",
+      "description": "the one comment on the goal; created once, patched in place",
+      "x-requirements": ["LAUNCH-PREFLIGHT-GOAL-BUDGET"]
+    }
+  }
+}

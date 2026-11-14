@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/github-grammar.schema.json",
+  "title": "The scan family's GitHub grammar — labels, the machine block, the markers",
+  "type": "object",
+  "x-requirements": {
+    "/properties/labels": ["SCAN-GH-LABELS"],
+    "/properties/machine_block": ["SCAN-GH-BODY"],
+    "/properties/machine_block_redrawn": ["SCAN-GH-ONE-BLOCK"],
+    "/properties/markers": ["SCAN-GH-MARKERS", "SCAN-CLAUSE-DEBOUNCE"]
+  },
+  "properties": {
+    "labels": {
+      "description": "Label vocabulary with this island's writes. `island_writes` names the member that may write it; [] = read only here.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(agent/[a-z-]+|agent-fix|agent-budget/(xs|sm|md|lg)|major|major/awaiting-human|merge-conflict|automerge|deps-review|direction-change|task/[a-z]+)$": {
+          "type": "object",
+          "properties": {
+            "island_writes": {"type": "array", "items": {"enum": ["coordinator-scan.sh", "update-pr-branch.sh", "review-reflex.sh", "major-handoff.sh"]}},
+            "op": {"enum": ["add", "remove", "add+remove"]},
+            "transport": {"const": "REST", "description": "gh_label_add / gh_label_rm — never a GraphQL mutation"}
+          }
+        }
+      },
+      "examples": [{
+        "agent/queued": {"island_writes": ["coordinator-scan.sh"], "op": "add", "transport": "REST"},
+        "agent/in-progress": {"island_writes": ["coordinator-scan.sh", "major-handoff.sh"], "op": "remove", "transport": "REST"},
+        "agent/review": {"island_writes": ["coordinator-scan.sh"], "op": "remove", "transport": "REST"},
+        "agent/blocked": {"island_writes": ["coordinator-scan.sh"], "op": "add", "transport": "REST"},
+        "agent/done": {"island_writes": ["coordinator-scan.sh"], "op": "add", "transport": "REST"},
+        "agent/error": {"island_writes": ["coordinator-scan.sh", "review-reflex.sh"], "op": "add+remove", "transport": "REST"},
+        "agent/arbitrate": {"island_writes": ["review-reflex.sh"], "op": "add", "transport": "REST"},
+        "merge-conflict": {"island_writes": ["update-pr-branch.sh"], "op": "add+remove", "transport": "REST"},
+        "major/awaiting-human": {"island_writes": ["major-handoff.sh"], "op": "add", "transport": "REST"},
+        "agent-fix": {"island_writes": []},
+        "major": {"island_writes": []},
+        "automerge": {"island_writes": []},
+        "deps-review": {"island_writes": []}
+      }]
+    },
+    "machine_block": {
+      "description": "ADR-122 (3): the block at the top of an issue body, read by agents/issue_body.py. Keys case-sensitive; anything else inside the fences is a parse error (exit 2 → the scan HOLDS).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Touches": {"type": "string", "description": "comma-separated repo-relative paths/globs (ADR-097)"},
+        "Base": {"type": "string", "pattern": "^\\S+$"},
+        "Budget": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+        "Verdict-authority": {"enum": ["human", "kpi"]},
+        "Production-leg": {"type": "string"},
+        "Revert": {"type": "string"},
+        "Origin": {"type": "string", "pattern": "^[A-Za-z0-9._/-]+#[0-9]+$"},
+        "Size": {"type": "string"},
+        "Capability": {"type": "string"},
+        "alert-fp": {"type": "string"},
+        "self-referential": {"type": "string"},
+        "fix-verdict": {"type": "string"},
+        "Class": {"enum": ["fix", "build", "goal", "research"]}
+      }
+    },
+    "machine_block_redrawn": {
+      "description": "🚧 WIP → ADR-122 (3) / P3: the five facts in one block. NOT built — admission and state are labels today.",
+      "type": "object",
+      "properties": {
+        "Admission": {"enum": ["inert", "queued"]},
+        "Class": {"enum": ["fix", "build", "goal", "research"]},
+        "Budget": {"type": "string"},
+        "State": {"enum": ["in-progress", "review", "blocked", "done", "error", "arbitrate"]},
+        "Verdict": {"type": "string"}
+      }
+    },
+    "markers": {
+      "type": "object",
+      "properties": {
+        "state_fp": {"type": "string", "pattern": "^🤖 `state-fp:(arbitrate|ci-red|infra-enrich|merge-conflict|unarmed-major|goal-checkpoint-[bc]):[0-9a-f]+`"},
+        "agent_event": {"type": "string", "pattern": "^<!-- agent-event kind=[^ ]+ ts=[^ ]+ -->$"},
+        "agent_summary_head": {"const": "<!-- agent-summary -->"},
+        "blocked_on": {"type": "string", "pattern": "^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)"},
+        "agent_error": {"type": "string", "pattern": "^AGENT_ERROR: "},
+        "agent_infeasible": {"type": "string", "pattern": "^AGENT_INFEASIBLE: "},
+        "agent_strike": {"type": "string", "pattern": "^AGENT_STRIKE"}
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/scan-decision.schema.json",
+  "title": "coordinator-scan.sh — wake inputs, the unit, the hold line, the clause set",
+  "description": "The machine half of scan-decision.md. The scan is bash; nothing imports this schema yet (rule 7 coupling is unbuilt for this island) — it states the shapes the scan reads and emits so a consumer can.",
+  "type": "object",
+  "x-requirements": {
+    "/properties/doorbell": ["SCAN-WAKE-DOORBELL", "SCAN-WAKE-FASTPATH"],
+    "/properties/env": ["SCAN-WAKE-DOORBELL"],
+    "/properties/unit": ["SCAN-WAKE-FASTPATH", "SCAN-CLAUSE-QUEUED", "SCAN-CLAUSE-PR", "SCAN-CLAUSE-GOAL"],
+    "/properties/clause": ["SCAN-CLAUSE-OWNERSHIP", "SCAN-CLAUSE-PR", "SCAN-CLAUSE-PHANTOM", "SCAN-LANE-WALK"],
+    "/properties/lane": ["SCAN-LANE-WALK"],
+    "/properties/hold": ["SCAN-HOLD-STRUCTURAL", "SCAN-HOLD-TRANSIENT", "SCAN-CLAUSE-QUEUED"]
+  },
+  "properties": {
+    "doorbell": {
+      "description": "POST /coordinate body on the agent-loop EventSource (coordinate-argo.yaml). Every field optional; a missing key keeps the Sensor's static default. A doorbell scopes a pass; it is never a work item.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repo": {"type": "string", "default": "all", "description": "scopes logging; v1 re-lists everything"},
+        "unit": {"type": "string", "default": "-", "description": "'-' = full scan; else a unit string — the fast path (SCAN-WAKE-FASTPATH)"},
+        "loop_ns": {"type": "string", "default": "-", "description": "non-empty = route to that stack's per-stack scan; '-' = the switchboard resolves"},
+        "stack": {"type": "string"},
+        "source": {"type": "string", "default": "", "description": "'capacity' = a capacity transition fan-out (issue#779)"},
+        "rail": {"type": "string", "default": ""}
+      }
+    },
+    "env": {
+      "description": "What the Sensor's workflow exports to the scan process.",
+      "type": "object",
+      "properties": {
+        "SCAN_STACK": {"type": "string"},
+        "LOOP_NS": {"type": "string", "pattern": "^[a-z0-9-]+-agents$"},
+        "SCAN_UNIT": {"type": "string"},
+        "SCAN_REPO": {"type": "string"},
+        "SCAN_RING_NS": {"type": "string"},
+        "SCAN_SOURCE": {"type": "string"},
+        "SCAN_RAIL": {"type": "string"}
+      }
+    },
+    "unit": {
+      "description": "One dispatchable decision. 3 fields for the PR clauses, 4 with the issue's class, 5 with the parent Goal.",
+      "type": "string",
+      "pattern": "^(c4c5-redispatch|arbitrate|changes-requested|merge-conflict|unarmed-major|infra-enrich|ci-red|merged-closeout|goal-checkpoint|goal-decompose|queued-dispatch)\\|[A-Za-z0-9._-]+\\|(issue|pr)-[0-9]+(\\|[a-z]*(\\|[0-9]+)?)?$"
+    },
+    "clause": {
+      "description": "Lane-walk priority order — the array order IS the priority (coordinator-scan.sh:6844).",
+      "type": "string",
+      "enum": ["c4c5-redispatch", "arbitrate", "changes-requested", "merge-conflict", "unarmed-major", "infra-enrich", "ci-red", "merged-closeout", "goal-checkpoint", "goal-decompose", "queued-dispatch"],
+      "x-report-only-belts": ["review-phantom", "frozen-open-pr", "done-phantom", "review-flip", "unowned-pr-backstop", "unblocked-unlabeled", "sprout-report"]
+    },
+    "lane": {
+      "description": "A (repo, base) pair; base verbatim off Base:/baseRefName, whitespace-trimmed, default branch then 'master' as fallback.",
+      "type": "object",
+      "required": ["repo", "base"],
+      "properties": {
+        "repo": {"type": "string"},
+        "base": {"type": "string", "pattern": "^\\S+$"}
+      }
+    },
+    "hold": {
+      "description": "One report line per held unit. No hold writes a label.",
+      "type": "object",
+      "required": ["kind", "reason", "item"],
+      "properties": {
+        "kind": {"enum": ["structural", "transient", "fail-closed"]},
+        "reason": {
+          "enum": [
+            "pin-only-guarded", "operator-lane", "governance",
+            "footprint", "wip-ceiling", "item-session-in-flight", "pr-cap-per-base", "queued-blocked", "queued-held-by-ghost", "not-dispatchable",
+            "guarded-set-unreadable", "governance-set-unreadable", "body-block-malformed", "touches-malformed"
+          ]
+        },
+        "item": {"type": "string", "pattern": "^(issue|pr)-[0-9]+$"},
+        "label_written": {"const": false}
+      }
+    }
+  }
+}

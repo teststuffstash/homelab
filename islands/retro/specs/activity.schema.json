@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/activity.schema.json",
+  "$comment": "MACHINE half of retro_activity.py (the activity state and its bundle); the HUMAN half is activity.md.",
+  "x-interface": "activity",
+  "x-use-cases": [
+    "UC-1"
+  ],
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "occurred_at",
+        "observed_at",
+        "repo",
+        "item",
+        "kind",
+        "url",
+        "payload"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "<repo>:<item>:<kind>:<source identity>"
+        },
+        "occurred_at": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string",
+          "description": "the pass that last wrote this event; a correction moves it"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "item": {
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string",
+          "description": "opened, commented, closed, reopened, labeled, unlabeled, cross-referenced, referenced, committed, merged, review, check, or agent-<marker kind>",
+          "pattern": "^(opened|commented|closed|reopened|labeled|unlabeled|cross-referenced|referenced|committed|merged|review|check|agent-[a-z-]+)$"
+        },
+        "url": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "x-requirements": [
+        "RETRO-ACTIVITY-COLLECT"
+      ]
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "repo",
+        "item",
+        "title",
+        "url",
+        "state",
+        "created_at",
+        "labels",
+        "is_pr"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "item": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "open",
+            "closed"
+          ]
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "closed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_pr": {
+          "type": "boolean"
+        },
+        "merged_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head_sha": {
+          "type": "string"
+        },
+        "pending_check_shas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "x-requirements": [
+        "RETRO-ACTIVITY-COLLECT"
+      ]
+    },
+    "state": {
+      "description": "_retro/activity.json — shared by every series",
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          },
+          "x-requirements": [
+            "RETRO-ACTIVITY-PRUNE"
+          ]
+        },
+        "items": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/item"
+          }
+        },
+        "collected_until": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string"
+        },
+        "repos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope_source": {
+          "enum": [
+            "live claims over committed mirror",
+            "committed mirror (live claim read unavailable)",
+            "explicit repo scope"
+          ]
+        }
+      },
+      "x-requirements": [
+        "RETRO-ACTIVITY-COLLECT"
+      ]
+    },
+    "task": {
+      "description": "one scored item in bundle.tasks (prompt-side, compacted)",
+      "type": "object",
+      "required": [
+        "key",
+        "score",
+        "failure_events",
+        "infra_failure_events",
+        "superseded_cancellations",
+        "agent_pain_events",
+        "round_count",
+        "standing_stall_seconds"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "failure_events": {
+          "type": "integer"
+        },
+        "infra_failure_events": {
+          "type": "integer"
+        },
+        "superseded_cancellations": {
+          "type": "integer"
+        },
+        "agent_pain_events": {
+          "type": "integer"
+        },
+        "round_count": {
+          "type": "integer"
+        },
+        "direct_event_count": {
+          "type": "integer"
+        },
+        "standing_stall_seconds": {
+          "type": "number"
+        },
+        "event_count": {
+          "type": "integer"
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 8
+        },
+        "context": {
+          "type": "object"
+        }
+      },
+      "x-requirements": [
+        "RETRO-ACTIVITY-SCORE"
+      ]
+    },
+    "bundle_population": {
+      "type": "object",
+      "properties": {
+        "event_count": {
+          "type": "integer"
+        },
+        "task_count": {
+          "type": "integer"
+        },
+        "by_kind": {
+          "type": "object"
+        },
+        "failure_events": {
+          "type": "integer",
+          "description": "pre-credit total"
+        },
+        "infra_failure_events": {
+          "type": "integer"
+        },
+        "superseded_cancellations": {
+          "type": "integer"
+        },
+        "agent_pain_events": {
+          "type": "integer"
+        },
+        "worker_stat_records": {
+          "type": "integer"
+        },
+        "worker_cost_measured_records": {
+          "type": "integer"
+        },
+        "worker_cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "worker_duration_s": {
+          "type": "number"
+        },
+        "standing_stall_seconds": {
+          "type": "number"
+        }
+      },
+      "x-requirements": [
+        "RETRO-ACTIVITY-SCORE"
+      ]
+    },
+    "legacy_rank_row": {
+      "description": "retro-rank.py <ledger.jsonl> <ranked.json> [KEEP=40]: the output is the top-KEEP ledger rows, each with a dense 1-based `rank`; snapshot rows and closed-with-merged-strong-link rows excluded",
+      "type": "object",
+      "required": [
+        "rank"
+      ],
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snapshot": {
+          "not": {
+            "const": true
+          }
+        }
+      },
+      "x-requirements": [
+        "RETRO-RANK-LEGACY"
+      ]
+    }
+  }
+}

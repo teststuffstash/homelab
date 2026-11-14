@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/dispatch.schema.json",
+  "title": "The item dispatch — coordinator-session.sh argv, the --item grammar, the exit contract, the admission it leads to",
+  "description": "Machine half of dispatch.md. `argv` is what coordinator-scan.sh passes; `argv_redrawn` is the target shape with no model (⚑ gap until the gateway defer replaces the scan's rail probe).",
+  "type": "object",
+  "x-requirements": {
+    "/properties/argv": ["SCAN-DISPATCH-ITEM"],
+    "/properties/argv_redrawn": ["SCAN-DISPATCH-ITEM", "SCAN-DISPATCH-ADMISSION"],
+    "/properties/item": ["SCAN-DISPATCH-ITEM"],
+    "/properties/exit": ["SCAN-DISPATCH-ATOMIC"],
+    "/properties/admission": ["SCAN-DISPATCH-ADMISSION"],
+    "/properties/launch": ["SCAN-DISPATCH-RERUN"]
+  },
+  "$defs": {
+    "token": {"type": "string", "pattern": "^[A-Za-z0-9._/=-]+$"}
+  },
+  "properties": {
+    "argv": {
+      "type": "object",
+      "required": ["stack", "repos", "main_repo", "wip", "detach", "item"],
+      "properties": {
+        "stack": {"type": "string"},
+        "repos": {"type": "string", "description": "space-separated stack repos"},
+        "main_repo": {"type": "string"},
+        "loop_ns": {"type": "string", "pattern": "^[a-z0-9-]+-agents$"},
+        "model": {"type": "string", "description": "⚑ gap — sent today (coordinatorModel or an opencode-go/<id>); absent from argv_redrawn"},
+        "wip": {"type": "integer", "minimum": 1, "description": "ADR-097 AGENT_WIP_LIMIT for the item's repo; 1 on probe failure"},
+        "detach": {"const": true},
+        "item": {"type": "string", "description": "space-joined key=value tokens — see `item`"}
+      }
+    },
+    "argv_redrawn": {
+      "description": "The redrawn contract: identity + launcher-owned parameters only; the tier is derived from the clause by the admission, not chosen by the scan.",
+      "type": "object",
+      "required": ["stack", "repos", "main_repo", "wip", "detach", "item"],
+      "not": {"required": ["model"]}
+    },
+    "item": {
+      "type": "object",
+      "required": ["repo", "item", "clause"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {"$ref": "#/$defs/token"},
+        "item": {"type": "string", "pattern": "^(issue|pr)-[0-9]+$"},
+        "clause": {"enum": ["c4c5-redispatch", "arbitrate", "changes-requested", "merge-conflict", "unarmed-major", "infra-enrich", "ci-red", "merged-closeout", "goal-checkpoint", "goal-decompose", "queued-dispatch", "noop-rerun"]},
+        "class": {"enum": ["fix", "build", "goal", "research"]},
+        "parent": {"type": "string", "pattern": "^[0-9]+$"},
+        "work-branch": {"$ref": "#/$defs/token"},
+        "goal": {"type": "string", "pattern": "^[0-9]+$"},
+        "bucket": {"type": "string", "pattern": "^[0-9]+$"},
+        "harvest": {"enum": ["store", "inert"]},
+        "themes": {"type": "array", "items": {"$ref": "#/$defs/token"}}
+      }
+    },
+    "exit": {
+      "description": "coordinator-session.sh exit codes as the scan reads them.",
+      "oneOf": [
+        {"const": 0, "description": "pod created (and Ready under --detach) — the lane counts as dispatched"},
+        {"const": 2, "description": "usage refusal — no pod (missing repo=/item=, non-inert --launch token, mutually exclusive modes)"},
+        {"const": 3, "description": "a racing dispatcher holds the (repo, item) key — the scan marks the unit tried and walks on"},
+        {"type": "integer", "minimum": 1, "description": "any other failure — the scan flushes class rows and exits with this code"}
+      ]
+    },
+    "admission": {
+      "description": "In-pod admission of the item session's LLM, through the launch island's gateway-admit.sh → gateway POST /sessions (gateway/specs/endpoints/sessions.schema.json is the owner of the wire shapes).",
+      "type": "object",
+      "required": ["stack", "role", "task", "harness"],
+      "properties": {
+        "stack": {"const": "platform", "description": "⚑ gap — only the platform stack admits through the gateway today"},
+        "role": {"const": "coordinator"},
+        "task": {"type": "string", "description": "the pod name coordinator-<repo>-<item-key>"},
+        "tier": {"enum": ["", "heavy"], "description": "heavy for goal-decompose / goal-checkpoint items"},
+        "harness": {"const": "claude"},
+        "verdict": {"enum": ["dispatch", "defer", "refused", "fail-closed"]}
+      }
+    },
+    "launch": {
+      "description": "The --launch argv of a noop-rerun pod: agents/agent-session.sh's fix-round line, every token shell-inert.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/token"},
+      "minItems": 9
+    }
+  }
+}

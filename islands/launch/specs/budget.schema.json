@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teststuff.net/agents/islands/launch/specs/budget.schema.json",
+  "$comment": "MACHINE half of estimate_budget.py (budget.md is the human half): its CLI, its JSON answer and the CR it emits. agents/ledger.py keeps a copy of the enforced caps (TIERS) in lockstep by comment — the second reader this schema would replace.",
+  "x-interface": "budget",
+  "x-use-cases": ["UC-1"],
+  "type": "object",
+  "properties": {
+    "cli": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "issue_file": { "type": "string" },
+        "issue_chars": { "type": "integer", "minimum": 0 },
+        "model": { "type": "string", "default": "openrouter/deepseek/deepseek-v4-flash" },
+        "price_per_mtok": { "type": "number", "minimum": 0 },
+        "rounds": { "type": "integer", "default": 3 },
+        "context_tokens": { "type": "integer", "default": 50000 },
+        "cache_hit": { "type": "number", "minimum": 0, "maximum": 1 },
+        "label": { "type": "string", "pattern": "^(agent-budget/)?(xs|sm|md|lg)$" },
+        "registry_cache": { "type": "string" },
+        "refresh": { "type": "boolean" },
+        "lookup": { "type": "boolean" },
+        "project": { "type": "string" },
+        "session": { "type": "string" },
+        "ttl_hours": { "type": "number", "default": 4.0 },
+        "emit_cr": { "type": "boolean" },
+        "self_test": { "type": "boolean" }
+      },
+      "x-requirements": ["LAUNCH-BUDGET-ESTIMATE"]
+    },
+    "estimate": {
+      "type": "object",
+      "required": ["estimate_usd", "tier", "cap_usd", "escalate", "model", "price_per_mtok", "issue_tokens", "requests_per_round", "rounds", "cache_hit", "price_source", "price_note"],
+      "properties": {
+        "estimate_usd": { "type": "number", "minimum": 0 },
+        "tier": { "enum": ["xs", "sm", "md", "lg"] },
+        "cap_usd": { "enum": [0.5, 1.0, 2.0, 4.0] },
+        "escalate": { "type": "boolean" },
+        "model": { "type": "string" },
+        "price_per_mtok": { "type": "number" },
+        "issue_tokens": { "type": "integer" },
+        "requests_per_round": { "enum": [50, 90, 160] },
+        "rounds": { "type": "integer" },
+        "cache_hit": { "type": "number" },
+        "price_source": { "type": "string", "examples": ["override", "registry", "static", "default"] },
+        "price_note": { "type": "string" }
+      },
+      "x-tiers": { "xs": [0.25, 0.5], "sm": [0.5, 1.0], "md": [1.0, 2.0], "lg": [2.0, 4.0] },
+      "x-buffer": 2.0,
+      "x-requirements": ["LAUNCH-BUDGET-ESTIMATE"]
+    },
+    "cr": {
+      "type": "object",
+      "properties": {
+        "apiVersion": { "const": "openrouter.teststuff.net/v1alpha1" },
+        "kind": { "const": "OpenRouterKey" },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+            "namespace": { "type": "string" },
+            "labels": { "type": "object", "required": ["budget-tier", "budget-estimate-usd"] }
+          }
+        },
+        "spec": {
+          "type": "object",
+          "required": ["project", "budgetUSD", "ephemeral", "session", "secretName", "expiresAt"],
+          "properties": {
+            "budgetUSD": { "enum": [0.5, 1.0, 2.0, 4.0] },
+            "ephemeral": { "const": true },
+            "secretName": { "type": "string", "pattern": "^.+-session-.+-openrouter$" },
+            "expiresAt": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "x-requirements": ["LAUNCH-BUDGET-CR"]
+    }
+  }
+}
