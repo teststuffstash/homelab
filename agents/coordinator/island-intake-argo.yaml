@@ -534,7 +534,8 @@ spec:
               }
               _base_ready() { # <sha> → the clone holds it (a depth-1 clone has only master's tip; fetch the author's base when it differs)
                 git cat-file -e "$1^{commit}" 2>/dev/null && return 0
-                git -c "$_ah" fetch -q --depth 1 origin "$1" 2>&1 | tail -2 | sed 's/^/island-intake: base fetch: /'
+                # the clone's own config already carries the auth header (`git clone -c` persists it): a second -c doubles it (HTTP 400)
+                git fetch -q --depth 1 origin "$1" 2>&1 | tail -2 | sed 's/^/island-intake: base fetch: /'
                 git cat-file -e "$1^{commit}" 2>/dev/null
               }
 
