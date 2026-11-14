@@ -32,7 +32,7 @@ sequenceDiagram
   G->>S3: prepare: window [11-02, 11-09), 11 ledger tasks ≥ 8 → bundle frozen — RETRO-GUARD-LEDGER, RETRO-BUNDLE-FROZEN
   C->>GW: ② POST /sessions role retro, harness claude / goose — RETRO-CELL-PATH
   GW-->>C: dispatch claude/sonnet · dispatch opencode-go/kimi-k3.1-pro
-  C->>C: ③ ride; self-check: report ≥ 20 content lines — RETRO-CELL-SELFCHECK
+  C->>C: ③ ride, then self-check: report ≥ 20 content lines — RETRO-CELL-SELFCHECK
   H->>H: ④ served models → slugs sonnet, kimi-k3.1-pro — RETRO-HARVEST-NAME
   H->>GH: branch retro/2026-11-09-platform-r11 + PR — RETRO-HARVEST-PR
   H->>S3: ⑤ publish: findings parsed, checkpoint → 11-09 — RETRO-PUBLISH-CHECKPOINT

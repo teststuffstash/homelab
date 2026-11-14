@@ -29,18 +29,18 @@ sequenceDiagram
   participant P as worker pod
   S->>L: ① agent-session.sh homelab --task issue-2588 --round 1 --recipe .agents/fix.yaml — LAUNCH-DISPATCH-ARGV
   L->>K: ② read the AgentStack claims (docker, ride size, egress, MCP, specs) — LAUNCH-CARD-FACTS
-  L->>GH: ② issue body → Base:/Touches: through the one parser; parent chain → goal budget — LAUNCH-PREFLIGHT-BODY, -ARM, -GOAL-BUDGET
+  L->>GH: ② issue body → Base and Touches through the one parser, parent chain → goal budget — LAUNCH-PREFLIGHT-BODY, -ARM, -GOAL-BUDGET
   L->>G: ③ POST /sessions {stack, role, task, round, bind{homelab, agentstack-worker, agent-homelab-issue-2588-r1}} — LAUNCH-ADMIT-LAUNCHER
   G-->>L: dispatch {session, rail, harness, model, env_keys, pull_url, context_tokens} — no token — LAUNCH-ADMIT-BOUND
   L->>GH: ④ issue + comments (REST, trusted only) → index.txt, issue.md — LAUNCH-BUNDLE-DIRECTIVE, -TRUST
   L->>K: ④ ConfigMap agent-homelab-issue-2588-r1-context — LAUNCH-BUNDLE-DELIVERY
-  L->>K: ⑤ create pod (pull URL + env keys + projected token; recipe with the card) — LAUNCH-POD-*, LAUNCH-DISPATCH-RECIPE
+  L->>K: ⑤ create pod (pull URL + env keys + projected token, recipe with the card) — LAUNCH-POD-*, LAUNCH-DISPATCH-RECIPE
   P->>G: ⑥ POST /sessions/{id}/env (projected token) — the pod's own pull (GW-SESSIONS-PULL)
   Note over P: exports OPENCODE_CONFIG_CONTENT, runs opencode on the recipe, opens a PR via pr-open
   P-->>L: ⑦ AGENT_RUN_STATS {exit_status, pr_url, …} in the log
   L->>G: ⑦ POST /sessions/{id}/outcome {class: clean} — LAUNCH-OUTCOME-GATEWAY
   L->>G: ⑧ DELETE /sessions/{id}
-  L->>S: ⑧ POST /coordinate {repo: homelab} — LAUNCH-OUTCOME-DOORBELL; exit 0
+  L->>S: ⑧ POST /coordinate {repo: homelab} — LAUNCH-OUTCOME-DOORBELL, exit 0
 ```
 
 ## Walk-through data (the golden thread)
