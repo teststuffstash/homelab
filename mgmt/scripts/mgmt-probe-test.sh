@@ -13,7 +13,8 @@ export MGMT_TEXTFILE_DIR="$T/text" DRY_RUN=0 MODE=belt
 . "$HERE/mgmt-probe.sh" 2>/dev/null || { echo "FATAL: could not source mgmt-probe.sh"; exit 1; }
 
 fails=0 n=0
-reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; }
+# shellcheck disable=SC2034  # read by the sourced probe (passed/failed/skipped, publish)
+reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; SEEDS=(); }
 check() {  # check <name> <expected "status reason"> — against the single RESULTS row
   n=$((n+1))
   local got="${RESULTS[0]#* }"
@@ -190,6 +191,70 @@ done < <(grep -oE '\b(failed|skipped) "?[a-z0-9:$_{}]+"? [a-z-]+ "' "$HERE/mgmt-
 used="$(grep -cE '\b(failed|skipped) "?[a-z0-9:$_{}]+"? [a-z-]+ "' "$HERE/mgmt-probe.sh")"
 if [ -z "$bad" ] && [ "$used" -ge 30 ]; then echo "ok   all $used call sites use vocabulary words"; else
   echo "FAIL call sites outside the vocabulary:${bad:- none} (matched $used call sites, expected ≥30)"; fails=$((fails+1)); fi
+
+# 10. check_seeds — the runner seed the main STATE declares (the lost-trigger detector's declared half).
+#     A state in tofu's v4 shape: two runner VMs, each referencing its own snippet by id; a non-runner
+#     VM with a snippet (out of the `ci_runner*` glob → no series); a runner VM whose file id matches
+#     no file (→ no series). Expected shas are sha256 of the content's exact bytes — the same bytes
+#     Proxmox hands the VM as user-data.txt — computed here from the inputs, not by the probe.
+S1=$'#cloud-config\nhostname: ci-runner-01\n'
+S2=$'#cloud-config\nhostname: ci-runner-02\nruncmd:\n  - echo "tab\there" \\\n'
+jq -n --arg s1 "$S1" --arg s2 "$S2" '{version: 4, resources: [
+  {mode: "managed", type: "proxmox_virtual_environment_file", name: "ci_runner_cloud_init",
+   instances: [{index_key: 0, attributes: {id: "local:snippets/ci-runner-cloud-init.yaml", source_raw: [{file_name: "ci-runner-cloud-init.yaml", data: $s1}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_file", name: "ci_runner_02_cloud_init",
+   instances: [{index_key: 0, attributes: {id: "local:snippets/ci-runner-02-cloud-init.yaml", source_raw: [{file_name: "ci-runner-02-cloud-init.yaml", data: $s2}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_file", name: "other_cloud_init",
+   instances: [{attributes: {id: "local:snippets/other.yaml", source_raw: [{data: "x"}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_vm", name: "ci_runner",
+   instances: [{index_key: 0, attributes: {name: "ci-runner-01", initialization: [{user_data_file_id: "local:snippets/ci-runner-cloud-init.yaml"}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_vm", name: "ci_runner_02",
+   instances: [{index_key: 0, attributes: {name: "ci-runner-02", initialization: [{user_data_file_id: "local:snippets/ci-runner-02-cloud-init.yaml"}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_vm", name: "ci_runner_03",
+   instances: [{index_key: 0, attributes: {name: "ci-runner-03", initialization: [{user_data_file_id: "local:snippets/gone.yaml"}]}}]},
+  {mode: "managed", type: "proxmox_virtual_environment_vm", name: "other_vm",
+   instances: [{attributes: {name: "other", initialization: [{user_data_file_id: "local:snippets/other.yaml"}]}}]}
+]}' >"$T/main.tfstate"
+H1="$(printf '%s' "$S1" | sha256sum | cut -d' ' -f1)"
+H2="$(printf '%s' "$S2" | sha256sum | cut -d' ' -f1)"
+seeds_published() { grep '^mgmt_runner_seed_declared_info{' "$prom" 2>/dev/null | sort; }
+
+reset; MAIN_STATE="$T/main.tfstate" check_seeds >/dev/null 2>&1
+check "two runner seeds in state → pass ok" "pass ok"
+publish >/dev/null 2>&1
+n=$((n+1))
+want="$(printf 'mgmt_runner_seed_declared_info{vm="ci-runner-01",sha256="%s"} 1\nmgmt_runner_seed_declared_info{vm="ci-runner-02",sha256="%s"} 1' "$H1" "$H2" | sort)"
+got="$(seeds_published)"
+if [ "$got" = "$want" ]; then echo "ok   two runner VMs → two declared series, names + shas from the state"; else
+  echo "FAIL declared series: want
+$want
+got
+$got"; fails=$((fails+1)); fi
+
+# unreadable state → fail unparseable, and the rewritten file carries NO declared series
+printf 'not json{' >"$T/bad.tfstate"
+reset; MAIN_STATE="$T/bad.tfstate" check_seeds >/dev/null 2>&1
+check "unreadable main state → fail unparseable" "fail unparseable"
+publish >/dev/null 2>&1
+n=$((n+1)); if [ -z "$(seeds_published)" ]; then echo "ok   an unreadable state publishes no declared series"; else
+  echo "FAIL unreadable state published: $(seeds_published)"; fails=$((fails+1)); fi
+
+# no state file (the jail) → skip no-input, no series
+reset; MAIN_STATE="$T/absent.tfstate" check_seeds >/dev/null 2>&1
+check "no main state → skip no-input" "skip no-input"
+publish >/dev/null 2>&1
+n=$((n+1)); if [ -z "$(seeds_published)" ]; then echo "ok   an absent state publishes no declared series"; else
+  echo "FAIL absent state published: $(seeds_published)"; fails=$((fails+1)); fi
+
+# the VM side's metric line, rendered from the real template: the runcmd hashes user-data.txt and
+# names the VM by the template's ${name}. Rendering through tofu is the sentinel's job; here the
+# guard is that the line exists and survives tftpl escaping (a `${` would be a template var).
+n=$((n+1))
+TPL="$HERE/../../tofu/templates/ci-runner-cloud-init.yaml.tftpl"
+if grep -qF 'ci_runner_seed_info{vm="${name}",sha256="%s"} 1' "$TPL" \
+   && grep -qF 'sha256sum /var/lib/cloud/instance/user-data.txt' "$TPL"; then
+  echo "ok   the runner template publishes ci_runner_seed_info{vm,sha256}"; else
+  echo "FAIL the runner template no longer writes ci_runner_seed_info — MgmtRunnerSeedDrift's live side"; fails=$((fails+1)); fi
 
 echo "mgmt-probe-test: $((n-fails))/$n passed"
 [ "$fails" -eq 0 ]

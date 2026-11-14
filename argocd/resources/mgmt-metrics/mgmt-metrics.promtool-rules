@@ -98,6 +98,16 @@ groups:
         labels:
           severity: warning
           triage: dig
+  - name: mgmt-runner-seed
+    rules:
+      - alert: MgmtRunnerSeedDrift
+        expr: |
+          mgmt_runner_seed_declared_info == 1
+            unless on (vm, sha256) ci_runner_seed_info == 1
+        for: 6h
+        labels:
+          severity: warning
+          triage: none
   - name: mgmt-belt
     rules:
       - alert: MgmtBeltStale
