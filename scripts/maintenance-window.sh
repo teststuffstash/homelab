@@ -141,8 +141,9 @@ EXPECTED='[]'
 WIN_NODE=""
 # SCOPE (`--scope-ip <ip> [--scope-vm <name>] [--scope-prefix <P>]`, on `open` and `compare`): an act on
 # ONE machine outside the cluster (a ci-runner VM) can only raise alerts about that machine, so a new
-# name counts only if one of its firing instances is in scope — `instance` host == ip, `vm` == name, or
-# the name starts with the prefix. Out-of-scope names print and pass; the responder still sees them.
+# name counts only if one of its firing instances is in scope — `instance` host == ip, a `vm`, `name`
+# (the pve guest alerts: PveVmIoError, PveGuestSwapped) or `host` label == the vm name, or the alert
+# name starts with the prefix. Out-of-scope names print and pass; the responder still sees them.
 # Empty (the default) = every new name counts, as before. Never set without an ip (fail closed).
 SCOPE='{}'
 
@@ -538,7 +539,7 @@ classify_off_baseline() { # <baseline-json> <now-json>
     def inst($n): [ ($now.firing // [])[] | select(.alertname == $n) ];
     def inscope($n; $l): (($scope.prefix // "") != "" and ($n | startswith($scope.prefix)))
         or ((($l.instance // "") | split(":")[0]) == $scope.ip)
-        or (($scope.vm // "") != "" and ($l.vm // "") == $scope.vm);
+        or (($scope.vm // "") != "" and ([$l.vm, $l.name, $l.host] | index($scope.vm)) != null);
     reduce $cand[] as $a ({claimed:[], declared:[], node:[], scoped_out:[], new:[], ctx_unread:$unread};
       if ($cl|index($a)) != null then .claimed += [$a]
       elif ($exp|index($a)) != null then .declared += [$a]
@@ -591,7 +592,7 @@ compare_snapshots() { # <baseline-json> <now-json>
     for a in $(jq -r '.node[]' <<<"$bins"); do echo "  ok  EXPECTED $a (node consequence)"; done
     [ "$(jq -r .ctx_unread <<<"$bins")" != true ] || echo "  ⚠ node context for $WIN_NODE UNREADABLE (InternalIP / DaemonSet pods) — consequence alerts not pinned by a node label count as NEW"
     a="$(jq -r '.scoped_out|join(", ")' <<<"$bins")"
-    [ -z "$a" ] || echo "  ok  firing but OUT OF SCOPE (not about $(jq -r '.vm // .ip' <<<"$SCOPE")): $a"
+    [ -z "$a" ] || echo "  ok  firing but OUT OF SCOPE (not about $(jq -r 'if (.vm // "") != "" then .vm else .ip end' <<<"$SCOPE")): $a"
     new="$(jq -r '.new|join(", ")' <<<"$bins")"
     if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
   fi

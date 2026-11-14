@@ -393,6 +393,14 @@ out="$(sc "Watchdog TargetDown{instance=10.9.9.9:9100}")"; rc=$?
 [ "$rc" -eq 2 ] && grep -q "NEW firing alerts: TargetDown" <<<"$out" && ok "…blocks on one about the VM's instance" || bad "scope instance rc=$rc: $out"
 out="$(sc "Watchdog MgmtRunnerSeedDrift{vm=vm-a}")"; rc=$?
 [ "$rc" -eq 2 ] && ok "…blocks on one carrying the VM's vm label" || bad "scope vm rc=$rc: $out"
+out="$(sc "Watchdog PveVmIoError{name=vm-a,instance=10.0.0.5:9221}")"; rc=$?
+[ "$rc" -eq 2 ] && ok "…blocks on a pve guest alert naming the VM by name= (hypervisor instance)" || bad "scope pve name rc=$rc: $out"
+out="$(sc "Watchdog SomeHostAlert{host=vm-a,instance=10.0.0.6:1}")"; rc=$?
+[ "$rc" -eq 2 ] && ok "…blocks on one carrying the VM as host=" || bad "scope host rc=$rc: $out"
+out="$(sc "Watchdog PveVmIoError{name=vm-b,instance=10.0.0.5:9221}")"; rc=$?
+[ "$rc" -eq 0 ] && ok "…passes the same alert about ANOTHER guest" || bad "scope pve other rc=$rc: $out"
+out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog Foo{repo=x}" FAKE_UP=100 bash "$SUT" compare "$TMP/base-sc.json" --scope-ip 10.9.9.9 2>&1)"
+grep -q "OUT OF SCOPE (not about 10.9.9.9): Foo" <<<"$out" && ok "an ip-only scope names the ip in the out-of-scope line" || bad "ip-only display: $out"
 out="$(sc "Watchdog CiRunnerRootFsFillingUp{instance=10.0.0.1:9100}")"; rc=$?
 [ "$rc" -eq 2 ] && ok "…blocks on a prefixed name whatever its instance" || bad "scope prefix rc=$rc: $out"
 out="$(sc "Watchdog TargetDown{instance=10.0.0.1:9100} TargetDown{instance=10.9.9.9:9100}")"; rc=$?

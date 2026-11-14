@@ -1122,7 +1122,8 @@ the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `
   stack's red CI, and the stack reports it or makes the version bump on its side. Seen on the first
   unattended run: oracle-fleet's own lint failure (started before the window) failed ci-runner-01's run,
   and ci-runner-02's clean run failed at close on "CI status UNREADABLE". Its new-alert diff is likewise
-  **scoped to the VM** (`--scope-ip/-vm/-prefix CiRunner` on the window and the compare): an alert about
+  **scoped to the VM** (`--scope-ip/-vm/-prefix CiRunner` on the window and the compare — its instance,
+  a `vm`/`name`/`host` label, which covers the pve guest alerts, or a `CiRunner*` name): an alert about
   anything else in the fleet prints out of scope and passes — round two failed on the agent platform's
   `BlockingCodeownerParkWaiting`. The cluster probes stay strict.
 - **The final full apply stamps.** A scoped apply does not advance `applied-rev`; the tick after

@@ -94,7 +94,8 @@ MGMT_TF="${MGMT_TF:-$ROOT/mgmt/scripts/mgmt-tf.sh}"
 # (version bumps on its side, never a migration). Declared, not silenced: the responder still sees them.
 # The window opens `--no-ci` for the same reason: its close skips the stranded-CI probe (gh; the box has none).
 # And the new-alert diff is SCOPED to this VM (operator ruling, same section): the VM is outside the
-# cluster, so only an alert about it — its instance, its `vm` label, a `CiRunner*` name — can be its
+# cluster, so only an alert about it — its instance, its `vm`/`name`/`host` label (the pve guest alerts
+# carry `name`), a `CiRunner*` name — can be its
 # doing; any other new alert in the fleet prints out of scope and passes. The cluster probes (nodes,
 # targets, cilium, pods) stay as strict as ever.
 CI_OUTCOME_ALERTS="GithubWorkflowRunFailed"
