@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/findings.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/findings.schema.json",
   "$comment": "MACHINE half of retro_findings.py + retro_queue.py; the HUMAN half is findings.md.",
   "x-interface": "findings",
   "x-use-cases": ["UC-1"],

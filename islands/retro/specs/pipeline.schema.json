@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/pipeline.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/pipeline.schema.json",
   "$comment": "MACHINE half of retro_pipeline.py and the _retro/ store; the HUMAN half is pipeline.md.",
   "x-interface": "pipeline",
   "x-use-cases": ["UC-1"],

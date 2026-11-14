@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/pod.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/pod.schema.json",
   "$comment": "MACHINE half of the worker pod the launcher writes (pod.md is the human half) — the fields other islands read, not the whole manifest. The LLM env VALUES a gateway ride exports are the supplier's (gateway sessions.schema.json pull.output.env, GW-SESSIONS-ENV); this file pins only the slot that points at them.",
   "x-interface": "pod",
   "x-use-cases": ["UC-1"],

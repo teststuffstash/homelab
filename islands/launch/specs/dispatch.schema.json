@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/dispatch.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/dispatch.schema.json",
   "$comment": "MACHINE half of the launcher CLI (dispatch.md is the human half). The launcher is bash, so nothing imports this file yet (rule 7 ⛑ gap: the coupling is by annotation only). `argv` is the parsed flag set, `exit` the code vocabulary, `derived` the facts the launcher computes instead of being told (ADR-094), `stderr` the verdict-line grammar a caller may match.",
   "x-interface": "dispatch",
   "x-use-cases": ["UC-1"],

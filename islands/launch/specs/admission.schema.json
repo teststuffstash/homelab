@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/admission.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/admission.schema.json",
   "$comment": "MACHINE half of the admission helper (admission.md is the human half). The WIRE shapes are the supplier's: `request` and `answer` reference gateway/specs/endpoints/sessions.schema.json and are never re-declared here. This file declares only the helper's own surface: its argv, return codes and output variables, and the worker launcher's knobs. ⚑ gap: nothing validates a seam request against the supplier schema (a fixture sends tier `strong`).",
   "x-interface": "admission",
   "x-use-cases": ["UC-1"],

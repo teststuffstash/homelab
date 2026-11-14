@@ -13,6 +13,11 @@
 - **Membership** — every `Touches` entry under `islands/launch/`, or a title starting
   `launch island:`. An item on the OLD launcher (`agent-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
+- **Not yet selectable**: `gateway/scripts/intake-select.sh` has no row for this island on master
+  (2026-11-14) — `--island launch` exits 2, a Touches-only item under `islands/` lands in `none` (or
+  agent-loop attribution).
+  Until the selector rows land (a separate change), a sitting on this island is the seat's, run with
+  this file by hand.
 - **Read set** = [`islands/launch/README.md`](../../islands/launch/README.md) +
   [`islands/launch/specs/README.md`](../../islands/launch/specs/README.md) + the page an item names
   (+ its schema). The old member the item replaces (`agents/agent-session.sh`, `gateway-admit.sh`, `pr-open.sh`, `recipe-lint.sh`, `estimate_budget.py`, `model_id.py`) may be read as **the behaviour to

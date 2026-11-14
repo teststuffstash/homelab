@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/outcome.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/outcome.schema.json",
   "$comment": "MACHINE half of the ride's end (outcome.md is the human half). The gateway outcome's wire shape and its class vocabulary are the supplier's (gateway sessions.schema.json #/outcome/input, GW-SESSIONS-OUTCOME) and are referenced, not re-declared; `err_class` is the launcher's own finer vocabulary and `gateway_class_map` is the projection between them.",
   "x-interface": "outcome",
   "x-use-cases": ["UC-1"],

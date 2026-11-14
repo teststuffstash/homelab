@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/activity.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/activity.schema.json",
   "$comment": "MACHINE half of retro_activity.py (the activity state and its bundle); the HUMAN half is activity.md.",
   "x-interface": "activity",
   "x-use-cases": [

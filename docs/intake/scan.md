@@ -13,6 +13,11 @@
 - **Membership** — every `Touches` entry under `islands/scan/`, or a title starting
   `scan island:`. An item on the OLD scan (`coordinator-scan.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
+- **Not yet selectable**: `gateway/scripts/intake-select.sh` has no row for this island on master
+  (2026-11-14) — `--island scan` exits 2, a Touches-only item under `islands/` lands in `none` (or
+  agent-loop attribution), and agent-loop's title ERE `^(scan|…)\b` also matches `scan island:`.
+  Until the selector rows land (a separate change), a sitting on this island is the seat's, run with
+  this file by hand.
 - **Read set** = [`islands/scan/README.md`](../../islands/scan/README.md) +
   [`islands/scan/specs/README.md`](../../islands/scan/specs/README.md) + the page an item names
   (+ its schema). The old member the item replaces (`agents/coordinator-scan.sh`, `coordinator-session.sh`, `update-pr-branch.sh`, `review-reflex.sh`, `major-handoff.sh`, … — the list in the README) may be read as **the behaviour to

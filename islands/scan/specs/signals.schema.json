@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/signals.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/signals.schema.json",
   "title": "The scan's pushgateway families — grouping keys, metric names, labels",
   "type": "object",
   "x-requirements": {

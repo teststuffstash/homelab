@@ -13,6 +13,11 @@
 - **Membership** — every `Touches` entry under `islands/retro/`, or a title starting
   `retro island:`. An item on the OLD retro (`retro_*.py`, `retro-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
+- **Not yet selectable**: `gateway/scripts/intake-select.sh` has no row for this island on master
+  (2026-11-14) — `--island retro` exits 2, a Touches-only item under `islands/` lands in `none` (or
+  agent-loop attribution).
+  Until the selector rows land (a separate change), a sitting on this island is the seat's, run with
+  this file by hand.
 - **Read set** = [`islands/retro/README.md`](../../islands/retro/README.md) +
   [`islands/retro/specs/README.md`](../../islands/retro/specs/README.md) + the page an item names
   (+ its schema). The old member the item replaces (`agents/retro_activity.py`, `retro_pipeline.py`, `retro_findings.py`, `retro_queue.py`, `retro_guard_expr.py`, `retro-session.sh`, …) may be read as **the behaviour to
@@ -24,7 +29,7 @@
   `docs/intake/**` = `machine-merge`. Anything under `agents/**` is `codeowner-merge` and **out of
   this island's scope** — the old members are never edited from an island item.
 - **The oracle for correctness** = the replay families the island's specs name per requirement
-  (`retro-quiet-guard`, `retro-gateway-cell`, `retro-key/*`, `retro-cell-report/*`, `retro-harvest`, `retro-harvest-push`, `retro-push-belt`, `retro-activity-window`; plus the in-process suites `agents/retro-{activity,pipeline,findings}-test.py`) — `agents/replay/fixtures/**`, **read-only**: the new build's tests drive those
+  (`retro-quiet-guard`, `retro-gateway-cell`, `retro-key/*`, `retro-cell-report/*`, `retro-harvest`, `retro-harvest-push`, `retro-push-belt`, `retro-activity-window`) — `agents/replay/fixtures/**`, **read-only** — plus the in-process suites `agents/retro-{activity,pipeline,findings}-test.py` (standalone test scripts of the OLD members, not fixtures: run them as the behaviour to match, never edit them from here): the new build's tests drive those
   worlds and match their expected streams; a build item never edits a fixture (an existing
   assertion changed is a red flag, `agents/jail-subagent-card.md`). The runtime-read templates `docs/agents/retros/{BRIEF,CROSS-REVIEW,SERIES-BRIEF}.md` stay in place; reports under `docs/agents/retros/` are historical.
 - **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first

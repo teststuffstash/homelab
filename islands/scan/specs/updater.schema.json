@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/updater.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/updater.schema.json",
   "title": "update-pr-branch.sh — the PR fields one pass reads, the actions it emits",
   "type": "object",
   "x-requirements": {

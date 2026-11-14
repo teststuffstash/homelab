@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/context.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/context.schema.json",
   "$comment": "MACHINE half of the worker's context (context.md is the human half): the bundle files under /work/context/ and the environment card's switches. The bundle is markdown for a model to read, so the schema pins the names, the index grammar and the lines a consumer may match — not the prose.",
   "x-interface": "context",
   "x-use-cases": ["UC-1"],

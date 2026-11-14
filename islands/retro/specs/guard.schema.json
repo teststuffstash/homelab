@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/guard.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/guard.schema.json",
   "$comment": "MACHINE half of the guard step (retro-argo.yaml templates[guard]); the HUMAN half is guard.md.",
   "x-interface": "guard",
   "x-use-cases": ["UC-1"],

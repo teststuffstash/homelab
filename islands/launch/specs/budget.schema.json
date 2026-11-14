@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/agents/islands/launch/specs/budget.schema.json",
+  "$id": "https://teststuff.net/islands/launch/specs/budget.schema.json",
   "$comment": "MACHINE half of estimate_budget.py (budget.md is the human half): its CLI, its JSON answer and the CR it emits. agents/ledger.py keeps a copy of the enforced caps (TIERS) in lockstep by comment — the second reader this schema would replace.",
   "x-interface": "budget",
   "x-use-cases": ["UC-1"],

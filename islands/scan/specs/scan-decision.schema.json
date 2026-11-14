@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/scan-decision.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/scan-decision.schema.json",
   "title": "coordinator-scan.sh — wake inputs, the unit, the hold line, the clause set",
   "description": "The machine half of scan-decision.md. The scan is bash; nothing imports this schema yet (rule 7 coupling is unbuilt for this island) — it states the shapes the scan reads and emits so a consumer can.",
   "type": "object",

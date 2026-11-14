@@ -1,6 +1,6 @@
 ---
 id: UC-1
-interfaces: [IF-DISPATCH, IF-ADMISSION, IF-POD, IF-CONTEXT, IF-OUTCOME]
+interfaces: [IF-DISPATCH, IF-ADMISSION, IF-BUDGET, IF-POD, IF-CONTEXT, IF-OUTCOME]
 status: spine            # the use case the island is built and tracked around
 ---
 # UC-1 — a platform fix round: dispatch → admit → bundle → pod → outcome → release
@@ -40,7 +40,7 @@ sequenceDiagram
   P-->>L: ⑦ AGENT_RUN_STATS {exit_status, pr_url, …} in the log
   L->>G: ⑦ POST /sessions/{id}/outcome {class: clean} — LAUNCH-OUTCOME-GATEWAY
   L->>G: ⑧ DELETE /sessions/{id}
-  L->>S: ⑧ POST /coordinate {repo: homelab} — LAUNCH-OUTCOME-DOORBELL, exit 0
+  L->>S: ⑧ POST /coordinate {repo: homelab, stack: platform, loop_ns: platform-agents, unit: -} — LAUNCH-OUTCOME-DOORBELL, exit 0
 ```
 
 ## Walk-through data (the golden thread)
@@ -58,7 +58,7 @@ and no `task/*` label, two collaborator comments.
 | ④ bundle | the issue + its comments | [`uc-1/index.txt`](uc-1/index.txt); `issue.md` with both comments, no withheld line | LAUNCH-BUNDLE-DIRECTIVE, LAUNCH-BUNDLE-TRUST, LAUNCH-BUNDLE-DELIVERY |
 | ⑤ pod | ③ + ④ + the carded recipe | [`uc-1/pod.json`](uc-1/pod.json) | LAUNCH-POD-IDENTITY, LAUNCH-POD-ENV-PULL, LAUNCH-POD-CRED, LAUNCH-POD-HARNESS-CMD, LAUNCH-CARD-GROUND-RULES, LAUNCH-CARD-FACTS |
 | ⑦ outcome | stats `{exit_status: clean, pr_url: …}`, no strike signature | [`uc-1/outcome-request.json`](uc-1/outcome-request.json) | LAUNCH-OUTCOME-CLASSIFY, LAUNCH-OUTCOME-GATEWAY |
-| ⑧ release + ring | — | one `DELETE /sessions/«id»`; `{"repo":"homelab","unit":"-"}` to `/coordinate`; exit 0 | LAUNCH-OUTCOME-DOORBELL |
+| ⑧ release + ring | — | one `DELETE /sessions/«id»`; `{"repo":"homelab","stack":"platform","loop_ns":"platform-agents","unit":"-"}` to `/coordinate` (platform is `graduated: true`); exit 0 | LAUNCH-OUTCOME-DOORBELL |
 
 ### Canonical calls
 

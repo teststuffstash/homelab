@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/cell.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/cell.schema.json",
   "$comment": "MACHINE half of retro-session.sh + the retro-cell step; the HUMAN half is cell.md.",
   "x-interface": "cell",
   "x-use-cases": ["UC-1"],

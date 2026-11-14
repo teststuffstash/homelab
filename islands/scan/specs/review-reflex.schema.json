@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/review-reflex.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/review-reflex.schema.json",
   "title": "review-reflex.sh — the tick gate, the per-lane pick line, the reviewer dispatch, the breakers, the C9 arm",
   "type": "object",
   "x-requirements": {

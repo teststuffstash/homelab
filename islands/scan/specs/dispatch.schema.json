@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/dispatch.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/dispatch.schema.json",
   "title": "The item dispatch — coordinator-session.sh argv, the --item grammar, the exit contract, the admission it leads to",
   "description": "Machine half of dispatch.md. `argv` is what coordinator-scan.sh passes; `argv_redrawn` is the target shape with no model (⚑ gap until the gateway defer replaces the scan's rail probe).",
   "type": "object",

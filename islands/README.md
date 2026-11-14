@@ -15,7 +15,8 @@ what that branch's [`context-and-autonomy.md`](../docs/spikes/context-and-autono
 section — not on master) measured as separable pieces of the agent loop. They are written against the REDRAWN contracts
 (§Interfaces — gateway `POST /sessions`, ADR-122's one machine block); every old-contract site is a
 `⚑ gap` row, every unbuilt one `🚧 WIP`. What an island is: [docs/glossary.md](../docs/glossary.md)
-("island"). Intake facts per island: [`docs/intake/`](../docs/intake/).
+("island"). Intake facts per island: [`docs/intake/`](../docs/intake/) — not yet rows in
+`gateway/scripts/intake-select.sh` (a separate change).
 
 | Island | Prefix | Specs | Intake facts | What it will own |
 |---|---|---|---|---|

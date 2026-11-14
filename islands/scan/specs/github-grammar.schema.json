@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/teststuffstash/homelab/agents/islands/scan/specs/github-grammar.schema.json",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/github-grammar.schema.json",
   "title": "The scan family's GitHub grammar — labels, the machine block, the markers",
   "type": "object",
   "x-requirements": {

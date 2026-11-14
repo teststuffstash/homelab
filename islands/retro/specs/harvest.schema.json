@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://teststuff.net/homelab/agents/islands/retro/specs/harvest.schema.json",
+  "$id": "https://teststuff.net/homelab/islands/retro/specs/harvest.schema.json",
   "$comment": "MACHINE half of the harvest step (retro-argo.yaml templates[harvest]) and the overdue belt; the HUMAN half is harvest.md.",
   "x-interface": "harvest",
   "x-use-cases": ["UC-1"],
