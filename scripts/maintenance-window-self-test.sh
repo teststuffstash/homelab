@@ -383,6 +383,22 @@ out="$(FAKE_PROM=1 FAKE_ALERTS="Watchdog GithubWorkflowRunFailed" FAKE_UP=100 ba
 [ "$rc" -eq 2 ] && ok "…without --expect the same alert is NEW (the default stays strict)" || bad "compare rc=$rc without --expect: $out"
 FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" compare "$TMP/base.json" --expect 'a b' >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 64 ] && ok "compare --expect rejects a malformed list (rc 64)" || bad "compare --expect malformed rc=$rc"
+# One-machine SCOPE: a new alert about another target passes as OUT OF SCOPE; one on the VM's instance, its
+# `vm` label, or a prefixed name still blocks; a scope without an ip is a usage error (fail closed).
+FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" snapshot > "$TMP/base-sc.json"
+sc() { FAKE_PROM=1 FAKE_ALERTS="$1" FAKE_UP=100 bash "$SUT" compare "$TMP/base-sc.json" --scope-ip 10.9.9.9 --scope-vm vm-a --scope-prefix CiRunner 2>&1; }
+out="$(sc "Watchdog BlockingCodeownerParkWaiting{repo=x}")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "OUT OF SCOPE (not about vm-a): BlockingCodeownerParkWaiting" <<<"$out" && ok "scoped compare passes an alert about something else" || bad "scope other rc=$rc: $out"
+out="$(sc "Watchdog TargetDown{instance=10.9.9.9:9100}")"; rc=$?
+[ "$rc" -eq 2 ] && grep -q "NEW firing alerts: TargetDown" <<<"$out" && ok "…blocks on one about the VM's instance" || bad "scope instance rc=$rc: $out"
+out="$(sc "Watchdog MgmtRunnerSeedDrift{vm=vm-a}")"; rc=$?
+[ "$rc" -eq 2 ] && ok "…blocks on one carrying the VM's vm label" || bad "scope vm rc=$rc: $out"
+out="$(sc "Watchdog CiRunnerRootFsFillingUp{instance=10.0.0.1:9100}")"; rc=$?
+[ "$rc" -eq 2 ] && ok "…blocks on a prefixed name whatever its instance" || bad "scope prefix rc=$rc: $out"
+out="$(sc "Watchdog TargetDown{instance=10.0.0.1:9100} TargetDown{instance=10.9.9.9:9100}")"; rc=$?
+[ "$rc" -eq 2 ] && ok "…blocks when ANY instance of a name is the VM's" || bad "scope mixed rc=$rc: $out"
+FAKE_PROM=1 FAKE_ALERTS="Watchdog" FAKE_UP=100 bash "$SUT" compare "$TMP/base-sc.json" --scope-vm vm-a >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 64 ] && ok "a scope without --scope-ip is a usage error (rc 64)" || bad "scope without ip rc=$rc"
 # The stock meta-alerts are never NEW (GAPS maintenance-window-G4): InfoInhibitor flaps with any
 # `info` alert and landed between open and check in window after window; the route drops it, so does the diff.
 jq '.alerts=[]' "$TMP/base.json" > "$TMP/base-nometa.json"
@@ -841,6 +857,14 @@ out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "with-ci")"; nid="$(sed -n 's/^ 
 out="$(FAKE_GH_FAIL=1 FAKE_ALERTS="Watchdog" mw9 check --id "$nid")"; rc=$?
 [ "$rc" -eq 2 ] && grep -q "CI status UNREADABLE" <<<"$out" && ok "…without --no-ci a dead gh still blocks (strict by default)" || bad "with-ci check rc=$rc: $out"
 FAKE_ALERTS="Watchdog" mw9 close --id "$nid" --force >/dev/null
+# the same one-machine SCOPE recorded on `open` holds for check/close (the runner verb's window)
+out="$(FAKE_ALERTS="Watchdog" mw9 open --reason "scoped" --scope-ip 10.9.9.9 --scope-vm vm-a --scope-prefix CiRunner)"
+nid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' <<<"$out" | head -1)"
+[ "$(jq -c .scope "$S9/state/$nid/meta.json")" = '{"ip":"10.9.9.9","vm":"vm-a","prefix":"CiRunner"}' ] && ok "open --scope-* records the scope in the slot" || bad "open scope: $(cat "$S9/state/$nid/meta.json")"
+out="$(FAKE_ALERTS="Watchdog TargetDown{instance=10.9.9.9:9100}" mw9 check --id "$nid")"; rc=$?
+[ "$rc" -eq 2 ] && ok "a scoped window's check blocks on the VM's own alert" || bad "scoped check own rc=$rc: $out"
+out="$(FAKE_ALERTS="Watchdog BlockingCodeownerParkWaiting{repo=x}" mw9 close --id "$nid")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q "OUT OF SCOPE" <<<"$out" && ok "…and closes past an alert about something else" || bad "scoped close rc=$rc: $out"
 
 # 9d. node-maintenance `up` on a VM: no MAC in the DHCP source, so the node is STARTED on the
 # hypervisor var.nodes declares (`qm start <vmid>` over ssh, as host-maintenance.sh's hv()), then the
