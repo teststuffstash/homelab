@@ -1,0 +1,10 @@
+{
+  "stack": "platform",
+  "series": "",
+  "harnessA": "claude",
+  "harnessB": "goose",
+  "guardExpr": "",
+  "minWindowTasks": "8",
+  "cellPgSecret": "",
+  "retroKeySecret": ""
+}

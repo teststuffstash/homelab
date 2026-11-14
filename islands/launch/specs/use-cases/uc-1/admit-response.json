@@ -1,0 +1,11 @@
+{
+  "_comment": "UC-1 step 3 — the bound dispatch the launcher accepts (LAUNCH-ADMIT-BOUND): no token, no env values; env_keys non-empty shell names incl. the harness's model key; pull_url ends in /sessions/<this id>/env. Guillemet values are produced by the run.",
+  "decision": "dispatch",
+  "session": { "id": "«id»", "expires_at": "«created_at + 14400 s»" },
+  "rail": "opencode",
+  "harness": "opencode",
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "env_keys": ["OPENCODE_CONFIG_CONTENT"],
+  "pull_url": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/«id»/env",
+  "context_tokens": 1000000
+}
