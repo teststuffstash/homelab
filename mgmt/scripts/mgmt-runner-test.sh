@@ -123,6 +123,13 @@ eq rest-both "kubernetes_config_map.x	update" "$(printf '%s\n' "$CH" | mgmt_runn
 # with only the first candidate, F2 stays in the rest (and is outside the allowlist → ordinary refusal)
 eq rest-first-only "$F2	delete+create
 kubernetes_config_map.x	update" "$(printf '%s\n' "$CH" | mgmt_runner_rest "$(head -1 <<<"$CANDS")")"
+# a pending admitted helm release beside the snippets: the rest is the release alone, and it is inside the
+# allowlist (its apply_helm row) → the recreate is admitted; the release waits for its own bracket after the
+# last VM (mgmt-apply.sh — standing down for it deadlocked both, 2026-11-14). A release with no row stays
+# outside → the ordinary path decides.
+CHH="$(printf '%s\tno-op\n%s\tdelete+create\n%s\tdelete+create\nhelm_release.argocd\tupdate\n' "$V1" "$F1" "$F2")"
+eq rest-helm-row-admitted "" "$(printf '%s\n' "$CHH" | mgmt_runner_rest "$CANDS" | mgmt_apply_allowed "$POL_ON" main)"
+eq rest-helm-no-row-outside "helm_release.cilium" "$(printf 'helm_release.cilium\tupdate\n' | mgmt_apply_allowed "$POL_ON" main | cut -f1)"
 scope() { printf '%b' "$2" | mgmt_runner_scope "$POL_ON" main "$V1" "$V1 $F1" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//'; : "$1"; }
 # the -target plan: V1 replaced, its snippet re-created, the seed image (allowlisted) → in scope
 eq scope-ok "" "$(scope ok "$V1\tdelete+create\n$F1\tdelete+create\nproxmox_download_file.debian_cloud[0]\tupdate\n")"

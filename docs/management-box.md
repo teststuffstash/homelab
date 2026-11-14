@@ -1090,8 +1090,11 @@ the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `
   of the other VM) consumes the trigger — that VM keeps its old seed until a recreate is planned by hand.
 - **The VM name is read from the plan JSON** (the VM's `name`), never from a list of runner names.
 - **Admitted only when the rest of the plan is the box's anyway**: every change the candidates do not
-  cover inside the allowlist, the Talos precondition clean, no helm change. Otherwise the ordinary path
-  decides (and refuses the snippet to a human).
+  cover inside the allowlist, the Talos precondition clean. An admitted helm change rides along untouched
+  (the scoped apply never reaches it) and goes through its own bracket once the last VM is done — the
+  bracket's "alone" rule cannot hold before that, so standing down for it would deadlock both (seen
+  2026-11-14: argocd 10.14.0 + the #3313 snippets). Otherwise the ordinary path decides (and refuses the
+  snippet to a human).
 - **One VM per tick, scoped with `-target`, not `-exclude`.** The box plans
   `-target=<vm> -replace=<vm>`: the VM and its dependencies (its own snippet, the seed image) and
   nothing else, so the other runner's snippet stays pending and its trigger survives for the next tick.

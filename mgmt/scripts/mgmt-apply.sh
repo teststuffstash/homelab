@@ -306,9 +306,11 @@ for root in "${apply_roots[@]}"; do
   read -r a c d r <<<"$(printf '%s\n' "$changes" | mgmt_plan_counts)"; rs=""; [ "${r:-0}" -gt 0 ] && rs="×$r"
   if [ -z "$changes" ] && [ -z "$outs" ]; then log "$root: no changes"; continue; fi
   # Non-Talos VM recreates (mgmt-runner.sh): admitted only when EVERYTHING else in the plan is the box's
-  # anyway — the rest inside the allowlist, the Talos precondition clean, no helm change (the helm bracket
-  # demands to be alone). The rest is applied by the final unscoped tick, after the last VM.
-  # Rows all `off` (as shipped) → not read at all: the loop is byte-for-byte the old one.
+  # anyway — the rest inside the allowlist, the Talos precondition clean. A pending helm change does NOT
+  # stand it down: the scoped `-target` apply never touches it, and the helm bracket demands to be alone,
+  # which it is only AFTER the last VM — standing down would deadlock both (each waits for the other).
+  # The rest is applied by the following unscoped ticks, after the last VM.
+  # Rows all `off` → not read at all: the loop is byte-for-byte the old one.
   rlive="$(mgmt_runner_live "$POL" "$root")" || rlive=unreadable
   if [ -n "$changes" ] && [ "$rlive" != 0 ]; then
     [ "$rlive" = unreadable ] && { refuse "$sha" "$root: apply_vm_recreate unreadable — human apply"; exit 0; }
@@ -318,7 +320,7 @@ for root in "${apply_roots[@]}"; do
       rrest="$(printf '%s\n' "$changes" | mgmt_runner_rest "$ract")"
       routside="$(printf '%s\n' "$rrest" | mgmt_apply_allowed "$POL" "$root")" || { refuse "$sha" "$root: apply allowlist unreadable — human apply"; exit 0; }
       rthits="$(mgmt_talos_gate "$POL" "$root" "$out")" || { refuse "$sha" "$root: Talos precondition unreadable — human apply"; exit 0; }
-      if [ -z "$routside" ] && [ -z "$rthits" ] && [ ! -s "$out.helm" ]; then
+      if [ -z "$routside" ] && [ -z "$rthits" ]; then
         runner_bracket "$POL" "$root" "$sha" "$rel" "$ract"; brc=$?
         case "$brc" in
           0|3) exit 0 ;;     # one VM recreated (no stamp — the next tick re-plans) / REFUSED
