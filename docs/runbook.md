@@ -90,8 +90,8 @@ curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
 #    2026-10-17 — the models list authenticates a bearer when one is sent):
 curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
   -H "Authorization: Bearer $($W opencode-go-api-key -a Password)"
-# 2. wallet → Infisical (no `$` in the value — scripts/infisical-secret.sh header)
-devbox run infisical-secret OPENCODE_GO_API_KEY="$($W opencode-go-api-key -a Password)"
+# 2. wallet → Infisical (value on stdin: `$` survives, the script reads it back — its header)
+$W opencode-go-api-key -a Password | devbox run infisical-secret OPENCODE_GO_API_KEY=-
 # 3. Infisical → the k8s Secret now, not at the 1h refresh
 $K annotate externalsecret opencode-go-key force-sync=$(date +%s) --overwrite
 $K get externalsecret opencode-go-key   # SecretSynced / Ready=True

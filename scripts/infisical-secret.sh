@@ -26,6 +26,24 @@ cd "$(dirname "$0")/.."
 [ $# -ge 1 ] || { echo "usage: $0 KEY=VALUE [KEY2=VALUE2 ...]   (env: INFISICAL_ENV=prod INFISICAL_PATH=/)" >&2; exit 2; }
 export NIX_CONFIG="experimental-features = nix-command flakes" DEVBOX_QUIET=1
 
+# Resolve every value FIRST — before any other command can touch stdin. `KEY=-` = stdin, at most
+# once; an empty value is refused before anything is written (an empty pipe must never blank a live secret).
+STAGE="$(umask 077; mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT   # widened once the port-forward exists
+declare -A VAL=()
+ARGS=(); used_stdin=0
+for kv in "$@"; do
+  case "$kv" in *=*) ;; *) echo "infisical-secret: '$kv' is not KEY=VALUE" >&2; rm -rf "$STAGE"; exit 2 ;; esac
+  k="${kv%%=*}"; v="${kv#*=}"
+  if [ "$v" = "-" ]; then
+    [ "$used_stdin" = 0 ] || { echo "infisical-secret: $k: only one KEY=- per run (stdin is already read)" >&2; rm -rf "$STAGE"; exit 2; }
+    used_stdin=1; v="$(cat)"
+  fi
+  v="${v%$'\n'}"   # argv and stdin alike: no trailing newline (the read-back compares $(…) output)
+  [ -n "$v" ] || { echo "infisical-secret: $k: empty value refused" >&2; rm -rf "$STAGE"; exit 2; }
+  VAL[$k]="$v"; ARGS+=("$k=$v")
+done
+
 KC=(--kubeconfig "${KUBECONFIG:-$PWD/tofu/kubeconfig}")
 SVC=svc/infisical-infisical-standalone-infisical
 PORT=18080
@@ -55,16 +73,6 @@ CURL="$(devbox run --quiet -- sh -c 'command -v curl')"
 INFISICAL="$(devbox run --quiet -- sh -c 'command -v infisical')"
 [ -x "$KUBECTL" ] && [ -x "$CURL" ] && [ -x "$INFISICAL" ] || { echo "infisical-secret: could not resolve kubectl/curl/infisical from the devbox env" >&2; exit 1; }
 
-# Resolve every value BEFORE anything else reads stdin. `KEY=-` = stdin (once).
-STAGE="$(umask 077; mktemp -d)"
-declare -A VAL=()
-ARGS=()
-for kv in "$@"; do
-  case "$kv" in *=*) ;; *) echo "infisical-secret: '$kv' is not KEY=VALUE" >&2; rm -rf "$STAGE"; exit 2 ;; esac
-  k="${kv%%=*}"; v="${kv#*=}"
-  [ "$v" = "-" ] && v="$(cat)"
-  VAL[$k]="$v"; ARGS+=("$k=$v")
-done
 "$KUBECTL" "${KC[@]}" -n infisical port-forward "$SVC" "$PORT:8080" >/tmp/inf-secret-pf.log 2>&1 &
 PF=$!; trap 'kill $PF 2>/dev/null || true; rm -rf "$STAGE"' EXIT
 mkdir -m 700 "$STAGE/.home"   # the CLI writes its login session under $HOME — keep it in the run's tempdir
