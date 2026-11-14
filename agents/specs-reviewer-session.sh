@@ -1436,7 +1436,7 @@ else
       2) return 0;;   # head moved while fetching — logged; the next tick reads the new head
       4) if [ "$n_roots" -gt 1 ]; then   # one root of several: its review is the fixed body, the verdict still waits
            printf '## Specs review\nVerdict: APPROVE — no rule touched: touched-rules (allure-behavior-snippets %s) found no rule this diff touches under %s.\n' "$SNIPPETS_VERSION" "$sroot" > "$WORK/root-$pending.md"
-           skip_llm=root-mechanical
+           skip_llm="root-mechanical"
          else
            printf '## Specs review\nVerdict: APPROVE — mechanical: touched-rules (allure-behavior-snippets %s) found no rule this diff touches. Head %s.\n' "$SNIPPETS_VERSION" "${head:0:12}" > "$WORK/mech-$num.md"
            local rs0=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs0=$?
