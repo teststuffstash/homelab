@@ -1,7 +1,7 @@
 """The 12 rows of `agents/replay/fixtures/gateway-admit/rows.psv`, one rule()-labelled case per row.
 
 Case id = the row id verbatim. Labels follow specs/admission.md's two tables. Target of every case
-here: the old member `agents/gateway-admit.sh`, read in place (the island's helper is #3393).
+here: the island's helper `islands/launch/lib/gateway-admit.sh` (#3393).
 """
 
 from __future__ import annotations
@@ -9,7 +9,9 @@ from __future__ import annotations
 import allure
 import pytest
 
-from conftest import OLD_MEMBER, REPLAY, REPO, replay_row, rule
+from conftest import ISLAND, REPLAY, replay_row, rule
+
+TARGET = "islands/launch/lib/gateway-admit.sh"
 
 HELPER = ["bound-dispatch", "unbound-dispatch", "defer", "http-503", "no-mode", "both-modes",
           "bad-bind", "bad-round", "missing-role"]
@@ -29,7 +31,7 @@ CASES = [pytest.param(r, marks=rule("LAUNCH-ADMIT-HELPER"), id=r) for r in HELPE
 @pytest.mark.parametrize("row_id", CASES)
 def test_replay_row(row_id: str) -> None:
     allure.dynamic.title(row_id)
-    allure.dynamic.parameter("target", OLD_MEMBER)
-    ok, out = replay_row(row_id, REPO / OLD_MEMBER)
+    allure.dynamic.parameter("target", TARGET)
+    ok, out = replay_row(row_id, ISLAND / "lib" / "gateway-admit.sh")
     allure.attach(out, name="run.sh output", attachment_type=allure.attachment_type.TEXT)
     assert ok, out
