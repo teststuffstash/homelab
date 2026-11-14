@@ -15364,3 +15364,18 @@ updates or reverts as much as possible — mechanical revert or a responder."
   — PR pickup median 3/23/44/57 s at 0/1/2/3+ jobs just ahead — is what it buys.
 - The session drained the shared GitHub pool to 0 at 17:54Z (six parallel subagents + pr-waits); reset 17:57Z, no
   failure. A ci.yaml comment fix (the mgmt step) went seat-direct.
+
+## 2026-11-14 — seat: box-run runner recreate trial → on; lost-trigger detector; argocd 10.14.0 unblocked
+
+- Shadow → on for `apply_vm_recreate` (#3366 shadow, #3368 on). The trial found: fixtures pinning the committed
+  mode (#3366); a helm↔runner deadlock — a pending helm release stood the recreate down while `helm-not-alone`
+  refused the release beside the snippets, every tick refused since #3313 (#3367, `mgmt_runner_admit`).
+- Both runners recreated unattended twice (#3313's mirror env, then #3369's template); each run replaced the VM
+  cleanly but failed its gate on things not about the VM — `GithubWorkflowRunFailed` (oracle-fleet lint), the
+  stranded-CI probe (box has no gh), `BlockingCodeownerParkWaiting`. Seat closed each window `--force` + cleared
+  `refused-rev`. Operator rulings → #3370 (CI outcomes not the verb's signal: `compare --expect`, `open --no-ci`)
+  and #3372 (new-alert diff scoped to the VM: instance / vm|name|host label / `CiRunner*`).
+- Lost trigger was REAL: both runners had booted 2026-10-08 seeds the state no longer held (missing the
+  kargo-e2e janitor prefix + ADR-161 cache cleanup). Detector #3369 (`MgmtRunnerSeedDrift`, VM textfile sha vs
+  the belt's state sha) live; both pairs match, drift expression empty.
+- argocd 10.12.1 → 10.14.0 then applied by the box's helm bracket alone (verdict clean); applied-rev = master.
