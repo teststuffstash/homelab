@@ -27,18 +27,24 @@ What this island adds, by rule:
 
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
-  ⚑ gap: the specs reviewer reads nothing here today — the claim's `specs` field admits one
-  `{root, tests}` pair per repo and homelab's names the gateway's; until it becomes a list,
-  a change to these pages reaches only the ordinary reviewer.
+  The specs reviewer reviews this root since #3379 (the claim's `repos[].extraSpecs` lists
+  `islands/launch/specs`, no tests root declared); its pack carries no evidence (no publisher
+  for an extra root); a ride touching this root gets no process mount.
 - **Rule 3 (IDs):** the prefix is `LAUNCH-`; areas are `DISPATCH`, `PREFLIGHT`, `ADMIT`, `POD`,
   `BUNDLE`, `CARD`, `OUTCOME`, `BUDGET`.
-- **Rule 5 (evidence):** **none is generated.** The proving harness is the clause-replay harness
+- **Rule 5 (evidence):** raw Allure results are generated locally by `islands/launch/tests/` (run by
+  `islands/launch/scripts/ci.sh`, gated at the worker's `pr-open` through `diff-ci`, not by GitHub
+  CI). A labelled case runs one replay row with `agents/replay/run.sh` from a temporary copy of the
+  harness in which the path `agents/gateway-admit.sh` (today's helper, the one being replaced) holds
+  the file under test, and records that file as its
+  target. Nothing is published, so every row stays unproven to the specs reviewer. The Status-cell
+  forms (rule 10) are the only two: a requirement an OPEN issue builds or proves says
+  `🚧 WIP → #<issue>`, with what runs locally and against which target in parentheses; a gap says
+  `⚑ gap (<date>, PR #<n> → work #<m>): <line>`. The proving harness is the clause-replay harness
   ([`agents/replay/`](../../../agents/replay/README.md)): it extracts the real clause between its
   `>>>REPLAY:<name>>>>` sentinels, runs it against recorded worlds, and diffs the action stream.
-  It runs in `ci` on every PR, but it emits no Allure results, so no fragment exists to transclude
-  and no stamp binds a row to a commit. Every requirement whose clause has a fixture says
-  `🚧 WIP — no evidence pipeline yet (fixture: <dir>)` in its Status cell and carries the evidence
-  shell under its tables (the fragment it would transclude); a requirement with no fixture says so.
+  It runs in `ci` on every PR; a requirement with no fixture says so. Every requirement carries the
+  evidence shell under its tables (the fragment it would transclude).
   The replay is PR-head evidence by construction (the clause at head, stubbed `gh`/`kubectl`/`curl`)
   — there is no built artifact; the pod image is agent-runtime's.
 - **Rule 7 (coupling):** each page's schema annotates its paths with `x-requirements`; no

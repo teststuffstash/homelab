@@ -99,8 +99,10 @@ recipes in stack repos revert in their own repo. **At switch-over** (a later, se
   field — FU-270); every other stack rides the old self-routing path
   ([admission.md](specs/admission.md#launch-admit-no-model)). The new build admits only through
   `POST /sessions`.
-- No evidence pipeline: the replay families prove clauses, but nothing renders them into these
-  pages ([specs/README.md](specs/README.md) §Rule 5) — the first deliverable of the build.
+- Evidence is local and partial: `tests/` (run by `scripts/ci.sh`, gated at `pr-open` via `diff-ci`)
+  runs the `gateway-admit` replay family as 12 rule-labelled Allure cases against today's helper `agents/gateway-admit.sh`;
+  no other family runs, nothing is published, and nothing renders into these pages
+  ([specs/README.md](specs/README.md) §Rule 5).
 - Exit codes mix two defer conventions (exit 0 and exit 1) —
   [LAUNCH-DISPATCH-EXIT](specs/dispatch.md#launch-dispatch-exit).
 - Unspecced clauses (fixtures exist, no page): ride size, nix/python/npm env, hostAliases,
