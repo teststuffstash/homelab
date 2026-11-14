@@ -357,7 +357,10 @@ spec:
               (the brief's outcomes; \`unchanged\` = a \`reread:\` input whose wait still holds — you wrote
               nothing; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap; \`read\` = an
               \`escape:\` PR you read); <refs> is a comma-separated list of the issue/PR refs you wrote or
-              relied on (owner/repo#n), or \`-\`. For every \`## Escape records\` record also print
+              relied on (owner/repo#n), or \`-\`. An issue you FILED this sitting (a \`file\`, a parity issue, a
+              split part) is listed in the \`<refs>\` of the input it came from AND gets its own line with its own
+              ruling — \`INTAKE-RULED: <owner/repo>#<n> queue|goal|seat|standing|close <refs>\` (dry-run: \`#new-<k>\`);
+              a filed queue/goal issue is reviewed and labelled like any other. For every \`## Escape records\` record also print
                 INTAKE-ESCAPE: <pr id> <finding id> <class A|B|C|D|E|X> <the intake check it names, one line>
               In dry-run mode print the lines you WOULD print.
               BRIEF
@@ -415,7 +418,11 @@ spec:
                         | select(.input as $i | ($filed | index($i)) and ($ins | index($i) | not))
                         | select(.outcome | IN("queue","goal","seat","standing","close")) ] | unique_by(.input)' > /tmp/ruled-filed.json 2>/dev/null || echo '[]' > /tmp/ruled-filed.json
               jq -s '.[0] + .[1]' /tmp/ruled.json /tmp/ruled-filed.json > /tmp/ruled-q.json 2>/dev/null || cp /tmp/ruled.json /tmp/ruled-q.json
-              NQ="$(jq '[.[] | select(.outcome == "queue" or .outcome == "goal" or .outcome == "requeue")] | length' /tmp/ruled-q.json)"
+              # queued = queue-class rulings of inputs + of filed issues no input's queue-class ruling already names (no double count)
+              NQ="$(jq -n --slurpfile r /tmp/ruled.json --slurpfile f /tmp/ruled-filed.json '
+                    def q: select(.outcome == "queue" or .outcome == "goal" or .outcome == "requeue");
+                    ([$r[0][] | q]) as $rq | ([$rq[] | .refs[]]) as $named
+                    | ($rq | length) + ([$f[0][] | q | select(.input as $i | $named | index($i) | not)] | length)')"
               # the escape read's records: one per blocking finding of an escape input of THIS run
               grep -oE '^ *INTAKE-ESCAPE: [^ ]+ [^ ]+ [A-EX]( .*)?$' /tmp/intake.log | sed 's/^ *INTAKE-ESCAPE: //' \
                 | jq -R -s --slurpfile sel /tmp/sel.json '
