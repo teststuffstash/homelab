@@ -1,0 +1,9 @@
+# raw Allure results (pytest --alluredir)
+allure-results/
+# the evidence pack (child 2) lands here
+evidence/
+.devbox/
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
