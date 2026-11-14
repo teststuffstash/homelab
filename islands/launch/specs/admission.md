@@ -34,8 +34,8 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 |---|---|---|
 | [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3393 (fixture: `gateway-admit` — its 9 rows run locally in `islands/launch/tests` against the pre-island helper `agents/gateway-admit.sh`); the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
 | [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3393 (fixtures: `gateway-admit` — 3 rows run locally against the pre-island helper `agents/gateway-admit.sh`; `gateway-sessions`) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
-| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3391 (fixture: `gateway-sessions`; no issue builds its rows yet — #3391 is the island's evidence in CI) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
-| [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3392): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
+| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
+| [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
 ## The helper
 
@@ -191,7 +191,7 @@ path, the launcher's own default).
 | dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
 | dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
 | dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
+| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
 | defer | stack-platform · gw-defer | — | `defer` with a reason and a retry | bind | — | — | 1 |
 | http-503 | stack-platform · gw-error | — | 503 error envelope | bind | — | — | 1 |
 | unreachable | stack-platform · gw-error | — | no answer | bind | — | — | 1 |
