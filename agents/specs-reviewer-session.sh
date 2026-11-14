@@ -1423,7 +1423,7 @@ else
         root_review_of "$own_comments" "$sroot" "$c8" > "$WORK/root-$i.md"
         [ -s "$WORK/root-$i.md" ] || { [ -n "$pending" ] || pending="$i"; }
       done
-      log "[$repo#$num] ${n_roots} spec roots touched ($(printf '%s, ' "${pairs[@]}" | sed 's/, $//')); ${pending:+reviewing #$((pending+1)) this tick}${pending:-all reviewed — posting the verdict}"
+      log "[$repo#$num] ${n_roots} spec roots touched ($(printf '%s, ' "${pairs[@]}" | sed 's/, $//')); $([ -n "$pending" ] && echo "reviewing #$((pending+1)) this tick" || echo "all reviewed — posting the verdict")"
     fi
     read -r sroot troot <<< "${pairs[${pending:-0}]}"
     local review="" verdict="" skip_llm=""
