@@ -32,7 +32,9 @@ reviewer bot (`homelab-reviewer`, `[bot]` suffix normalized) has an APPROVED rev
 after the newest **non-merge** commit — the reflex's own `bot_approved_head`, replicated by name
 (a merge commit, in any of GitHub's three default message shapes, is not new content); (3) that
 review's body carries the four headings `Upstream`, `Known issues`, `Platform compatibility`,
-`Evidence`, each as a line-anchored `## …` heading or `**…**` label, case-insensitive. Then it
+`Evidence`, each as a line-anchored `## …` heading or `**…**` label, case-insensitive; the heading name is matched at the start of the line, and a
+suffix after a separator on the same line (e.g. `## Evidence — re-review at new head <sha>`) still
+counts, while a name with no separator (`## Evidenced`) does not. Then it
 adds `major/awaiting-human` **first**, removes `agent/in-progress` **second** (add-before-remove,
 IL-T16) and re-reads the labels to prove the end state (`agents/major-handoff.sh:1-60`).
 Exit 0 = handed off; **3** = refused, nothing written (dispatch the reviewer again, never relabel);
