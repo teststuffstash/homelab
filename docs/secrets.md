@@ -53,7 +53,7 @@ irreducible minimum and ArgoCD/Infisical take over:
 ```
 KeePass ──tofu/argocd.tf──► ArgoCD + Infisical bootstrap secrets (encryption/auth keys, DB creds, git PAT)
    │                            └─ chart autoBootstrap → super admin (creds in KeePass), org "homelab"
-   ▼                                   └─ emits a non-expiring instance-admin TOKEN (in-cluster secret)
+   ▼                                   └─ emits an instance-admin TOKEN (in-cluster secret; DEAD since chart 1.12 — see below)
 tofu/infisical/ (Infisical TF provider, token-auth) ──► project "homelab" + "eso-reader" UA identity
    ▼                                                        └─ writes infisical-machine-identity → ESO
 ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for every app
@@ -64,7 +64,15 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
 1. **Put the value in Infisical** (homelab project, `prod` env, `/` path by default):
    ```sh
    devbox run infisical-secret MY_API_KEY=s3cr3t
+   printf '%s' "$line" | devbox run infisical-secret CIRCLES_PAGE_HTPASSWD=-   # any value with `$`
    ```
+   The script logs in per run as the super admin (wallet `infisical-admin-email`/`-password`) and
+   reads every key back before exiting 0. A value containing `$` goes on **stdin** (`KEY=-`) or via
+   `bash scripts/infisical-secret.sh KEY='…'`: the `devbox run` task layer re-evaluates its argv,
+   so `$…` in a `devbox run infisical-secret KEY=…` argument is expanded before the script sees it.
+   The bootstrap instance-admin token is not durable any more: Infisical ≥ chart 1.12 rejects
+   exp-less tokens past 2026-05-04 + 90 d and caps every machine-identity token at 90 d
+   (`MAX_MACHINE_IDENTITY_TOKEN_AGE`).
 2. **Pull it into the app's namespace** with an `ExternalSecret` (copy
    `argocd/resources/extras/demo-externalsecret.yaml`):
    ```yaml
