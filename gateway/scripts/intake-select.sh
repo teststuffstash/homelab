@@ -79,6 +79,40 @@
 #   cap, fire = the dig's: ≥ 1 input and fewer than INTAKE_DAILY_MAX apply sittings today
 # Exit codes as above (2 = the issue list or the bucket could not be read). Seams: INTAKE_ISSUES_JSON
 # + INTAKE_TS_DIR + INTAKE_NOW.
+#
+# --source gaps (FU-320, night run 2026-11-14): the island's OWN incompleteness — the `⚑ gap` /
+# `🚧 WIP` requirement rows of its specs index (`<specs root>/README.md`, the root from
+# island_specs_root below), as `kind: gap` inputs (gateway/intake.md §Inputs `gap:`).
+#
+#   bash gateway/scripts/intake-select.sh --source gaps [--island gateway] [--out sel.json]
+#
+#   row       = an index table row whose first cell is `[<REQ-ID>](<page>#…)` and that carries `⚑ gap`
+#               or `🚧`; id = `<specs page>#<REQ-ID>` (gateway/intake.md §Inputs `gap:`)
+#   minus     = every id an APPLY receipt of the last INTAKE_GAP_LOOKBACK_D days (default 30) lists
+#               with an outcome other than `deferred` (the dig's ledger), and every row an OPEN issue
+#               already names (its title or body names the REQ-ID, or the row's own `#<n>` is open)
+#   cap       = the first INTAKE_GAP_MAX (default 6) rows in index order; the rest re-present
+#               tomorrow (no receipt line) — plus the daily INTAKE_DAILY_MAX, as every source
+# An island with no specs root is a valid empty selection (exit 1); a DECLARED root whose index is
+# unreadable is a probe failure (exit 2). Seams: INTAKE_ISSUES_JSON + INTAKE_TS_DIR + INTAKE_NOW.
+#
+# --source escape (FU-320, the island's improvement loop): the PRs of work this island QUEUED that
+# drew a CHANGES_REQUESTED review — read later by the same sitting (gateway/intake-escape.md), one
+# record per blocking finding, `kind: escape`.
+#
+#   bash gateway/scripts/intake-select.sh --source escape [--island gateway] [--out sel.json]
+#
+#   queued    = every issue id (`<owner/repo>#<n>`, the input or a ref) of a `queue`/`goal`/`requeue`
+#               line in an APPLY receipt of this island's last INTAKE_ESCAPE_LOOKBACK_D days (default 30)
+#   PR        = OPEN or MERGED, created inside that window, linked to a queued issue (its closing
+#               references, a head branch `…issue-<n>…`, or a `Fixes/Closes/Resolves #<n>` line in its
+#               body), with at least one CHANGES_REQUESTED review; id = `<owner/repo>#<pr>`
+#   minus     = every PR id an APPLY receipt of the same window lists (outcome ≠ deferred): read once
+#   prior     = the `escapes` records of those receipts — the prompt's `escape-prior:` (step E counts a
+#               class sighted on two inputs across sittings)
+# Nothing queued → a valid empty selection and NO PR read. Exit codes as above (2 = the bucket or
+# the PR list could not be read). Seams: INTAKE_PRS_JSON (the `gh pr list --json …` answer) +
+# INTAKE_TS_DIR + INTAKE_NOW.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -102,7 +136,11 @@ done
 # (issues); a new island adds its rows plus its §Island facts file (gateway/intake.md names where those live). ISLANDS is the
 # PRECEDENCE order — most specific first, gateway first so its selection never moves: an item
 # belongs to the first island that claims it, so it is never ruled by two sittings.
-ISLANDS="gateway router-pair mgmt-box dependency-upgrades substrate agent-loop"
+# scan / launch / retro (night run 2026-11-14) sit right after the gateway: their title row
+# (`<island> island:`) is narrower than agent-loop's `^scan` and their prefix (`islands/<island>/`)
+# is nobody else's, so placing them before agent-loop moves no existing selection and keeps a
+# "scan island: …" title off the agent-loop sitting.
+ISLANDS="gateway scan launch retro router-pair mgmt-box dependency-upgrades substrate agent-loop"
 # The island whose sitting receives the bot-filed issues no island claims (header: ATTRIBUTION
 # inputs) — the loop's own filings, so the loop's island owns their first ruling.
 ATTRIBUTION_ISLAND=agent-loop
@@ -123,6 +161,7 @@ island_alert_rules() {
 island_pattern() {
   case "$1" in
     gateway)             printf '%s' '(?!)';;
+    scan|launch|retro)   printf '%s' "islands/$1/";;   # new islands: no alerts yet; a finding citing their tree
     router-pair)         printf '%s' '[Oo][Pp][Nn][Ss]ense|CARP|RouterPair|RouterWan|Unbound|router-move|ansible/opnsense';;
     mgmt-box)            printf '%s' 'mgmt/|Mgmt[A-Z]|UpgradeLease|management box|mgmt-(tf|lease|reconcile|apply)';;
     dependency-upgrades) printf '%s' '[Rr]enovate|VersionSet|version-sets/|DependencyClass|lock-intake';;
@@ -142,6 +181,7 @@ island_members() {
   case "$1" in
     gateway) printf '%s\n' '^gateway([:/ ]|$)|\bGW-[A-Z]' \
       gateway/;;
+    scan|launch|retro) printf '%s\n' "^$1 island:" "islands/$1/";;   # islands/README.md (provisional home)
     router-pair) printf '%s\n' '^(opnsense|carp|router[- ]pair|router-move|haproxy|unbound|wireguard|dnsmasq)\b' \
       opnsense/ ansible/opnsense- ansible/roles/opnsense- ansible/group_vars/opnsense.yml ansible/router-nodes/ \
       ansible/test-vm/ ansible/pve-router-killswitch.yml ansible/roles/pve-router-killswitch/ \
@@ -170,6 +210,16 @@ island_members() {
       argocd/platform/agent-coordinator.yaml argocd/platform/agent-fixer.yaml argocd/platform/agentstack.yaml \
       argocd/platform/openrouter-proxy.yaml argocd/platform/openrouter-operator.yaml;;
     *) return 1;;
+  esac
+}
+
+# island_specs_root <island> → the island's specs root, repo-relative (its index is <root>/README.md);
+# nothing for an island without specs (--source gaps then selects nothing).
+island_specs_root() {
+  case "$1" in
+    gateway) printf '%s' 'gateway/specs';;
+    scan|launch|retro) printf '%s' "islands/$1/specs";;
+    *) ;;
   esac
 }
 
@@ -362,10 +412,144 @@ cmd_dig() {
   fi
   echo "fire: $n unruled dig finding(s) for island $ISLAND" >&2; exit 0
 }
+# read_issues → $issues: the repo's OPEN issues, one REST list call (paginated by gh), bodies and
+# comments riding it; exit 2 on a failed or empty read (never "no issues").
+read_issues() {
+  if [ -n "${INTAKE_ISSUES_JSON:-}" ]; then
+    issues="$(cat "$INTAKE_ISSUES_JSON" 2>/dev/null)" || { echo "intake-select: INTAKE_ISSUES_JSON unreadable" >&2; exit 2; }
+  else
+    issues="$(gh issue list --repo "$REPO" --state open --limit 500 \
+      --json number,title,body,labels,createdAt,updatedAt,author,comments 2>/dev/null)" || {
+      echo "intake-select: gh issue list failed for $REPO" >&2; exit 2; }
+  fi
+  [ -n "$issues" ] || { echo "intake-select: empty answer from gh issue list (not a verdict)" >&2; exit 2; }
+  printf '%s' "$issues" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "intake-select: the issue list is not a JSON array" >&2; exit 2; }
+}
+# emit_sel <sel-json> <verdict-tail> — write the selection, then the dig's verdict (exit 0 fire / 1 hold)
+emit_sel() {
+  local sel="$1" what="$2" n sittings dmax
+  if [ -n "$OUT" ]; then printf '%s\n' "$sel" > "$OUT"; else printf '%s\n' "$sel"; fi
+  n="$(printf '%s' "$sel" | jq '.counts.inputs')"; sittings="$(printf '%s' "$sel" | jq '.sittings_today')"
+  dmax="$(printf '%s' "$sel" | jq '.daily_max')"
+  if [ "$n" -eq 0 ]; then
+    echo "hold: no $what for island $ISLAND ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
+  elif [ "$sittings" -ge "$dmax" ]; then
+    echo "hold: daily cap — $sittings apply sitting(s) today (INTAKE_DAILY_MAX=$dmax); $n input(s) wait for tomorrow" >&2; exit 1
+  fi
+  echo "fire: $n $what for island $ISLAND ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 0
+}
+
+# ── --source gaps ────────────────────────────────────────────────────────────────────────────────
+cmd_gaps() {
+  local root now dmax gmax lookback receipts sel ts today
+  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"
+  gmax="${INTAKE_GAP_MAX:-6}"; lookback="${INTAKE_GAP_LOOKBACK_D:-30}"
+  ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
+  root="$(island_specs_root "$ISLAND")"
+  if [ -z "$root" ]; then
+    sel="$(jq -n --arg island "$ISLAND" --arg ts "$ts" --argjson dmax "$dmax" \
+      '{schema: "island-intake-select/v1", island: $island, source: "gaps", ts: $ts, specs_root: null,
+        counts: {rows: 0, ruled: 0, named: 0, over_cap: 0, inputs: 0}, sittings_today: 0, daily_max: $dmax, inputs: []}')"
+    emit_sel "$sel" "gap rows (the island declares no specs root)"
+  fi
+  [ -r "$ROOT/$root/README.md" ] || { echo "intake-select: $root/README.md (the specs index) unreadable — probe failed" >&2; exit 2; }
+  read_issues
+  ts_probe
+  receipts="$(read_receipts "$now" "$lookback")"
+  sel="$(jq -n --arg island "$ISLAND" --arg root "$root" --arg repo "$REPO" --arg ts "$ts" --arg today "$today" \
+      --argjson dmax "$dmax" --argjson gmax "$gmax" --slurpfile iss <(printf '%s' "$issues") \
+      --rawfile idx "$ROOT/$root/README.md" \
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+    $iss[0] as $issues
+    | ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
+            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $ruled
+    | ([ $issues[] | .number ]) as $open
+    | [ $idx | split("\n")[]
+        | select(test("^\\|\\s*\\[[A-Z][A-Z0-9-]*\\]\\("))
+        | select(test("⚑ gap|🚧"))
+        | . as $line
+        | (capture("^\\|\\s*\\[(?<req>[A-Z][A-Z0-9-]*)\\]\\((?<href>[^)]*)\\)")) as $m
+        | ($root + "/" + ($m.href | sub("#.*$"; ""))) as $page
+        | {id: ($page + "#" + $m.req), kind: "gap", requirement: $m.req, page: $page,
+           marks: ([if ($line | test("⚑ gap")) then "⚑ gap" else empty end, if ($line | test("🚧")) then "🚧 WIP" else empty end]),
+           refs: ([$line | scan("#([0-9]+)") | .[0] | tonumber] | unique),
+           row: $line} ] as $rows
+    | [ $rows[] | . as $g
+        | select(any($open[]; . as $n | $g.refs | index($n))
+                 or any($issues[]; ((.title // "") + "\n" + (.body // "")) | test("(^|[^A-Z0-9-])" + $g.requirement + "($|[^A-Z0-9-])")))
+        | .id ] as $named
+    | [ $rows[] | select(.id as $i | ($ruled | index($i) | not) and ($named | index($i) | not)) ] as $free
+    | {schema: "island-intake-select/v1", island: $island, source: "gaps", ts: $ts, specs_root: $root,
+       counts: {rows: ($rows | length), ruled: ([ $rows[] | select(.id as $i | $ruled | index($i)) ] | length),
+                named: ($named | length), over_cap: ([($free | length) - $gmax, 0] | max),
+                inputs: ([$free | length, $gmax] | min)},
+       gap_max: $gmax, sittings_today: sittings($r; $today), daily_max: $dmax, inputs: $free[0:$gmax]}')" \
+    || { echo "intake-select: gaps selection jq failed" >&2; exit 2; }
+  printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.marks | join("+"))"' >&2
+  emit_sel "$sel" "unruled, unnamed gap rows"
+}
+
+# ── --source escape ──────────────────────────────────────────────────────────────────────────────
+cmd_escape() {
+  local now dmax lookback receipts queued prs sel ts today since
+  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"; lookback="${INTAKE_ESCAPE_LOOKBACK_D:-30}"
+  ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
+  since="$(date -u -d "@$(( now - lookback * 86400 ))" +%Y-%m-%d)"
+  ts_probe
+  receipts="$(read_receipts "$now" "$lookback")"
+  # the issues this island queued, each with the run that queued it
+  queued="$(jq -nc --arg repo "$REPO" --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) '
+    [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply") | (.run // "") as $run
+      | .ruled[]? | select(.outcome | IN("queue", "goal", "requeue"))
+      | ([.input] + (.refs // []))[] | select(test("^" + ($repo | gsub("\\."; "\\.")) + "#[0-9]+$"))
+      | {n: (sub(".*#"; "") | tonumber), run: $run} ] | unique_by(.n)')" \
+    || { echo "intake-select: escape receipt jq failed" >&2; exit 2; }
+  if [ "$(printf '%s' "$queued" | jq 'length')" -eq 0 ]; then
+    prs='[]'
+  elif [ -n "${INTAKE_PRS_JSON:-}" ]; then
+    prs="$(cat "$INTAKE_PRS_JSON" 2>/dev/null)" || { echo "intake-select: INTAKE_PRS_JSON unreadable" >&2; exit 2; }
+  else
+    prs="$(gh pr list --repo "$REPO" --state all --search "created:>=$since" --limit 1000 \
+      --json number,title,state,url,headRefName,body,closingIssuesReferences,reviews 2>/dev/null)" \
+      || { echo "intake-select: gh pr list failed for $REPO" >&2; exit 2; }
+  fi
+  printf '%s' "$prs" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "intake-select: the PR list is not a JSON array (not a verdict)" >&2; exit 2; }
+  sel="$(jq -n --arg island "$ISLAND" --arg repo "$REPO" --arg ts "$ts" --arg today "$today" --argjson dmax "$dmax" \
+      --argjson queued "$queued" --slurpfile prsf <(printf '%s' "$prs") \
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+    $prsf[0] as $prs
+    | ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
+            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $read
+    | def links($n): . as $p
+        | (any(($p.closingIssuesReferences // [])[]; .number == $n))
+          or (($p.headRefName // "") | test("(^|[/-])issue-" + ($n | tostring) + "($|[^0-9])"))
+          or (($p.body // "") | test("(?i)\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s*:?\\s+(" + ($repo | gsub("\\."; "\\.")) + ")?#" + ($n | tostring) + "\\b"));
+    [ $prs[] | select(.state == "OPEN" or .state == "MERGED")
+        | ([ (.reviews // [])[] | select(.state == "CHANGES_REQUESTED") ] | length) as $cr
+        | select($cr > 0)
+        | . as $p | ([ $queued[] | select(.n as $n | $p | links($n)) ] | first) as $q
+        | select($q != null)
+        | {id: ($repo + "#" + (.number | tostring)), kind: "escape", number, title, url, state,
+           issue: ($repo + "#" + ($q.n | tostring)), queued_by: $q.run, changes_requested: $cr} ] as $match
+    | [ $match[] | select(.id as $i | $read | index($i) | not) ] as $inputs
+    | {schema: "island-intake-select/v1", island: $island, source: "escape", ts: $ts,
+       counts: {queued: ($queued | length), prs: ($match | length), read: (($match | length) - ($inputs | length)),
+                inputs: ($inputs | length)},
+       sittings_today: sittings($r; $today), daily_max: $dmax, inputs: $inputs,
+       prior: [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply") | (.escapes // [])[] ]}')" \
+    || { echo "intake-select: escape selection jq failed" >&2; exit 2; }
+  printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.state)\tCR×\(.changes_requested)\t\(.issue)"' >&2
+  emit_sel "$sel" "unread escape PRs"
+}
+
 case "$SOURCE" in
   issues|pile) ;;
   dig) cmd_dig; exit $?;;
-  *) echo "intake-select: unknown --source $SOURCE (issues|dig|pile)" >&2; exit 2;;
+  gaps) cmd_gaps; exit $?;;
+  escape) cmd_escape; exit $?;;
+  *) echo "intake-select: unknown --source $SOURCE (issues|dig|pile|gaps|escape)" >&2; exit 2;;
 esac
 
 # ── the issue pile (--source issues, --source pile) ──────────────────────────────────────────────
@@ -374,14 +558,7 @@ PARSER="$ROOT/agents/issue_body.py"
 [ -f "$PARSER" ] || { echo "intake-select: $PARSER missing (run from a homelab checkout)" >&2; exit 2; }
 
 # One list call (REST, paginated by gh); the body rides it so membership needs no second read.
-if [ -n "${INTAKE_ISSUES_JSON:-}" ]; then
-  issues="$(cat "$INTAKE_ISSUES_JSON" 2>/dev/null)" || { echo "intake-select: INTAKE_ISSUES_JSON unreadable" >&2; exit 2; }
-else
-  issues="$(gh issue list --repo "$REPO" --state open --limit 500 \
-    --json number,title,body,labels,createdAt,updatedAt,author,comments 2>/dev/null)" || {
-    echo "intake-select: gh issue list failed for $REPO" >&2; exit 2; }
-fi
-[ -n "$issues" ] || { echo "intake-select: empty answer from gh issue list (not a verdict)" >&2; exit 2; }
+read_issues
 
 now="${INTAKE_NOW:-$(date -u +%s)}"
 # REREAD=1 (--source pile) also collects the waits: the SAME walk, the same container/Goal and
