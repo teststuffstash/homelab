@@ -104,6 +104,7 @@
 #
 #   queued    = every issue id (`<owner/repo>#<n>`, the input or a ref) of a `queue`/`goal`/`requeue`
 #               line in an APPLY receipt of this island's last INTAKE_ESCAPE_LOOKBACK_D days (default 30)
+#               — an input's line (`ruled`) or an issue the sitting filed and ruled (`ruled_filed`)
 #   PR        = OPEN or MERGED, created inside that window, linked to a queued issue (its closing
 #               references, a head branch `…issue-<n>…`, or a `Fixes/Closes/Resolves #<n>` line in its
 #               body), with at least one CHANGES_REQUESTED review; id = `<owner/repo>#<pr>`
@@ -322,10 +323,19 @@ read_receipts() {
     ts_read_objects "intake-$ISLAND-$d" 'receipt.json'
   done
 }
-# The jq both receipt-reading sources share: today's APPLY sittings (the daily cap's count).
+# The jq every receipt-reading source shares — one definition each of:
+#   applied($r)       the APPLY receipts (dry-runs rule nothing)
+#   sittings($r; $d)  today's APPLY sittings (the daily cap's count)
+#   ruled_ids($r)     the input ids an APPLY receipt ruled (outcome ≠ deferred): the ledger — read once
+#   queued_ids($r)    the ids (input or ref) of every queue/goal/requeue ruling an APPLY receipt carries,
+#                     an input's (`ruled`) or an issue the sitting filed and ruled in the same pass
+#                     (`ruled_filed`), each {id, run} — "what this island queued"
 # shellcheck disable=SC2016  # a jq program, not a shell expansion
-JQ_SITTINGS='def sittings($r; $today): [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply"
-    and .session_ran == true and ((.ts // "") | startswith($today))) ] | length;'
+JQ_RECEIPTS='def applied($r): $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply");
+  def sittings($r; $today): [ applied($r) | select(.session_ran == true and ((.ts // "") | startswith($today))) ] | length;
+  def ruled_ids($r): [ applied($r) | .ruled[]? | select(.outcome != "deferred") | .input ] | unique;
+  def queued_ids($r): [ applied($r) | (.run // "") as $run | ((.ruled // []) + (.ruled_filed // []))[]
+    | select(.outcome | IN("queue", "goal", "requeue")) | ([.input] + (.refs // []))[] | {id: ., run: $run} ];'
 
 # owner_table → a JSON array, one row per island in ISLANDS order, that finding_owner (jq, in
 # cmd_dig) walks: {island, alerts: [the names its rule files define], paths: [its Touches prefixes]
@@ -366,7 +376,7 @@ cmd_dig() {
   sel="$(jq -n --argjson tbl "$tbl" --arg verdicts "$verdicts" --arg island "$ISLAND" --arg today "$today" \
       --argjson dmax "$dmax" --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" \
       --slurpfile f <(printf '%s' "$findings" | grep -v '^$' || true) \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
     def fid: (._key | sub("\\.json$"; ""));
     def esc: gsub("(?<c>[.\\[\\](){}*+?^$|\\\\])"; "\\\(.c)");
     # finding_owner: ONE island per finding, so no finding is ruled by two sittings.
@@ -389,8 +399,7 @@ cmd_dig() {
                   | ([$f.cause, $f.recommendation, ($f.evidence // []), ($f.related // []), $f.pr] | tostring | test($pat))
                 end) | .island ] | first)
         // "";
-    ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
-            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $ruled
+    ruled_ids($r) as $ruled
     | sittings($r; $today) as $sittings
     | [ $f[] | select(.schema == "dig-finding/v1")
              | select(.verdict as $v | ($verdicts | split(",")) | index($v))
@@ -460,10 +469,9 @@ cmd_gaps() {
   sel="$(jq -n --arg island "$ISLAND" --arg root "$root" --arg repo "$REPO" --arg ts "$ts" --arg today "$today" \
       --argjson dmax "$dmax" --argjson gmax "$gmax" --slurpfile iss <(printf '%s' "$issues") \
       --rawfile idx "$ROOT/$root/README.md" \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
     $iss[0] as $issues
-    | ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
-            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $ruled
+    | ruled_ids($r) as $ruled
     | ([ $issues[] | .number ]) as $open
     | [ $idx | split("\n")[]
         | select(test("^\\|\\s*\\[[A-Z][A-Z0-9-]*\\]\\("))
@@ -500,11 +508,9 @@ cmd_escape() {
   ts_probe
   receipts="$(read_receipts "$now" "$lookback")"
   # the issues this island queued, each with the run that queued it
-  queued="$(jq -nc --arg repo "$REPO" --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) '
-    [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply") | (.run // "") as $run
-      | .ruled[]? | select(.outcome | IN("queue", "goal", "requeue"))
-      | ([.input] + (.refs // []))[] | select(test("^" + ($repo | gsub("\\."; "\\.")) + "#[0-9]+$"))
-      | {n: (sub(".*#"; "") | tonumber), run: $run} ] | unique_by(.n)')" \
+  queued="$(jq -nc --arg repo "$REPO" --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
+    [ queued_ids($r)[] | select(.id | test("^" + ($repo | gsub("\\."; "\\.")) + "#[0-9]+$"))
+      | {n: (.id | sub(".*#"; "") | tonumber), run} ] | unique_by(.n)')" \
     || { echo "intake-select: escape receipt jq failed" >&2; exit 2; }
   if [ "$(printf '%s' "$queued" | jq 'length')" -eq 0 ]; then
     prs='[]'
@@ -518,10 +524,9 @@ cmd_escape() {
   printf '%s' "$prs" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "intake-select: the PR list is not a JSON array (not a verdict)" >&2; exit 2; }
   sel="$(jq -n --arg island "$ISLAND" --arg repo "$REPO" --arg ts "$ts" --arg today "$today" --argjson dmax "$dmax" \
       --argjson queued "$queued" --slurpfile prsf <(printf '%s' "$prs") \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
     $prsf[0] as $prs
-    | ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
-            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $read
+    | ruled_ids($r) as $read
     | def links($n): . as $p
         | (any(($p.closingIssuesReferences // [])[]; .number == $n))
           or (($p.headRefName // "") | test("(^|[/-])issue-" + ($n | tostring) + "($|[^0-9])"))
@@ -538,7 +543,7 @@ cmd_escape() {
        counts: {queued: ($queued | length), prs: ($match | length), read: (($match | length) - ($inputs | length)),
                 inputs: ($inputs | length)},
        sittings_today: sittings($r; $today), daily_max: $dmax, inputs: $inputs,
-       prior: [ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply") | (.escapes // [])[] ]}')" \
+       prior: [ applied($r) | (.escapes // [])[] ]}')" \
     || { echo "intake-select: escape selection jq failed" >&2; exit 2; }
   printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.state)\tCR×\(.changes_requested)\t\(.issue)"' >&2
   emit_sel "$sel" "unread escape PRs"
@@ -694,11 +699,9 @@ if [ "$SOURCE" = pile ]; then
   sel="$(jq -n --arg island "$ISLAND" --arg repo "$REPO" --arg today "$(date -u -d "@$now" +%Y-%m-%d)" \
       --argjson now "$now" --argjson every "$every" --argjson age "$REREAD_AGE_D" --argjson dmax "$dmax" \
       --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" --argjson cands "$cands" --argjson rereads "$rereads" \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_SITTINGS"'
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
     # re-read in the last $every days: an APPLY receipt lists the id with an outcome other than deferred
-    ([ $r[] | select(.schema == "island-intake-receipt/v1" and .mode == "apply")
-            | select(((.ts // "") | (try fromdateiso8601 catch 0)) >= ($now - $every * 86400))
-            | .ruled[]? | select(.outcome != "deferred") | .input ] | unique) as $recent
+    ruled_ids([ $r[] | select(((.ts // "") | (try fromdateiso8601 catch 0)) >= ($now - $every * 86400)) ]) as $recent
     | [ $rereads[] | select(.id as $i | $recent | index($i) | not) ] as $rr
     | ([ $cands[] | {id: ($repo + "#" + (.number | tostring))} + . ] + $rr) as $inputs
     | {schema: "island-intake-select/v1", island: $island, source: "pile", ts: $ts,

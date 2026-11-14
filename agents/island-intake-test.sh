@@ -663,6 +663,20 @@ mkdir -p "$TSE/homelab/intake-gateway-2026-10-26/c"
 jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-26T05:00:00Z", session_ran:true,
   ruled:[{input:($h+"#501"), outcome:"read", refs:[]}, {input:($h+"#502"), outcome:"deferred", refs:[]}]}' > "$TSE/homelab/intake-gateway-2026-10-26/c/receipt.json"
 esc; [ "$(jq -r '[.inputs[].number] | join(" ")' "$TMP/esel.json")" = "502 508" ] && ok "a PR an APPLY receipt read is not re-read; \`deferred\` re-presents" || bad "escape ledger" "got $(jq -c '[.inputs[].number]' "$TMP/esel.json")"
+# an issue the sitting FILED from a gap:/text: input and ruled in the same pass (the launcher's
+# ruled_filed, island-intake-argo.yaml §3): the input's line is `file`/`seat` naming it, its own line
+# `queue` — queued by this island all the same, so its PR is read; a filed issue ruled `seat` is not
+mkdir -p "$TSE/homelab/intake-gateway-2026-10-22/d"
+jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-22T05:00:00Z", run:"intake-gateway-2026-10-22/d", session_ran:true,
+  ruled:[{input:"gateway/specs/x.md#GW-X", outcome:"file", refs:[($h+"#210")]}, {input:"dig-y/finding-2", outcome:"seat", refs:[($h+"#211")]}],
+  ruled_filed:[{input:($h+"#210"), outcome:"queue", refs:[($h+"#210")]}, {input:($h+"#211"), outcome:"seat", refs:[]}]}' > "$TSE/homelab/intake-gateway-2026-10-22/d/receipt.json"
+{ pr 509 MERGED fix/g "Fixes #210" '[]' '["CHANGES_REQUESTED"]'   # in: filed + ruled queue in one sitting
+  pr 510 OPEN   fix/h "Fixes #211" '[]' '["CHANGES_REQUESTED"]'   # out: filed, ruled seat
+} | jq -s . > "$TMP/prs-filed.json"
+esc "$TMP/prs-filed.json"
+{ [ "$(jq -r '[.inputs[].number] | join(" ")' "$TMP/esel.json")" = "509" ] && [ "$(jq -r '.inputs[0].queued_by' "$TMP/esel.json")" = "intake-gateway-2026-10-22/d" ]; } \
+  && ok "an issue filed and ruled queue in one sitting (receipt ruled_filed) is queued: its PR #509 is read; a filed seat (#510) is not" \
+  || bad "escape filed queue" "got $(jq -c '[.inputs[] | {number, queued_by}]' "$TMP/esel.json") $(cat "$TMP/esel.err")"
 esc "$TMP/nowhere.json"; rc=$?
 [ "$rc" = 2 ] && ok "queued issues + an unreadable PR list → exit 2" || bad "escape rule #6" "rc=$rc"
 TSE0="$TMP/tse0"; mkdir -p "$TSE0/homelab"
@@ -843,6 +857,12 @@ gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
   && ok "a parity issue filed and ruled queue in the same sitting: reviewed, labelled, rung (receipt ruled_filed); a forged #77 ignored" \
   || bad "filed queue" "$(jq -c '{ruled, ruled_filed, held: .review.held}' "$TMP/up/receipt.json" 2>/dev/null)"
 grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "…counted once in the queued total" || bad "filed NQ" "$(grep 'ruled (' "$TMP/run.log")"
+# …and the receipt the launcher just wrote feeds the escape read: #9's later PR is one this island queued
+TSW="$TMP/tsw"; mkdir -p "$TSW/homelab/intake-gateway-$(date -u -d "@$NOW" +%Y-%m-%d)/w"; cp "$TMP/up/receipt.json" "$TSW/homelab/intake-gateway-$(date -u -d "@$NOW" +%Y-%m-%d)/w/receipt.json"
+pr 520 OPEN fix/issue-9-x "x" '[]' '["CHANGES_REQUESTED"]' | jq -s . > "$TMP/prs-w.json"
+INTAKE_PRS_JSON="$TMP/prs-w.json" INTAKE_TS_DIR="$TSW" INTAKE_NOW="$NOW" bash "$SEL" --source escape --island gateway --out "$TMP/esel-w.json" 2>"$TMP/esel-w.err"
+[ "$(jq -r '[.inputs[] | .number, .issue] | join(" ")' "$TMP/esel-w.json" 2>/dev/null)" = "520 $H#9" ] \
+  && ok "…and the launcher's own receipt puts #9's PR (#520) in the escape read" || bad "escape from the launcher receipt" "$(jq -c . "$TMP/esel-w.json" 2>/dev/null) $(cat "$TMP/esel-w.err")"
 printf 'INTAKE-RULED: %s queue %s\n' "$H#9" "$H#9" >> "$TMP/r-author.keep"   # the input's queue names #9 AND #9 rules itself queue
 cp "$TMP/r-author.keep" "$TMP/r-author.out"; gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
 grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "an input's queue naming #9 plus #9's own queue line: one queued, not two" || bad "NQ double count" "$(grep 'ruled (' "$TMP/run.log")"
