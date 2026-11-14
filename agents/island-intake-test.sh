@@ -831,6 +831,18 @@ gview '[]'; PILE_JSON="$PILE9" review_run apply
   && ok "a queue ruled in place (refs -) is held and reviewed through its input id" || bad "hold by input" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
 sed -i "s|^INTAKE-RULED: $H#9 queue -\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9|" "$TMP/r-author.out"   # back to the dig-born ruling
 
+# a parity issue FILED in this sitting and ruled queue (the in-cluster dry-run's shape, 2026-11-15): its
+# ruling line names a ref of an input's ruling, not an input — reviewed, labelled and rung all the same;
+# a queue line naming neither an input nor a filed ref (#77) is forged and ignored
+cp "$TMP/r-author.out" "$TMP/r-author.keep"
+sed -i -e "s|^INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 seat $H#9\nINTAKE-RULED: $H#9 queue $H#9\nINTAKE-RULED: $H#77 queue -|" "$TMP/r-author.out"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+{ jq -e '.review.held == ["'"$H"'#9"] and ([.ruled_filed[].input] == ["'"$H"'#9"]) and ([.ruled[] | select(.input | startswith("dig-2026-10-26")) | .outcome] == ["seat"])' "$TMP/up/receipt.json" >/dev/null 2>&1 \
+    && grep -q '^unit ' "$TMP/r.calls" && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && grep -q '/coordinate' "$TMP/curl.calls"; } \
+  && ok "a parity issue filed and ruled queue in the same sitting: reviewed, labelled, rung (receipt ruled_filed); a forged #77 ignored" \
+  || bad "filed queue" "$(jq -c '{ruled, ruled_filed, held: .review.held}' "$TMP/up/receipt.json" 2>/dev/null)"
+cp "$TMP/r-author.keep" "$TMP/r-author.out"
+
 review_run dry-run
 { ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
   && ok "dry-run: lenses and repair run, nothing is written to GitHub" || bad "review dry-run" "$(cat "$TMP/gh.calls" 2>/dev/null)"
