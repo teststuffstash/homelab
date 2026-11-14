@@ -221,7 +221,7 @@ The section's content moved to its proper homes; this pointer is all that remain
   counter-vs-throughput, green-surface, bypass actors, written-is-not-applied,
   one-spec-page, operator-lane PRs) → **`docs/runbook.md` §Meta-session probe & triage
   discipline**.
-- Shell/tool gotchas (zsh word-split, `--body-file`, `gh --jq`, `gh pr view` merged, python3
+- Shell/tool gotchas (jail shell is bash, `--body-file`, `gh --jq`, `gh pr view` merged, python3
   yaml) → **`agents/jail-subagent-card.md`** (applies to the seat too); pipe-filter-push →
   CLAUDE.md §lanes; apostrophe-in-jq → mechanized in `prompt-transport-lint`.
 - goal/-prefix arming → `docs/agents/issue-authoring.md` §Base (was a duplicate);

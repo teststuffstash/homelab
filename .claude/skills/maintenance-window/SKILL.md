@@ -111,7 +111,7 @@ prints each NEW name once (`NEW <name>`; the EXPECTED bins above print once as `
 after 3 consecutive failed/empty reads instead of staying silent, renews the lease every tick (a
 lapsed lease prints its ⚠ — the responder is triaging your named alerts and your claims are gone:
 stop and re-open), and exits when `close` removes the window. If the verb is ever missing, a hand
-copy is a script FILE (never an inline loop — zsh does not word-split) that meets the same four
+copy is a script FILE (never an inline loop — one-liners are where quoting bugs hide) that meets the same four
 rules, each a past silent failure (promoted 2026-10-26, GAPS maintenance-window-G2): **seed from
 the slot's baseline** (`~/.claude/maintenance-window/<id>/baseline.json` → `.alerts[]`, never from
 the terminal — `open` prints the responder's skip list, not the firing set); **probe a path the
