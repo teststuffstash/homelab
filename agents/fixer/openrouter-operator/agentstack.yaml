@@ -126,6 +126,13 @@ spec:
       # `Touches:` reaches either root gets the pinned process (gateway/scripts/lib/snippets.sh)
       # mounted read-only + the card block; the specs reviewer reads the same roots (#3025).
       specs: { root: gateway/specs, tests: gateway/tests }
+      # The islands built fresh beside the old loop (islands/README.md) keep their own specs/: the
+      # specs reviewer reviews each root on its own (XRD extraSpecs — reviewer only, no worker
+      # process mount, no evidence pipeline yet, so no tests root is declared).
+      extraSpecs:
+        - root: islands/scan/specs
+        - root: islands/launch/specs
+        - root: islands/retro/specs
       # ADR-089 quota-as-contract, ARMED 2026-08-07. Until today NO claim set spec.repos[].storage,
       # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
       # fails fast at CREATE" promise was never in force. A docker ride takes a 20Gi scratch

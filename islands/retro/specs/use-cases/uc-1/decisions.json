@@ -1,0 +1,19 @@
+{
+  "rf-a41552306252d4ac": {
+    "disposition": "new_work_needed",
+    "evidence": [
+      "https://github.com/teststuffstash/homelab/pull/9002"
+    ],
+    "matched_work": [],
+    "issue": {
+      "repo": "teststuffstash/homelab",
+      "title": "agent-session: a CI-red round must carry the failure into the next round's brief",
+      "body": "<the ADR-122 machine block: Touches: agents/agent-session.sh \u00b7 Base: master>\n\nWhat the retro saw: \u2026",
+      "labels": [
+        "task/fix"
+      ]
+    },
+    "accepted_by": "seat (operator-started jail)",
+    "accepted_at": "2026-11-09T09:00:00Z"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "_comment": "UC-1 step 1 — the dispatch params the platform scan writes for a queued homelab issue (dispatch.md LAUNCH-DISPATCH-ARGV). Env of the calling pod: AGENT_GATEWAY=sessions (the Composition sets it on the platform loop pod).",
+  "argv": ["homelab", "--task", "issue-2588", "--round", "1", "--recipe", ".agents/fix.yaml", "--no-attach"],
+  "env": { "AGENT_GATEWAY": "sessions" }
+}

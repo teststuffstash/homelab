@@ -21,9 +21,9 @@ agents/retro-session.sh SC2010 1
 agents/reviewer-session.sh SC2034 1
 agents/specs-reviewer-session.sh SC2034 1
 agents/specs-reviewer-session.sh SC2120 1
-agents/specs-reviewer-session.sh SC2128 3
+agents/specs-reviewer-session.sh SC2128 2
 agents/specs-reviewer-session.sh SC2155 1
-agents/specs-reviewer-session.sh SC2178 2
+agents/specs-reviewer-session.sh SC2178 1
 agents/upgrade-lease-test.sh SC1090 1
 ansible/roles/pve-router-killswitch/files/router-wangate.sh SC2034 1
 gateway/scripts/lib/site.sh SC2034 1

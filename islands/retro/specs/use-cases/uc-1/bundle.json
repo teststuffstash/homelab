@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "window": {
+    "since": "2026-11-02T00:00:00Z",
+    "until": "2026-11-09T00:00:00Z"
+  },
+  "population": {
+    "event_count": 1840,
+    "task_count": 96,
+    "failure_events": 41,
+    "agent_pain_events": 12,
+    "superseded_cancellations": 30
+  },
+  "tasks": [
+    {
+      "key": "teststuffstash/homelab#9001",
+      "score": 4512.5,
+      "failure_events": 3,
+      "infra_failure_events": 0,
+      "superseded_cancellations": 2,
+      "agent_pain_events": 1,
+      "round_count": 2,
+      "standing_stall_seconds": 0,
+      "events": [
+        {
+          "at": "2026-11-04T10:00:00Z",
+          "kind": "check",
+          "url": "https://github.com/teststuffstash/homelab/pull/9002",
+          "detail": "ci failure"
+        }
+      ]
+    }
+  ],
+  "late_arrivals": [],
+  "ledger": {
+    "population": {
+      "rows_emitted": 14,
+      "task_count": 11,
+      "snapshot_tasks": 2,
+      "by_terminal_label": {
+        "agent/done": 9,
+        "agent/blocked": 2
+      }
+    },
+    "rows": [
+      {
+        "key": "homelab#9001",
+        "rounds": [
+          [
+            "opencode-go/deepseek-v4.1-flash",
+            "ci-failed",
+            "ci-red",
+            false
+          ],
+          [
+            "opencode-go/deepseek-v4.1-flash",
+            "clean",
+            null,
+            true
+          ]
+        ]
+      }
+    ],
+    "row_fields": "rounds = [model, exit_status, error_class, ci] per round"
+  },
+  "previous_findings": [],
+  "previous_findings_total": 0,
+  "run_id": "r11",
+  "source_revision": "0000000000000000000000000000000000000000",
+  "prepared_at": "2026-11-09T05:00:12Z",
+  "series": "platform",
+  "storage_key": "platform/runs/20261109T000000Z",
+  "selected_task_count": 1,
+  "bundle_id": "9c73fc0e0d5bef5ecb34a590cb06e2c93fdb416e71043a18ce65d007eba2e018"
+}
