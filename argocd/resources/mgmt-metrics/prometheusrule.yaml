@@ -260,6 +260,40 @@ spec:
               construction — Talos honours it only at the next install — so only a maintenance window
               (reinstall or upgrade with the declared image) resolves it. The 2026-09-16 case: nx-01
               after #1717, plain schematic and EPHEMERAL on the SATA disk. docs/management-box.md §MB4.
+    # The ci-runner LOST TRIGGER (docs/management-box.md §Non-Talos VMs). A runner template edit
+    # re-creates only the snippet file (the VMs ignore user_data_file_id), and the box recreates the
+    # VM on that pending snippet — unless a human apply re-created the snippet first, after which
+    # nothing is pending and the VM keeps its old seed forever. DECLARED =
+    # mgmt_runner_seed_declared_info{vm,sha256}: the snippet the main STATE holds per runner VM
+    # (mgmt-probe.sh check_seeds, the belt every 15 min; an unreadable state publishes no series, so
+    # this stays silent rather than guessing). LIVE = ci_runner_seed_info{vm,sha256} on job
+    # ci-runner-node: the VM's own sha256 of the user-data it booted (the runner cloud-init).
+    # Fires per VM when no live series carries the declared sha — a different one, or none at all.
+    # `for: 6h`: on the box path the declared sha moves in the same scoped apply that recreates the
+    # VM, so a healthy gap is one boot; the longest legitimate one is two drained recreates in a
+    # row (each drain waits up to 3600 s for idle slots, then the cloud-init boot), box- or
+    # attended-run. 6h is that with ~2× headroom; past it, no recreate is coming.
+    - name: mgmt-runner-seed
+      rules:
+        - alert: MgmtRunnerSeedDrift
+          expr: |
+            mgmt_runner_seed_declared_info == 1
+              unless on (vm, sha256) ci_runner_seed_info == 1
+          for: 6h
+          # triage none: the remedy is an attended VM recreate; both shas are already in the labels/series
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "{{ $labels.vm }} did not boot the cloud-init seed the tofu state holds — for 6h"
+            description: >-
+              The main tofu state holds runner snippet sha256 {{ $labels.sha256 }} for {{ $labels.vm }},
+              and the VM publishes no ci_runner_seed_info with that sha (a different one, or none:
+              the VM or its exporter is down, or it booted before the seed metric existed). The usual
+              cause is a consumed trigger: an apply re-created the snippet without recreating the VM,
+              so the box sees nothing pending (docs/management-box.md §Non-Talos VMs). Compare with
+              `ci_runner_seed_info{vm="{{ $labels.vm }}"}`. The box recreates only on a snippet still
+              pending in its plan, and an applied one is not: plan `-replace` of that VM and run the
+              attended recipe — docs/runbook.md §"Replacing a CI runner VM — drained one at a time"
+              (`devbox run runner-maint -- run <plan-id> <vm>`).
     - name: mgmt-belt
       rules:
         # The drift alerts above are only as live as the belt that writes the series.

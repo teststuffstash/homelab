@@ -256,7 +256,9 @@ The cause-side fix is the `kind-janitor` reaping volumes too ([`patterns/kind-ci
 rule 2). Since 2026-11-08 the janitor also carries the VM's automatic cache limit
 ([ADR-161](adr.md)): at 70 % used, with no job on either slot, it removes unused images and build
 cache oldest first and garbage-collects `/nix` if that was not enough.
-`CiRunnerCacheCleanedRepeatedly` is the sizing signal. The same incident left a crashed job's ghcr.io login behind in the shared
+`CiRunnerCacheCleanedRepeatedly` is the sizing signal. Each VM also publishes the sha256 of the
+cloud-init seed it booted (`ci_runner_seed_info`), which the management box compares with the one
+the tofu state holds ([`management-box.md`](management-box.md) §Non-Talos VMs). The same incident left a crashed job's ghcr.io login behind in the shared
 `~/.docker/config.json`, breaking every later default-builder `docker build`, so **registry
 logins are job-scoped**: each runner slot's `.env` sets its own `DOCKER_CONFIG`
 (`~/.docker-slot-<n>`) and an `ACTIONS_RUNNER_HOOK_JOB_STARTED` hook

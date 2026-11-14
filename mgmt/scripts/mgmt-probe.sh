@@ -53,13 +53,14 @@
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file mgmt/scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos nodes ansible creds substrate kps-crds
+#   SKIP          space-separated check names to skip: tofu talos nodes seeds ansible creds substrate kps-crds
 #   GITHUB_TOKEN  the read-only PAT the env file already carries for tofu/github — also used to
 #                 authenticate the substrate check's upstream release reads (5000/hr vs 60/hr);
 #                 absent or insufficient falls back to anonymous
 #   MGMT_CACHE_DIR     where the substrate check caches the upstream release answer (default
 #                 /var/lib/mgmt/cache; falls back to $TMPDIR when that is not writable)
-#   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate)
+#   MAIN_STATE    main root's state file (default /var/lib/mgmt/state/main/terraform.tfstate) — the
+#                 node diff's declaration and the runner seed check's (check_seeds) input
 #   NODE_TARGETS_JSON  pre-fetched `node_install_targets` JSON — runs the node diff off the box
 #   NODE_K8S_JSON      pre-fetched `node_declared_k8s` JSON — the same for the registered/labels/
 #                      taints axes. With NODE_TARGETS_JSON set and this unset, those axes are NOT
@@ -443,6 +444,54 @@ JQ
     if [ "$tdiff" = "-" ]; then DRIFT_OK+=("$node taints")
     else DRIFT+=("$node taints"); K8S_GAPS=$((K8S_GAPS+1)); log "nodes: $node taints: $tdiff"; fi
   done <<< "$rows"
+}
+
+# ── check: the ci-runner seed the main STATE holds, per runner VM (the lost-trigger detector) ────
+# Both runner VMs ignore `initialization[0].user_data_file_id` (tofu/ci-runner.tf), so a template
+# edit re-creates only the snippet file. The box's runner verb recreates the VM on that pending
+# snippet (docs/management-box.md §Non-Talos VMs), but a human apply that re-creates the snippet
+# WITHOUT the recreate consumes the trigger, and the VM keeps its old seed with nothing pending.
+# This check publishes the DECLARED half: sha256 of the snippet content
+# (`source_raw[0].data`) each runner VM references, read from the main root's STATE rather than
+# a plan (after that human apply the state holds the new content while the VM booted the old).
+# The LIVE half is the VM's own `ci_runner_seed_info{vm,sha256}` (the runner cloud-init hashes
+# /var/lib/cloud/instance/user-data.txt at boot); MgmtRunnerSeedDrift
+# (argocd/resources/mgmt-metrics/) joins the two.
+# The VM name and the file come from the state: every managed `proxmox_virtual_environment_vm`
+# whose resource name matches `ci_runner*` (the apply policy's runner glob), joined to the
+# `proxmox_virtual_environment_file` whose `id` its `user_data_file_id` holds — no runner list here.
+# A state that cannot be read publishes NO series (never a false sha): the check_nodes rule.
+declare -a SEEDS=()   # "<vm> <sha256>"
+RUNNER_SEED_JQ='
+  [.resources[]? | select(.mode == "managed")] as $r
+  | [$r[] | select(.type == "proxmox_virtual_environment_file") | .instances[]?.attributes
+     | select((.source_raw[0].data? // null) != null) | {id, data: .source_raw[0].data}] as $files
+  | $r[] | select(.type == "proxmox_virtual_environment_vm" and (.name | startswith("ci_runner")))
+  | .instances[]?.attributes
+  | (.initialization[0].user_data_file_id? // null) as $fid
+  | select($fid != null)
+  | {vm: .name, data: ([$files[] | select(.id == $fid) | .data][0] // null)}
+  | select(.data != null)
+  | @json'
+check_seeds() {
+  skip_requested seeds && { skipped seeds requested "SKIP requested"; return; }
+  local statef="${MAIN_STATE:-/var/lib/mgmt/state/main/terraform.tfstate}"
+  [ -f "$statef" ] || { skipped seeds no-input "no main state at $statef — this check runs on the box"; return; }
+  local rows row vm sha seen=()
+  rows="$(mgmt_x jq -r "$RUNNER_SEED_JQ" "$statef" 2>/dev/null)" || {
+    failed seeds unparseable "the main state at $statef did not parse as tofu state JSON"; return; }
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    vm="$(printf '%s' "$row" | mgmt_x jq -r '.vm' 2>/dev/null)"
+    # -j: the content's exact bytes, no trailing newline added — what Proxmox hands the VM as user-data.
+    sha="$(printf '%s' "$row" | mgmt_x jq -j '.data' 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    [[ -n "$vm" && "$sha" =~ ^[0-9a-f]{64}$ ]] || { failed seeds unparseable "a runner VM row did not parse: '$vm'"; return; }
+    seen+=("$vm $sha")
+  done <<< "$rows"
+  # Assigned only once every row parsed: a partial read publishes nothing, not a partial set.
+  SEEDS=("${seen[@]}")
+  [ "${#SEEDS[@]}" -gt 0 ] || { passed seeds "no runner VM with a seed file in the main state"; return; }
+  passed seeds "$(printf '%s, ' "${SEEDS[@]}" | sed 's/, $//')"
 }
 
 # ── check: is the declared substrate still current, and still in support? (FU-254) ───────────────
@@ -924,6 +973,17 @@ publish() {
     for d in "${DRIFT[@]:-}";    do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 1"$'\n'; done
     for d in "${DRIFT_OK[@]:-}"; do [ -n "$d" ] && body+="mgmt_node_drift{node=\"${d% *}\",axis=\"${d##* }\"} 0"$'\n'; done
   fi
+  # The runner seed the main state declares, one series per runner VM (check_seeds). No series
+  # when the state was unreadable — MgmtRunnerSeedDrift then has no declared side and stays silent.
+  if [ ${#SEEDS[@]} -gt 0 ]; then
+    body+="# HELP mgmt_runner_seed_declared_info 1 per runner VM: sha256 of the cloud-init snippet the main tofu state holds for it."$'\n'
+    body+="# TYPE mgmt_runner_seed_declared_info gauge"$'\n'
+    local srow svm ssha
+    for srow in "${SEEDS[@]}"; do
+      read -r svm ssha <<< "$srow"
+      body+="mgmt_runner_seed_declared_info{vm=\"$svm\",sha256=\"$ssha\"} 1"$'\n'
+    done
+  fi
   # FU-254 — the substrate-currency gauges. Same rule as mgmt_node_drift: a 0 is a POSITIVE
   # statement ("compared, and current" / "compared, and supported"), which "no series" cannot make,
   # so every component that was actually compared publishes all three; a component whose upstream
@@ -984,6 +1044,7 @@ case "$MODE" in
     check_talos
     check_nodes
     dump_drift
+    check_seeds
     check_ansible
     check_creds
     check_substrate
