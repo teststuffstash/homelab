@@ -526,6 +526,34 @@ spec:
                               `<parent of root>/scripts/lib/snippets.sh` (`gateway/scripts/lib/
                               snippets.sh` for `gateway/specs`, `scripts/lib/snippets.sh` for
                               `specs`). Declare only when the repo keeps its pin elsewhere.
+                      extraSpecs:
+                        type: array
+                        maxItems: 16
+                        description: >-
+                          The repo's FURTHER spec roots, beside `specs` (a monorepo of islands:
+                          homelab's gateway owns `specs`, each island adds its own root here).
+                          Consumed by the SPECS REVIEWER only (specs-reviewer-session.sh
+                          pack_root_pairs): a PR touching a listed root gets that root's own
+                          context pack and rows review instead of the mechanical approval; a PR
+                          touching several roots gets one pass per root and ONE verdict. NOT read
+                          by the worker launcher (no process mount for these roots yet) and
+                          never an evidence source: the repo's evidence bucket belongs to
+                          `specs`, so an extra root's pack states it carries no evidence.
+                        items:
+                          type: object
+                          required: [root]
+                          properties:
+                            root:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: Repo-relative directory of the spec pages (same grammar as `specs.root`).
+                            tests:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: >-
+                                Repo-relative directory of the rule tests. Omit when the root has
+                                none yet — the reviewer then reaches rules through the spec pages
+                                alone; it never assumes a default tests root.
                       fixer:
                         type: object
                         description: >-

@@ -316,7 +316,10 @@ read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the 
 `Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
 every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
 same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
-pack name one set of roots. The author brief itself ships with the snippets release (since v0.6.6).
+pack name one set of roots. A repo with several roots lists the rest under `repos[].extraSpecs`
+(reviewer-only: one pack and one pass per touched root, one verdict —
+[agentstack.md §The spec process](agentstack.md#the-spec-process-rides-with-the-worker-reposspecs-adr-156)).
+The author brief itself ships with the snippets release (since v0.6.6).
 
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).
