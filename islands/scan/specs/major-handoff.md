@@ -22,8 +22,8 @@ headings and the exit contract.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-HANDOFF-GATE](#scan-handoff-gate) | `exit`, `evidence` | 🚧 WIP — no evidence pipeline yet (fixture: `major-handoff`) |
-| [SCAN-HANDOFF-ARM](#scan-handoff-arm) | `exit`, `evidence.upstream_line` | 🚧 WIP — no evidence pipeline yet (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-GATE](#scan-handoff-gate) | `exit`, `evidence` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-ARM](#scan-handoff-arm) | `exit`, `evidence.upstream_line` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
 
 ### SCAN-HANDOFF-GATE
 
