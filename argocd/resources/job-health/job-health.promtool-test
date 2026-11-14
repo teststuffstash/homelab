@@ -97,16 +97,21 @@ tests:
 
   # ── a bare Job keeps the stock semantics, because there they are right ───────────────────────
   # A one-shot has no next try, so the failed object persisting IS the open item rather than a
-  # latch. The CronJob-owned twin in the same evaluation must stay silent — that contrast is the
-  # whole point of the `unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}`.
+  # latch. The CronJob-owned and AnalysisRun-owned twins in the same evaluation must stay silent —
+  # that contrast is the whole point of the `unless on (namespace, job_name) kube_job_owner{…}`.
   - interval: 1m
-    name: "KubeJobFailed fires for a bare Job and never for a CronJob-owned one"
+    name: "KubeJobFailed fires for a bare Job and never for a CronJob- or AnalysisRun-owned one"
     input_series:
       - series: 'kube_job_failed{job="kube-state-metrics",namespace="infisical",job_name="infisical-bootstrap-1"}'
         values: "1+0x40"
       - series: 'kube_job_failed{job="kube-state-metrics",namespace="garage",job_name="garage-meta-rotation-29826405"}'
         values: "1+0x40"
       - series: 'kube_job_owner{job="kube-state-metrics",namespace="garage",job_name="garage-meta-rotation-29826405",owner_kind="CronJob",owner_name="garage-meta-rotation"}'
+        values: "1+0x40"
+      # a Kargo verification probe that returned a Failed verdict (live owner shape, 2026-11-12)
+      - series: 'kube_job_failed{job="kube-state-metrics",namespace="oracle-kargo",job_name="472a3b2c.candidate-image-probe.1"}'
+        values: "1+0x40"
+      - series: 'kube_job_owner{job="kube-state-metrics",namespace="oracle-kargo",job_name="472a3b2c.candidate-image-probe.1",owner_kind="AnalysisRun",owner_name="shadow.01m76h90.dd37c6e",owner_is_controller="true"}'
         values: "1+0x40"
     alert_rule_test:
       - eval_time: 10m
@@ -127,7 +132,9 @@ tests:
                 A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed
                 condition. Read the pod's log, then decide: re-run it, or delete the Job once the
                 outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert —
-                their schedule's health is CronJobNotSucceeding, which self-clears.
+                their schedule's health is CronJobNotSucceeding, which self-clears. Neither do Jobs
+                owned by an Argo Rollouts AnalysisRun (a Kargo verification probe): a Failed one is a
+                verdict, read on the AnalysisRun's phase, which the owning stack alerts on.
 
   # ── never-succeeded: the `unsuspended ≠ ever ran` class ─────────────────────────────────────
   # `last_successful_time` is ABSENT for a CronJob that has never completed one, so the rule above
