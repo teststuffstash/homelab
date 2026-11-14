@@ -411,7 +411,7 @@
         "python3 agents/estimate_budget.py \"$@\""
       ],
       "infisical-harden": [
-        "bash scripts/infisical-harden.sh"
+        "bash scripts/infisical-harden.sh \"$@\""
       ],
       "follow-ups-lint": [
         "sh scripts/follow-ups-lint.sh"

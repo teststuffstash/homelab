@@ -54,7 +54,7 @@ irreducible minimum and ArgoCD/Infisical take over:
 KeePass ──tofu/argocd.tf──► ArgoCD + Infisical bootstrap secrets (encryption/auth keys, DB creds, git PAT)
    │                            └─ chart autoBootstrap → super admin (creds in KeePass), org "homelab"
    ▼                                   └─ emits an instance-admin TOKEN (in-cluster secret; DEAD since chart 1.12 — see below)
-tofu/infisical/ (Infisical TF provider, token-auth) ──► project "homelab" + "eso-reader" UA identity
+tofu/infisical/ (TF provider; per-run super-admin login, scripts/infisical-login.sh) ──► project "homelab" + "eso-reader" UA identity
    ▼                                                        └─ writes infisical-machine-identity → ESO
 ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for every app
 ```

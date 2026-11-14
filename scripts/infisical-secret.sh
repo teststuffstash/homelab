@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # Set/update secret(s) in the homelab Infisical project (prod env, path / by default).
-# Auth = a per-run USER login as the Infisical super admin, creds from the KeePass wallet
-# (`infisical-admin-email` / `-password`, Tier-0), passed to the CLI as env — the session token
-# lives only for this run. Reaches Infisical via a short-lived port-forward. The bootstrap
-# instance-admin token (infisical-bootstrap-secret) is NOT used: Infisical >= chart 1.12 rejects
-# exp-less tokens past LEGACY_IDENTITY_ACCESS_TOKEN_EXPIRATION_ENFORCED_AT + 90d and caps every
-# machine-identity token at MAX_MACHINE_IDENTITY_TOKEN_AGE (90d), so no stored token is durable.
+# Auth = a per-run super-admin login (scripts/infisical-login.sh — why no stored token works any
+# more lives there); reaches Infisical via a short-lived port-forward.
 #
 #   devbox run infisical-secret API_TOKEN=s3cr3t
 #   devbox run infisical-secret KEY1=val1 KEY2=val2
@@ -28,82 +24,36 @@ export NIX_CONFIG="experimental-features = nix-command flakes" DEVBOX_QUIET=1
 
 # Resolve every value FIRST — before any other command can touch stdin. `KEY=-` = stdin, at most
 # once; an empty value is refused before anything is written (an empty pipe must never blank a live secret).
-STAGE="$(umask 077; mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT   # widened once the port-forward exists
 declare -A VAL=()
 ARGS=(); used_stdin=0
 for kv in "$@"; do
-  case "$kv" in *=*) ;; *) echo "infisical-secret: '$kv' is not KEY=VALUE" >&2; rm -rf "$STAGE"; exit 2 ;; esac
+  case "$kv" in *=*) ;; *) echo "infisical-secret: '$kv' is not KEY=VALUE" >&2; exit 2 ;; esac
   k="${kv%%=*}"; v="${kv#*=}"
   if [ "$v" = "-" ]; then
-    [ "$used_stdin" = 0 ] || { echo "infisical-secret: $k: only one KEY=- per run (stdin is already read)" >&2; rm -rf "$STAGE"; exit 2; }
+    [ "$used_stdin" = 0 ] || { echo "infisical-secret: $k: only one KEY=- per run (stdin is already read)" >&2; exit 2; }
     used_stdin=1; v="$(cat)"
   fi
   v="${v%$'\n'}"   # argv and stdin alike: no trailing newline (the read-back compares $(…) output)
-  [ -n "$v" ] || { echo "infisical-secret: $k: empty value refused" >&2; rm -rf "$STAGE"; exit 2; }
+  [ -n "$v" ] || { echo "infisical-secret: $k: empty value refused" >&2; exit 2; }
   VAL[$k]="$v"; ARGS+=("$k=$v")
 done
 
-KC=(--kubeconfig "${KUBECONFIG:-$PWD/tofu/kubeconfig}")
-SVC=svc/infisical-infisical-standalone-infisical
-PORT=18080
-
-# Wallet: explicit KP_DIR, else jail (~/.claude) or host (~/Projects/.claude-data) — keepass-env.sh's lookup.
-KP=""
-for d in "${KP_DIR:-}" "$HOME/.claude/homelab-keepass" "$HOME/Projects/.claude-data/homelab-keepass"; do
-  [ -n "$d" ] && [ -f "$d/homelab.kdbx" ] && KP="$d" && break
-done
-[ -n "$KP" ] || { echo "infisical-secret: KeePass wallet not found — bash scripts/keepass-init.sh" >&2; exit 1; }
-kp_get() { devbox run --quiet -- keepassxc-cli show -q --no-password -k "$KP/homelab.keyx" -a Password "$KP/homelab.kdbx" "$1" 2>/dev/null; }
-ADMIN_EMAIL="$(kp_get infisical-admin-email)"; ADMIN_PASSWORD="$(kp_get infisical-admin-password)"
-[ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ] || { echo "infisical-secret: wallet infisical-admin-email/-password unreadable" >&2; exit 1; }
-PGPOD="$(devbox run --quiet -- kubectl "${KC[@]}" -n infisical get pods -l cnpg.io/cluster=infisical-pg -o jsonpath='{.items[0].metadata.name}')"
-PROJECT_ID="$(devbox run --quiet -- kubectl "${KC[@]}" -n infisical exec "$PGPOD" -c postgres -- \
+# The login (wallet creds, resolved binaries, bounded port-forward, session HOME, EXIT trap).
+# shellcheck source=scripts/infisical-login.sh
+. ./scripts/infisical-login.sh
+PROJECT_ID="$("$KUBECTL" "${INF_KC[@]}" -n infisical exec "$INF_PGPOD" -c postgres -- \
   psql -U postgres -d infisical -tAc "select id from projects where slug='homelab';" | tr -d '[:space:]')"
-[ -n "$PROJECT_ID" ] || { echo "homelab project not found" >&2; exit 1; }
-ORG_ID="$(devbox run --quiet -- kubectl "${KC[@]}" -n infisical exec "$PGPOD" -c postgres -- \
-  psql -U postgres -d infisical -tAc "select \"orgId\" from projects where slug='homelab';" | tr -d '[:space:]')"
-[ -n "$ORG_ID" ] || { echo "homelab project's org not found" >&2; exit 1; }
+[ -n "$PROJECT_ID" ] || { echo "infisical-secret: homelab project not found (tofu/infisical not applied?)" >&2; exit 1; }
 
-# The port-forward and the readiness loop call the RESOLVED binaries, not `devbox run`: two devbox
-# runs at once (a backgrounded one + the loop) race on `.devbox/gen/scripts/.cmd.sh` and one of them
-# gets `eval: kubectl: not found` (exit 127) — the port-forward died that way on the host, 2026-10-22.
-KUBECTL="$(devbox run --quiet -- sh -c 'command -v kubectl')"
-CURL="$(devbox run --quiet -- sh -c 'command -v curl')"
-INFISICAL="$(devbox run --quiet -- sh -c 'command -v infisical')"
-[ -x "$KUBECTL" ] && [ -x "$CURL" ] && [ -x "$INFISICAL" ] || { echo "infisical-secret: could not resolve kubectl/curl/infisical from the devbox env" >&2; exit 1; }
-
-"$KUBECTL" "${KC[@]}" -n infisical port-forward "$SVC" "$PORT:8080" >/tmp/inf-secret-pf.log 2>&1 &
-PF=$!; trap 'kill $PF 2>/dev/null || true; rm -rf "$STAGE"' EXIT
-mkdir -m 700 "$STAGE/.home"   # the CLI writes its login session under $HOME — keep it in the run's tempdir
-# BOUNDED wait + liveness check (2026-08-09): the old bare `until curl` spun FOREVER when the
-# Infisical pod restarted mid-store and took the port-forward with it — the token store hung for
-# hours inside a tofu apply wrapper whose whole design was "Infisical failures WARN, never
-# abort". A wait that cannot fail defeats the caller's degrade path. 30s covers every healthy
-# bring-up; a dead forward or a dead pod now exits loudly with the forward's own log.
-tries=0
-until "$CURL" -sf "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; do
-  kill -0 "$PF" 2>/dev/null || { echo "infisical-secret: port-forward DIED — $(tail -2 /tmp/inf-secret-pf.log 2>/dev/null | tr '\n' ' ')" >&2; exit 1; }
-  tries=$((tries+1))
-  [ "$tries" -ge 30 ] && { echo "infisical-secret: Infisical not reachable through the port-forward after 30s — see /tmp/inf-secret-pf.log" >&2; exit 1; }
-  sleep 1
-done
-
-TOKEN="$(HOME="$STAGE/.home" INFISICAL_EMAIL="$ADMIN_EMAIL" INFISICAL_PASSWORD="$ADMIN_PASSWORD" \
-  INFISICAL_ORGANIZATION_ID="$ORG_ID" "$INFISICAL" login --method=user \
-  --domain "http://127.0.0.1:$PORT/api" --plain --silent)" || TOKEN=""
-unset ADMIN_PASSWORD
-[ -n "$TOKEN" ] || { echo "infisical-secret: admin login failed (wallet creds stale? Infisical down?)" >&2; exit 1; }
-
-COMMON=(--projectId "$PROJECT_ID" --domain "http://127.0.0.1:$PORT/api"
+COMMON=(--projectId "$PROJECT_ID" --domain "$INF_HOST/api"
         --env "${INFISICAL_ENV:-prod}" --path "${INFISICAL_PATH:-/}")
-HOME="$STAGE/.home" INFISICAL_TOKEN="$TOKEN" "$INFISICAL" secrets set "${ARGS[@]}" "${COMMON[@]}" >/dev/null
+HOME="$INF_STAGE/.home" INFISICAL_TOKEN="$INF_TOKEN" "$INFISICAL" secrets set "${ARGS[@]}" "${COMMON[@]}" >/dev/null
 
 # Read each key back: a stored value that differs from the staged bytes is a failure, never a
 # warning (the corruption this script once caused was silent).
 bad=0
 for k in "${!VAL[@]}"; do
-  got="$(HOME="$STAGE/.home" INFISICAL_TOKEN="$TOKEN" "$INFISICAL" secrets get "$k" --plain "${COMMON[@]}" 2>/dev/null)" || got=""
+  got="$(HOME="$INF_STAGE/.home" INFISICAL_TOKEN="$INF_TOKEN" "$INFISICAL" secrets get "$k" --plain "${COMMON[@]}" 2>/dev/null)" || got=""
   if [ -n "$got" ] && [ "$got" = "${VAL[$k]}" ]; then
     echo "✓ $k stored and read back identical (${#got} chars)"
   else
