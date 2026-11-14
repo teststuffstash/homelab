@@ -1113,6 +1113,15 @@ the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `
   its window and silences stay open, and that window holds the loop), 2 (drain refused, labels restored),
   3 (refused before a window) → a refusal naming it, `refused-rev` like any other. The same VM still a
   candidate after its recreate at the same sha is refused as a perpetual diff, never recreated twice.
+- **CI outcomes are not the verb's health signal** (operator ruling, 2026-11-14). The verb's own `verify`
+  (every registration online with its labels, the exporter up) plus the cluster compare decide; the
+  compare declares `GithubWorkflowRunFailed` expected (`compare --expect`, `scripts/runner-maintenance.sh`
+  `CI_OUTCOME_ALERTS`) and its window opens `--no-ci` (close skips the stranded-CI probe, which needs a
+  `gh` the box does not have), because a red run anywhere in the fleet is routine and says nothing about the VM,
+  and even a re-run green job would not prove it. A runner change that breaks a build shows up as that
+  stack's red CI, and the stack reports it or makes the version bump on its side. Seen on the first
+  unattended run: oracle-fleet's own lint failure (started before the window) failed ci-runner-01's run,
+  and ci-runner-02's clean run failed at close on "CI status UNREADABLE".
 - **The final full apply stamps.** A scoped apply does not advance `applied-rev`; the tick after
   the last runner plans master unscoped, and that apply stamps as any other.
 - **Shadow** makes the scoped plan and its scope check and writes the would-be `run` to the journal,
