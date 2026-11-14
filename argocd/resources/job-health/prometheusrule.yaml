@@ -83,11 +83,12 @@ spec:
         # A one-shot (a bootstrap, an ArgoCD PostSync smoke hook) has no next try, so the failed
         # object persisting until someone deals with it is the correct behaviour rather than a
         # latch. Live set on 2026-09-17: infisical/infisical-bootstrap-1 and
-        # sleep-tracking/sleep-ingester-smoke — exactly that class.
+        # sleep-tracking/sleep-ingester-smoke — exactly that class. AnalysisRun-owned Jobs are
+        # excluded like CronJob-owned ones: the owner carries the verdict (Kargo verification).
         - alert: KubeJobFailed
           expr: |
             kube_job_failed{job="kube-state-metrics"} > 0
-              unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}
+              unless on (namespace, job_name) kube_job_owner{owner_kind=~"CronJob|AnalysisRun"}
           for: 15m
           # triage dig: one-shot Job pod log is readable in-cluster; decide rerun or delete
           labels: { severity: warning, triage: dig }
@@ -97,4 +98,6 @@ spec:
               A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed
               condition. Read the pod's log, then decide: re-run it, or delete the Job once the
               outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert —
-              their schedule's health is CronJobNotSucceeding, which self-clears.
+              their schedule's health is CronJobNotSucceeding, which self-clears. Neither do Jobs
+              owned by an Argo Rollouts AnalysisRun (a Kargo verification probe): a Failed one is a
+              verdict, read on the AnalysisRun's phase, which the owning stack alerts on.
