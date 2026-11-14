@@ -89,8 +89,8 @@ templates (it floats) and reverts only by rebuilding it. The detector is `RetroR
 
 ## Open
 
-- The specs reach no specs reviewer: on master (2026-11-14) the claim's `specs` field holds one
-  pair per repo.
+- The specs get a rows review but no evidence: homelab's claim lists `islands/retro/specs` under
+  `extraSpecs` (#3379), with no tests root, so an unproven row needs its `🚧 WIP` / `⚑ gap` mark.
 - No evidence pipeline: the fixtures prove clauses, nothing renders them as stories (specs §Rule 5)
   — the first deliverable of the build.
 - The old-proxy transition path — the self-routing sites, the key mint, `retroKeySecret` and the
