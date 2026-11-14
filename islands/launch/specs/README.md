@@ -27,9 +27,8 @@ What this island adds, by rule:
 
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
-  ⚑ gap: the specs reviewer reads nothing here today — the claim's `specs` field admits one
-  `{root, tests}` pair per repo and homelab's names the gateway's; until it becomes a list,
-  a change to these pages reaches only the ordinary reviewer.
+  The specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379), a rows
+  review with no tests root and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** the prefix is `LAUNCH-`; areas are `DISPATCH`, `PREFLIGHT`, `ADMIT`, `POD`,
   `BUNDLE`, `CARD`, `OUTCOME`, `BUDGET`.
 - **Rule 5 (evidence):** **none is generated.** The proving harness is the clause-replay harness

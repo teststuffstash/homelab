@@ -33,9 +33,11 @@ intake, the deep dig, the responder) — the spike drafted both; they wait.
   dir that would prove them — but replay emits no `rule()` labels and no Allure stories, so every
   requirement is `🚧 WIP — no evidence pipeline yet`. A tests root with rule-labelled tests driven
   by those fixtures is each island's first deliverable.
-- **No specs reviewer.** On master (2026-11-14) the claim's `specs` field admits one `{root, tests}`
-  pair per repo and homelab's names `gateway/specs`, so a PR touching `islands/*/specs` gets no
-  specs-reviewer read.
+- **A rows review, no evidence.** homelab's claim lists each island's `specs/` under `extraSpecs`
+  (#3379): a PR touching `islands/<island>/specs` gets the specs reviewer's rows review over that
+  root, and a worker whose `Touches:` reaches it gets the pinned spec process mounted, versioned by
+  that root's `README.md`. No tests root is declared and the pack carries no evidence, so an
+  unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark.
 - **No spec gate / join ratchet** over these roots (`gateway/scripts/spec_gate.py` resolves its
   root from its own location — `gateway/specs` only).
 - **Write tier:** `classify_touches islands/…` = `machine-merge` (verified 2026-11-14).
