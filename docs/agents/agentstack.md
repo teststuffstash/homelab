@@ -139,6 +139,19 @@ The Composition renders nothing for it; two consumers read it:
   without the field (and for cluster-less runs). The `specs-review` SA holds `agentstacks`
   get/list for this one read ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
 
+**Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
+has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
+evidence bucket all belong to it), and each further root is listed here — homelab lists
+`islands/{scan,launch,retro}/specs` beside the gateway's. Only the specs reviewer reads it
+(`pack_root_pairs` → `touched_pairs`): a PR touching a listed root gets a context pack over THAT
+root and a real rows review instead of the mechanical approval; a PR touching several roots gets
+one pass per root (one per tick, each held as a `SPECS ROOT REVIEW` comment) and ONE verdict,
+CHANGES_REQUESTED when any root's is. `tests` is optional and has no default: a root without one
+is reached through its spec pages alone, and its pack carries no evidence (no publisher exists
+for an extra root yet), so unproven rows need the evidence brief's `🚧 WIP → #<issue>` or
+`⚑ gap` index mark. Not read by the worker launcher yet: a ride touching an extra root gets no
+process mount.
+
 Replay: `agents/replay/fixtures/specs-process/` (reached / not reached / field absent / pin
 unresolvable). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
 worker).
