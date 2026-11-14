@@ -1,0 +1,4 @@
+# shellcheck shell=sh
+# Constructed: a single-pair repo (`specs: {root: specs, tests: tests}`) keeps its pin at the
+# layout default `scripts/lib/snippets.sh`.
+SNIPPETS_WHEEL=https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v0.6.5/allure_behavior_snippets-0.6.5-py3-none-any.whl
