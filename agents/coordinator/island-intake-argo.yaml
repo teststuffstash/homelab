@@ -483,8 +483,9 @@ spec:
                        > "$d/issues/$k.comments.md" 2>/dev/null || echo "(comments unreadable — the read failed)" > "$d/issues/$k.comments.md";;
                 esac
               }
-              _lens_record() { # <kind> <unit index> <status> <output file|""> <runs>
-                jq --arg k "$1" --argjson u "$2" --arg s "$3" --arg o "$4" --argjson n "$5" --arg rail "${rail:-}" --arg m "${TS_MODEL:-}" \
+              _lens_record() { # <kind> <unit index> <status> <output file|""> <runs> — the rail/model of an ADMITTED lens only
+                local _r="" _m=""; [ "$5" -gt 0 ] && { _r="${rail:-}"; _m="${TS_MODEL:-}"; }
+                jq --arg k "$1" --argjson u "$2" --arg s "$3" --arg o "$4" --argjson n "$5" --arg rail "$_r" --arg m "$_m" \
                   '. + [{lens: $k, unit: $u, status: $s, output: $o, runs: $n, rail: $rail, model: $m}]' /tmp/lenses.json > /tmp/lenses.next \
                   && mv /tmp/lenses.next /tmp/lenses.json
               }
@@ -532,7 +533,9 @@ spec:
               print(masked)' "$SNIP" "$1"
               }
               _base_ready() { # <sha> → the clone holds it (a depth-1 clone has only master's tip; fetch the author's base when it differs)
-                git cat-file -e "$1^{commit}" 2>/dev/null || git -c "$_ah" fetch -q --depth 1 origin "$1" 2>/dev/null
+                git cat-file -e "$1^{commit}" 2>/dev/null && return 0
+                git -c "$_ah" fetch -q --depth 1 origin "$1" 2>&1 | tail -2 | sed 's/^/island-intake: base fetch: /'
+                git cat-file -e "$1^{commit}" 2>/dev/null
               }
 
               if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
@@ -602,7 +605,7 @@ spec:
               You are the REPAIR PASS of the ISLAND INTAKE sitting for the \`$ISLAND\` island (mode: $MODE), running
               unattended in-cluster; cwd = a fresh clone of homelab master. Follow gateway/intake.md §Review and repair,
               steps 3 and 4, exactly (and §A queue-ready body for any edit). Below: the first pass's report, then every
-              lens's findings file. Answer EVERY finding by its id, once (\`changed: …\` / \`declined: …\`), then on each
+              lens's findings file; the bodies under review are also at /tmp/review/issues/<n>.md (GitHub's copy wins in apply). Answer EVERY finding by its id, once (\`changed: …\` / \`declined: …\`), then on each
               issue of each unit: the ONE \`intake: review — …\` comment, then the labels (the INTAKE-HOLD lines of the
               first pass name them), then the ruling comment LAST. A lens that did not run adds its skipped line under the
               review comment's first line. In dry-run write nothing to GitHub: print every comment, label and edit you
@@ -659,7 +662,9 @@ spec:
                   _belt_review_comment > "/tmp/review/belt-$key.md"
                   gh issue comment "$key" --repo "$REPO_SLUG" --body-file "/tmp/review/belt-$key.md" >/dev/null || echo "⚠ island-intake: the review comment on $ref FAILED"
                 fi
-                if gh issue edit "$key" --repo "$REPO_SLUG" --add-label "$add" >/dev/null; then
+                _la=(); IFS=, read -ra _ls <<< "$add"; for _l in "${_ls[@]}"; do _la+=(-f "labels[]=$_l"); done
+                # one REST POST (gh_label_add's call, agents/machine-comment.sh — FU-290: no porcelain label write)
+                if gh api -X POST "repos/$REPO_SLUG/issues/$key/labels" "${_la[@]}" >/dev/null; then
                   NL=$((NL + 1)); echo "island-intake: belt labelled $ref (+$add; repair: $P_STATUS)"
                 else echo "⚠ island-intake: labelling $ref FAILED — it is not queued"; fi
                 if [ "$P_STATUS" != ran ] && [ "$REVIEW" = review-repair ]; then

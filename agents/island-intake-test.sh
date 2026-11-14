@@ -793,26 +793,26 @@ grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LEN
   && ok "receipt: one record per finding — id, lens, posture, changed/declined/unanswered" || bad "receipt findings" "$(jq -c .findings "$TMP/up/receipt.json" 2>/dev/null)"
 [ "$(jq -c '[.review.lenses[] | [.lens, .status, .runs]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["unit","ran",1],["rows","ran",2]]' ] && jq -e '.review.repair.status == "ran" and .review.held == ["'"$H"'#9"]' "$TMP/up/receipt.json" >/dev/null \
   && ok "receipt: each lens's status and runs, the repair, the held set (#999 forged → dropped)" || bad "receipt review" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
-grep -qF "gh issue edit 9 --repo $H --add-label agent-fix,task/fix,agent/queued" "$TMP/gh.calls" && ! grep -q 'agent/approved' "$TMP/gh.calls" && ! grep -q 'edit 999' "$TMP/gh.calls" \
-  && ok "the belt labels #9 the repair left unlabelled — brief labels only (agent/approved dropped), no forged ref" || bad "belt labels" "$(grep edit "$TMP/gh.calls")"
+grep -qF "gh api -X POST repos/$H/issues/9/labels -f labels[]=agent-fix -f labels[]=task/fix -f labels[]=agent/queued" "$TMP/gh.calls" && ! grep -q 'agent/approved' "$TMP/gh.calls" && ! grep -q 'issues/999' "$TMP/gh.calls" \
+  && ok "the belt labels #9 the repair left unlabelled — brief labels only (agent/approved dropped), no forged ref" || bad "belt labels" "$(grep labels "$TMP/gh.calls")"
 [ ! -s "$TMP/gh.comments" ] && ok "…and posts no comment of its own when the repair ran (the repair posts them)" || bad "belt comments" "$(cat "$TMP/gh.comments")"
 grep -q '/coordinate' "$TMP/curl.calls" && ok "the queue rings /coordinate after the labels" || bad "review ring" "$(cat "$TMP/curl.calls")"
 
 echo "agent-fix,task/fix,agent/queued" > "$TMP/gh-labels"
 review_run apply
-! grep -q 'issue edit' "$TMP/gh.calls" && ok "an issue the repair already labelled is left alone" || bad "belt idempotent" "$(grep edit "$TMP/gh.calls")"
+! grep -q '/labels' "$TMP/gh.calls" && ok "an issue the repair already labelled is left alone" || bad "belt idempotent" "$(grep labels "$TMP/gh.calls")"
 
 echo "" > "$TMP/gh-labels"; touch "$TMP/unit-fail" "$TMP/repair-fail"
 review_run apply
 { jq -e '[.review.lenses[] | select(.lens == "unit")][0] | .status == "skipped: failed twice (no findings file)" and .runs == 2' "$TMP/up/receipt.json" >/dev/null \
-  && grep -qF "gh issue edit 9" "$TMP/gh.calls" && head -1 "$TMP/gh.comments" | grep -q '^intake: review — 1 findings: 0 changed, 0 declined' \
+  && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && head -1 "$TMP/gh.comments" | grep -q '^intake: review — 1 findings: 0 changed, 0 declined' \
   && grep -q '^unit review skipped' "$TMP/gh.comments" && tail -1 "$TMP/gh.comments" | grep -q '^intake: queue — queued as authored'; } \
   && ok "a unit lens that writes no file twice + a repair that fails: still labelled; review comment (skipped line) first, ruling LAST" \
   || bad "lens failure" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null) | $(cat "$TMP/gh.comments" 2>/dev/null)"
 rm -f "$TMP/unit-fail" "$TMP/repair-fail"
 
 review_run dry-run
-{ ! grep -qE 'issue (edit|comment)' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
+{ ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
   && ok "dry-run: lenses and repair run, nothing is written to GitHub" || bad "review dry-run" "$(cat "$TMP/gh.calls" 2>/dev/null)"
 
 rm -f "$TMP/r.calls" "$TMP"/prompt-*.txt; RUN_PATH="$RBIN:$BIN" RUN_ENV="REVIEW=off" run_script apply
