@@ -162,6 +162,10 @@ MAP=(
   # §Gate A); its only input is the script. Its ci.yaml step lands operator-direct, like the row above.
   "pr-open-self-test:^agents/pr-open\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
+  # the scan island's gate (homelab#3389, islands/scan/): ruff + pytest incl. the replay-family adapter.
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
+  # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
+  "-- bash islands/scan/scripts/ci.sh:^islands/scan/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
   # *.md/*.sh/*.py/*.yaml/*.yml (code comments included) and resolve them against living .md,
