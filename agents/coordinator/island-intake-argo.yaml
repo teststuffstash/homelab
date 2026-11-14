@@ -83,10 +83,11 @@ spec:
   startingDeadlineSeconds: 3600
   workflowSpec:
     serviceAccountName: agent-coordinator
-    # the review stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (4) lenses × two
-    # runs × (PASS1 240 + LENS 600 s) + the repair (1200 s); the script's _fits keeps it inside
-    # RUN_DEADLINE_S (= this, 12600) so the pod is never killed mid-review
-    activeDeadlineSeconds: 12600
+    # the review stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (3) lenses × two
+    # runs × (PASS1 240 + LENS 1200 s) + the repair (1200 s); the script's _fits keeps it inside
+    # RUN_DEADLINE_S (= this, 14400) so the pod is never killed mid-review. A real unit lens explored
+    # past 600 s and wrote nothing, twice (in-cluster dry-run 2026-11-15)
+    activeDeadlineSeconds: 14400
     ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
     arguments:
       parameters:
@@ -468,12 +469,12 @@ spec:
               NH="$(jq 'length' /tmp/holds.json)"; NU="$(jq 'length' /tmp/units.json)"
               P_STATUS="skipped: review off"; P_RAIL=""; P_MODEL=""; LENS_N=0
               echo '[]' > /tmp/lenses.json; echo '[]' > /tmp/findings.json; mkdir -p /tmp/review/out
-              LENS_TIMEOUT_S="${LENS_TIMEOUT_S:-600}"; PASS1_TIMEOUT_S="${PASS1_TIMEOUT_S:-240}"; REPAIR_TIMEOUT_S="${REPAIR_TIMEOUT_S:-1200}"
-              LENS_MAX="${INTAKE_REVIEW_LENS_MAX:-4}"   # lens sessions per run: a budget, not a loop
+              LENS_TIMEOUT_S="${LENS_TIMEOUT_S:-1200}"; PASS1_TIMEOUT_S="${PASS1_TIMEOUT_S:-240}"; REPAIR_TIMEOUT_S="${REPAIR_TIMEOUT_S:-1200}"
+              LENS_MAX="${INTAKE_REVIEW_LENS_MAX:-3}"   # lens sessions per run: a budget, not a loop
               # the pod's wall clock (activeDeadlineSeconds): a lens starts only when its worst case (two runs) plus the
               # repair still fits, the repair only when it fits — Argo killing the pod mid-review would leave the held
               # issues unlabelled and no receipt
-              RUN_DEADLINE_S="${RUN_DEADLINE_S:-12600}"
+              RUN_DEADLINE_S="${RUN_DEADLINE_S:-14400}"
               _fits() { [ $(( SECONDS + $1 + REPAIR_TIMEOUT_S + 600 )) -le "$RUN_DEADLINE_S" ]; }
               _lens_env() { # <home> → KEY=VALUE lines for `env -i`: PATH, a throwaway HOME, the pod's LLM pair + OTEL, then the gateway's env over them
                 printf '%s\n' "PATH=$PATH" "HOME=$1" "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}" "ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}" \
@@ -587,7 +588,7 @@ spec:
                     if ! _admit "-lens-unit-$ui"; then _lens_record unit "$ui" "deferred: $ADMIT_WHY" "" 0; continue; fi
                     while [ "$runs" -lt 2 ]; do
                       runs=$((runs + 1)); rm -f "$out"
-                      _lens_run "$case" gateway/intake-review-unit.md "Unit review (gateway/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out." \
+                      _lens_run "$case" gateway/intake-review-unit.md "Unit review (gateway/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out. Your wall clock is ${LENS_TIMEOUT_S} s: write the file well before it with what you can support — an unwritten file is a failed run." \
                         "$LENS_TIMEOUT_S" "unit-$ui" "Read(/${case}/**)" "Glob" "Bash(git -C /work/homelab show:*)" "Bash(git -C /work/homelab grep:*)" "Edit(/${out})" || true
                       [ -s "$out" ] && break
                     done
@@ -613,7 +614,7 @@ spec:
                         "$PASS1_TIMEOUT_S" "rows-$ui-p1" "Read(/${p1}/**)" "Glob" "Edit(/${out})" || true
                       if [ -n "$(_pass1_lines "$out")" ]; then
                         cp "$out" "/tmp/review/out/rows-$ui.pass1.md"
-                        _lens_run "$case" gateway/intake-review-rows.md "Rows review (gateway/intake-review-rows.md, your system prompt) of ${REPO_SLUG}#${head} at base ${base}, island \`$ISLAND\` — PASS 2 of a staged read. $out already holds your FROZEN '## Pass 1 (frozen)': keep it verbatim and complete the file (order step 3, '## Findings', '## Cannot run pre-queue'). Use the frozen case directory $case (process/, masked/, issues/<n>.md — a Goal child's Goal body beside it —, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`." \
+                        _lens_run "$case" gateway/intake-review-rows.md "Rows review (gateway/intake-review-rows.md, your system prompt) of ${REPO_SLUG}#${head} at base ${base}, island \`$ISLAND\` — PASS 2 of a staged read. $out already holds your FROZEN '## Pass 1 (frozen)': keep it verbatim and complete the file (order step 3, '## Findings', '## Cannot run pre-queue'). Use the frozen case directory $case (process/, masked/, issues/<n>.md — a Goal child's Goal body beside it —, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`. Your wall clock is ${LENS_TIMEOUT_S} s: complete the file well before it." \
                           "$LENS_TIMEOUT_S" "rows-$ui" "Read(/${case}/**)" "Read(/${out})" "Glob" "Bash(git -C /work/homelab show:*)" "Bash(git -C /work/homelab grep:*)" "Edit(/${out})" || true
                         # the frozen pass 1 survives pass 2 whatever pass 2 did to the file
                         [ -n "$(_pass1_lines "$out")" ] || cp "/tmp/review/out/rows-$ui.pass1.md" "$out"
