@@ -21,7 +21,7 @@ Prometheus answer it parses, its outputs and its exit codes.
 |---|---|---|---|
 | [RETRO-GUARD-BUSY](#retro-guard-busy) | `params.stack`, `exit` | `1` refused (busy or unverifiable) | 🚧 WIP — no evidence pipeline yet (no fixture: the busy probe sits above the `retro-quiet-guard` markers) |
 | [RETRO-GUARD-LEDGER](#retro-guard-ledger) | `params.minWindowTasks`, `outputs.quiet`, `exit` | `0` fire · `3`→quiet · `1` fail | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `prepare-*`; `local-store` for the floor itself) |
-| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | `0` fire · `3` quiet · `1` fail | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `expr-*`) |
+| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | verdict `0` fire · `3` quiet · `1` fail → step `0` continue · `1` fail | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `expr-*`) |
 | [RETRO-GUARD-QUIET](#retro-guard-quiet) | `outputs.quiet`, `outputs.evidence`, `$defs.quiet_push` | `0` quiet · `1` push failed | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `quiet-push-*`, `expr-quiet`) |
 
 ## Flow overview
