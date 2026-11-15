@@ -709,8 +709,8 @@ while [ "$i" -lt "$count" ]; do
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
   # …except `intake: forward → <island>`: another sitting passed the item on (gateway/intake.md
   # step 0) and retitled it, so it is an UNRULED candidate of whichever island its title names now
-  fw="${ruling#intake:}"; fw="${fw#"${fw%%[![:space:]]*}"}"; read -r fw _ <<< "$fw" || true
-  [ "$fw" = forward ] && ruling=""
+  # (the SAME test as F_fwd's count above: `forward` as the outcome word, whatever follows it)
+  [[ "$ruling" =~ ^intake:[[:space:]]*forward($|[^[:alnum:]_]) ]] && ruling=""
   if [ "$life" = blocked ] || [ "$life" = loop ] || [ -n "$ruling" ]; then
     # ruled or blocked: never a candidate; a reread when it is a member's WAIT, old enough
     [ "$REREAD" = 1 ] && [ "$kind" = member ] || continue
