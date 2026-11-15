@@ -1,0 +1,5 @@
+CALL gh pr view 3444 --repo teststuffstash/homelab --json headRefOid,commits
+OUT verdict-pin: NOT submitted — the PR's content moved past the reviewed head 536ed6a0 while you reviewed. Do not resubmit and post nothing: the review path re-dispatches on the new head. Stop here.
+OUT SHIM_RC: 0
+OUT DROP: VERDICT_DROPPED: content moved past 536ed6a0 before submit ({{KIND}})
+RC 0

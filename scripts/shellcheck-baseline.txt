@@ -19,7 +19,6 @@ agents/responder-graduation-replay.sh SC2154 2
 agents/retro-project.sh SC2034 2
 agents/retro-session.sh SC2010 1
 agents/reviewer-session.sh SC2034 1
-agents/specs-reviewer-session.sh SC2034 1
 agents/specs-reviewer-session.sh SC2120 1
 agents/specs-reviewer-session.sh SC2128 2
 agents/specs-reviewer-session.sh SC2155 1

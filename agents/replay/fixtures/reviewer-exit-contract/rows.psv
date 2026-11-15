@@ -23,3 +23,7 @@ conflict-merge-aside-at-content-sha         | clean | gh/pr-view-42.json @ patch
 conflict-merge-verdict-between-content-merge| clean | gh/pr-view-42.json @ patches/conflict-merge-verdict.jq  | RC=0                | live-verdict          |
 issue-unreadable-standing-aside             | clean | gh/pr-view-42.json @ patches/add-issue-unreadable.jq   | RC=0                | standing-aside        |
 silent-dedup-checks-pending                 | clean | gh/pr-view-42.json @ patches/silent-dedup-checks-pending.jq | RC=0 SILENT_DEDUP=1 | silent-dedup-recorded |
+# homelab#3444, the verdict pin: the shim dropped this session's verdict because the PR's content
+# moved past the reviewed head — the session's correct record is NO verdict, so the drop record is a
+# terminal (FINAL=0) and, unlike the live-verdict terminal, rings no specs doorbell.
+verdict-dropped-recorded                    | clean |                                                         | RC=0 VERDICT_DROPPED=1 | verdict-dropped    |

@@ -1,0 +1,5 @@
+CALL gh pr view 3444 --repo teststuffstash/homelab --json state
+OUT {"state":"OPEN"}
+OUT SHIM_RC: 0
+OUT DROP: none
+RC 0
