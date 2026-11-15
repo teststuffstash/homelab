@@ -260,15 +260,19 @@ log() { printf '%s specs-review: %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 # ── the shared grammar (review-reflex.sh / reviewer-session.sh exit contract) ────────────────────
 # One jq prelude every read below composes with. The content commit is the newest NON-MERGE commit
 # (merge classified by GitHub's default message shapes — gh exposes no .parents[]); a review is at
-# head when submitted at or after it (>=, the exit contract's filter); a bot login is matched with
-# the `[bot]` suffix stripped (REST says `x[bot]`, GraphQL says `x`).
+# head when submitted at or after it (>=, the exit contract's filter) AND filed on the content commit
+# or a later one (reviewed_current) — a review filed on an OLDER commit but submitted after a push
+# (homelab#3444: read 536ed6a0, submitted 19 s after 75aaa056 landed) is about a head nobody read;
+# a review with no commit field keeps the time test alone. A bot login is matched with the `[bot]`
+# suffix stripped (REST says `x[bot]`, GraphQL says `x`).
 # >>>REPLAY:specs-reviewable-again>>>
 JQ_PRELUDE='
   def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
   def content_ts: ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
   def content_sha: ([ .commits[]? | select(is_merge | not) ] | sort_by(.committedDate) | last | .oid) // "";
   def login_of: (.author.login // "") | sub("\\[bot\\]$"; "");
-  def live_verdicts($bot): content_ts as $h | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) ];
+  def reviewed_current($cs; $h): (.commit.oid // "") as $c | $c == "" or (([ $cs[] | select(.oid == $c) | .committedDate ] | max // "") >= $h);
+  def live_verdicts($bot): content_ts as $h | (.commits // []) as $cs | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) | select(reviewed_current($cs; $h)) ];
   def green:
     ([ .statusCheckRollup[]? | {n: (.name // .context // ""), c: (.conclusion // .state // "")} ]) as $c
     # A CANCELLED run counts only when NO other run of the same check concluded: concurrency
@@ -336,6 +340,15 @@ self_test() {
   local j
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r' <<< "$base");                       check "code approved at head → candidate" candidate "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_old]" '.reviews=$r' <<< "$base");                      check "code approval older than content → code-not-approved" code-not-approved "$(classify "$j")"
+  # homelab#3444: the approval was SUBMITTED after the content commit (10:30 ≥ 10:00) but FILED on an
+  # older commit (00000000…, the head the session read) → about an unread head → not the code gate.
+  # Filed on the content commit, or on the later update-branch merge (GitHub re-points a review
+  # across one), it is live; a commit gone from the PR (force-push) is not.
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "code approval submitted after the push but filed on the older commit → code-not-approved (#3444)" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"aaaa1111"}' <<< "$base"); check "code approval filed on the content commit → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"bbbb2222"} | .reviews[0].submittedAt="2026-10-16T11:30:00Z"' <<< "$base"); check "code approval filed on the later update-branch merge → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"dead0000"}' <<< "$base"); check "code approval filed on a commit gone from the PR → code-not-approved" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r | .reviews[1].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "own verdict filed on an older commit is not own-at-head → candidate" candidate "$(classify "$j")"
   j=$(jq -c '.reviews=[]' <<< "$base");                                                 check "no code approval → code-not-approved" code-not-approved "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r' <<< "$base");               check "own live verdict at head → own-at-head" own-at-head "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_dismissed]" '.reviews=$r' <<< "$base");        check "own DISMISSED is not a verdict → candidate" candidate "$(classify "$j")"

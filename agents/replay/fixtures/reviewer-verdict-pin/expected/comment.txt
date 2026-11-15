@@ -1,0 +1,5 @@
+CALL gh pr review 3444 --comment -b a note
+OUT reviewed (passthrough)
+OUT SHIM_RC: 0
+OUT DROP: none
+RC 0

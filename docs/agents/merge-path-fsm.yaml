@@ -141,6 +141,7 @@ transitions:
     replay:
       - agents/reviewer-optout-replay.sh
       - agents/replay/fixtures/reviewer-exit-contract
+      - agents/replay/fixtures/reviewer-verdict-pin
       - agents/replay/fixtures/review-pick/two-lanes-two-picks
       - agents/replay/fixtures/review-pick/same-lane-oldest
       - agents/replay/fixtures/review-pick/required-context-absent-held
@@ -241,6 +242,14 @@ transitions:
           before pod creation) stay 0. Pinned by an executed replay (agents/replay/fixtures/
           reviewer-exit-contract, six rows)"
         anchor: { file: agents/reviewer-session.sh, pattern: "EXIT CONTRACT" }
+      - desc: "VERDICT PIN (homelab#3444): a verdict is filed on the commit that was REVIEWED. The
+          pod puts a shim first on PATH as `gh`; an --approve/--request-changes re-reads the PR and
+          submits through the REST reviews endpoint with commit_id = the head PREP checked out, only
+          when no non-merge commit follows it; content moved before submit → no verdict + a drop
+          record (an exit-contract terminal, no specs doorbell); moved during submit → the review is
+          dismissed. The specs gate reads a code verdict as live only when it is filed on the content
+          commit or later (specs-reviewer-session.sh reviewed_current, --self-test)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "THE VERDICT PIN" }
     incidents: ["2026-07-12 oracle-fleet#13 (reviewDecision aliasing, 12 approvals)", "2026-07-21 oracle-fleet#57 (merge-commit staleness, 9 reviews, 88% window burn)"]
 
   - id: MP-T04

@@ -1,0 +1,8 @@
+CALL gh pr view 3444 --repo teststuffstash/homelab --json headRefOid,commits
+CALL gh api -X POST repos/teststuffstash/homelab/pulls/3444/reviews -f commit_id=536ed6a0f0e1d2c3b4a5968778695a4b3c2d1e0f -f event=APPROVE -F body=@<file> --jq .id
+BODY stdin body
+CALL gh pr view 3444 --repo teststuffstash/homelab --json headRefOid,commits
+OUT verdict-pin: APPROVE submitted on 536ed6a0 (review 9001)
+OUT SHIM_RC: 0
+OUT DROP: none
+RC 0

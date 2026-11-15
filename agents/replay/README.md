@@ -559,6 +559,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-touches/sentinel-exempt` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-verdict-pin` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `ride-size` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
