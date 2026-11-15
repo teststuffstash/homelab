@@ -19,8 +19,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a) scan
-  assembly #3418 — once #3450 lands, move the scan row in `scripts/diff-ci.sh` off the spot master's island rows sit
-  on (the #3453 shape; a master merge into a goal branch does not clear it), update the branch, see it merged;
+  assembly #3418 — conflict cleared (#3462), code reviewer APPROVED at e37b0f28, specs reviewer CHANGES_REQUESTED
+  21:03Z with four R2 findings, one edit pair: add a `Spec changes:` section to #3418's BODY for the scan-decision.md
+  work #3450 brought (SCAN-CLAUSE-PR hold reversal + five rows, SCAN-CLAUSE-GOAL's nine ⚖ rows + checkpoint prose,
+  SCAN-WAKE-DOORBELL's ⚖ row + warning scope, SCAN-CLAUSE-QUEUED blocker-open; #3450's own body has the text), and
+  mark the blocker-open row ⚖ (a commit through a PR into `goal/3389-scan-island`); the body edit alone re-opens the
+  specs review since #3456;
   (b) then hand-submit the next-leg sittings `argo -n agent-coordinator submit --from cronworkflow/island-intake -p
   island=scan|launch|retro` over #3436 #3437 #3438 (launch also rules #3408 #3409); each next Goal puts its gate row
   in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
