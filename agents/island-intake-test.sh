@@ -321,6 +321,34 @@ INTAKE_ISSUES_JSON="$PISS" INTAKE_TS_DIR="$TMP/nowhere" INTAKE_NOW="$NOW" bash "
 [ "$rc" = 2 ] && ok "an unreadable receipt store is a probe failure (exit 2) — it could not see what was re-read" || bad "pile rule #6 (bucket)" "rc=$rc"
 INTAKE_ISSUES_JSON="$TMP/nowhere.json" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --out "$TMP/x.json" 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "…and so is an unreadable issue list" || bad "pile rule #6 (issues)" "rc=$rc"
+# PR-level waits (INTAKE_PR_HOLDS=1): an issue the loop still holds (another `agent/*` label) whose
+# OPEN PR's newest `blocked-on:` marker is `human` is a reread, `wait: pr-hold`, dated by the marker.
+piss 116 "gateway: in review, its PR parked on a human" '["agent-fix","agent/review"]' "[$(cm 'intake: queue — one ride' 2026-10-02T00:00:00Z)]" 2026-10-26T00:00:00Z
+piss 117 "gateway: in review, the hold superseded"      '["agent/review"]' '[]' 2026-10-26T00:00:00Z
+piss 118 "gateway: in review, parked yesterday"         '["agent/review"]' '[]' 2026-10-26T00:00:00Z
+jq -s . "$PISS.rows" > "$PISS"
+PPRS="$TMP/pile-prs.json"
+jq -n '[
+  {number:900, state:"OPEN", headRefName:"fix/issue-116-x", body:"", closingIssuesReferences:[], comments:[
+     {body:"ruling\nblocked-on: issue=5", createdAt:"2026-10-18T00:00:00Z"},
+     {body:"ci-red ruling: designed wait\n\nblocked-on: human\n\nNext mover: a rerun", createdAt:"2026-10-20T00:00:00Z"},
+     {body:"state-fp:ci-red:abc — a marker comment that talks about `blocked-on: human` mid-line", createdAt:"2026-10-21T00:00:00Z"}]},
+  {number:901, state:"OPEN", headRefName:"fix/other", body:"Fixes #117", closingIssuesReferences:[], comments:[
+     {body:"blocked-on: human", createdAt:"2026-10-10T00:00:00Z"}, {body:"blocked-on: issue=5", createdAt:"2026-10-12T00:00:00Z"}]},
+  {number:902, state:"OPEN", headRefName:"fix/y", body:"", closingIssuesReferences:[{number:118}], comments:[
+     {body:"blocked-on: human", createdAt:"2026-10-26T04:00:00Z"}]},
+  {number:903, state:"OPEN", headRefName:"fix/issue-112-z", body:"", closingIssuesReferences:[], comments:[]}]' > "$PPRS"
+INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
+[ "$(pk reread)" = "102 103 107 109 115 116" ] \
+  && [ "$(jq -c '.inputs[] | select(.number == 116) | [.wait, .pr, .wait_d, .since, .parked_by]' "$TMP/pile-sel.json")" = '["pr-hold",900,7,"2026-10-20T00:00:00Z","blocked-on: human (PR #900)"]' ] \
+  && ok "INTAKE_PR_HOLDS=1: an agent/review issue whose open PR's NEWEST marker is blocked-on: human is a reread (pr-hold, the PR, the marker's date); a superseded (#117), a 1-day (#118) and a marker-less (#112) one are not" \
+  || bad "pile pr-hold" "got '$(pk reread)' $(jq -c '.inputs[] | select(.number == 116)' "$TMP/pile-sel.json") $(cat "$TMP/pile.err")"
+[ "$(jq -c '[.inputs[] | select(.kind == "reread" and .number != 116) | has("pr")] | any' "$TMP/pile-sel.json")" = false ] \
+  && ok "…and a label/ruling wait carries no pr field" || bad "pile pr field" "$(jq -c '.inputs[] | select(.kind == "reread")' "$TMP/pile-sel.json")"
+INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
+[ "$(pk reread)" = "102 103 107 109 115" ] && ok "without INTAKE_PR_HOLDS the pile is the label/ruling waits only (the default)" || bad "pile pr-hold default" "got '$(pk reread)'"
+INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$TMP/nowhere.json" pile; rc=$?
+[ "$rc" = 2 ] && ok "INTAKE_PR_HOLDS=1 with an unreadable PR list is a probe failure (exit 2), never \"no holds\"" || bad "pile rule #6 (prs)" "rc=$rc"
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"

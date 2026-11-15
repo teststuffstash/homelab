@@ -74,11 +74,18 @@
 #               receipt of the last INTAKE_REREAD_EVERY_D days (default 7) lists with an outcome
 #               other than `deferred`: an unchanged wait is not re-read daily, and the receipt is
 #               the ledger of that (the dig source's pattern). Never a Goal or a container; an
-#               issue carrying any OTHER `agent/*` label is the loop's, not a wait.
+#               issue carrying any OTHER `agent/*` label is the loop's, not a wait — UNLESS its
+#               OPEN PR is parked on a human: the newest `blocked-on:` marker among that PR's
+#               comments is `blocked-on: human` (a ruling of the PR lanes, written where the
+#               issue's labels never show it). That issue is a reread too, `wait: pr-hold`, with
+#               `pr` = the PR's number and the wait's date = the marker comment's. PR ↔ issue is
+#               the escape source's link (closing reference, head branch `…issue-<n>…`, a
+#               `Fixes/Closes/Resolves #<n>` body line). Only under INTAKE_PR_HOLDS=1 (default
+#               off — no PR list is read without it).
 #   id        = `<owner/repo>#<n>` — what the receipt's `ruled` lines carry
 #   cap, fire = the dig's: ≥ 1 input and fewer than INTAKE_DAILY_MAX apply sittings today
-# Exit codes as above (2 = the issue list or the bucket could not be read). Seams: INTAKE_ISSUES_JSON
-# + INTAKE_TS_DIR + INTAKE_NOW.
+# Exit codes as above (2 = the issue list, the open-PR list or the bucket could not be read). Seams:
+# INTAKE_ISSUES_JSON + INTAKE_PRS_JSON (the open PRs, comments included) + INTAKE_TS_DIR + INTAKE_NOW.
 #
 # --source gaps (FU-320, night run 2026-11-14): the island's OWN incompleteness — the `⚑ gap` /
 # `🚧 WIP` requirement rows of its specs index (`<specs root>/README.md`, the root from
@@ -585,7 +592,7 @@ JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\
   + "F_life[\($i)]=\(lazy([.labels[].name] as $l
       | if ($l | index("task/goal")) then "other"
         elif ($l | index("agent/blocked")) then "blocked"
-        elif ($l | any(startswith("agent/"))) then "other" else "none" end) | @sh); "
+        elif ($l | any(startswith("agent/"))) then "loop" else "none" end) | @sh); "
   + "F_bot[\($i)]=\(if (try ((.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))) catch false) then 1 else "" end | @sh); "
   + "F_ruling[\($i)]=\(lazy([.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // "") | @sh); "
   + "F_since[\($i)]=\(lazy(([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
@@ -633,6 +640,39 @@ done
 lazy() { # <value> → the field, or jq's own error line + exit 5 where the per-field read would have died
   case "$1" in =*) printf '%s' "${1#=}";; *) echo "jq: error (at <stdin>:0): ${1#!}" >&2; exit 5;; esac
 }
+# The PR-level waits (--source pile only): PRHOLD_PR[<issue>] = the OPEN PR whose newest
+# `blocked-on:` marker is `human`, PRHOLD_SINCE[<issue>] = that comment's date. ONE list call; a
+# failed read is exit 2 (an unread PR list is never "no holds"). The marker grammar is the scan's
+# (`blocked_on_kind`, agents/coordinator-scan.sh §BLOCKED-ON PREDICATE): the LAST line of a comment
+# starting `blocked-on: `, kind human | issue=<n> | pr=<n>; the newest comment carrying one rules.
+# Offered only under INTAKE_PR_HOLDS=1 (default off: gateway/intake.md step R rules these rows in
+# the report only, until the release of a PR-level hold has a rule — the cron does not set it).
+declare -A PRHOLD_PR=() PRHOLD_SINCE=()
+if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
+  if [ -n "${INTAKE_PRS_JSON:-}" ]; then
+    open_prs="$(cat "$INTAKE_PRS_JSON" 2>/dev/null)" || { echo "intake-select: INTAKE_PRS_JSON unreadable" >&2; exit 2; }
+  else
+    open_prs="$(gh pr list --repo "$REPO" --state open --limit 300 \
+      --json number,state,headRefName,body,closingIssuesReferences,comments 2>/dev/null)" \
+      || { echo "intake-select: gh pr list failed for $REPO" >&2; exit 2; }
+  fi
+  printf '%s' "$open_prs" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "intake-select: the PR list is not a JSON array (not a verdict)" >&2; exit 2; }
+  # shellcheck disable=SC2016  # a jq program, not a shell expansion
+  holds="$(printf '%s' "$open_prs" | jq -r '
+    def bok: [ split("\n")[] | select(startswith("blocked-on: ")) ] | last // ""
+      | if test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)") then capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)").kind else "" end;
+    .[] | select((.state // "OPEN") == "OPEN")
+    | ([ .comments[]? | select(((.body // "") | bok) != "") ] | sort_by(.createdAt // "") | last) as $m
+    | select($m != null and (($m.body // "") | bok) == "human")
+    | .number as $pr
+    | ( [ (.closingIssuesReferences // [])[] | .number ]
+      + [ (.headRefName // "") | match("(^|[/-])issue-(?<n>[0-9]+)($|[^0-9])"; "g") | .captures[] | select(.name == "n") | .string | tonumber ]
+      + [ (.body // "") | match("(?i)\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s*:?\\s+#(?<n>[0-9]+)\\b"; "g") | .captures[] | select(.name == "n") | .string | tonumber ]
+      ) | unique | .[]
+    | "PRHOLD_PR[\(.)]=\($pr); PRHOLD_SINCE[\(.)]=\(($m.createdAt // "") | @sh)"')" \
+    || { echo "intake-select: PR-hold jq failed" >&2; exit 2; }
+  eval "$holds"
+fi
 cand_args=(); reread_args=()
 i=0
 while [ "$i" -lt "$count" ]; do
@@ -641,10 +681,15 @@ while [ "$i" -lt "$count" ]; do
   title="${F_title[$ix]}"
   # containers and lifecycle-labelled items are never candidates
   case "$title" in post-launch:*|stint:*) continue;; esac
-  # lifecycle: none | blocked (`agent/blocked` — a wait, the reread's) | other (a Goal, or any other
-  # `agent/*` label: the loop's own state, nobody's input)
+  # lifecycle: none | blocked (`agent/blocked` — a wait, the reread's) | other (a Goal) | loop (any
+  # other `agent/*` label: the loop's own state, nobody's input — unless its open PR is parked on
+  # a human, which is a wait the labels do not show: PRHOLD_PR above)
   life="$(lazy "${F_life[$ix]}")" || exit 5
-  case "$life" in other) continue;; blocked) [ "$REREAD" = 1 ] || continue;; esac
+  case "$life" in
+    other) continue;;
+    blocked) [ "$REREAD" = 1 ] || continue;;
+    loop) [ -n "${PRHOLD_PR[$num]:-}" ] || continue;;
+  esac
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
   touches="${F_touches[$ix]:-}"
   kind=member
@@ -658,20 +703,22 @@ while [ "$i" -lt "$count" ]; do
   esac
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
-  if [ "$life" = blocked ] || [ -n "$ruling" ]; then
+  if [ "$life" = blocked ] || [ "$life" = loop ] || [ -n "$ruling" ]; then
     # ruled or blocked: never a candidate; a reread when it is a member's WAIT, old enough
     [ "$REREAD" = 1 ] && [ "$kind" = member ] || continue
     wait_kind=""
     w="${ruling#intake:}"; w="${w#"${w%%[![:space:]]*}"}"; read -r w _ <<< "$w" || true
     [ "$w" = seat ] && wait_kind=seat
     [ "$life" = blocked ] && wait_kind=agent/blocked
+    pr=""
+    [ "$life" = loop ] && { wait_kind=pr-hold; pr="${PRHOLD_PR[$num]}"; ruling="blocked-on: human (PR #${pr})"; }
     [ -n "$wait_kind" ] || continue
-    since="$(lazy "${F_since[$ix]}")" || exit 5
+    if [ -n "$pr" ]; then since="${PRHOLD_SINCE[$num]}"; else since="$(lazy "${F_since[$ix]}")" || exit 5; fi
     sts="$(date -u -d "$since" +%s 2>/dev/null || echo "$now")"
     wait_d=$(( (now - sts) / 86400 ))
     [ "$wait_d" -ge "$REREAD_AGE_D" ] || continue
     author="$(lazy "${F_author[$ix]}")" || exit 5
-    reread_args+=("${REPO}#${num}" "$num" "$title" "$author" "$wait_kind" "$since" "$wait_d" "$ruling")
+    reread_args+=("${REPO}#${num}" "$num" "$title" "$author" "$wait_kind" "$since" "$wait_d" "$ruling" "$pr")
     continue
   fi
   created="${F_created[$ix]}"
@@ -689,8 +736,8 @@ rows_json() { # <width> <jq object over the row .[0..]> <values…>
 }
 cands="$(rows_json 5 '{number: (.[0] | fromjson), age_h: (.[1] | fromjson), author: .[3], title: .[2], kind: .[4]}' \
   ${cand_args[@]+"${cand_args[@]}"})"
-rereads="$(rows_json 8 '{id: .[0], kind: "reread", number: (.[1] | fromjson), title: .[2], author: .[3], wait: .[4],
-  since: .[5], wait_d: (.[6] | fromjson), parked_by: .[7]}' ${reread_args[@]+"${reread_args[@]}"})"
+rereads="$(rows_json 9 '{id: .[0], kind: "reread", number: (.[1] | fromjson), title: .[2], author: .[3], wait: .[4],
+  since: .[5], wait_d: (.[6] | fromjson), parked_by: .[7]} + (if .[8] == "" then {} else {pr: (.[8] | fromjson)} end)' ${reread_args[@]+"${reread_args[@]}"})"
 
 if [ "$SOURCE" = pile ]; then
   dmax="${INTAKE_DAILY_MAX:-2}"; every="${INTAKE_REREAD_EVERY_D:-7}"
