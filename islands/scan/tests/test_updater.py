@@ -1,4 +1,4 @@
-"""Updater legs 1–2 (pick, unstrand) — the island's `scan_island.updater` against the `updater` replay family."""
+"""Updater legs 1–3 (pick, unstrand, conflict) and Renovate currency — the island's `scan_island.updater` against the `updater` replay family."""
 
 import sys
 
@@ -53,4 +53,45 @@ def test_pick(row):
 def test_unstrand(row, probe):
     with allure.step(f"Given the commit/review probe answers: {probe}"):
         pass
+    check(row)
+
+
+CONFLICT = [
+    ("conflict-dirty", "armed ∧ DIRTY #90 gains the label (created first, over REST)"),
+    ("conflict-clear", "#90 carries the label but is no longer armed ∧ DIRTY: the label is removed"),
+    ("update-fail", "#101's update-branch PUT fails: the skip line prints and gh's stderr passes through"),
+]
+RENOVATE = [  # id, commits, checks (read from rows/<id>/gh/ — the table's two input columns)
+    ("renovate-untouched-no-update", "Renovate only", "none reported"),
+    ("renovate-untouched-green-update", "Renovate only", "`ci` success"),
+    ("renovate-untouched-red-no-update", "Renovate only", "`ci` failure"),
+    ("renovate-worker-pushed-update", "Renovate + a worker commit + a merge commit", "none reported"),
+    ("renovate-updater-merged-red-handback", "Renovate + a merge commit", "`ci` success, `system-test` failure"),
+    ("renovate-superseded-cancel-green-update", "Renovate + a merge commit", "`ci` cancelled, outlived by `ci` success"),
+    ("renovate-checks-unreadable-hold", "Renovate only", "unreadable"),
+    ("renovate-merged-current-red-handback", "Renovate + a merge commit", "`ci` success, `system-test` failure"),
+    ("renovate-merged-current-pending-noop", "Renovate + a merge commit", "`ci` success, `system-test` in progress"),
+]
+LISTED = {*PICK, *(i for i, _ in UNSTRAND), *(i for i, _ in CONFLICT), *(i for i, *_ in RENOVATE)}
+
+
+@rule("SCAN-UPDATER-CONFLICT")
+@pytest.mark.parametrize("row, effect", [pytest.param(ROWS[i], effect, id=i) for i, effect in CONFLICT])
+def test_conflict(row, effect):
+    with allure.step(f"Given: {effect}"):
+        pass
+    check(row)
+
+
+@rule("SCAN-UPDATER-RENOVATE")
+@pytest.mark.parametrize("row, commits, checks", [pytest.param(ROWS[i], commits, checks, id=i) for i, commits, checks in RENOVATE])
+def test_renovate(row, commits, checks):
+    with allure.step(f"Given the branch carries: {commits}; the check rollup is: {checks}"):
+        pass
+    check(row)
+
+
+# Family completeness (Goal pin 5): rows no listed requirement of this Goal owns still run, unlabelled.
+@pytest.mark.parametrize("row", [pytest.param(r, id=i) for i, r in ROWS.items() if i not in LISTED])
+def test_family_completeness(row):
     check(row)

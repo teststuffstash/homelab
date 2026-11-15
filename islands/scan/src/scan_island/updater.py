@@ -3,14 +3,15 @@
 Leg 1 (the main pick) updates the oldest merge-ready, armed, BEHIND PR of each (repo, base) lane,
 hopping to the lane's next member when an update fails (homelab#2203). Leg 2 (unstrand) updates an
 armed, BEHIND, CHANGES_REQUESTED PR only when content landed after the reviewer's verdict.
-Legs 3 (merge-conflict) and the Renovate predicates are not built here.
+Leg 1b (the Renovate hand-back sweep) runs over the PRs outside legs 1 and 2; leg 3 labels armed ∧ DIRTY PRs
+`merge-conflict` over REST. Renovate authorship and currency live in `renovate.py`.
 """
 
 import json
 import os
 import sys
 
-from . import gh
+from . import gh, renovate
 
 LIST_FIELDS = "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName"
 MERGE_PREFIX = "Merge branch "
@@ -66,6 +67,19 @@ def _newest_content(commits: list) -> str:
 def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
     n = pr["number"]
     decision = pr.get("reviewDecision")
+    cj = None
+    if renovate.author(pr):
+        cj = renovate.probe(slug, n, pr.get("headRefOid") or "")
+        if cj is None:
+            print(f"updater[{slug}]: #{n} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
+            return False
+        # the merge-ready exception (ADR-153): untouched + green falls through to the admission below
+        if renovate.untouched(cj) and not renovate.green(cj):
+            if renovate.merged_into(cj):
+                renovate.handback(slug, n, f"updater[{slug}]:")
+            else:
+                print(f"updater[{slug}]: #{n} Renovate-authored, untouched and not green — Renovate's to rebase (rebaseWhen behind-base-branch, ADR-153); skipping")
+            return False
     if not ready_only or decision == "APPROVED":
         return True
     if decision == "REVIEW_REQUIRED":  # the codeowner park (#1649): decided by reviewDecision, probe-free
@@ -76,7 +90,7 @@ def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
     if not approved:
         return False
     approved_at = max(approved)
-    probe = _probe(slug, n, "commits")
+    probe = cj if cj is not None else _probe(slug, n, "commits")
     if probe is None:
         print(f"updater[{slug}]: #{n} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
         return False
@@ -117,6 +131,22 @@ def leg1(slug: str, prs: list[dict], bot: str, ready_only: bool) -> None:
             first = False
 
 
+def sweep(slug: str, prs: list[dict]) -> None:
+    """Leg 1b: hand back an armed, unbreakered Renovate PR outside legs 1 and 2 (a concluded red, or CHANGES_REQUESTED) the updater merged into."""
+    for pr in prs:
+        if pr.get("autoMergeRequest") is None or leg1_cand(pr) or leg2_domain(pr) or breakered(pr) or not renovate.author(pr):
+            continue
+        n = pr["number"]
+        sj = renovate.probe(slug, n, pr.get("headRefOid") or "")
+        if sj is None:
+            print(f"handback[{slug}]: #{n} commit probe unreadable — HOLDING (rule #6; the */15 cron retries)")
+            continue
+        if not (renovate.untouched(sj) and renovate.merged_into(sj)):
+            continue
+        if renovate.red(sj) or pr.get("reviewDecision") == "CHANGES_REQUESTED":
+            renovate.handback(slug, n, f"handback[{slug}]:")
+
+
 def _verdict_ok(probe: dict | None) -> str:
     """"yes" when the newest non-merge commit post-dates the newest reviewer verdict, "no" when not, "" when unreadable."""
     if probe is None or not isinstance(probe.get("reviews"), list):
@@ -132,7 +162,15 @@ def leg2(slug: str, prs: list[dict]) -> None:
         if not leg2_domain(pr) or breakered(pr):
             continue
         n = pr["number"]
-        verdict = _verdict_ok(_probe(slug, n, "commits,reviews"))
+        pj = _probe(slug, n, "commits,reviews")
+        # a CHANGES_REQUESTED PR is never merge-ready: an untouched Renovate PR here is always Renovate's to rebase
+        if pj is not None and renovate.author(pr) and renovate.untouched(pj):
+            if renovate.merged_into(pj):
+                renovate.handback(slug, n, "unstrand:")
+            else:
+                print(f"unstrand: #{n} Renovate-authored and untouched — Renovate rebases it itself (rebaseWhen behind-base-branch, ADR-153); skipping")
+            continue
+        verdict = _verdict_ok(pj)
         if verdict == "yes":
             print(f"unstrand: updating CR-and-behind PR #{n} (new content since verdict)")
             if not _update(slug, n, pr.get("headRefOid")):
@@ -141,6 +179,34 @@ def leg2(slug: str, prs: list[dict]) -> None:
             print(f"unstrand: #{n} CR-and-behind but NO new content since the verdict — nothing to re-review, not updating (2026-08-17 narrowing)")
         else:
             print(f"unstrand: #{n} commit/review probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
+
+
+def _label_token() -> str | None:
+    return os.environ.get("UPDATER_LABEL_TOKEN") or os.environ.get("GH_TOKEN") or None
+
+
+def _label_conflict(slug: str, n: int) -> None:
+    """Create the label idempotently, then add it — REST both, never `gh pr edit` (GraphQL; homelab#2476)."""
+    tok = _label_token()
+    created = gh.run("api", "-X", "POST", f"repos/{slug}/labels", "-f", "name=merge-conflict", "-f", "color=e11d21",
+                     "-f", "description=PR branch conflicts with master — updater can't auto-resolve", token=tok)
+    create_err = created.stderr.rstrip("\n") if created.returncode else ""
+    added = gh.run("api", "-X", "POST", f"repos/{slug}/issues/{n}/labels", "-f", "labels[]=merge-conflict", token=tok)
+    if added.returncode:
+        err = added.stderr.rstrip("\n") or "gh gave no output"
+        print(f"updater[{slug}]: could not label #{n} merge-conflict — {err}" + (f" (label create: {create_err})" if create_err else "") + " — the */15 pass retries")
+
+
+def leg3(slug: str, prs: list[dict]) -> None:
+    """Armed ∧ DIRTY gains `merge-conflict`; anything else carrying it loses it (best-effort)."""
+    for pr in prs:
+        n = pr["number"]
+        has = "merge-conflict" in _names(pr)
+        if pr.get("autoMergeRequest") is not None and pr.get("mergeStateStatus") == "DIRTY":
+            if not has:
+                _label_conflict(slug, n)
+        elif has:
+            gh.run("api", "-X", "DELETE", f"repos/{slug}/issues/{n}/labels/merge-conflict", token=_label_token())
 
 
 def main(slug: str) -> int:
@@ -152,7 +218,9 @@ def main(slug: str) -> int:
         return listing.returncode
     prs = json.loads(listing.stdout)
     leg1(slug, prs, bot, ready_only)
+    sweep(slug, prs)
     leg2(slug, prs)
+    leg3(slug, prs)
     return 0
 
 

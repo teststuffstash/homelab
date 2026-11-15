@@ -31,8 +31,8 @@ actions it can emit.
 |---|---|---|
 | [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
 | [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP → #3389 — no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `action.handback` | 🚧 WIP → #3389 — no evidence publisher for this root (fixture: `updater`, `fu124-nudge`) |
+| [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
+| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `action.handback` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py (updater family); the `fu124-nudge` half is the scan clause's, not built (fixture: `updater`, `fu124-nudge`) |
 
 **World for every table below:** [`board`](worlds/README.md#family-worlds-fixture-local-worldsname-named-in-rowspsv) — one repo, `#90` armed ∧ CLEAN, `#91` un-armed ∧ BEHIND; each row's `patch` adds its condition.
 
@@ -134,17 +134,17 @@ with the scan's FU-124 nudge — one copy.
 
 #### Whose currency is this Renovate PR?
 
-| description | world | patch | review | authorship | rollup | env | expect? |
-|---|---|---|---|---|---|---|---|
-| renovate-untouched-no-update ⚖ | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | none reported (zero check runs, status success) | — | renovate-skip-probe1 |
-| renovate-untouched-green-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | green | — | picks-probe1-renovate |
-| renovate-untouched-red-no-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | red (`ci` failure) | — | renovate-skip-probe1 |
-| renovate-worker-pushed-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | worker-pushed | none reported (zero check runs, status success) | — | picks-probe1-renovate |
-| renovate-updater-merged-red-handback | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | updater-merged | red (`system-test` failure) | — | renovate-handback-probe1 |
-| renovate-superseded-cancel-green-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | updater-merged | CANCELLED-outlived (a CANCELLED `ci` beside its SUCCESS sibling) | — | picks-probe1-renovate |
-| renovate-checks-unreadable-hold | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | unreadable | (check-runs read fails) | renovate-probe-hold |
-| renovate-merged-current-red-handback | board | add-renovate-current-review | `reviewDecision` REVIEW_REQUIRED, no review, PR CURRENT (BLOCKED, not BEHIND) | updater-merged | red (`system-test` failure) | — | sweep-handback-probe1 |
-| renovate-merged-current-pending-noop ⚖ | board | add-renovate-current-review | `reviewDecision` REVIEW_REQUIRED, no review, PR CURRENT (BLOCKED, not BEHIND) | updater-merged | pending (`system-test` in_progress) | — | sweep-silent-probe1 |
+| description | world | patch | commits | checks | env | expect? |
+|---|---|---|---|---|---|---|
+| renovate-untouched-no-update ⚖ | board | add-renovate-approved | Renovate only | none reported | — | renovate-skip-probe1 |
+| renovate-untouched-green-update | board | add-renovate-approved | Renovate only | `ci` success | — | picks-probe1-renovate |
+| renovate-untouched-red-no-update | board | add-renovate-approved | Renovate only | `ci` failure | — | renovate-skip-probe1 |
+| renovate-worker-pushed-update | board | add-renovate-approved | Renovate + a worker commit + a merge commit | none reported | — | picks-probe1-renovate |
+| renovate-updater-merged-red-handback | board | add-renovate-approved | Renovate + a merge commit | `ci` success, `system-test` failure | — | renovate-handback-probe1 |
+| renovate-superseded-cancel-green-update | board | add-renovate-approved | Renovate + a merge commit | `ci` cancelled, outlived by `ci` success | — | picks-probe1-renovate |
+| renovate-checks-unreadable-hold | board | add-renovate-approved | Renovate only | unreadable | `STUB_GH_api_repos_teststuffstash_testrepo_commits_ren150oid789_check_runs_per_page_100=fail` | renovate-probe-hold |
+| renovate-merged-current-red-handback | board | add-renovate-current-review | Renovate + a merge commit | `ci` success, `system-test` failure | — | sweep-handback-probe1 |
+| renovate-merged-current-pending-noop ⚖ | board | add-renovate-current-review | Renovate + a merge commit | `ci` success, `system-test` in progress | — | sweep-silent-probe1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
