@@ -24,10 +24,10 @@ its writers, the machine block keys, and the marker shapes.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-GH-LABELS](#scan-gh-labels) | `labels` | 🚧 WIP — no evidence pipeline yet (fixture: the `*-graphql-drained` rows) |
-| [SCAN-GH-BODY](#scan-gh-body) | `machine_block` | 🚧 WIP — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`) |
-| [SCAN-GH-MARKERS](#scan-gh-markers) | `markers` | 🚧 WIP — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
-| [SCAN-GH-ONE-BLOCK](#scan-gh-one-block) | `machine_block_redrawn` | 🚧 WIP → ADR-122 (3) / P3 — not built |
+| [SCAN-GH-LABELS](#scan-gh-labels) | `labels` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: the `*-graphql-drained` rows) |
+| [SCAN-GH-BODY](#scan-gh-body) | `machine_block` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`) |
+| [SCAN-GH-MARKERS](#scan-gh-markers) | `markers` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
+| [SCAN-GH-ONE-BLOCK](#scan-gh-one-block) | `machine_block_redrawn` | 🚧 WIP → #3461 — ADR-122 (3) / P3, not built |
 
 ### SCAN-GH-LABELS
 
@@ -37,11 +37,11 @@ session's, the worker launcher's or a human's):
 | label | written by (this island) | how |
 |---|---|---|
 | `agent/queued` | the scan | restored when it reconciles a phantom `agent/in-progress` / `agent/review` |
-| `agent/in-progress`, `agent/review` | the scan; `major-handoff.sh` (`agent/in-progress`) | removed on reconcile / on handoff |
+| `agent/in-progress`, `agent/review` | the scan; `major-handoff.sh` (`agent/in-progress`) | removed on reconcile / on handoff / on an `AGENT_INFEASIBLE:` park |
 | `agent/blocked` | the scan | added on an `AGENT_INFEASIBLE:` park (IL-T26) |
 | `agent/done` | the scan | the done-phantom reconcile |
-| `agent/error` | the scan (fleet latch), the review reflex (impossible verdict state) | added; the scan removes only its own fleet latch |
-| `agent/arbitrate` | the review reflex | added at the round cap |
+| `agent/error` | the scan (fleet latch), the review reflex (impossible verdict state) | added; the scan removes it in two cases only: releasing its own fleet latch, and parking an issue on an `AGENT_INFEASIBLE:` verdict |
+| `agent/arbitrate` | the review reflex; the scan | added at the round cap; the scan adds it when an `unarmed-major` PR's rides are exhausted |
 | `merge-conflict` | the updater | added on armed ∧ DIRTY, removed when no longer |
 | `major/awaiting-human` | `major-handoff.sh` ONLY | added after the evidence check |
 
@@ -59,15 +59,15 @@ precondition (ADR-122 (2), ADR-109).
 
 #### Does a label write land while GraphQL is drained?
 
-| description | world | env | expect? |
-|---|---|---|---|
-| conflict-dirty-graphql-drained | board | `STUB_GH_GRAPHQL=drained` | dirty-label |
-| conflict-clear-graphql-drained | board | `STUB_GH_GRAPHQL=drained` | label-clear |
-| error-approved-at-head-graphql-drained | — | `IN_V_HEAD=1 IN_V_HEAD_APPROVED=1 STUB_GH_GRAPHQL=drained` | error-trip-drained |
-| arbitrate-at-cap-graphql-drained | — | `IN_ROUNDS_TOTAL=12 STUB_GH_GRAPHQL=drained` | arbitrate-trip |
-| handoff-graphql-drained | approved | `STUB_GH_GRAPHQL=drained` | handoff |
-| parks-graphql-drained | verdict | `STUB_GH_GRAPHQL=drained` | parks |
-| us-case-labels-graphql-drained | spread | `STUB_GH_GRAPHQL=drained` | us-case-labels |
+| description | world | PR / issue state | env | expect? |
+|---|---|---|---|---|
+| conflict-dirty-graphql-drained | board | an armed PR gone DIRTY, no `merge-conflict` label | `STUB_GH_GRAPHQL=drained` | `merge-conflict` created with its colour, then added, over REST |
+| conflict-clear-graphql-drained | board | a CLEAN PR still carrying `merge-conflict` | `STUB_GH_GRAPHQL=drained` | `merge-conflict` removed, over REST |
+| error-approved-at-head-graphql-drained | — | one bot APPROVED verdict already at the head the reflex picked | `IN_V_HEAD=1 IN_V_HEAD_APPROVED=1 STUB_GH_GRAPHQL=drained` | `agent/error` added, over REST |
+| arbitrate-at-cap-graphql-drained | — | 12 review rounds recorded (the cap) | `IN_ROUNDS_TOTAL=12 STUB_GH_GRAPHQL=drained` | `agent/arbitrate` created with its colour, then added, over REST |
+| handoff-graphql-drained | approved | an approved `major` PR wearing `agent/in-progress` | `STUB_GH_GRAPHQL=drained` | `major/awaiting-human` added, then `agent/in-progress` removed, then the labels re-read, over REST |
+| parks-graphql-drained | verdict | an issue with an `AGENT_INFEASIBLE:` verdict, wearing `agent/in-progress` and `agent/error` | `STUB_GH_GRAPHQL=drained` | `agent/blocked` added, then `agent/in-progress` and `agent/error` removed, then the labels re-read, over REST |
+| us-case-labels-graphql-drained | spread | four open items the fleet case "us" latches | `STUB_GH_GRAPHQL=drained` | `agent/error` added to each of the four, over REST |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
