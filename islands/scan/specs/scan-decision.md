@@ -153,7 +153,9 @@ machine block's `Class:` (legacy: the `task/*` label) and, for a Goal child, the
 An open, un-labelled issue (no `agent*` label) whose native `blockedBy` edges are all closed and
 that is older than 24 h is surfaced as its own `🔓 UNBLOCKED-UNLABELED` report line — report-only,
 no label is written (the human gate stands: label `agent/queued` to adopt, or close it). An issue
-with an open blocker, or with no edges, never gets that line.
+with an open blocker, or with no edges, never gets that line. A bot-authored open issue without
+`agent-fix` that no sharper line already names (a `post-launch:` bucket excepted) is reported on the
+generic `🌱` awaiting-triage line instead — report-only, the same human gate.
 
 **World:** per-case recorded issue lists.
 
@@ -164,7 +166,7 @@ with an open blocker, or with no edges, never gets that line.
 | no-agent-fix | queued-derivation/no-agent-fix | `agent/queued` without `agent-fix` | unit emitted |
 | ready | queued-classification/ready | `agent/queued`, every blocker closed | `queued-dispatch` unit |
 | held | queued-classification/held | `agent/queued`, a blocker open | `⏳ queued-blocked`, no unit |
-| blocker-open | unblocked-unlabeled/blocker-open | unlabelled, a blocker open | no `🔓 UNBLOCKED-UNLABELED` line (the generic `🌱` awaiting-triage line only) |
+| blocker-open | unblocked-unlabeled/blocker-open | bot-authored, unlabelled, a blocker open | no `🔓 UNBLOCKED-UNLABELED` line (the generic `🌱` awaiting-triage line only) |
 | surfaces | unblocked-unlabeled/surfaces | unlabelled > 24 h, every blocker closed | a `🔓 UNBLOCKED-UNLABELED` line naming the issue and its closed blockers; no label written |
 
 <details markdown="1"><summary>Evidence — latest run</summary>

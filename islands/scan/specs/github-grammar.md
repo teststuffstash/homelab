@@ -25,8 +25,8 @@ its writers, the machine block keys, and the marker shapes.
 | Requirement | Governs (schema) | Status |
 |---|---|---|
 | [SCAN-GH-LABELS](#scan-gh-labels) | `labels` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: the `*-graphql-drained` rows) |
-| [SCAN-GH-BODY](#scan-gh-body) | `machine_block` | 🚧 WIP — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`) |
-| [SCAN-GH-MARKERS](#scan-gh-markers) | `markers` | 🚧 WIP — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
+| [SCAN-GH-BODY](#scan-gh-body) | `machine_block` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`) |
+| [SCAN-GH-MARKERS](#scan-gh-markers) | `markers` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
 | [SCAN-GH-ONE-BLOCK](#scan-gh-one-block) | `machine_block_redrawn` | 🚧 WIP → ADR-122 (3) / P3 — not built |
 
 ### SCAN-GH-LABELS
@@ -37,10 +37,10 @@ session's, the worker launcher's or a human's):
 | label | written by (this island) | how |
 |---|---|---|
 | `agent/queued` | the scan | restored when it reconciles a phantom `agent/in-progress` / `agent/review` |
-| `agent/in-progress`, `agent/review` | the scan; `major-handoff.sh` (`agent/in-progress`) | removed on reconcile / on handoff |
+| `agent/in-progress`, `agent/review` | the scan; `major-handoff.sh` (`agent/in-progress`) | removed on reconcile / on handoff / on an `AGENT_INFEASIBLE:` park |
 | `agent/blocked` | the scan | added on an `AGENT_INFEASIBLE:` park (IL-T26) |
 | `agent/done` | the scan | the done-phantom reconcile |
-| `agent/error` | the scan (fleet latch), the review reflex (impossible verdict state) | added; the scan removes only its own fleet latch |
+| `agent/error` | the scan (fleet latch), the review reflex (impossible verdict state) | added; the scan removes it in two cases only: releasing its own fleet latch, and parking an issue on an `AGENT_INFEASIBLE:` verdict |
 | `agent/arbitrate` | the review reflex; the scan | added at the round cap; the scan adds it when an `unarmed-major` PR's rides are exhausted |
 | `merge-conflict` | the updater | added on armed ∧ DIRTY, removed when no longer |
 | `major/awaiting-human` | `major-handoff.sh` ONLY | added after the evidence check |
