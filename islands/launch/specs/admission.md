@@ -45,7 +45,8 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 return code, and the caller decides what it means (`agents/gateway-admit.sh` header, :12–58).
 **rc 0** — `dispatch`: `GW_SESSION_ID`, `GW_RAIL`, `GW_HARNESS`, `GW_MODEL`, `GW_WIRE_MODEL` (the
 model with its rail prefix stripped — the harness invocation's id), `GW_CONTEXT_TOKENS`,
-`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`).
+`GW_ENV_KEYS` are set; a bound dispatch also sets `GW_PULL_URL` (this session's env URL) and
+`GW_PULL_PRELUDE` (the in-pod pull); from here the caller owns the release (`trap gw_release EXIT`).
 **rc 1** — `defer`: `GW_DEFER_REASON` and `GW_RETRY_AFTER` are the gateway's, no session exists.
 **rc 3** — fail closed: unreachable, non-200 (the error envelope, redacted by the supplier, is
 quoted; a 200 that is neither verdict is never printed, since it could carry a token), or an
@@ -123,7 +124,7 @@ the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the ro
 | harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
 | unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
 | unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
-| unknown-decision | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no session kept | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
+| unknown-decision | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
 The `(exit)` rows run through the worker launcher, which maps rc 3 to exit 1
 ([LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher)).
