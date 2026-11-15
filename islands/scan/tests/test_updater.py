@@ -61,16 +61,16 @@ CONFLICT = [
     ("conflict-clear", "#90 carries the label but is no longer armed ∧ DIRTY: the label is removed"),
     ("update-fail", "#101's update-branch PUT fails: the skip line prints and gh's stderr passes through"),
 ]
-RENOVATE = [  # id, commits, checks (read from rows/<id>/gh/ — the table's two input columns)
-    ("renovate-untouched-no-update", "Renovate only", "none reported"),
-    ("renovate-untouched-green-update", "Renovate only", "`ci` success"),
-    ("renovate-untouched-red-no-update", "Renovate only", "`ci` failure"),
-    ("renovate-worker-pushed-update", "Renovate + a worker commit + a merge commit", "none reported"),
-    ("renovate-updater-merged-red-handback", "Renovate + a merge commit", "`ci` success, `system-test` failure"),
-    ("renovate-superseded-cancel-green-update", "Renovate + a merge commit", "`ci` cancelled, outlived by `ci` success"),
-    ("renovate-checks-unreadable-hold", "Renovate only", "unreadable"),
-    ("renovate-merged-current-red-handback", "Renovate + a merge commit", "`ci` success, `system-test` failure"),
-    ("renovate-merged-current-pending-noop", "Renovate + a merge commit", "`ci` success, `system-test` in progress"),
+RENOVATE = [  # id, review, commits, checks (the table's three input columns, read from the patch and rows/<id>/gh/)
+    ("renovate-untouched-no-update", "`APPROVED`, BEHIND", "Renovate only", "none reported"),
+    ("renovate-untouched-green-update", "`APPROVED`, BEHIND", "Renovate only", "`ci` success"),
+    ("renovate-untouched-red-no-update", "`APPROVED`, BEHIND", "Renovate only", "`ci` failure"),
+    ("renovate-worker-pushed-update", "`APPROVED`, BEHIND", "Renovate + a worker commit + an updater merge commit", "none reported"),
+    ("renovate-updater-merged-red-handback", "`APPROVED`, BEHIND", "Renovate + an updater merge commit", "`ci` success, `system-test` failure"),
+    ("renovate-superseded-cancel-green-update", "`APPROVED`, BEHIND", "Renovate + an updater merge commit", "`ci` cancelled, outlived by `ci` success"),
+    ("renovate-checks-unreadable-hold", "`APPROVED`, BEHIND", "Renovate only", "unreadable"),
+    ("renovate-merged-current-red-handback", "`REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND)", "Renovate + an updater merge commit", "`ci` success, `system-test` failure"),
+    ("renovate-merged-current-pending-noop", "`REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND)", "Renovate + an updater merge commit", "`ci` success, `system-test` in progress"),
 ]
 LISTED = {*PICK, *(i for i, _ in UNSTRAND), *(i for i, _ in CONFLICT), *(i for i, *_ in RENOVATE)}
 
@@ -84,9 +84,9 @@ def test_conflict(row, effect):
 
 
 @rule("SCAN-UPDATER-RENOVATE")
-@pytest.mark.parametrize("row, commits, checks", [pytest.param(ROWS[i], commits, checks, id=i) for i, commits, checks in RENOVATE])
-def test_renovate(row, commits, checks):
-    with allure.step(f"Given the branch carries: {commits}; the check rollup is: {checks}"):
+@pytest.mark.parametrize("row, review, commits, checks", [pytest.param(ROWS[i], review, commits, checks, id=i) for i, review, commits, checks in RENOVATE])
+def test_renovate(row, review, commits, checks):
+    with allure.step(f"Given the PR is: {review}; the branch carries: {commits}; the check rollup is: {checks}"):
         pass
     check(row)
 
