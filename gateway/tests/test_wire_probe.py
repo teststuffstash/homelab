@@ -68,7 +68,7 @@ PROBE_ROWS = [
     pytest.param("wire-codex, the fake answers 503", "a valid credential", "T0", "as the first row", "fetch-failed", "account",
                  id="an upstream error is counted and recorded as the failure"),
     pytest.param("`GATEWAY_WIRE` names a path that does not exist", "a valid credential", "T0", "none", "—", "—", id="a missing path, nothing read ⚖"),
-    pytest.param("wire-codex, a no-credential tick at T0", "the lifecycle refuses", "a second tick at T0 + 60 s", "none", "no-credential", "—",
+    pytest.param("wire-codex, a no-credential tick at T0", "refuses at T0, a valid credential at T0 + 60 s", "a second tick at T0 + 60 s", "none", "no-credential", "—",
                  id="no credential is not retried inside the interval ⚖"),
     pytest.param("wire-codex, a record at T0", "a valid credential", "restart at T0 + 3600 s", "none", "—", "account",
                  id="a restart inside the interval probes nothing at start"),
@@ -87,7 +87,7 @@ async def test_a_declared_probe_is_read(tmp_path, settings, secrets, store, cloc
     fake = FakeModels()
     if "503" in declarations:
         fake.status = 503
-    if lifecycle == "the lifecycle refuses":
+    if lifecycle == "the lifecycle refuses" or lifecycle.startswith("refuses at T0"):
         exchange.fault = RuntimeError("DUMMY-SECRET exchange refused")  # the stored credential is near expiry: acquire must exchange
     app, client = build(tmp_path, settings, secrets, store, clock, codex_store, exchange, fake, text)
     if "does not exist" in declarations:  # the same app, GATEWAY_WIRE naming a path nothing is at
@@ -114,6 +114,8 @@ async def test_a_declared_probe_is_read(tmp_path, settings, secrets, store, cloc
         with given("a no-credential tick at T0"):
             first = await probe.tick()
             assert first.get("codex-models") == "no-credential"
+        if "a valid credential at" in lifecycle:  # the credential is usable again: a retry WOULD send the GET
+            exchange.fault = None
         clock.t = T0 + at_offset(at.removeprefix("a second tick at "))
     with when(f"the probe schedule runs at {at}"):
         outcomes = await probe.tick()

@@ -237,7 +237,7 @@ read; `at` = the clock when the schedule runs; `request?` = what the fake upstre
 | no usable credential, no fetch ⚖ | wire-codex | the lifecycle refuses | T0 | none | no-credential | — |
 | an upstream error is counted and recorded as the failure | wire-codex, the fake answers 503 | a valid credential | T0 | as the first row | fetch-failed | account |
 | a missing path, nothing read ⚖ | `GATEWAY_WIRE` names a path that does not exist | a valid credential | T0 | none | — | — |
-| no credential is not retried inside the interval ⚖ | wire-codex, a no-credential tick at T0 | the lifecycle refuses | a second tick at T0 + 60 s | none | no-credential | — |
+| no credential is not retried inside the interval ⚖ | wire-codex, a no-credential tick at T0 | refuses at T0, a valid credential at T0 + 60 s | a second tick at T0 + 60 s | none | no-credential | — |
 | a restart inside the interval probes nothing at start | wire-codex, a record at T0 | a valid credential | restart at T0 + 3600 s | none | — | account |
 
 #### What a probe may be
