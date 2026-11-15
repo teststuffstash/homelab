@@ -142,18 +142,22 @@ The Composition renders nothing for it; two consumers read it:
 **Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
 has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
 evidence bucket all belong to it), and each further root is listed here — homelab lists
-`islands/{scan,launch,retro}/specs` beside the gateway's. Only the specs reviewer reads it
+`islands/{scan,launch,retro}/specs` beside the gateway's. Two consumers read it. The specs reviewer
 (`pack_root_pairs` → `touched_pairs`): a PR touching a listed root gets a context pack over THAT
 root and a real rows review instead of the mechanical approval; a PR touching several roots gets
 one pass per root (one per tick, each held as a `SPECS ROOT REVIEW` comment) and ONE verdict,
 CHANGES_REQUESTED when any root's is. `tests` is optional and has no default: a root without one
 is reached through its spec pages alone, and its pack carries no evidence (no publisher exists
 for an extra root yet), so unproven rows need the evidence brief's `🚧 WIP → #<issue>` or
-`⚑ gap` index mark. Not read by the worker launcher yet: a ride touching an extra root gets no
-process mount.
+`⚑ gap` index mark. The worker launcher (same `REPLAY:specs-process-volume` clause): when the
+primary pair is not reached and the footprint reaches a listed root, the ride gets the same
+read-only mount, pinned from THAT root's `README.md` (its `RULES.md @ v<version>` link, the
+`gateway/specs/README.md` §Rules shape); a README with no parseable link falls back to the primary
+pin file, said on stderr. The primary pair wins a footprint that reaches both (one mount per ride).
 
 Replay: `agents/replay/fixtures/specs-process/` (reached / not reached / field absent / pin
-unresolvable). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
+unresolvable / single pair; `extra-*`: an island root reached, its README unpinned, not reached,
+reached beside the primary). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
 worker).
 
 ## The MCP knob (`spec.mcp`, #1039)

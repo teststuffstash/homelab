@@ -13,8 +13,8 @@ says so (`⚑ gap`, `🚧 WIP`, "unverified — expected …"). Terms: [glossary
 the platform's [docs/glossary.md](../../../docs/glossary.md).
 
 > **Contract for a fresh build** ([../README.md](../README.md)): these pages specify the component
-> to be written under `islands/scan/`; the "code" a row cites is the OLD member it replaces, read as
-> the behaviour to match. Line citations (`file:<n>`) are against the spike's base `c34535a5`
+> to be written under `islands/scan/`; the "code" a row cites is the OLD member it replaces, read
+> to explain a difference, never as the source ([Built from the specs](../../README.md#built-from-the-specs-never-copied)). Line citations (`file:<n>`) are against the spike's base `c34535a5`
 > (2026-11-07) and have drifted on master — the `REPLAY:` sentinels and fixture dirs are the stable
 > anchors. Nothing live reads this directory.
 
@@ -30,7 +30,9 @@ What this island adds, by rule:
 
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
-  The specs reviewer reviews this root through `extraSpecs`; its pack carries no evidence.
+  The specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379;
+  `agents/specs-reviewer-session.sh` `pack_root_pairs`), a rows review with no tests root and no
+  evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** the prefix is `SCAN-`; areas `WAKE`, `CLAUSE`, `HOLD`, `LANE`, `DISPATCH`,
   `GH`, `UPDATER`, `REFLEX`, `HANDOFF`, `SIGNAL`.
 - **Rule 5 (evidence):** The tests root is `islands/scan/tests/`, run by

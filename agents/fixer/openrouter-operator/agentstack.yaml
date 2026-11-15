@@ -127,8 +127,8 @@ spec:
       # mounted read-only + the card block; the specs reviewer reads the same roots (#3025).
       specs: { root: gateway/specs, tests: gateway/tests }
       # The islands built fresh beside the old loop (islands/README.md) keep their own specs/: the
-      # specs reviewer reviews each root on its own (XRD extraSpecs — reviewer only, no worker
-      # process mount, no evidence pipeline yet, so no tests root is declared).
+      # specs reviewer reviews each root on its own and a worker reaching one gets the process mount
+      # pinned by that root's README (XRD extraSpecs); no evidence pipeline yet, so no tests root.
       extraSpecs:
         - root: islands/scan/specs
         - root: islands/launch/specs

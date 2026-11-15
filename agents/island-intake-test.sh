@@ -321,6 +321,57 @@ INTAKE_ISSUES_JSON="$PISS" INTAKE_TS_DIR="$TMP/nowhere" INTAKE_NOW="$NOW" bash "
 [ "$rc" = 2 ] && ok "an unreadable receipt store is a probe failure (exit 2) — it could not see what was re-read" || bad "pile rule #6 (bucket)" "rc=$rc"
 INTAKE_ISSUES_JSON="$TMP/nowhere.json" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --out "$TMP/x.json" 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "…and so is an unreadable issue list" || bad "pile rule #6 (issues)" "rc=$rc"
+# PR-level waits (INTAKE_PR_HOLDS=1): an issue the loop still holds (another `agent/*` label) whose
+# OPEN PR's newest `blocked-on:` marker is `human` is a reread, `wait: pr-hold`, dated by the marker.
+piss 116 "gateway: in review, its PR parked on a human" '["agent-fix","agent/review"]' "[$(cm 'intake: queue — one ride' 2026-10-02T00:00:00Z)]" 2026-10-26T00:00:00Z
+piss 117 "gateway: in review, the hold superseded"      '["agent/review"]' '[]' 2026-10-26T00:00:00Z
+piss 118 "gateway: in review, parked yesterday"         '["agent/review"]' '[]' 2026-10-26T00:00:00Z
+jq -s . "$PISS.rows" > "$PISS"
+PPRS="$TMP/pile-prs.json"
+jq -n '[
+  {number:900, state:"OPEN", headRefName:"fix/issue-116-x", body:"", closingIssuesReferences:[], comments:[
+     {body:"ruling\nblocked-on: issue=5", createdAt:"2026-10-18T00:00:00Z"},
+     {body:"ci-red ruling: designed wait\n\nblocked-on: human\n\nNext mover: a rerun", createdAt:"2026-10-20T00:00:00Z"},
+     {body:"state-fp:ci-red:abc — a marker comment that talks about `blocked-on: human` mid-line", createdAt:"2026-10-21T00:00:00Z"}]},
+  {number:901, state:"OPEN", headRefName:"fix/other", body:"Fixes #117", closingIssuesReferences:[], comments:[
+     {body:"blocked-on: human", createdAt:"2026-10-10T00:00:00Z"}, {body:"blocked-on: issue=5", createdAt:"2026-10-12T00:00:00Z"}]},
+  {number:902, state:"OPEN", headRefName:"fix/y", body:"", closingIssuesReferences:[{number:118}], comments:[
+     {body:"blocked-on: human", createdAt:"2026-10-26T04:00:00Z"}]},
+  {number:903, state:"OPEN", headRefName:"fix/issue-112-z", body:"", closingIssuesReferences:[], comments:[]}]' > "$PPRS"
+INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
+[ "$(pk reread)" = "102 103 107 109 115 116" ] \
+  && [ "$(jq -c '.inputs[] | select(.number == 116) | [.wait, .pr, .wait_d, .since, .parked_by]' "$TMP/pile-sel.json")" = '["pr-hold",900,7,"2026-10-20T00:00:00Z","blocked-on: human (PR #900)"]' ] \
+  && ok "INTAKE_PR_HOLDS=1: an agent/review issue whose open PR's NEWEST marker is blocked-on: human is a reread (pr-hold, the PR, the marker's date); a superseded (#117), a 1-day (#118) and a marker-less (#112) one are not" \
+  || bad "pile pr-hold" "got '$(pk reread)' $(jq -c '.inputs[] | select(.number == 116)' "$TMP/pile-sel.json") $(cat "$TMP/pile.err")"
+[ "$(jq -c '[.inputs[] | select(.kind == "reread" and .number != 116) | has("pr")] | any' "$TMP/pile-sel.json")" = false ] \
+  && ok "…and a label/ruling wait carries no pr field" || bad "pile pr field" "$(jq -c '.inputs[] | select(.kind == "reread")' "$TMP/pile-sel.json")"
+INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
+[ "$(pk reread)" = "102 103 107 109 115" ] && ok "without INTAKE_PR_HOLDS the pile is the label/ruling waits only (the default)" || bad "pile pr-hold default" "got '$(pk reread)'"
+INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$TMP/nowhere.json" pile; rc=$?
+[ "$rc" = 2 ] && ok "INTAKE_PR_HOLDS=1 with an unreadable PR list is a probe failure (exit 2), never \"no holds\"" || bad "pile rule #6 (prs)" "rc=$rc"
+# forward (gateway/intake.md step 0): an issue whose LATEST intake ruling is `forward` is unruled —
+# a member of whichever island its (retitled) title names now, its row carrying the hop count.
+FISS="$TMP/fwd.json"
+fiss() { jq -nc --argjson n "$1" --arg t "$2" --argjson c "$3" \
+  '{number:$n, title:$t, body:"free text", labels:[], createdAt:"2026-10-01T00:00:00Z", updatedAt:"2026-10-20T00:00:00Z", author:{login:"rsoot",is_bot:false}, comments:$c}'; }
+{ fiss 201 "gateway: passed here by another island" "[$(cm 'intake: forward → gateway — the catalog view is the gateway'"'"'s' 2026-10-20T00:00:00Z)]"
+  fiss 202 "gateway: passed here twice" "[$(cm 'intake: forward → retro — x' 2026-10-18T00:00:00Z),$(cm 'intake: forward → gateway — y' 2026-10-20T00:00:00Z)]"
+  fiss 203 "gateway: forwarded, then ruled seat" "[$(cm 'intake: forward → gateway — x' 2026-10-10T00:00:00Z),$(cm "$SEAT" 2026-10-20T00:00:00Z)]"
+  fiss 204 "dependency: passed on to another island" "[$(cm 'intake: forward → dependency-upgrades — the lint is theirs' 2026-10-20T00:00:00Z)]"
+  fiss 205 "gateway: never forwarded" '[]'
+  fiss 206 "gateway: forwarded with a missed space" "[$(cm 'intake: forward→gateway — z' 2026-10-20T00:00:00Z)]"
+  fiss 207 "gateway: forwarded with a colon" "[$(cm 'intake: forward: gateway — z' 2026-10-20T00:00:00Z)]"
+  fiss 208 "gateway: a ruling that only starts like it" "[$(cm 'intake: forwarded-looking standing note' 2026-10-20T00:00:00Z)]"
+} | jq -s . > "$FISS"
+fwd() { INTAKE_ISSUES_JSON="$FISS" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island "$1" --out "$TMP/fwd-sel.json" 2>"$TMP/fwd.err"; }
+fwd gateway
+[ "$(jq -c '[.inputs[] | select(.kind == "member") | [.number, (.forwards // 0)]] | sort' "$TMP/fwd-sel.json")" = '[[201,1],[202,2],[205,0],[206,1],[207,1]]' ] \
+  && [ "$(jq -c '[.inputs[] | select(.kind == "reread") | .number]' "$TMP/fwd-sel.json")" = '[203]' ] \
+  && ok "a latest ruling of forward is unruled: a member again, with forwards = its hop count (#201 ×1, #202 ×2; #205 carries none); a later seat is a wait again (#203); the count and the unruled check read the comment the same way (\`forward→gateway\` #206, \`forward:\` #207 are members ×1; \`forwarded…\` #208 is neither)" \
+  || bad "forward members" "$(jq -c '.inputs' "$TMP/fwd-sel.json") $(cat "$TMP/fwd.err")"
+fwd dependency-upgrades
+[ "$(jq -c '[.inputs[] | [.number, .kind, .forwards]]' "$TMP/fwd-sel.json")" = '[[204,"member",1]]' ] \
+  && ok "…and it is the member of the island its title names now (#204 → dependency-upgrades)" || bad "forward target" "$(jq -c '.inputs' "$TMP/fwd-sel.json")"
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"
@@ -351,6 +402,9 @@ dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -
 # the rail + model resolution are the proxy's — served flat here
 printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
 printf '#!/bin/bash\necho opus\n' > "\$dest/agents/resolve-model.sh"
+# the island's specs index: a row's fixture (\$H/specs-index.md), else one with no gap row — the gap
+# source then holds and the dig/pile rows below see exactly the sittings they always saw
+if [ -f "\$H/specs-index.md" ]; then cp "\$H/specs-index.md" "\$dest/gateway/specs/README.md"; else printf '# specs\n' > "\$dest/gateway/specs/README.md"; fi
 EOF
 cat > "$BIN/claude" <<'EOF'
 #!/bin/bash
@@ -370,8 +424,8 @@ chmod +x "$BIN"/*
 echo '[]' > "$TMP/pile-empty.json"   # the pile source's seam: an empty pile unless a row sets PILE_JSON
 run_script() { # <mode>
   rm -rf "$TMP/work" "$TMP/up"/* "$TMP/run"/*; : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
-  ( cd "$TMP" && H="$TMP" PATH="$BIN:$PATH" HOME="$TMP/home" MODE="$1" ISLAND=gateway \
-      INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" \
+  ( cd "$TMP" && H="$TMP" PATH="${RUN_PATH:-$BIN}:$PATH" HOME="$TMP/home" MODE="$1" ISLAND=gateway \
+      INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" INTAKE_PRS_JSON="${PRS_JSON:-$TMP/pile-empty.json}" \
       INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
       AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" env ${RUN_ENV:-} bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
 }
@@ -426,6 +480,7 @@ INTAKE-RULED: $H#102 requeue $H#102
 INTAKE-RULED: $H#103 unchanged -
 INTAKE-RULED: $H#107 split $H#7,$H#8
 INTAKE-RULED: $H#109 reopened -
+INTAKE-RULED: $H#115 forward island:retro
 INTAKE-RULED: $H#999 requeue -
 EOF
 PILE_JSON="$PISS" run_script apply; rc=$?
@@ -443,20 +498,22 @@ PILE_JSON="$PISS" run_script apply; rc=$?
   && ok "…and the in-cluster addresses of the live reads (Prometheus, Alertmanager, the gateway + its caller token)" || bad "brief live reads" "missing an address"
 grep -qF 'AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID"' "$TMP/up/brief.md" \
   && ok "…the bucket read names the READER key by VARIABLE — no key value is rendered into the uploaded brief" || bad "brief reader key" "$(grep -n AWS_ACCESS "$TMP/up/brief.md")"
-[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"]]" ] \
-  && ok "receipt: issue ids with seat / requeue / unchanged / split; an unknown outcome and a forged id dropped" || bad "pile receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
+[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"],[\"$H#115\",\"forward\"]]" ] \
+  && [ "$(jq -c '.ruled[] | select(.outcome == "forward") | .refs' "$TMP/up/receipt.json" 2>/dev/null)" = '["island:retro"]' ] \
+  && ok "receipt: issue ids with seat / requeue / unchanged / split / forward (its ref = the island it went to); an unknown outcome and a forged id dropped" || bad "pile receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
 grep -q '/coordinate' "$TMP/curl.calls" && ok "a \`requeue\` rings /coordinate (it queued work)" || bad "requeue ring" "$(cat "$TMP/curl.calls")"
 mkdir -p "$TSP/homelab/intake-gateway-2026-10-27/r"; cp "$TMP/up/receipt.json" "$TSP/homelab/intake-gateway-2026-10-27/r/"
 rm -rf "$TSP/homelab/intake-gateway-2026-10-24"
 pile
-[ "$(pk reread)" = "109 115" ] && ok "…and the next pile selection reads that receipt back: #102 #103 #107 are not re-read tomorrow, #109 #115 (no line) are" \
+[ "$(pk reread)" = "109" ] && ok "…and the next pile selection reads that receipt back: #102 #103 #107 #115 are not re-read tomorrow, #109 (no line) is" \
   || bad "pile round trip" "got '$(pk reread)'"
 rm -rf "$TSP/homelab/intake-gateway-2026-10-27"
 cat > "$TMP/claude.out" <<EOF
 INTAKE-RULED: $H#103 unchanged -
+INTAKE-RULED: $H#115 forward island:retro
 EOF
 PILE_JSON="$PISS" run_script apply
-grep -q '/coordinate' "$TMP/curl.calls" && bad "unchanged ring" "rang /coordinate" || ok "\`unchanged\` alone rings nothing"
+grep -q '/coordinate' "$TMP/curl.calls" && bad "unchanged ring" "rang /coordinate" || ok "\`unchanged\` and \`forward\` ring nothing (a forward queues no work)"
 echo 'not json' > "$TMP/pile-bad.json"
 PILE_JSON="$TMP/pile-bad.json" run_script apply; rc=$?
 { [ "$rc" = 1 ] && [ ! -s "$TMP/claude.calls" ] && grep -q "selection failed (source pile" "$TMP/run.log"; } \
@@ -501,11 +558,12 @@ gw_intake_run() { # <reply-kind> [knob]
   : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
   case "$1" in
     dispatch) printf '%s' '{"decision":"dispatch","session":{"id":"s-int-1","token":"gws_INTAKETOKEN","expires_at":"2026-10-27T09:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/gw-intake-model","env":{"ANTHROPIC_BASE_URL":"'"$I_GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_INTAKETOKEN","ANTHROPIC_MODEL":"gw-intake-model"},"context_tokens":200000}' > "$TMP/gw-reply.json";;
+    go)       printf '%s' '{"decision":"dispatch","session":{"id":"s-int-go","token":"gws_GO","expires_at":"2026-10-27T09:00:00Z"},"rail":"opencode","harness":"claude","model":"opencode-go/claude-haiku-5-5","env":{"ANTHROPIC_BASE_URL":"'"$I_GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_GO","ANTHROPIC_MODEL":"claude-haiku-5-5"},"context_tokens":200000}' > "$TMP/gw-reply.json";;
     defer)    printf '%s' '{"decision":"defer","reason":"subscription-sessions-full","retry_after_s":600}' > "$TMP/gw-reply.json";;
     fallback) printf '{"error":"down"}' > "$TMP/gw-reply.json"; printf '503' > "$TMP/gw-http";;
   esac
   ( cd "$TMP" && H="$TMP" PATH="$GBIN:$BIN:$PATH" HOME="$TMP/home" MODE=apply ISLAND=gateway \
-      INTAKE_ISSUES_JSON="$TMP/pile-empty.json" \
+      INTAKE_ISSUES_JSON="$TMP/pile-empty.json" INTAKE_PRS_JSON="$TMP/pile-empty.json" \
       INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
       AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" \
       AGENT_GATEWAY="${2-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
@@ -529,6 +587,12 @@ gw_intake_run defer; rc=$?
 { [ "$rc" = 1 ] && ! grep -q '^claude' "$TMP/claude.calls" && grep -qF "the gateway deferred [subscription-sessions-full]" "$TMP/run.log"; } \
   && ok "defer → no sitting, exit 1 → the retry wrapper (as a rail not clear does)" || bad "gw defer" "rc=$rc $(tail -3 "$TMP/run.log")"
 
+gw_intake_run go; rc=$?
+{ [ "$rc" = 1 ] && ! grep -q '^claude' "$TMP/claude.calls" && grep -qF -- "-X DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-int-go" "$TMP/curl.calls" \
+    && grep -qF "answered on the Go rail" "$TMP/run.log"; } \
+  && ok "a dispatch on the Go rail (opencode / opencode-go/*) is released unused → no sitting, exit 1 (nothing of this run rides Go)" \
+  || bad "gw go rail" "rc=$rc $(tail -3 "$TMP/run.log")"
+
 gw_intake_run fallback; rc=$?
 grep -qF "gateway admission refused rc=3 — old-proxy fallback" "$TMP/run.log" \
   && ok "gateway 503 (fail-closed) → the ONE loud transition-fallback line" || bad "gw fallback line" "$(tail -5 "$TMP/run.log")"
@@ -538,6 +602,334 @@ grep -qF "gateway admission refused rc=3 — old-proxy fallback" "$TMP/run.log" 
 gw_intake_run dispatch ""; rc=$?
 { ! grep -q '/sessions' "$TMP/curl.calls" && grep -qx "model opus" "$TMP/claude.calls"; } \
   && ok "AGENT_GATEWAY unset → no /sessions call, the old path byte-for-byte" || bad "gw knob off" "$(grep sessions "$TMP/curl.calls")"
+
+# ── night run 2026-11-14: scan / launch / retro rows (the selector's island table) ──────────────
+# Expected from the header contract: a title `<island> island:` or every Touches entry under
+# islands/<island>/; the three rows sit after gateway and before agent-loop, so "scan island: …"
+# is scan's though agent-loop's title row matches `^scan`; spanning two islands is nobody's.
+section "selector issues — scan / launch / retro rows"
+rm -f "$ISS.rows"
+iss 41 "scan island: the doorbell row"           -                                              # scan title (not agent-loop's ^scan)
+iss 42 "no title cue"                            "islands/scan/specs/scan-decision.md, islands/scan/README.md" # scan Touches
+iss 43 "no title cue"                            "islands/launch/specs/x.md"                    # launch Touches
+iss 44 "retro island: a gap"                     -                                              # retro title
+iss 45 "no title cue, human"                     "islands/scan/a.md, islands/retro/b.md" '[]' "" "$HUMAN" # spans two → none
+iss 46 "scan: a guard"                           -                                              # agent-loop title, as before
+iss 47 "no title cue, human"                     "agents/x.sh, islands/scan/y.md" '[]' "" "$HUMAN"   # spans two → none
+iss 48 "launch: no island suffix"                -              '[]' "" "$HUMAN"                 # `launch:` alone is no row → none
+jq -s . "$ISS.rows" > "$ISS"
+for row in "scan:41 42" "launch:43" "retro:44" "agent-loop:46" "gateway:"; do
+  isl="${row%%:*}"; want="${row#*:}"; got="$(members "$isl")"
+  [ "$got" = "$want" ] && ok "--island $isl selects '${want:-nothing}'" || bad "members $isl (new rows)" "want '$want' got '$got'"
+done
+allsel="$(for i in gateway scan launch retro router-pair mgmt-box dependency-upgrades substrate agent-loop; do
+  INTAKE_ISSUES_JSON="$ISS" bash "$SEL" --island "$i" --json 2>/dev/null | jq -r '.[].number'; done | sort -n | tr '\n' ' ')"
+[ "$allsel" = "41 42 43 44 46 " ] && ok "each issue on at most one island; #45 #47 (span two) and #48 (no row) on none" || bad "new-row exclusivity" "selected: $allsel"
+TS3="$TMP/ts3"; mkdir -p "$TS3/homelab/dig-2026-10-26/r"
+jq -n '{schema:"dig-finding/v1", verdict:"cause-found", cause:"c", evidence:["islands/scan/specs/scan-decision.md:12 (read)", "agents/coordinator-scan.sh:40 (read)"],
+  recommendation:"r", pr:"", related:[], alerts:[], members:[]}' > "$TS3/homelab/dig-2026-10-26/r/finding-1.json"
+got="$(for i in scan agent-loop; do INTAKE_TS_DIR="$TS3" INTAKE_NOW="$NOW" bash "$SEL" --source dig --island "$i" --out "$TMP/sel4.json" 2>/dev/null; printf '%s:%s ' "$i" "$(jq '.counts.inputs' "$TMP/sel4.json")"; done)"
+[ "$got" = "scan:1 agent-loop:0 " ] && ok "dig: a finding citing islands/scan/ is scan's (text row before agent-loop's), once" || bad "dig scan row" "got $got"
+
+# ── --source gaps ────────────────────────────────────────────────────────────────────────────────
+# A private tree (the selector + the body parser + a fixture index) so the expectation never reads
+# the live gateway index. Expected from the header contract: rows with `⚑ gap` or `🚧` whose first
+# cell is `[REQ](page#…)`, minus APPLY-ruled ids and rows an open issue names (REQ in its
+# title/body at a word boundary, or the row's own `#<n>` open), first INTAKE_GAP_MAX in index order.
+section "selector --source gaps"
+GT="$TMP/gtree"; mkdir -p "$GT/gateway/scripts" "$GT/gateway/specs" "$GT/agents"
+cp "$SEL" "$GT/gateway/scripts/"; cp "$REPO/agents/issue_body.py" "$GT/agents/"
+cat > "$GT/gateway/specs/README.md" <<'EOF'
+# specs — fixture index
+A prose line naming `⚑ gap` rows is not a row.
+| Requirement | Page | What it pins | Status |
+|---|---|---|---|
+| [GW-A](endpoints/a.md#gw-a) | a | the a row · `⚑ gap`: one thing | ok |
+| [GW-B](endpoints/b.md#gw-b) | b | the b row | 🚧 WIP — no evidence pipeline yet |
+| [GW-C](endpoints/c.md#gw-c) | c | complete | ok |
+| [GW-D](endpoints/d.md#gw-d) | d | `⚑ gap (2026-10-01, PR #5 → work #77)` | ok |
+| [GW-E](endpoints/e.md#gw-e) | e | `⚑ gap`: named by an open issue | ok |
+| [GW-EF](endpoints/ef.md#gw-ef) | ef | `⚑ gap`: "GW-E" and "GW-EFX" do not name it | ok |
+| [GW-F](endpoints/f.md#gw-f) | f | `⚑ gap`: ruled by an apply receipt | ok |
+| [GW-G](endpoints/g.md#gw-g) | g | `⚑ gap`: a dry-run receipt rules nothing | ok |
+EOF
+GISS="$TMP/gaps-issues.json"
+jq -n '[{number:77, title:"work on d", body:"x", labels:[], comments:[]},
+        {number:78, title:"an issue", body:"touches GW-E and GW-EFX", labels:[], comments:[]}]' > "$GISS"
+TSG="$TMP/tsg"; mkdir -p "$TSG/homelab/intake-gateway-2026-10-20/a" "$TSG/homelab/intake-gateway-2026-10-21/b"
+jq -n '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-20T05:00:00Z", session_ran:true,
+  ruled:[{input:"gateway/specs/endpoints/f.md#GW-F", outcome:"standing", refs:[]}]}' > "$TSG/homelab/intake-gateway-2026-10-20/a/receipt.json"
+jq -n '{schema:"island-intake-receipt/v1", island:"gateway", mode:"dry-run", ts:"2026-10-21T05:00:00Z", session_ran:true,
+  ruled:[{input:"gateway/specs/endpoints/g.md#GW-G", outcome:"standing", refs:[]}]}' > "$TSG/homelab/intake-gateway-2026-10-21/b/receipt.json"
+gaps() { INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" env "$@" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island gateway --out "$TMP/gsel.json" 2>"$TMP/gsel.err"; }
+gaps; rc=$?
+got="$(jq -r '[.inputs[].requirement] | join(" ")' "$TMP/gsel.json" 2>/dev/null)"
+{ [ "$rc" = 0 ] && [ "$got" = "GW-A GW-B GW-EF GW-G" ]; } && ok "fires on GW-A (⚑) GW-B (🚧) GW-EF GW-G; not C (no mark), D (#77 open), E (named), F (apply-ruled)" \
+  || bad "gaps selection" "rc=$rc got '$got' $(cat "$TMP/gsel.err")"
+[ "$(jq -c '.counts' "$TMP/gsel.json")" = '{"rows":7,"ruled":1,"named":2,"over_cap":0,"inputs":4}' ] && ok "counts: 7 rows, 1 ruled, 2 named, 4 inputs" || bad "gaps counts" "$(jq -c .counts "$TMP/gsel.json")"
+[ "$(jq -r '.inputs[0] | [.id, .kind, (.marks | join("+")), (.row | startswith("| [GW-A]"))] | @tsv' "$TMP/gsel.json")" = "$(printf 'gateway/specs/endpoints/a.md#GW-A\tgap\t⚑ gap\ttrue')" ] \
+  && ok "an input is <specs page>#<REQ>, kind gap, its marks and the row verbatim" || bad "gap input shape" "$(jq -c '.inputs[0]' "$TMP/gsel.json")"
+gaps INTAKE_GAP_MAX=2; [ "$(jq -r '[.inputs[].requirement] | join(" ")' "$TMP/gsel.json"):$(jq '.counts.over_cap' "$TMP/gsel.json")" = "GW-A GW-B:2" ] \
+  && ok "INTAKE_GAP_MAX=2 → the first two in index order, over_cap 2 (they re-present tomorrow)" || bad "gap cap" "$(jq -c .counts "$TMP/gsel.json")"
+INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island router-pair --out "$TMP/gsel.json" 2>/dev/null; rc=$?
+{ [ "$rc" = 1 ] && jq -e '.specs_root == null and .counts.inputs == 0' "$TMP/gsel.json" >/dev/null; } && ok "an island with no specs root: a valid empty selection (exit 1)" || bad "gaps no root" "rc=$rc"
+INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island scan --out "$TMP/gsel.json" 2>/dev/null; rc=$?
+[ "$rc" = 2 ] && ok "a declared specs root whose index is missing (islands/scan/specs here) is a probe failure (exit 2)" || bad "gaps missing index" "rc=$rc"
+gaps INTAKE_ISSUES_JSON="$TMP/nowhere.json"; rc=$?
+[ "$rc" = 2 ] && ok "an unreadable issue list is exit 2 (it could not see which rows are named)" || bad "gaps issues rule #6" "rc=$rc"
+gaps INTAKE_TS_DIR="$TMP/nowhere"; rc=$?
+[ "$rc" = 2 ] && ok "an unreadable receipt store is exit 2" || bad "gaps bucket rule #6" "rc=$rc"
+
+# ── --source escape ──────────────────────────────────────────────────────────────────────────────
+# Expected from the header contract: issues of queue/goal/requeue lines (input or ref) in APPLY receipts
+# of the last 30 d; PRs OPEN|MERGED, linked (closing ref / head `issue-<n>` / `Fixes|Closes #<n>` in the
+# body), ≥ 1 CHANGES_REQUESTED, not already read by an APPLY receipt.
+section "selector --source escape"
+TSE="$TMP/tse"; mkdir -p "$TSE/homelab/intake-gateway-2026-10-20/a" "$TSE/homelab/intake-gateway-2026-10-21/b"
+jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-20T05:00:00Z", run:"intake-gateway-2026-10-20/a", session_ran:true,
+  ruled:[{input:($h+"#201"), outcome:"queue", refs:[($h+"#201")]}, {input:"dig-x/finding-1", outcome:"goal", refs:[($h+"#300"), ($h+"#301")]},
+         {input:($h+"#202"), outcome:"requeue", refs:[]}, {input:($h+"#203"), outcome:"seat", refs:[($h+"#203")]}],
+  escapes:[{pr:($h+"#400"), finding:"F1", class:"B", check:"the read set"}]}' > "$TSE/homelab/intake-gateway-2026-10-20/a/receipt.json"
+jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"dry-run", ts:"2026-10-21T05:00:00Z", session_ran:true,
+  ruled:[{input:($h+"#204"), outcome:"queue", refs:[($h+"#204")]}]}' > "$TSE/homelab/intake-gateway-2026-10-21/b/receipt.json"
+pr() { # <n> <state> <head> <body> <closing-json> <review-states-json>
+  jq -nc --argjson n "$1" --arg s "$2" --arg hd "$3" --arg b "$4" --argjson c "$5" --argjson r "$6" \
+    '{number:$n, title:"t", state:$s, url:"u", headRefName:$hd, body:$b, closingIssuesReferences:($c | map({number:.})), reviews:($r | map({state:.}))}'
+}
+{ pr 501 OPEN   fix/a              "x"                     '[201]' '["COMMENTED","CHANGES_REQUESTED"]'   # in: closing ref
+  pr 502 MERGED fix/issue-301-x    "x"                     '[]'    '["CHANGES_REQUESTED","APPROVED"]'    # in: a goal child by head
+  pr 503 MERGED fix/b              "Fixes #202"            '[]'    '["APPROVED"]'                        # out: no CR
+  pr 504 CLOSED fix/c              "Fixes #201"            '[]'    '["CHANGES_REQUESTED"]'               # out: closed unmerged
+  pr 505 OPEN   fix/d              "Fixes #203"            '[]'    '["CHANGES_REQUESTED"]'               # out: #203 was seat
+  pr 506 OPEN   fix/e              "Fixes #204"            '[]'    '["CHANGES_REQUESTED"]'               # out: a dry-run queued it
+  pr 507 MERGED fix/issue-2010-y   "relates to #2010"      '[]'    '["CHANGES_REQUESTED"]'               # out: 2010 is not 201
+  pr 508 MERGED fix/f              "Closes $H#202"         '[]'    '["CHANGES_REQUESTED"]'               # in: a requeue, full ref
+} | jq -s . > "$TMP/prs.json"
+esc() { INTAKE_PRS_JSON="${1:-$TMP/prs.json}" INTAKE_TS_DIR="$TSE" INTAKE_NOW="$NOW" bash "$SEL" --source escape --island gateway --out "$TMP/esel.json" 2>"$TMP/esel.err"; }
+esc; rc=$?
+got="$(jq -r '[.inputs[].number] | join(" ")' "$TMP/esel.json" 2>/dev/null)"
+{ [ "$rc" = 0 ] && [ "$got" = "501 502 508" ]; } && ok "fires on #501 (closing ref) #502 (head issue-301, a Goal child) #508 (Closes, a requeue)" \
+  || bad "escape selection" "rc=$rc got '$got' $(cat "$TMP/esel.err")"
+[ "$(jq -c '[.inputs[] | select(.number == 502) | .id, .issue, .changes_requested][]' "$TMP/esel.json" | tr '\n' ' ')" = "\"$H#502\" \"$H#301\" 1 " ] \
+  && ok "an input carries its id <owner/repo>#<pr>, the queued issue and the CR count" || bad "escape shape" "$(jq -c '.inputs[1]' "$TMP/esel.json")"
+[ "$(jq -c '[.prior[].finding]' "$TMP/esel.json")" = '["F1"]' ] && ok "the receipts' escape records ride as prior (the prompt's escape-prior:)" || bad "escape prior" "$(jq -c .prior "$TMP/esel.json")"
+mkdir -p "$TSE/homelab/intake-gateway-2026-10-26/c"
+jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-26T05:00:00Z", session_ran:true,
+  ruled:[{input:($h+"#501"), outcome:"read", refs:[]}, {input:($h+"#502"), outcome:"deferred", refs:[]}]}' > "$TSE/homelab/intake-gateway-2026-10-26/c/receipt.json"
+esc; [ "$(jq -r '[.inputs[].number] | join(" ")' "$TMP/esel.json")" = "502 508" ] && ok "a PR an APPLY receipt read is not re-read; \`deferred\` re-presents" || bad "escape ledger" "got $(jq -c '[.inputs[].number]' "$TMP/esel.json")"
+# an issue the sitting FILED from a gap:/text: input and ruled in the same pass (the launcher's
+# ruled_filed, island-intake-argo.yaml §3): the input's line is `file`/`seat` naming it, its own line
+# `queue` — queued by this island all the same, so its PR is read; a filed issue ruled `seat` is not
+mkdir -p "$TSE/homelab/intake-gateway-2026-10-22/d"
+jq -n --arg h "$H" '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2026-10-22T05:00:00Z", run:"intake-gateway-2026-10-22/d", session_ran:true,
+  ruled:[{input:"gateway/specs/x.md#GW-X", outcome:"file", refs:[($h+"#210")]}, {input:"dig-y/finding-2", outcome:"seat", refs:[($h+"#211")]}],
+  ruled_filed:[{input:($h+"#210"), outcome:"queue", refs:[($h+"#210")]}, {input:($h+"#211"), outcome:"seat", refs:[]}]}' > "$TSE/homelab/intake-gateway-2026-10-22/d/receipt.json"
+{ pr 509 MERGED fix/g "Fixes #210" '[]' '["CHANGES_REQUESTED"]'   # in: filed + ruled queue in one sitting
+  pr 510 OPEN   fix/h "Fixes #211" '[]' '["CHANGES_REQUESTED"]'   # out: filed, ruled seat
+} | jq -s . > "$TMP/prs-filed.json"
+esc "$TMP/prs-filed.json"
+{ [ "$(jq -r '[.inputs[].number] | join(" ")' "$TMP/esel.json")" = "509" ] && [ "$(jq -r '.inputs[0].queued_by' "$TMP/esel.json")" = "intake-gateway-2026-10-22/d" ]; } \
+  && ok "an issue filed and ruled queue in one sitting (receipt ruled_filed) is queued: its PR #509 is read; a filed seat (#510) is not" \
+  || bad "escape filed queue" "got $(jq -c '[.inputs[] | {number, queued_by}]' "$TMP/esel.json") $(cat "$TMP/esel.err")"
+esc "$TMP/nowhere.json"; rc=$?
+[ "$rc" = 2 ] && ok "queued issues + an unreadable PR list → exit 2" || bad "escape rule #6" "rc=$rc"
+TSE0="$TMP/tse0"; mkdir -p "$TSE0/homelab"
+INTAKE_PRS_JSON="$TMP/nowhere.json" INTAKE_TS_DIR="$TSE0" INTAKE_NOW="$NOW" bash "$SEL" --source escape --island gateway --out "$TMP/esel.json" 2>/dev/null; rc=$?
+[ "$rc" = 1 ] && ok "nothing queued → a valid empty selection and NO PR read (an unreadable list is never touched)" || bad "escape nothing queued" "rc=$rc"
+
+# ── the workflow's review stage, run (gateway/intake.md §Review and repair) ─────────────────────
+# Stubs: `claude` answers per session (author / unit lens / rows pass 1 / rows pass 2 / repair, told
+# apart by the prompt) and writes each lens's ONE file where its prompt says; `gh` records. The
+# expectations come from the launcher's contract in the manifest header + §Review and repair:
+# lenses run confined (env -i, Read scoped to the case dir, Write to one file), the rows lens sees
+# only masked/ + process/ on pass 1, an empty Pass 1 is re-run once, the repair answers by id, the
+# launcher's belt labels what the repair left unlabelled, a failed lens never holds the queue.
+section "island-intake-argo.yaml — review and repair"
+RBIN="$TMP/rbin"; mkdir -p "$RBIN"
+cat > "$RBIN/claude" <<EOF
+#!/bin/bash
+T="$TMP"
+p=""; prev=""; allow=""; inallow=0; for a in "\$@"; do
+  [ "\$prev" = -p ] && case "\$a" in --*) ;; *) p="\$a";; esac
+  case "\$a" in --allowedTools) inallow=1;; --*) inallow=0;; *) [ "\$inallow" = 1 ] && allow="\$allow \$a";; esac
+  prev="\$a"; done
+[ -n "\$p" ] || p="\$(cat)"   # \`claude -p\` with no prompt argument reads it from stdin (the repair's brief)
+case "\$p" in
+  *"REPAIR PASS"*) s=repair;; *"ISLAND INTAKE sitting"*) s=author;; *"Unit review"*) s=unit;;
+  *"PASS 1 of a staged read"*) s=pass1;; *"PASS 2 of a staged read"*) s=pass2;; *) s=other;;
+esac
+echo "\$s cwd=\$PWD gh_token=\${GH_TOKEN:+set} allow=\$allow" >> "\$T/r.calls"
+printf '%s' "\$p" > "\$T/prompt-\$s.txt"
+out="\$(printf '%s' "\$p" | grep -oE '/[^ ]*/review/out/[a-z]+-[0-9]+\.md' | head -1)"
+case "\$s" in
+  author) mkdir -p "\$T/run/review/issues"; cp "\$T/body-9.md" "\$T/run/review/issues/9.md"; cat "\$T/r-author.out";;
+  unit)   [ -f "\$T/unit-fail" ] || cp "\$T/r-unit.md" "\$out"; echo '{"result":"done"}';;
+  pass1)  if [ -f "\$T/pass1-empty-once" ]; then rm -f "\$T/pass1-empty-once"; printf 'specs review\n## Pass 1 (frozen)\n\n' > "\$out"
+          else printf 'specs review, pre-queue: CHANGES_REQUESTED — #9\n## Pass 1 (frozen)\n- 9/r1.1 — check 10 — the cells do not place it\n' > "\$out"; fi
+          ls -R "\$PWD" > "\$T/pass1-world.txt"; echo '{"result":"p1"}';;
+  pass2)  printf '\n## Findings\n| id | posture | finding | evidence | fate | by |\n|---|---|---|---|---|---|\n| R10/9/r1.1 | BLOCKING | the row cannot be placed | q | survives | x |\n' >> "\$out"; echo '{"result":"p2"}';;
+  repair) cat "\$T/r-repair.out"; if [ -f "\$T/repair-fail" ]; then exit 1; fi;;
+esac
+EOF
+cat > "$RBIN/gh" <<EOF
+#!/bin/bash
+echo "gh \$*" >> "$TMP/gh.calls"
+case "\$1 \$2" in
+  "issue view") case "\$*" in *labels,comments*) cat "$TMP/gh-view.json" 2>/dev/null;; *title,body*) cat "$TMP/body-9.md";; esac;;
+  "issue comment") prev=""; for a in "\$@"; do [ "\$prev" = --body-file ] && cat "\$a" >> "$TMP/gh.comments"; prev="\$a"; done;;
+esac
+exit 0
+EOF
+chmod +x "$RBIN"/*
+SN="$TMP/snip/allure_behavior_snippets"; mkdir -p "$SN/process/briefs"; : > "$SN/__init__.py"; echo "# RULES" > "$SN/process/RULES.md"
+cat > "$SN/evidence.py" <<'EOF'
+# a stand-in for the pinned mask_page: description column → r<t>.<r>, header → row
+def mask_page(text):
+    out, keys, t, lines, i = [], [], 0, text.split("\n"), 0
+    while i < len(lines):
+        cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+        if lines[i].lstrip().startswith("|") and cells and cells[0] == "description":
+            t += 1; out += ["| row |" + lines[i].split("|", 2)[2], lines[i + 1]]; i += 2; r = 0
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                r += 1; c = [x.strip() for x in lines[i].strip().strip("|").split("|")]
+                keys.append((f"r{t}.{r}", c[0])); out.append(f"| r{t}.{r} |" + lines[i].split("|", 2)[2]); i += 1
+            continue
+        out.append(lines[i]); i += 1
+    return "\n".join(out), keys
+EOF
+cat > "$TMP/body-9.md" <<'EOF'
+---
+Touches: gateway/specs/endpoints/sessions.md
+---
+## Deliverable
+the thing
+## Acceptance
+1. GW-X row 1
+## Spec changes
+| description | world | input || expected? |
+|---|---|---||---|
+| "SECRET-DESCRIPTION the happy path" | w | a || b |
+## Out of scope
+none
+EOF
+cat > "$TMP/r-unit.md" <<'EOF'
+unit review: CHANGES_REQUESTED — #9
+| id | issue(s) | BLOCKING / advisory | finding (one sentence) | evidence | what would clear it |
+|---|---|---|---|---|---|
+| U1 | #9 | BLOCKING | the acceptance cannot pass | a ↔ b | c |
+| U2 | #9 | advisory | a wording nit | a ↔ b | c |
+EOF
+cat > "$TMP/r-author.out" <<EOF
+… the first pass …
+## Review units
+- unit: $H#9 base=$(git -C "$REPO" rev-parse HEAD)
+- rows: $H#9 base=$(git -C "$REPO" rev-parse HEAD)
+- unit: $H#999 base=$(git -C "$REPO" rev-parse HEAD)
+INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9
+INTAKE-RULED: dig-2026-10-25/$R1/finding-2 standing -
+INTAKE-HOLD: $H#9 add=agent-fix,task/fix,agent/queued,agent/approved
+INTAKE-HOLD: $H#999 add=agent/queued
+EOF
+cat > "$TMP/r-repair.out" <<'EOF'
+INTAKE-REPAIR: unit#0:U1 changed fixed the acceptance
+INTAKE-REPAIR: rows#1:R10/9/r1.1 declined the row is right
+EOF
+review_run() { # <mode> [env…]
+  rm -f "$TMP/r.calls" "$TMP/gh.calls" "$TMP/gh.comments" "$TMP"/prompt-*.txt
+  RUN_PATH="$RBIN:$BIN" RUN_ENV="INTAKE_SNIPPETS_DIR=$TMP/snip ${*:2}" run_script "$1"
+}
+rm -rf "$TS/homelab/intake-gateway-2026-10-27"
+gview() { # <labels-json> <comment bodies…> — the issue as the belt reads it back; comments dated inside this run
+  local l="$1"; shift; jq -n --argjson l "$l" '{labels: ($l | map({name: .})), comments: [$ARGS.positional[] | {body: ., createdAt: "2099-01-01T00:00:00Z"}]}' --args "$@" > "$TMP/gh-view.json"; }
+touch "$TMP/pass1-empty-once"; gview '[]' "intake: review — 3 findings: 1 changed, 1 declined" "intake: queue — one ride"   # the repair posted, but did not label
+review_run apply; rc=$?
+[ "$rc" = 0 ] && ok "apply run with review-repair exits 0" || bad "review run" "rc=$rc $(tail -5 "$TMP/run.log")"
+[ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit pass1 pass1 pass2 repair " ] \
+  && ok "sessions: author → unit lens → rows pass 1 (empty → re-run once) → pass 2 → ONE repair" || bad "session order" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')"
+grep -q "INTAKE-HOLD" "$TMP/prompt-author.txt" && grep -q "review: review-repair" "$TMP/prompt-author.txt" && grep -qF '`## Review units`' "$TMP/prompt-author.txt" \
+    && grep -q 'An issue you FILED this sitting' "$TMP/prompt-author.txt" \
+  && ok "the author is told: review-repair, Review units, INTAKE-HOLD, a filed issue's own ruling line" || bad "author prompt" "$(grep -n REVIEW "$TMP/prompt-author.txt")"
+line="$(grep '^unit ' "$TMP/r.calls")"
+case "$line" in *"cwd=$TMP/run/review/case-unit-0 gh_token= "*"Read(/$TMP/run/review/case-unit-0/**)"*"Bash(git -C $TMP/work/homelab show:*)"*"Edit(/$TMP/run/review/out/unit-0.md)"*) ok "unit lens: cwd = its case dir, no token, Read scoped to it, git show on the clone at the base, Edit = its one file";;
+  *) bad "unit confinement" "$line";; esac
+[ "$(grep -c '^unit ' "$TMP/r.calls")" = 1 ] && ok "a unit line whose issue no queue/goal ruling names (#999) gets no lens" || bad "forged unit" "$(grep -c '^unit ' "$TMP/r.calls")"
+{ grep -q 'r1.1' "$TMP/pass1-world.txt" 2>/dev/null || grep -q '9.md' "$TMP/pass1-world.txt"; } && ! grep -q 'issues' "$TMP/pass1-world.txt" \
+  && ! grep -rq SECRET-DESCRIPTION "$TMP/run/review/rows-pass1-1/" && grep -q '| r1.1 |' "$TMP/run/review/rows-pass1-1/masked/9.md" \
+  && ok "rows pass 1 sees masked/ + process/ only: the description is keyed (r1.1), the body is out of reach" || bad "pass 1 world" "$(cat "$TMP/pass1-world.txt" | head -12)"
+grep -q "^pass2 cwd=$TMP/run/review/case-rows-1 gh_token= .*Bash(git -C $TMP/work/homelab show:\*)" "$TMP/r.calls" && ok "rows pass 2 runs in its case dir, the base through git -C, no token" || bad "pass 2" "$(grep pass2 "$TMP/r.calls")"
+grep -q -- '- 9/r1.1' "$TMP/run/review/out/rows-1.md" && grep -q 'R10/9/r1.1' "$TMP/run/review/out/rows-1.md" \
+  && ok "the rows file keeps its frozen Pass 1 and gains pass 2's findings" || bad "rows file" "$(cat "$TMP/run/review/out/rows-1.md")"
+grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LENS FINDINGS FILE: rows-1.md' "$TMP/prompt-repair.txt" && grep -q 'Review units' "$TMP/prompt-repair.txt" \
+    && grep -q 'unit#0:U1' "$TMP/prompt-repair.txt" \
+  && ok "the repair prompt (on stdin) carries the first-pass report, every lens's findings file and the keyed ids" || bad "repair prompt" "$(grep -c FINDINGS "$TMP/prompt-repair.txt")"
+[ "$(jq -c '[.findings[] | [.id, .lens, .posture, .fate]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["rows#1:R10/9/r1.1","rows","blocking","declined"],["unit#0:U1","unit","blocking","changed"],["unit#0:U2","unit","advisory","unanswered"]]' ] \
+  && ok "receipt: one record per finding, keyed <lens>#<unit>:<id> (two units' U1 never collide) — lens, posture, changed/declined/unanswered" || bad "receipt findings" "$(jq -c .findings "$TMP/up/receipt.json" 2>/dev/null)"
+[ "$(jq -c '[.review.lenses[] | [.lens, .status, .runs]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["unit","ran",1],["rows","ran",2]]' ] && jq -e '.review.repair.status == "ran" and .review.held == ["'"$H"'#9"]' "$TMP/up/receipt.json" >/dev/null \
+  && ok "receipt: each lens's status and runs, the repair, the held set (#999 forged → dropped)" || bad "receipt review" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
+grep -qF "gh api -X POST repos/$H/issues/9/labels -f labels[]=agent-fix -f labels[]=task/fix -f labels[]=agent/queued" "$TMP/gh.calls" && ! grep -q 'agent/approved' "$TMP/gh.calls" && ! grep -q 'issues/999' "$TMP/gh.calls" \
+  && ok "the belt labels #9 the repair left unlabelled — brief labels only (agent/approved dropped), no forged ref" || bad "belt labels" "$(grep labels "$TMP/gh.calls")"
+[ ! -s "$TMP/gh.comments" ] && ok "…and posts no comment the repair already posted in this run" || bad "belt comments" "$(cat "$TMP/gh.comments")"
+grep -q '/coordinate' "$TMP/curl.calls" && ok "the queue rings /coordinate after the labels" || bad "review ring" "$(cat "$TMP/curl.calls")"
+
+gview '["agent-fix","task/fix","agent/queued"]' "intake: review — x" "intake: queue — y"
+review_run apply
+! grep -q '/labels' "$TMP/gh.calls" && ok "an issue the repair already labelled is left alone" || bad "belt idempotent" "$(grep labels "$TMP/gh.calls")"
+
+gview '[]'; touch "$TMP/unit-fail" "$TMP/repair-fail"
+review_run apply
+{ jq -e '[.review.lenses[] | select(.lens == "unit")][0] | .status == "skipped: failed twice (no findings file)" and .runs == 2' "$TMP/up/receipt.json" >/dev/null \
+  && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && head -1 "$TMP/gh.comments" | grep -q '^intake: review — 1 findings: 0 changed, 0 declined' \
+  && grep -q '^unit review skipped' "$TMP/gh.comments" && tail -1 "$TMP/gh.comments" | grep -q '^intake: queue — queued as authored'; } \
+  && ok "a unit lens that writes no file twice + a repair that fails: still labelled; review comment (skipped line) first, ruling LAST" \
+  || bad "lens failure" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null) | $(cat "$TMP/gh.comments" 2>/dev/null)"
+rm -f "$TMP/unit-fail" "$TMP/repair-fail"
+
+gview '[]' "intake: review — 3 findings: 1 changed, 1 declined"; touch "$TMP/repair-fail"   # the repair posted its review comment, then died
+review_run apply
+{ [ "$(grep -c '^intake: review' "$TMP/gh.comments" 2>/dev/null || true)" = 0 ] && grep -q '^intake: queue — queued as authored' "$TMP/gh.comments" \
+    && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
+  && ok "a repair that posted its review comment and died: the belt adds labels + the ruling, never a second review comment" \
+  || bad "belt partial" "$(cat "$TMP/gh.comments" 2>/dev/null)"
+rm -f "$TMP/repair-fail"
+
+# a queue ruling in place (refs \`-\`): its INPUT is the held issue (the contract allows refs \`-\`)
+sed -i "s|^INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9\$|INTAKE-RULED: $H#9 queue -|" "$TMP/r-author.out"
+PILE9="$TMP/pile9.json"; jq -n '[{number:9, title:"gateway: in place", body:"x", labels:[], createdAt:"2026-10-20T00:00:00Z", updatedAt:"2026-10-20T00:00:00Z", author:{login:"rsoot"}, comments:[]}]' > "$PILE9"
+gview '[]'; PILE_JSON="$PILE9" review_run apply
+{ jq -e '.review.held == ["'"$H"'#9"] and (.review.units | length == 2)' "$TMP/up/receipt.json" >/dev/null 2>&1 && grep -q '^unit ' "$TMP/r.calls"; } \
+  && ok "a queue ruled in place (refs -) is held and reviewed through its input id" || bad "hold by input" "$(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
+sed -i "s|^INTAKE-RULED: $H#9 queue -\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9|" "$TMP/r-author.out"   # back to the dig-born ruling
+
+# a parity issue FILED in this sitting and ruled queue (the in-cluster dry-run's shape, 2026-11-15): its
+# ruling line names a ref of an input's ruling, not an input — reviewed, labelled and rung all the same;
+# a queue line naming neither an input nor a filed ref (#77) is forged and ignored
+cp "$TMP/r-author.out" "$TMP/r-author.keep"
+sed -i -e "s|^INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9\$|INTAKE-RULED: dig-2026-10-26/$R2/finding-2 seat $H#9\nINTAKE-RULED: $H#9 queue $H#9\nINTAKE-RULED: $H#77 queue -|" "$TMP/r-author.out"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+{ jq -e '.review.held == ["'"$H"'#9"] and ([.ruled_filed[].input] == ["'"$H"'#9"]) and ([.ruled[] | select(.input | startswith("dig-2026-10-26")) | .outcome] == ["seat"])' "$TMP/up/receipt.json" >/dev/null 2>&1 \
+    && grep -q '^unit ' "$TMP/r.calls" && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls" && grep -q '/coordinate' "$TMP/curl.calls"; } \
+  && ok "a parity issue filed and ruled queue in the same sitting: reviewed, labelled, rung (receipt ruled_filed); a forged #77 ignored" \
+  || bad "filed queue" "$(jq -c '{ruled, ruled_filed, held: .review.held}' "$TMP/up/receipt.json" 2>/dev/null)"
+grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "…counted once in the queued total" || bad "filed NQ" "$(grep 'ruled (' "$TMP/run.log")"
+# …and the receipt the launcher just wrote feeds the escape read: #9's later PR is one this island queued
+TSW="$TMP/tsw"; mkdir -p "$TSW/homelab/intake-gateway-$(date -u -d "@$NOW" +%Y-%m-%d)/w"; cp "$TMP/up/receipt.json" "$TSW/homelab/intake-gateway-$(date -u -d "@$NOW" +%Y-%m-%d)/w/receipt.json"
+pr 520 OPEN fix/issue-9-x "x" '[]' '["CHANGES_REQUESTED"]' | jq -s . > "$TMP/prs-w.json"
+INTAKE_PRS_JSON="$TMP/prs-w.json" INTAKE_TS_DIR="$TSW" INTAKE_NOW="$NOW" bash "$SEL" --source escape --island gateway --out "$TMP/esel-w.json" 2>"$TMP/esel-w.err"
+[ "$(jq -r '[.inputs[] | .number, .issue] | join(" ")' "$TMP/esel-w.json" 2>/dev/null)" = "520 $H#9" ] \
+  && ok "…and the launcher's own receipt puts #9's PR (#520) in the escape read" || bad "escape from the launcher receipt" "$(jq -c . "$TMP/esel-w.json" 2>/dev/null) $(cat "$TMP/esel-w.err")"
+printf 'INTAKE-RULED: %s queue %s\n' "$H#9" "$H#9" >> "$TMP/r-author.keep"   # the input's queue names #9 AND #9 rules itself queue
+cp "$TMP/r-author.keep" "$TMP/r-author.out"; gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+grep -q 'ruled (1 queued)' "$TMP/run.log" && ok "an input's queue naming #9 plus #9's own queue line: one queued, not two" || bad "NQ double count" "$(grep 'ruled (' "$TMP/run.log")"
+sed -i '$d' "$TMP/r-author.keep"
+cp "$TMP/r-author.keep" "$TMP/r-author.out"
+
+review_run dry-run
+{ ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
+  && ok "dry-run: lenses and repair run, nothing is written to GitHub" || bad "review dry-run" "$(cat "$TMP/gh.calls" 2>/dev/null)"
+
+rm -f "$TMP/r.calls" "$TMP"/prompt-*.txt; RUN_PATH="$RBIN:$BIN" RUN_ENV="REVIEW=off" run_script apply
+{ [ "$(grep -c . "$TMP/r.calls")" = 1 ] && grep -q 'REVIEW: off' "$TMP/prompt-author.txt" && ! grep -q 'INTAKE-HOLD:' "$TMP/prompt-author.txt"; } 2>/dev/null \
+  && ok "review=off: one author session, told to label as it rules" || bad "review off" "$(cat "$TMP/r.calls")"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

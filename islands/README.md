@@ -4,7 +4,7 @@
 code it replaces** — the way [`gateway/`](../gateway/README.md) replaced the old router. A README
 (what it replaces, consumer contracts, read set, revert class) and a `specs/` root in the
 [allure-behavior-snippets v0.6.9](https://github.com/teststuffstash/allure-behavior-snippets/blob/v0.6.9/allure_behavior_snippets/process/RULES.md)
-shape; no code yet. **The `islands/` location is provisional** — the final home is the operator's
+shape. **The `islands/` location is provisional** — the final home is the operator's
 call. It sits outside `agents/` on purpose: the rules that bind that tree stay on the old code while
 old and new run side by side. **Nothing in the running loop reads or calls anything under
 `islands/`**; the old members each README names are live and authoritative until a separate
@@ -15,8 +15,8 @@ what that branch's [`context-and-autonomy.md`](../docs/spikes/context-and-autono
 section — not on master) measured as separable pieces of the agent loop. They are written against the REDRAWN contracts
 (§Interfaces — gateway `POST /sessions`, ADR-122's one machine block); every old-contract site is a
 `⚑ gap` row, every unbuilt one `🚧 WIP`. What an island is: [docs/glossary.md](../docs/glossary.md)
-("island"). Intake facts per island: [`docs/intake/`](../docs/intake/) — not yet rows in
-`gateway/scripts/intake-select.sh` (a separate change).
+("island"). Intake facts per island: [`docs/intake/`](../docs/intake/) — each a row in
+`gateway/scripts/intake-select.sh`.
 
 | Island | Prefix | Specs | Intake facts | What it will own |
 |---|---|---|---|---|
@@ -29,13 +29,38 @@ intake, the deep dig, the responder) — the spike drafted both; they wait.
 
 ## What every island shares (and what is not built)
 
-- **No evidence.** The replay harness (`agents/replay/`) is the oracle — most rows name the fixture
-  dir that would prove them — but replay emits no `rule()` labels and no Allure stories, so every
-  requirement is `🚧 WIP — no evidence pipeline yet`. A tests root with rule-labelled tests driven
-  by those fixtures is each island's first deliverable.
-- **No specs reviewer.** On master (2026-11-14) the claim's `specs` field admits one `{root, tests}`
-  pair per repo and homelab's names `gateway/specs`, so a PR touching `islands/*/specs` gets no
-  specs-reviewer read.
+- **Evidence starts empty.** Replay (`agents/replay/`) emits no `rule()` labels and no Allure
+  stories, so a requirement is `🚧 WIP — no evidence pipeline yet` until the island's own tests
+  root proves it. That tests root is each island's first deliverable, built under the four rules
+  below.
+- **A rows review, no evidence.** homelab's claim lists each island's `specs/` under `extraSpecs`
+  (#3379): a PR touching `islands/<island>/specs` gets the specs reviewer's rows review over that
+  root, and a worker whose `Touches:` reaches it gets the pinned spec process mounted, versioned by
+  that root's `README.md`. No tests root is declared and the pack carries no evidence, so an
+  unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark.
 - **No spec gate / join ratchet** over these roots (`gateway/scripts/spec_gate.py` resolves its
   root from its own location — `gateway/specs` only).
 - **Write tier:** `classify_touches islands/…` = `machine-merge` (verified 2026-11-14).
+
+## Built from the specs, never copied
+
+An island is a rebuild, not a port. Four rules bind every item on every island:
+
+1. **The page's rows are the test source.** One `rule()`-labelled case per requirement row, its
+   inputs and expected cells taken from the page. A component's interface comes from the page's
+   inputs and its schema — never from an old member's shell variables, function names or block
+   layout. A new file that reproduces an old member's text is a blocking finding.
+2. **Worlds are recorded whole.** A world holds the full answer of the surface it stands for
+   (GitHub, the gateway, Prometheus), recorded from the live surface with credentials removed —
+   from public repos only. The reader parses it strictly: a missing field is an error, never a
+   default. The page renders only the fields a row reads. A hand-written supplier answer validates
+   against the supplier's schema. Where no recording exists the row is `⚑ gap`, and the recorder
+   or the world is the item that comes before the component.
+3. **New components are Python** (ADR-113: logic is Python), with their own test hooks.
+4. **Replay is a comparison, not the gate.** The replay families a page names
+   (`agents/replay/fixtures/**`, read-only) run against the old member and the new component;
+   every difference gets a ruling in the PR — `spec` (the page is wrong: fix the page), `old` (the
+   old member is wrong: the page says so) or `new` (the component is wrong: fix it). An unruled
+   difference blocks; equality with the old member is not required and is not the acceptance.
+
+The old members are read to explain a difference, never as the source of a component.
