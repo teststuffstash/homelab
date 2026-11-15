@@ -423,7 +423,7 @@ The goal lane: an `agent/queued` Goal emits `goal-decompose` (the session author
 undispositioned member, or whose members are all closed, emits `goal-checkpoint` — bare members
 are counted, never queued (ADR-122 (1)), `deferred` members are excluded and `adopted` ones counted
 (ADR-122 (4)). A checkpoint is due for any of three reasons, and the unit names them: the
-[findings store](../../../docs/glossary.md) holds undispositioned findings (total minus
+[findings store](../../../docs/glossary.md) holds at least `GOAL_CHECKPOINT_N` (default 5) undispositioned findings (fewer wake nothing) (total minus
 dispositioned, e.g. `findings 5 undispositioned` for 6 total / 1 dispositioned); the child set
 is complete pre-launch; a member is undispositioned. Dispositions are read from the store comment
 on the Goal; when that read fails the undispositioned-member wake is held this pass, with one
@@ -446,8 +446,8 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 
 | description | world | members | findings store | queued | expect? |
 |---|---|---|---|---|---|
-| ⚖ bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | `goal-checkpoint` emitted: yes — reason `findings 5 undispositioned` + child set complete pre-launch (the findings-store reason alone); the members add nothing to it and none is queued |
-| ⚖ undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — the reason is the undispositioned member |
+| ⚖ bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | `goal-checkpoint` emitted: yes — the same reason as the world without the members (`checkpoint-due` template: `findings 5 undispositioned + child-set complete pre-launch`); the members add nothing to it and none is queued |
+| ⚖ undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — reasons `child-set complete pre-launch` + `members 1 undispositioned` |
 | ⚖ deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
 | ⚖ adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
 | ⚖ dispositions-unreadable | open-pre | one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
@@ -494,10 +494,10 @@ remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](
 
 | description | world | ROW | lanes | lost dispatches | expect? |
 |---|---|---|---|---|---|
-| two-lanes | — | two-lanes | `master`: one `changes-requested` (#10); `goal/x`: one queued child (#20) | — | ⚖ two spawns, `master` lane first (oldest item #10), then `goal/x` (#20) |
-| aged | — | aged | one lane (`master`): a `changes-requested` and a `goal-decompose` | 3 | ⚖ one spawn: `goal-decompose`, before the recovery unit |
-| not-yet | — | not-yet | one lane (`master`): a `changes-requested` and a `goal-decompose` | 2 | ⚖ one spawn: `changes-requested` (ordinary walk) |
-| probe-unreadable | — | probe-unreadable | one lane (`master`): a `changes-requested` and a `goal-decompose` | unreadable | ⚖ one spawn: `changes-requested` (ordinary walk), one report line |
+| two-lanes | — | two-lanes | `master`: one `changes-requested` (#500); `goal/x`: one queued child (#600) | — | two spawns, `master` lane first (oldest item #500), then `goal/x` (#600) |
+| aged | — | aged | one lane (`master`): a `changes-requested` and a `goal-decompose` | 3 | one spawn: `goal-decompose`, before the recovery unit |
+| not-yet | — | not-yet | one lane (`master`): a `changes-requested` and a `goal-decompose` | 2 | one spawn: `changes-requested` (ordinary walk) |
+| probe-unreadable | — | probe-unreadable | one lane (`master`): a `changes-requested` and a `goal-decompose` | unreadable | one spawn: `changes-requested` (ordinary walk), one report line |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
