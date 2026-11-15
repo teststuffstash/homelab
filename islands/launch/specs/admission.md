@@ -45,11 +45,17 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 return code, and the caller decides what it means (`agents/gateway-admit.sh` header, :12–58).
 **rc 0** — `dispatch`: `GW_SESSION_ID`, `GW_RAIL`, `GW_HARNESS`, `GW_MODEL`, `GW_WIRE_MODEL` (the
 model with its rail prefix stripped — the harness invocation's id), `GW_CONTEXT_TOKENS`,
-`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`).
+`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`). A bound
+call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (the in-pod pull,
+[LAUNCH-POD-ENV-PULL](pod.md#launch-pod-env-pull)). On an unbound call the dispatch's
+`session.token` and env values go only to the `--env-file`, written 0600, never to a `GW_*` variable.
 **rc 1** — `defer`: `GW_DEFER_REASON` and `GW_RETRY_AFTER` are the gateway's, no session exists.
 **rc 3** — fail closed: unreachable, non-200 (the error envelope, redacted by the supplier, is
 quoted; a 200 that is neither verdict is never printed, since it could carry a token), or an
-unusable dispatch ([LAUNCH-ADMIT-BOUND](#launch-admit-bound)). **rc 2** — refused before any
+unusable dispatch ([LAUNCH-ADMIT-BOUND](#launch-admit-bound)); `GW_DEFER_REASON` names the cause —
+`gateway-unreachable`; `gateway-http <status>: <the redacted envelope>` for a non-200;
+`gateway-http 200, unknown decision '<decision>'` for a 200 that is neither verdict;
+`dispatch-unusable: <what>` for an unusable dispatch — and `GW_RETRY_AFTER` is `?` in every case. **rc 2** — refused before any
 request: `--stack`, `--role`, `--task` missing, neither or both of `--bind` / `--env-file`, a bind
 that is not `<ns>/<sa>/<pod>`, a non-integer round, an attempt < 1. Optional fields reach the
 request only when given; `attempt` only when > 1. The caller's identity is a fresh token per call
@@ -77,7 +83,7 @@ all empty).
 |---|---|---|---|---|---|
 | bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
 | unbound-dispatch | gw-dispatch-unbound | `--role responder --task 'respond homelab#7' --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
-| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind …/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
+| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
 | http-503 | gw-error | `--role responder --task t --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
 | no-mode | launcher-vars | `--role responder --task t` | — | 2 | — |
 | both-modes | launcher-vars | `--role responder --task t --env-file F --bind a/b/c` | — | 2 | — |
