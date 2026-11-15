@@ -203,7 +203,8 @@ URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …) and
 `rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file (unset, or a path that does not exist), or an empty one, means no
 probe goes out and no account string is kept ⚖. A probe reads at start unless its record is younger than
 its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
-read with no usable credential fetches nothing and counts `no-credential` ⚖. `gateway_wire_probe_total{source, outcome}`
+read with no usable credential fetches nothing and counts `no-credential` ⚖. A no-credential attempt writes no record, and the probe's next read is due at that attempt's time + the interval, not at the next tick ⚖.
+`gateway_wire_probe_total{source, outcome}`
 counts each probe (`ok`, `no-credential`, `fetch-failed`); `source` only takes names the file declares. A
 `wire` key in the policy refuses the load ⚖. A probe may not take the name of a source the gateway already registers ([GW-WIRE-RECORD](#gw-wire-record)'s list), and the loader refuses it naming that name ⚖. A malformed declarations file refuses to start, like a
 malformed policy ⚖. The same file holds the account class's allowlist (`keep_keys`): the string values
