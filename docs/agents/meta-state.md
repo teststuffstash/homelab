@@ -26,8 +26,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
   #3456's diff base on a goal-branch master merge. OPERATOR: (d) verdicts on Goals #3384 #3390 (assemblies merged)
   and #3389; (e) the agent-runtime half — `agent-finalize` skips the `agent/review` flip on a `no-op` round;
-  (f) the specs reviewer finds a different R10 each pass on an unchanged page — bound it (carry forward only rows the
-  diff touched, or a round cap that parks with the finding) before the next-leg Goals ride; (g) sleep-iac#80 needs a
+  (f) specs-reviewer rules — operator direction: TALLY which rule rejects the most before any brief or rule change
+  (the verdict line carries the ids; rough count today: R10 ≈ 8 blocks, E-NO_EVIDENCE 3, R2 2); a decidable rule goes
+  to a lint/script, not the LLM pass; rule 10's `🚧 WIP → #<issue>` may be the thing that is wrong — a pointer to an
+  ADR / plan step may be the correct mark; intake and Goal decomposition do NOT file placeholder issues to satisfy it
+  (second sighting on #3450 after #3401; the seat filed #3461 that way — keep, re-scope or close it); a reviewer
+  finding new blockers on old text in round five is a known pattern, the code reviewer did it before; (g) sleep-iac#80 needs a
   new head commit to leave the status cap. Superseded in the bullet below: its (c) is answered (new shape, Python)
   and #3337 is merged.
 

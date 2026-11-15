@@ -15462,4 +15462,8 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Mine:** answered a specs finding with a body edit and waited on a reviewer that could not see it; closed #3444 as a
   duplicate of #3447 without diffing them (it carried a fix #3447 lacked); ran three hand fixes in parallel with the
   loop's own fix children.
+- **#3450, 20:40Z:** last blocker E-NO_EVIDENCE on SCAN-GH-ONE-BLOCK (index `🚧 WIP → ADR-122 (3) / P3`, rule 10 wants
+  `→ #<issue>`; no issue owned it). The seat filed #3461 and pointed the rows at it. Operator, after: no placeholder
+  issues from intake/decomposition; the ADR/plan pointer may be the right mark; tally the rejecting rules first, let a
+  lint decide what is decidable — no intake-brief change from this sighting.
 
