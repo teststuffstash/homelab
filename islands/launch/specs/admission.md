@@ -48,7 +48,7 @@ model with its rail prefix stripped — the harness invocation's id), `GW_CONTEX
 `GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`). A bound
 call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (the in-pod pull,
 [LAUNCH-POD-ENV-PULL](pod.md#launch-pod-env-pull)). On an unbound call the dispatch's
-`session.token` and env values go only to the `--env-file`, never to a `GW_*` variable.
+`session.token` and env values go only to the `--env-file`, written 0600, never to a `GW_*` variable.
 **rc 1** — `defer`: `GW_DEFER_REASON` and `GW_RETRY_AFTER` are the gateway's, no session exists.
 **rc 3** — fail closed: unreachable, non-200 (the error envelope, redacted by the supplier, is
 quoted; a 200 that is neither verdict is never printed, since it could carry a token), or an
