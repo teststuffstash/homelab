@@ -582,8 +582,13 @@ is stale, so it cannot drift the way the prose register did.
 | `session-belt/queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sigpipe-lint` | suite | - | `-` | - |
 | `slo-teeth/slo-teeth` | suite | - | `-` | - |
+| `specs-process/extra-and-primary` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/extra-not-reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/extra-reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/extra-readme-unpinned` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/field-absent` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/not-reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-process/pair-only` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/pin-missing` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/pin-unpublished` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/reached` | actions | - | `agents/agent-session.sh` | - |

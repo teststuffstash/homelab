@@ -16,8 +16,13 @@ _ib_ref="${ORG}/${PROJECT}#${ISSUE_N}"
 IV_MOUNT=""; IV_VOLUME=""; IV_CARD=""; IV_SEEN_NAMES=" "; IV_SEEN_PATHS=""
 # The registry, recorded: the tag the snippets release published as an image resolves to its
 # index digest; a tag with no published image (v0.6.4 — the pin before the artifact existed) does not.
+# v0.6.9 = the island READMEs' pin (the extra-* rows), digest read off ghcr.io 2026-11-14.
 iv_digest_of() {
   printf 'CALL iv_digest_of %s %s %s\n' "$1" "$2" "$3" >> "$REPLAY_ACTIONS"
-  case "$3" in v0.6.5) printf 'sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9';; *) return 1;; esac
+  case "$3" in
+    v0.6.5) printf 'sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9';;
+    v0.6.9) printf 'sha256:f366ba9e154db34f2880b12bc0eebe1d4cf489d38cd69153702bdbdc3dfbb2f2';;
+    *) return 1;;
+  esac
 }
 iv_probe() { printf 'CALL iv_probe %s %s %s\n' "$1" "$2" "$3" >> "$REPLAY_ACTIONS"; return 0; }

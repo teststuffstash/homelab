@@ -1,0 +1,14 @@
+CALL gh api repos/teststuffstash/homelab/contents/gateway/scripts/lib/snippets.sh?ref=master -H Accept: application/vnd.github.raw
+CALL iv_digest_of ghcr.io teststuffstash/allure-behavior-snippets-process v0.6.5
+CALL iv_probe ghcr.io teststuffstash/allure-behavior-snippets-process sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9
+OUT → spec process: #3030's footprint reaches gateway/specs/ or gateway/tests/ — pin v0.6.5 (gateway/scripts/lib/snippets.sh@master) resolves to sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9
+OUT → image volume process: mounting ghcr.io/teststuffstash/allure-behavior-snippets-process@sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9 at /mnt/snippets (read-only, ADR-135)
+OUT SPECS_PROCESS:[mounted]
+OUT IV_MOUNT:
+OUT         - { name: iv-process, mountPath: /mnt/snippets, readOnly: true }
+OUT IV_VOLUME:
+OUT     - name: iv-process
+OUT       image: { reference: "ghcr.io/teststuffstash/allure-behavior-snippets-process@sha256:dce3b1676e3dfa5cadfbe8ecd0ae418b1be069e486a26ba0c4f78da72fa91cf9", pullPolicy: IfNotPresent }
+OUT IV_CARD:[]
+OUT - **Spec process: this task touches the repo's spec pages or rule tests.** The repo's pinned spec process is mounted READ-ONLY at `/mnt/snippets/process` (verify: `cat /mnt/snippets/process/VERSION`). Read `briefs/author.md` there FIRST, then the rules it cites ("rule N" = `RULES.md` there; the conventions = `CONVENTIONS.md`). List EVERY specs change in the PR body under a `Spec changes:` heading, ⚖ on judgment rows. The specs reviewer judges your rows against this same text — never reconstruct the rules from memory or from another repo.
+RC 0
