@@ -155,6 +155,11 @@ MAP=(
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
+  # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
+  # as rule()-labelled cases + the stub control; enters the island's own devbox). GitHub CI has no step
+  # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
+  # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
+  "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
   # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
   # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "specs-review-self-test:^agents/specs-reviewer-session\.sh$"

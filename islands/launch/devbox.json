@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "launch island toolchain (homelab#3392): python 3.15 + uv (the gateway island's shape — python rides the same nixpkgs flake ref, homelab#2610), plus jq, gawk, diffutils, gnused — the tools agents/replay/run.sh needs: awk, sed, diff, jq (agents/replay/run.sh). Run `bash scripts/ci.sh` from this directory under `devbox run`; the repo-root diff-ci row `-- bash islands/launch/scripts/ci.sh` reaches it. The repo-root devbox.json/devbox.lock are never touched.",
+  "packages": {
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
+    "uv": "latest",
+    "jq": "latest",
+    "gawk": "latest",
+    "diffutils": "latest",
+    "gnused": "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE": "only-system",
+    "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/launch-island$VENV_SUFFIX"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci": ["bash scripts/ci.sh"],
+      "test": ["uv run --frozen pytest -q \"$@\""]
+    }
+  }
+}
