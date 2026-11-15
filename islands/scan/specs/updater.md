@@ -31,8 +31,8 @@ actions it can emit.
 |---|---|---|
 | [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
 | [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`) |
-| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `action.handback` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`, `fu124-nudge`) |
+| [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP → #3389 — no evidence publisher for this root (fixture: `updater`) |
+| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `action.handback` | 🚧 WIP → #3389 — no evidence publisher for this root (fixture: `updater`, `fu124-nudge`) |
 
 **World for every table below:** [`board`](worlds/README.md#family-worlds-fixture-local-worldsname-named-in-rowspsv) — one repo, `#90` armed ∧ CLEAN, `#91` un-armed ∧ BEHIND; each row's `patch` adds its condition.
 
@@ -50,20 +50,20 @@ successful update, so a member whose update 422s every pass cannot hold its lane
 
 #### Which PR does the main leg update?
 
-| description | world | patch | env | expect? |
-|---|---|---|---|---|
-| armed-only-noop | board | — | — | noop |
-| fifo-pick | board | add-two-behind-ready | — | picks-probe2 (`#101`, the older) |
-| lane-hop-wedged-oldest | board | add-two-behind-ready | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | lane-hop (`#102` updated in the same pass) |
-| two-lanes-two-updates | board | add-two-lanes | — | picks-two-probe2 (one per base) |
-| same-lane-one-update | board | add-two-same-goal-lane | — | picks-probe2 (one) |
-| unreviewed-behind-no-update | board | add-two-behind | — | noop |
-| bot-approved-head-update | board | add-bot-approved-head | — | picks-probe1 |
-| stale-approval-no-update | board | add-bot-approved-stale | — | noop-probe1 |
-| probe-unreadable | board | add-bot-approved-head | (probe fails) | noop-probe-hold |
-| parked-approved-head-no-update | board | add-parked-approved-head | — | noop |
-| park-skip | board | add-park-skip | — | noop |
-| merge-ready-only-off-legacy-pick | board | add-two-behind | `UPDATER_MERGE_READY_ONLY=0` | picks |
+| description | world | patch | review | env | expect? |
+|---|---|---|---|---|---|
+| armed-only-noop | board | — | — (no armed ∧ BEHIND PR: `#90` is CLEAN, `#91` un-armed) | — | noop |
+| fifo-pick | board | add-two-behind-ready | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit (both PRs) | — | picks-probe2 (`#101`, the older) |
+| lane-hop-wedged-oldest | board | add-two-behind-ready | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit (both PRs) | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | lane-hop (`#102` updated in the same pass) |
+| two-lanes-two-updates | board | add-two-lanes | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit (both PRs) | — | picks-two-probe2 (one per base) |
+| same-lane-one-update | board | add-two-same-goal-lane | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit (both PRs) | — | picks-probe2 (one) |
+| unreviewed-behind-no-update | board | add-two-behind | `reviewDecision ""`, no review, no `automerge` label | — | noop |
+| bot-approved-head-update | board | add-bot-approved-head | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit | — | picks-probe1 |
+| stale-approval-no-update | board | add-bot-approved-stale | `reviewDecision ""`, the bot's APPROVED is older than a later content commit (stale) | — | noop-probe1 |
+| probe-unreadable | board | add-bot-approved-head | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit; the commit probe `pr-view-141.json` is a non-JSON body | (probe fails) | noop-probe-hold |
+| parked-approved-head-no-update | board | add-parked-approved-head | `REVIEW_REQUIRED` (park); `latestReviews` bot COMMENTED, `reviews[]` bot APPROVED at head | — | noop |
+| park-skip | board | add-park-skip | `REVIEW_REQUIRED` (park); `latestReviews` bot APPROVED | — | noop |
+| merge-ready-only-off-legacy-pick | board | add-two-behind | `reviewDecision ""`, no review, no `automerge` label (not merge-ready) | `UPDATER_MERGE_READY_ONLY=0` | picks |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -106,7 +106,7 @@ conflict, deliberately not told apart, homelab#1007) is a skip; the next pass re
 |---|---|---|---|---|
 | conflict-dirty | board | dirty-90 | — | dirty-label |
 | conflict-clear | board | label-conflict-90 | — | label-clear |
-| update-fail | board | conflict-101 | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | update-fail |
+| update-fail | board | conflict-101 (`#101` armed ∧ BEHIND, not DIRTY) | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | no-update-no-label (no `update` action, no `merge-conflict` label op for `#101`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -130,17 +130,17 @@ with the scan's FU-124 nudge — one copy.
 
 #### Whose currency is this Renovate PR?
 
-| description | world | patch | env | expect? |
-|---|---|---|---|---|
-| renovate-untouched-no-update | board | add-renovate-approved | — | renovate-skip-probe1 |
-| renovate-untouched-green-update | board | add-renovate-approved | — | picks-probe1-renovate |
-| renovate-untouched-red-no-update | board | add-renovate-approved | — | renovate-skip-probe1 |
-| renovate-worker-pushed-update | board | add-renovate-approved | — | picks-probe1-renovate |
-| renovate-updater-merged-red-handback | board | add-renovate-approved | — | renovate-handback-probe1 |
-| renovate-superseded-cancel-green-update | board | add-renovate-approved | — | picks-probe1-renovate |
-| renovate-checks-unreadable-hold | board | add-renovate-approved | (check-runs read fails) | renovate-probe-hold |
-| renovate-merged-current-red-handback | board | add-renovate-current-review | — | sweep-handback-probe1 |
-| renovate-merged-current-pending-noop | board | add-renovate-current-review | — | sweep-silent-probe1 |
+| description | world | patch | authorship | rollup | env | expect? |
+|---|---|---|---|---|---|---|
+| renovate-untouched-no-update | board | add-renovate-approved | untouched | none reported (zero check runs, status success) | — | renovate-skip-probe1 |
+| renovate-untouched-green-update | board | add-renovate-approved | untouched | green | — | picks-probe1-renovate |
+| renovate-untouched-red-no-update | board | add-renovate-approved | untouched | red (`ci` failure) | — | renovate-skip-probe1 |
+| renovate-worker-pushed-update | board | add-renovate-approved | worker-pushed | none reported (zero check runs, status success) | — | picks-probe1-renovate |
+| renovate-updater-merged-red-handback | board | add-renovate-approved | updater-merged | red (`system-test` failure) | — | renovate-handback-probe1 |
+| renovate-superseded-cancel-green-update | board | add-renovate-approved | updater-merged | CANCELLED-outlived (a CANCELLED `ci` beside its SUCCESS sibling) | — | picks-probe1-renovate |
+| renovate-checks-unreadable-hold | board | add-renovate-approved | untouched | unreadable | (check-runs read fails) | renovate-probe-hold |
+| renovate-merged-current-red-handback | board | add-renovate-current-review | updater-merged | red (`system-test` failure) | — | sweep-handback-probe1 |
+| renovate-merged-current-pending-noop | board | add-renovate-current-review | updater-merged | pending (`system-test` in_progress) | — | sweep-silent-probe1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
