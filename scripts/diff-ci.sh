@@ -167,6 +167,10 @@ MAP=(
   # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
   # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
   "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
+  # the retro island's tests root (Goal #3384): uv sync --frozen + ruff + pytest over the replay oracle.
+  # No ci.yaml step runs it yet (ci.yaml is pin-only-guarded; the step lands operator-direct, like the
+  # specs-review-self-test row) — so pr-gate is the only place it runs today.
+  "-- bash islands/retro/scripts/ci.sh:^islands/retro/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
   # *.md/*.sh/*.py/*.yaml/*.yml (code comments included) and resolve them against living .md,

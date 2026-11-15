@@ -1,0 +1,27 @@
+{
+  "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "retro island toolchain (Goal #3384): python 3.15 + uv, the gateway island's shape (python rides the same nixpkgs flake ref as gateway/devbox.json, homelab#2610). jq/gawk/diffutils/gnused are what agents/replay/run.sh needs, since the island's tests run the replay families as the oracle. Run `devbox run ci` from THIS directory; the repo-root gate reaches it through scripts/ci.sh.",
+  "packages": {
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
+    "uv":        "latest",
+    "jq":        "latest",
+    "gawk":      "latest",
+    "diffutils": "latest",
+    "gnused":    "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE":   "only-system",
+    "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/retro-island$VENV_SUFFIX"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci": [
+        "bash scripts/ci.sh"
+      ],
+      "test": [
+        "uv run --frozen pytest -q \"$@\""
+      ]
+    }
+  }
+}
