@@ -135,7 +135,7 @@ with the scan's FU-124 nudge — one copy.
 #### Whose currency is this Renovate PR?
 
 | description | world | patch | review | authorship | rollup | env | expect? |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|
 | renovate-untouched-no-update ⚖ | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | none reported (zero check runs, status success) | — | renovate-skip-probe1 |
 | renovate-untouched-green-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | green | — | picks-probe1-renovate |
 | renovate-untouched-red-no-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | red (`ci` failure) | — | renovate-skip-probe1 |
