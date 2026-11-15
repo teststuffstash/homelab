@@ -27,7 +27,7 @@ its writers, the machine block keys, and the marker shapes.
 | [SCAN-GH-LABELS](#scan-gh-labels) | `labels` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: the `*-graphql-drained` rows) |
 | [SCAN-GH-BODY](#scan-gh-body) | `machine_block` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`) |
 | [SCAN-GH-MARKERS](#scan-gh-markers) | `markers` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
-| [SCAN-GH-ONE-BLOCK](#scan-gh-one-block) | `machine_block_redrawn` | 🚧 WIP → ADR-122 (3) / P3 — not built |
+| [SCAN-GH-ONE-BLOCK](#scan-gh-one-block) | `machine_block_redrawn` | 🚧 WIP → #3461 — ADR-122 (3) / P3, not built |
 
 ### SCAN-GH-LABELS
 

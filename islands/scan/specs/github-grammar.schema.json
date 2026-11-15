@@ -61,7 +61,7 @@
       }
     },
     "machine_block_redrawn": {
-      "description": "🚧 WIP → ADR-122 (3) / P3: the five facts in one block. NOT built — admission and state are labels today.",
+      "description": "🚧 WIP → #3461 (ADR-122 (3) / P3): the five facts in one block. NOT built — admission and state are labels today.",
       "type": "object",
       "properties": {
         "Admission": {"enum": ["inert", "queued"]},
