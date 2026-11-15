@@ -19,10 +19,10 @@ Prometheus answer it parses, its outputs and its exit codes.
 
 | Requirement | Governs (schema) | Exit / outcome | Status |
 |---|---|---|---|
-| [RETRO-GUARD-BUSY](#retro-guard-busy) | `params.stack`, `exit` | `1` refused (busy or unverifiable) | 🚧 WIP — no evidence pipeline yet (no fixture: the busy probe sits above the `retro-quiet-guard` markers) |
-| [RETRO-GUARD-LEDGER](#retro-guard-ledger) | `params.minWindowTasks`, `outputs.quiet`, `exit` | `0` fire · `3`→quiet · `1` fail | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `prepare-*`; `local-store` for the floor itself) |
-| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | verdict `0` fire · `3` quiet · `1` fail → step `0` continue · `1` fail | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `expr-*`) |
-| [RETRO-GUARD-QUIET](#retro-guard-quiet) | `outputs.quiet`, `outputs.evidence`, `$defs.quiet_push` | `0` quiet · `1` push failed | 🚧 WIP — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `quiet-push-*`, `expr-quiet`) |
+| [RETRO-GUARD-BUSY](#retro-guard-busy) | `params.stack`, `exit` | `1` refused (busy or unverifiable) | 🚧 WIP → #3384 — no evidence pipeline yet (no fixture: the busy probe sits above the `retro-quiet-guard` markers) |
+| [RETRO-GUARD-LEDGER](#retro-guard-ledger) | `params.minWindowTasks`, `outputs.quiet`, `exit` | `0` fire · `3`→quiet · `1` fail | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `prepare-*`; `local-store` for the floor itself) |
+| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | verdict `0` fire · `3` quiet · `1` fail → step `0` continue · `1` fail | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `expr-*`) |
+| [RETRO-GUARD-QUIET](#retro-guard-quiet) | `outputs.quiet`, `outputs.evidence`, `$defs.quiet_push` | `0` quiet · `1` push failed | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `quiet-push-*`, `expr-quiet`) |
 
 ## Flow overview
 
@@ -56,12 +56,12 @@ as idle. A refusal fails the workflow visibly (exit 1). An unknown stack fails t
 
 **World:** none committed — unverified, expected to behave as the rows say.
 
-| description | world | pods_in_PROJECT | probe | rc? |
-|---|---|---|---|---|
-| idle ride namespace | — | none | ok | continue |
-| a worker rides the ride namespace | — | ≥ 1 | ok | 1 |
-| ⚖ the probe itself failed — busy, not idle | — | — | error | 1 |
-| ⚖ a fixer in a sibling platform namespace does not refuse | — | none (busy in `homelab`) | ok | continue |
+| description | world | stack | pods_in_PROJECT | probe | rc? |
+|---|---|---|---|---|---|
+| idle ride namespace | — | platform | none | ok | continue |
+| a worker rides the ride namespace | — | platform | ≥ 1 | ok | 1 |
+| ⚖ the probe itself failed — busy, not idle | — | platform | — | error | 1 |
+| ⚖ a fixer in a sibling platform namespace does not refuse | — | platform | none (busy in `homelab`) | ok | continue |
 
 > **External:** kubectl prints "No resources found in <ns> namespace." to STDERR with exit 0 on an
 > empty list — the probe reads stdout only (`retro-argo.yaml` guard comment, homelab#237; verify during
@@ -77,11 +77,11 @@ including **zero** ledger tasks, which is a dead ledger source, never a quiet we
 
 **World: [guard-bridge](worlds/README.md)** — `prepare` is an exit code.
 
-| description | world | PREP_RC | QUIET? | rc? |
-|---|---|---|---|---|
-| prepare-ok | guard-bridge | 0 | false | 0 |
-| prepare-fails | guard-bridge | 1 | — | 1 |
-| quiet-push-ok | guard-bridge | 3 | true | 0 |
+| description | world | PREP_RC | CURL_RC_1 | QUIET? | rc? |
+|---|---|---|---|---|---|
+| prepare-ok | guard-bridge | 0 | — | false | 0 |
+| prepare-fails | guard-bridge | 1 | — | — | 1 |
+| quiet-push-ok | guard-bridge | 3 | 0 | true | 0 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -122,9 +122,6 @@ reasoning as the ledger guard's zero-task rule, so `RetroReportOverdue` still pa
 --8<-- "RETRO-GUARD-EXPR.md"
 
 </details>
-
-`expr-fires` also reads the series' CronWorkflow declaration (`retro-feedback-triage suspend=false`,
-unsuspended 2026-11-07 after the hand-fired run, #3202).
 
 ## RETRO-GUARD-QUIET
 
