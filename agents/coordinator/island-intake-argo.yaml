@@ -329,8 +329,9 @@ spec:
 
               \`reread:\` — the island's waits: issues an earlier ruling parked on a human, with the
               label or ruling that parks them (\`wait\`), since when (\`since\`) and the parking line
-              (\`parked_by\`). Procedure step R: test the ONE fact, then change the ruling or write
-              nothing.
+              (\`parked_by\`). A \`wait: pr-hold\` row is parked by \`blocked-on: human\` on its open PR
+              (\`pr\`), not by a label. Procedure step R: test the ONE fact, then change the ruling or
+              write nothing.
 
               \`gap:\` — \`⚑ gap\` / \`🚧 WIP\` rows of the island's own specs index that no open issue names,
               id \`<specs page>#<REQ>\` (the index row verbatim in \`row\`). Rule each one (intake.md §Inputs).

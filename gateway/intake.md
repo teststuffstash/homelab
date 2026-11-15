@@ -48,7 +48,9 @@ The dispatch prompt names them:
   report-only — the source record keeps it (one home per fact), the report says why.
 - `reread:` `<owner/repo>#<n>` … — island issues that an earlier ruling left waiting on a human
   (`agent/blocked`, or a standing `intake: seat`) for `INTAKE_REREAD_AGE_D` days or more
-  (`scripts/intake-select.sh --source pile`). A wait is a claim about ONE fact; facts move. You
+  (`scripts/intake-select.sh --source pile`). A row with `wait: pr-hold` is an issue the loop still
+  holds whose open PR (`pr`) carries `blocked-on: human` as its newest ruling: the wait was
+  written on the PR, by a PR lane, and no label shows it (offered only under `INTAKE_PR_HOLDS=1`). A wait is a claim about ONE fact; facts move. You
   re-verify that fact (§The procedure, step R) and either change the ruling or leave the item
   untouched — a re-read that changes nothing writes nothing. The morning sitting gets these
   together with its `dig` inputs and the island's unruled `issues:`; there an unchanged wait is
@@ -152,7 +154,8 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
    it is not "the issue exists".
 
-**R. A `reread:` input — is the wait still true?** Read the comment that parked it and name the
+**R. A `reread:` input — is the wait still true?** Read the comment that parked it (on a
+`pr-hold` row: the PR's newest ruling, and the failing check it names) and name the
 ONE fact it waits on. Then test that fact, not the comment: the ride record (did the work finish?
 what stopped it?), the loop-worker PRs merged since (was the blocker that ride's own?), the alert
 or gauge, the spec line, the ruling the tracker called pending, the done-when the body offers
@@ -160,7 +163,10 @@ or gauge, the spec line, the ruling the tracker called pending, the done-when th
 `queue` after a rewrite, `close`, `standing`). Unchanged → no write; the report says which fact
 you tested and where. Never restate a wait in a second comment. Step 3's parity check runs on a
 re-read too: a wait that narrows (one of its facts filed as a parity gap) has changed, and gets
-the one comment naming what remains.
+the one comment naming what remains. **A `pr-hold` row is ruled in the report only**: no label
+and no comment on the issue or the PR — the report gives the ruling, the fact tested, and the
+one instruction the next round needs; its receipt line is `deferred`. (The scan releases a
+PR-level `blocked-on: human` on a human's comment only; what else may release it is not ruled.)
 
 **E. An `escape:` input — what intake let through.** Follow
 [`intake-escape.md`](intake-escape.md) on the PR: classify each blocking review finding of each
