@@ -32,8 +32,8 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 | Requirement | section | Status |
 |---|---|---|
-| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3393 (fixture: `gateway-admit` — its 9 rows run locally in `islands/launch/tests` against the pre-island helper `agents/gateway-admit.sh`); the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3393 (fixtures: `gateway-admit` — 3 rows run locally against the pre-island helper `agents/gateway-admit.sh`; `gateway-sessions`) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
+| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3390 (fixture: `gateway-admit` — its 9 rows pass locally in `islands/launch/tests` against `islands/launch/lib/gateway-admit.sh`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
 | [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
@@ -112,17 +112,18 @@ among the env keys — `ANTHROPIC_MODEL` (claude), `OPENCODE_CONFIG_CONTENT` (op
 
 Legend: `defect` = what is wrong with the answer; `released?` = one DELETE of the session;
 `defer_reason?` = `GW_DEFER_REASON` after `dispatch-unusable: `, except a cell marked *(whole)*, which is
-the entire `GW_DEFER_REASON` with no such prefix.
+the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the row runs through:
+`gw_admit` (rc as returned) or `launcher` (the worker launcher, which maps rc 3 to exit 1).
 
-| description | world | defect | released? | rc? | defer_reason? |
-|---|---|---|---|---|---|
-| credential-in-answer ⚖ | gw-dispatch-bound | `session.token` + `env` in a bound answer, no `env_keys` / `pull_url`; harness `opencode` | yes | 1 (exit) | `a credential in a bound answer, env_keys, pull_url, env_keys lacks OPENCODE_CONFIG_CONTENT` |
-| bad-pull-url | gw-dispatch-bound | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
-| unusable-env | gw-dispatch-bound | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
-| harness-not-run | gw-dispatch-bound | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
-| unbound-answer-bound | gw-dispatch-unbound | an unbound call answered without `env` | yes | 3 | `env` |
-| unbound-env-newline | gw-dispatch-unbound | an `env` value with a newline | yes | 3 | `env` |
-| unknown-decision | gw-dispatch-unbound | `decision: maybe` (with a token) | no session kept | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
+| description | world | via | defect | released? | rc? | defer_reason? |
+|---|---|---|---|---|---|---|
+| credential-in-answer ⚖ | gw-dispatch-bound | launcher | `session.token` + `env` in a bound answer, no `env_keys` / `pull_url`; harness `opencode` | yes | 1 (exit) | `a credential in a bound answer, env_keys, pull_url, env_keys lacks OPENCODE_CONFIG_CONTENT` |
+| bad-pull-url | gw-dispatch-bound | launcher | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
+| unusable-env | gw-dispatch-bound | launcher | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
+| harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
+| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
+| unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
+| unknown-decision | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no session kept | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
 The `(exit)` rows run through the worker launcher, which maps rc 3 to exit 1
 ([LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher)).
@@ -143,8 +144,8 @@ stack row is `platform`; any other stack takes [the old path](glossary.md#the-ol
 `WARN` line (`agents/agent-session.sh` `REPLAY:gateway-sessions`, :272–345). Before any request it
 refuses (exit 2, no session, no pod): `--model` (the gateway owns the model — a contradiction, not
 an override), an interactive ride with neither `--run` nor `--recipe` (the pod pulls its env in its
-command, and an interactive pod has none), a non-integer round, an attempt < 1, and a missing
-caller token. The bind is the pod it is about to create — namespace = the repo, ServiceAccount
+command, and an interactive pod has none), a non-integer round, an attempt < 1, a canary `AGENT_GATEWAY_CALLER_SA` that is not `<ns>/<sa>`
+(whatever the token file holds), and a missing caller token. The bind is the pod it is about to create — namespace = the repo, ServiceAccount
 `agentstack-worker`, name `agent-<repo>-<task>-r<round>` (the pod-name block reuses it verbatim,
 [LAUNCH-POD-IDENTITY](pod.md#launch-pod-identity)). `--harness` reaches the request only when
 explicit (it narrows the walk to that dialect); `AGENT_GATEWAY_RAIL`, `AGENT_GATEWAY_ROLE`,
