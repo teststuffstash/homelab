@@ -29,8 +29,8 @@ actions it can emit.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `action.update` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`) |
-| [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `action.update` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`) |
+| [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
+| [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `action.update` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
 | [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`) |
 | [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `action.handback` | 🚧 WIP — no evidence pipeline yet (fixture: `updater`, `fu124-nudge`) |
 
@@ -54,14 +54,14 @@ successful update, so a member whose update 422s every pass cannot hold its lane
 |---|---|---|---|---|
 | armed-only-noop | board | — | — | noop |
 | fifo-pick | board | add-two-behind-ready | — | picks-probe2 (`#101`, the older) |
-| lane-hop-wedged-oldest | board | add-two-behind-ready | `…pulls_101_update_branch=fail` | lane-hop (`#102` updated in the same pass) |
+| lane-hop-wedged-oldest | board | add-two-behind-ready | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | lane-hop (`#102` updated in the same pass) |
 | two-lanes-two-updates | board | add-two-lanes | — | picks-two-probe2 (one per base) |
 | same-lane-one-update | board | add-two-same-goal-lane | — | picks-probe2 (one) |
 | unreviewed-behind-no-update | board | add-two-behind | — | noop |
 | bot-approved-head-update | board | add-bot-approved-head | — | picks-probe1 |
 | stale-approval-no-update | board | add-bot-approved-stale | — | noop-probe1 |
 | probe-unreadable | board | add-bot-approved-head | (probe fails) | noop-probe-hold |
-| parked-approved-head-no-update | board | (`latestReviews` non-APPROVED, `reviews[]` APPROVED at head, `REVIEW_REQUIRED`) | — | noop |
+| parked-approved-head-no-update | board | add-parked-approved-head | — | noop |
 | park-skip | board | add-park-skip | — | noop |
 | merge-ready-only-off-legacy-pick | board | add-two-behind | `UPDATER_MERGE_READY_ONLY=0` | picks |
 
@@ -80,11 +80,11 @@ review data holds (`update-pr-branch.sh:362`, rule #6).
 
 #### Is a changes-requested, behind PR brought current?
 
-| description | world | patch | env | expect? |
-|---|---|---|---|---|
-| unstrand-yes | board | add-cr-behind | — | unstrand-yes |
-| unstrand-no | board | add-cr-behind | — | unstrand-no |
-| unstrand-unreadable | board | add-cr-behind | — | unstrand-hold |
+| description | world | patch | probe | env | expect? |
+|---|---|---|---|---|---|
+| unstrand-yes | board | add-cr-behind | newest non-merge commit 12:00 after the bot's CHANGES_REQUESTED 11:00 | — | unstrand-yes |
+| unstrand-no | board | add-cr-behind | newest non-merge commit 10:00 before the bot's CHANGES_REQUESTED 11:00 (the 12:00 merge commit is not content) | — | unstrand-no |
+| unstrand-unreadable | board | add-cr-behind | unreadable (non-JSON body) | — | unstrand-hold |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -106,7 +106,7 @@ conflict, deliberately not told apart, homelab#1007) is a skip; the next pass re
 |---|---|---|---|---|
 | conflict-dirty | board | dirty-90 | — | dirty-label |
 | conflict-clear | board | label-conflict-90 | — | label-clear |
-| update-fail | board | conflict-101 | `…pulls_101_update_branch=fail` | update-fail |
+| update-fail | board | conflict-101 | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | update-fail |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
