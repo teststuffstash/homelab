@@ -1,0 +1,31 @@
+[
+  {
+    "number": 3444,
+    "isDraft": false,
+    "labels": [],
+    "commits": [
+      {"oid": "536ed6a0", "committedDate": "2026-11-15T16:20:00Z", "messageHeadline": "launch admission page: the unknown-decision row"},
+      {"oid": "75aaa056", "committedDate": "2026-11-15T16:25:00Z", "messageHeadline": "Merge branch 'master' into fix/launch-assembly-cr"}
+    ],
+    "statusCheckRollup": [{"name": "ci", "conclusion": "SUCCESS"}],
+    "comments": [],
+    "reviews": [
+      {"author": {"login": "homelab-reviewer"}, "state": "APPROVED", "submittedAt": "2026-11-15T16:30:00Z"},
+      {"author": {"login": "homelab-specs-reviewer"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-15T16:42:11Z"}
+    ]
+  },
+  {
+    "number": 3445,
+    "isDraft": false,
+    "labels": [],
+    "commits": [
+      {"oid": "aaaa1111", "committedDate": "2026-11-15T16:00:00Z", "messageHeadline": "rows: a new row"}
+    ],
+    "statusCheckRollup": [{"name": "ci", "conclusion": "SUCCESS"}],
+    "comments": [],
+    "reviews": [
+      {"author": {"login": "homelab-reviewer"}, "state": "APPROVED", "submittedAt": "2026-11-15T16:10:00Z"},
+      {"author": {"login": "homelab-specs-reviewer"}, "state": "APPROVED", "submittedAt": "2026-11-15T16:15:00Z"}
+    ]
+  }
+]
