@@ -84,7 +84,9 @@ A ring whose emitter already knows its unit (a reviewer verdict computes
 `changes-requested|<repo>|pr-N` in script code) skips the multi-repo sweep: the scan re-validates
 that one item — breaker label, capacity, WIP, the item session belt, a goal-head PR's FU-143
 exclusion, a `blocked-on:` marker — and any doubt returns to the full scan, so the compound is
-only ever cheaper, never weaker (`fast_unit_dispatch`, the `unit-fast-path` block, :1497). The
+only ever cheaper, never weaker. A `coordinator-<repo>-pr-<n>` session pod already Running for the
+item is not doubt but the item's in-flight work: the fast path holds the unit, dispatching nothing
+and not falling through to the full scan (FU-146) (`fast_unit_dispatch`, the `unit-fast-path` block, :1497). The
 v1 whitelist is `changes-requested`, plus the goal clauses (`doorbell/goal-fast-path`).
 
 **World:** per-case recorded PR views.
@@ -478,10 +480,10 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 | description | world | members | findings store | queued | expect? |
 |---|---|---|---|---|---|
 | ⚖ bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | `goal-checkpoint` emitted: yes — the same reason as the world without the members (`checkpoint-due` template: `findings 5 undispositioned + child-set complete pre-launch`); the members add nothing to it and none is queued |
-| ⚖ undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — reasons `child-set complete pre-launch` + `members 1 undispositioned` |
-| ⚖ deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
-| ⚖ adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
-| ⚖ dispositions-unreadable | open-pre | one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
+| ⚖ undispositioned-wakes | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — reasons `child-set complete pre-launch` + `members 1 undispositioned` |
+| ⚖ deferred-excluded | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, `deferred` | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
+| ⚖ adopted-open-unlabelled | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
+| ⚖ dispositions-unreadable | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
 | ⚖ base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | `goal-decompose` refused: no decompose unit, the refusal names `Base: master` and `Base: goal/<branch>` |
 
 #### Which Goal does a merged PR's finding belong to?
@@ -515,7 +517,9 @@ Within a lane the clause priority is fixed — `c4c5-redispatch`, `arbitrate`, `
 loops, and only then new work (`coordinator-scan.sh:6844`). [Aging](glossary.md#aging): a `goal-decompose` /
 `queued-dispatch` unit that has lost `SCAN_AGING_N` (3) lane dispatches since its newest
 `agent/queued` label event jumps the walk once; the loss count is the `agent-event` markers on the
-lane siblings' `agent-summary` comments, read-only. An unreadable probe never ages. The
+lane siblings' `agent-summary` comments, read-only. An unreadable probe never ages: when the
+unit's `agent/queued` label event cannot be read, the scan reports one ``aging: <unit> — no readable `agent/queued` labeled event; ordinary
+walk this pass`` line and walks the lane in clause order. The
 subscription probe before each spawn after the first is the fleet ceiling: when it fails, the
 remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatch-admission)).
 
