@@ -26,18 +26,18 @@ grammar, the hold report line and the clause enum.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-WAKE-DOORBELL](#scan-wake-doorbell) | `doorbell`, `env.SCAN_*` | 🚧 WIP — no evidence pipeline yet (fixture: `doorbell`) |
-| [SCAN-WAKE-FASTPATH](#scan-wake-fastpath) | `doorbell.unit`, `unit` | 🚧 WIP — no evidence pipeline yet (fixture: `unit-fast-path-author`, `unit-fast-path-blocked-on`, `session-belt`) |
-| [SCAN-CLAUSE-OWNERSHIP](#scan-clause-ownership) | `clause` | 🚧 WIP — no evidence pipeline yet (fixture: `clause-coverage`) |
-| [SCAN-CLAUSE-QUEUED](#scan-clause-queued) | `unit` (4/5-field) | 🚧 WIP — no evidence pipeline yet (fixture: `queued-derivation`, `queued-classification`, `review-only-label-combinations`) |
-| [SCAN-HOLD-STRUCTURAL](#scan-hold-structural) | `hold.kind = structural` | 🚧 WIP — no evidence pipeline yet (fixture: `scan-guarded`, `scan-governance`, `classify-touches-repo`) |
-| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP — no evidence pipeline yet (fixture: `footprint-entry-split`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
-| [SCAN-CLAUSE-PR](#scan-clause-pr) | `unit` (3-field), `clause` | 🚧 WIP — no evidence pipeline yet (fixture: `changes-requested`, `merge-conflict`, `unarmed-major`) |
-| [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
-| [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `done-phantom-belt`) |
-| [SCAN-CLAUSE-FLEET](#scan-clause-fleet) | — | 🚧 WIP (fixture: `fleet-reader-rekey`) · ⚑ gap: reads the old proxy's `/router-status` |
-| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
-| [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP — no evidence pipeline yet (fixture: `scan-lane-walk`) |
+| [SCAN-WAKE-DOORBELL](#scan-wake-doorbell) | `doorbell`, `env.SCAN_*` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `doorbell`) |
+| [SCAN-WAKE-FASTPATH](#scan-wake-fastpath) | `doorbell.unit`, `unit` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `unit-fast-path-author`, `unit-fast-path-blocked-on`, `session-belt`) |
+| [SCAN-CLAUSE-OWNERSHIP](#scan-clause-ownership) | `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `clause-coverage`) |
+| [SCAN-CLAUSE-QUEUED](#scan-clause-queued) | `unit` (4/5-field) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `queued-derivation`, `queued-classification`, `review-only-label-combinations`) |
+| [SCAN-HOLD-STRUCTURAL](#scan-hold-structural) | `hold.kind = structural` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-guarded`, `scan-governance`, `classify-touches-repo`) |
+| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `footprint-entry-split`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
+| [SCAN-CLAUSE-PR](#scan-clause-pr) | `unit` (3-field), `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `changes-requested`, `merge-conflict`, `unarmed-major`) |
+| [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
+| [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `done-phantom-belt`) |
+| [SCAN-CLAUSE-FLEET](#scan-clause-fleet) | — | 🚧 WIP → #3448 (fixture: `fleet-reader-rekey`) · ⚑ gap (2026-11-15, PR #3450 → work #3448): reads the old proxy's `/router-status` |
+| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
+| [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-lane-walk`) |
 
 ## The wake
 
@@ -49,9 +49,11 @@ the scan re-applies the full predicate (`coordinate-argo.yaml:10-16`). A ring th
 `loop_ns` submits the per-stack scan into that namespace (`--spawn`, `SCAN_STACK`, `LOOP_NS`);
 every other ring submits the [switchboard](../../../docs/glossary.md) (`--switchboard`,
 ADR-120), which lists no GitHub state and spawns no LLM: a capacity ring fans out to every
-graduated stack, a repo-dumb unit ring resolves its repo to its graduated stack and rings it, a
+graduated stack, a repo-dumb full ring (no `unit`, no `loop_ns`) rings each graduated stack with
+its resolved `{stack, loop_ns}` and `unit: -`, a repo-dumb unit ring resolves its repo to its graduated stack and rings it, a
 ring already routed per-stack exits, and a stack that is not graduated is reported as served by
-no scan path (`coordinator-scan.sh` `switchboard` block, :1456). A starting full scan absorbs
+no scan path, a warning that fires on every switchboard pass that reaches the fan-out of a full
+ring, not on a capacity ring (`coordinator-scan.sh` `switchboard` block, :1456). A starting full scan absorbs
 every pending sibling `coordinate*` workflow in its namespace before listing GitHub (the
 `doorbell-collapse` block, ADR-106 (5)), so a burst of rings is one pass.
 
@@ -61,14 +63,14 @@ every pending sibling `coordinate*` workflow in its namespace before listing Git
 
 #### What does a ring cause?
 
-| description | world | ring | expect? |
-|---|---|---|---|
-| collapse | doorbell/collapse | full scan starting with pending sibling `coordinate*` workflows | the siblings deleted before the GitHub list |
-| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | every graduated stack rung, no board scan |
-| switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | the graduated stack rung into its namespace |
-| switchboard-routed | doorbell/switchboard-routed | ring already carrying `loop_ns` | exit, nothing rung |
-| switchboard-unit | doorbell/switchboard-unit | `unit: changes-requested\|<repo>\|pr-N`, no `loop_ns` | the repo's stack rung with that unit |
-| fanout | doorbell/fanout | repo-dumb ring from a stack emitter | the per-stack doorbell rung (FU-144 receiver-side resolution) |
+| description | world | ring | stacks | expect? |
+|---|---|---|---|---|
+| collapse | doorbell/collapse | full scan starting with pending sibling `coordinate*` workflows | — | the siblings deleted before the GitHub list |
+| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | `circles` graduated, `newborn` not | every graduated stack rung (`circles` only, with `source`, `rail`, `loop_ns`), no board scan, no no-scan-path warning |
+| ⚖ switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | `circles` graduated, `newborn` not | `circles` (the one graduated stack) rung into its namespace; a no-scan-path warning names `newborn` |
+| switchboard-routed | doorbell/switchboard-routed | ring already carrying `loop_ns` | — | exit, nothing rung |
+| switchboard-unit | doorbell/switchboard-unit | `unit: changes-requested\|<repo>\|pr-N`, no `loop_ns` | — | the repo's stack rung with that unit |
+| fanout | doorbell/fanout | repo-dumb ring from a stack emitter: `{"repo": "all"}`, no `unit`, no `loop_ns`, edge-woken | `circles`, `sleep` graduated | each graduated stack rung with its resolved `{stack, loop_ns}` and `unit: -` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -82,7 +84,9 @@ A ring whose emitter already knows its unit (a reviewer verdict computes
 `changes-requested|<repo>|pr-N` in script code) skips the multi-repo sweep: the scan re-validates
 that one item — breaker label, capacity, WIP, the item session belt, a goal-head PR's FU-143
 exclusion, a `blocked-on:` marker — and any doubt returns to the full scan, so the compound is
-only ever cheaper, never weaker (`fast_unit_dispatch`, the `unit-fast-path` block, :1497). The
+only ever cheaper, never weaker. A `coordinator-<repo>-pr-<n>` session pod already Running for the
+item is not doubt but the item's in-flight work: the fast path holds the unit, dispatching nothing
+and not falling through to the full scan (FU-146) (`fast_unit_dispatch`, the `unit-fast-path` block, :1497). The
 v1 whitelist is `changes-requested`, plus the goal clauses (`doorbell/goal-fast-path`).
 
 **World:** per-case recorded PR views.
@@ -146,6 +150,12 @@ queued issue whose native `blockedBy` edge points at an open issue is reported
 still open holds it as `queued-held-by-ghost` (#833); a repo with no fixer block is reported as
 context-only (`coordinator-scan.sh:2786-2794`). The emitted unit carries the class from the
 machine block's `Class:` (legacy: the `task/*` label) and, for a Goal child, the parent number.
+An open, un-labelled issue (no `agent*` label) whose native `blockedBy` edges are all closed and
+that is older than 24 h is surfaced as its own `🔓 UNBLOCKED-UNLABELED` report line — report-only,
+no label is written (the human gate stands: label `agent/queued` to adopt, or close it). An issue
+with an open blocker, or with no edges, never gets that line. A bot-authored open issue without
+`agent-fix` that no sharper line already names (a `post-launch:` bucket excepted) is reported on the
+generic `🌱` awaiting-triage line instead — report-only, the same human gate.
 
 **World:** per-case recorded issue lists.
 
@@ -156,8 +166,8 @@ machine block's `Class:` (legacy: the `task/*` label) and, for a Goal child, the
 | no-agent-fix | queued-derivation/no-agent-fix | `agent/queued` without `agent-fix` | unit emitted |
 | ready | queued-classification/ready | `agent/queued`, every blocker closed | `queued-dispatch` unit |
 | held | queued-classification/held | `agent/queued`, a blocker open | `⏳ queued-blocked`, no unit |
-| blocker-open | unblocked-unlabeled/blocker-open | blocker open, not queued | no report |
-| surfaces | unblocked-unlabeled/surfaces | every blocker closed, issue unlabelled > 24 h | its own `🔓 UNBLOCKED-UNLABELED` line, no label written |
+| ⚖ blocker-open | unblocked-unlabeled/blocker-open | bot-authored, unlabelled, a blocker open | no `🔓 UNBLOCKED-UNLABELED` line (the generic `🌱` awaiting-triage line only) |
+| surfaces | unblocked-unlabeled/surfaces | unlabelled > 24 h, every blocker closed | a `🔓 UNBLOCKED-UNLABELED` line naming the issue and its closed blockers; no label written |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -176,33 +186,38 @@ Three sets, tested before every transient hold so the line reads "route to the o
 API — the set is read, never re-declared, #1855); homelab's **operator-lane** paths
 (`classify_touches` → `codeowner-author`); homelab's **GOVERNANCE** set (`scripts/governance-lint.sh`).
 An unreadable set HOLDS the issue (rule #6 — never fail into a dispatch). The `*` sentinel (no
-`Touches:`) never matches a guarded set.
+`Touches:`) never matches a guarded set. The operator-lane classification is `classify_touches`'
+tier for the footprint, the highest across its paths: `machine-merge` (CI gate only),
+`codeowner-merge` (a worker may author, a human merges) or `codeowner-author` (only the codeowner
+may author — homelab's ❌ set, applied to a homelab slug only; any other repo is classified by its
+own `CODEOWNERS`).
 
 **World:** the `scan-guarded` family; homelab rows read the real `scripts/pin-only-lint.sh` from the checkout.
 
 #### Is this footprint dispatchable?
 
-Legend: `CASE_TOUCHES` = the issue's declared footprint; `expect?` = the report line the scan emits.
+Legend: `CASE_TOUCHES` = the issue's declared footprint; `guarded set` = whether the repo's
+declaration of its guarded set can be read; `expect?` = held or dispatched, and the report line.
 
-| description | world | CASE_REPO | CASE_TOUCHES | expect? |
-|---|---|---|---|---|
-| homelab-guarded-dir | — | homelab | `agents/coordinator/` | homelab-guarded-dir |
-| homelab-guarded-file | — | homelab | `argocd/platform/openrouter-operator.yaml` | homelab-guarded-file |
-| homelab-unguarded-self | — | homelab | `agents/coordinator-scan.sh,agents/replay/` | homelab-unguarded-self |
-| homelab-sentinel | — | homelab | `*` | homelab-sentinel |
-| homelab-set-unreadable | — | homelab | `argocd/resources/loki/` | homelab-set-unreadable |
-| remote-guarded | agent-runtime-guarded | agent-runtime | `agent-base/devbox.json,agent-base/devbox.lock,agent-base/Dockerfile` | remote-guarded |
-| remote-unguarded | oracle-fleet-none | oracle-fleet | `agents/coordinator/` | remote-unguarded |
-| remote-unreadable | — | agent-runtime | `argocd/resources/loki/` | remote-unreadable |
+| description | world | CASE_REPO | CASE_TOUCHES | guarded set | expect? |
+|---|---|---|---|---|---|
+| homelab-guarded-dir | — | homelab | `agents/coordinator/` | readable | held: `⛔ pin-only GUARDED path`, guarded `agents/coordinator/reflexes-argo.yaml`, `agents/coordinator/sentinel-argo.yaml` |
+| homelab-guarded-file | — | homelab | `argocd/platform/openrouter-operator.yaml` | readable | held: `⛔ pin-only GUARDED path`, guarded `argocd/platform/openrouter-operator.yaml` |
+| homelab-unguarded-self | — | homelab | `agents/coordinator-scan.sh,agents/replay/` | readable | dispatched |
+| homelab-sentinel | — | homelab | `*` | readable | dispatched |
+| homelab-set-unreadable | — | homelab | `argocd/resources/loki/` | unreadable | held: `⛔ GUARDED-SET PROBE-FAILED` |
+| remote-guarded | agent-runtime-guarded | agent-runtime | `agent-base/devbox.json,agent-base/devbox.lock,agent-base/Dockerfile` | readable | held: `⛔ pin-only GUARDED path`, guarded `agent-base/devbox.json`, `agent-base/devbox.lock` |
+| remote-unguarded | oracle-fleet-none | oracle-fleet | `agents/coordinator/` | readable, none declared | dispatched |
+| remote-unreadable | — | agent-runtime | `argocd/resources/loki/` | unreadable | held: `⛔ GUARDED-SET PROBE-FAILED` |
 
 #### Who may author this path? (the operator-lane classification)
 
 | description | world | SLUG | FOOTPRINT | expect? |
 |---|---|---|---|---|
-| homelab-dotagents-author | — | teststuffstash/homelab | `.agents/probe.md` | author |
-| homelab-scripts-unowned | — | teststuffstash/homelab | `scripts/x.sh` | machine |
-| stack-dotagents-codeowner-merge | — | teststuffstash/oracle-fleet | `.agents/probe.md` | merge |
-| stack-scripts-unowned | — | teststuffstash/oracle-fleet | `scripts/x.sh` | stack-machine |
+| homelab-dotagents-author | — | teststuffstash/homelab | `.agents/probe.md` | `codeowner-author` |
+| homelab-scripts-unowned | — | teststuffstash/homelab | `scripts/x.sh` | `machine-merge` |
+| stack-dotagents-codeowner-merge | oracle-fleet | teststuffstash/oracle-fleet | `.agents/probe.md` | `codeowner-merge` |
+| stack-scripts-unowned | oracle-fleet | teststuffstash/oracle-fleet | `scripts/x.sh` | `machine-merge` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -216,45 +231,47 @@ New work is held, one report line each and no label, while: its footprint overla
 in-progress issue's (`fp_conflict_multi`, ADR-097 — Goal-class units exempt, they write no diff);
 the repo has `REPO_MAX_WIP` (3) live workers; a `coordinator-<repo>-issue-<n>` session pod is
 Running for it (FU-146); or the repo carries `REPO_PR_CAP` (3) armed PRs on the **same base** as
-the issue's `Base:` (#849 — a master pile never holds a `goal/**` issue). In-flight recovery
+the issue's `Base:` (#849 — a master pile never holds a `goal/**` issue; no `Base:` line means the default branch). In-flight recovery
 clauses are exempt from all four (`coordinator-scan.sh:2923-2995`). A footprint entry is split
 and normalized by `fp_split_entries` / `fp_norm_entry` (`footprint.sh`): an annotation
-`path (why)` is the path; an entry with internal whitespace is reported as an escape, never
-guessed. "Live worker" is the shared predicate `live-worker-pod` pins.
+`path (why)` is the path; an entry with internal whitespace is read whole, never split or
+guessed, so a path that is only a prefix of it is not covered. A declared entry that covers a
+changed path is a *hold* on that path; a changed path no entry covers is an *escape*. A "live
+worker" is a pod (`live_worker_pod_count`, `kube.sh`) whose phase is not `Succeeded`/`Failed`,
+whose `agent` container has not terminated, and — when it is `Pending` — that is schedulable or
+younger than 30 s.
 
 **World:** per-row constructed state.
 
 #### Does the footprint entry hold?
 
-Legend: `path` = the escape the report names (the row's `params`); the entries themselves are the bridge's constructed `Touches:` values.
-
-| description | world | path | expect? |
-|---|---|---|---|
-| plain-entry | — | — | hold |
-| annotated-exact | — | — | hold |
-| annotated-among-many | — | — | hold |
-| annotated-glob | — | — | hold |
-| whitespace-padded | — | — | hold |
-| internal-whitespace-prefix | — | `docs/a` | escape |
-| annotated-escape-still-reported | — | `mcps/riigiteataja/ingest/other.py` | escape |
+| description | world | declared `Touches:` entry | changed path | expect? |
+|---|---|---|---|---|
+| plain-entry | — | `mcps/riigiteataja/ingest/delta.py` | `mcps/riigiteataja/ingest/delta.py` | hold |
+| annotated-exact | — | `mcps/riigiteataja/ingest/delta.py (log fields only)` | `mcps/riigiteataja/ingest/delta.py` | hold |
+| annotated-among-many | — | `chassis/build.py, mcps/riigiteataja/ingest/delta.py (log fields only), tests/test_build.py` | `mcps/riigiteataja/ingest/delta.py` | hold |
+| annotated-glob | — | `mcps/riigiteataja/ingest/** (ingest only)` | `mcps/riigiteataja/ingest/delta.py` | hold |
+| whitespace-padded | — | `  chassis/build.py  ,  tests/test_build.py  ` | `chassis/build.py` | hold |
+| internal-whitespace-prefix | — | `docs/a b.md` | `docs/a` | escape |
+| annotated-escape-still-reported | — | `mcps/riigiteataja/ingest/delta.py (log fields only)` | `mcps/riigiteataja/ingest/other.py` | escape |
 
 #### Is a worker live?
 
 | description | world | pod phase / state | expect? |
 |---|---|---|---|
-| running-agent-alive | — | Running, agent container running | running-agent-alive |
-| running-agent-terminated-sidecar-held | — | Running, agent terminated, sidecar holding | running-agent-terminated-sidecar-held |
-| pending-schedulable | — | Pending, schedulable | pending-schedulable |
-| pending-unschedulable | — | Pending, Unschedulable | pending-unschedulable |
-| succeeded-phase | — | Succeeded | succeeded-phase |
+| running-agent-alive | — | Running, agent container running | live |
+| running-agent-terminated-sidecar-held | — | Running, agent terminated, sidecar holding | not live |
+| pending-schedulable | — | Pending, schedulable | live |
+| pending-unschedulable | — | Pending, Unschedulable, older than 30 s | not live |
+| succeeded-phase | — | Succeeded | not live |
 
 #### Does the per-base PR cap hold?
 
 | description | world | armed PRs | issue `Base:` | expect? |
 |---|---|---|---|---|
-| pr-cap-per-base (case 1) | pr-cap-per-base | ≥ cap on master | `goal/x` | dispatched |
-| pr-cap-per-base (case 2) | pr-cap-per-base | ≥ cap on master | none (master) | held |
-| pr-cap-per-base (case 3) | pr-cap-per-base | ≥ cap on master | absent → default branch | held |
+| pr-cap-per-base (case 1) | pr-cap-per-base | 3 (= cap) on master | `Base: goal/x` | dispatched |
+| pr-cap-per-base (case 2) | pr-cap-per-base | 3 (= cap) on master | `Base: master` | held |
+| pr-cap-per-base (case 3) | pr-cap-per-base | 3 (= cap) on master | no `Base:` line (the default branch, master) | held |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -270,14 +287,19 @@ actionable when it is open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-
 ¬`major` ∧ red at a settled head)) (`coordinator-scan.sh:7-15`). The `major` clause keys on
 `autoMergeRequest == null` — an armed major is the reflex's, an un-armed one the coordinator's
 (ADR-141). `changes-requested` holds while the PR carries `agent/blocked` or an unresolved
-`blocked-on:` marker, and while it is not reviewable again (no content commit or body edit newer
-than the newest verdict — the mirror of the reflex's `reviewable_again`). `merge-conflict` scopes
+`blocked-on:` marker, and once the PR is reviewable again — a content commit or a body edit newer
+than the newest verdict means the worker has answered and re-review is the reviewer's, so no fix
+round is spent (the mirror of the reflex's `reviewable_again`). Which reviewer filed the newest
+CHANGES_REQUESTED does not matter: the code reviewer and the specs reviewer both re-open their own
+verdict on a newer body edit. With nothing newer than the verdict it dispatches a fix round. ⚖ `changes-requested` admits only the worker App's PRs, so an un-armed `major` PR authored by Renovate and carrying CHANGES_REQUESTED is `unarmed-major`'s alone; the lane-walk order ranks clauses only for a PR both admit, which this one is not. `merge-conflict` scopes
 to worker-authored PRs, tolerates a null author, and holds when the source issue is blocked; a
 Renovate-authored DIRTY PR is rebased by ticking Renovate's own checkbox instead
 (`renovate-rebase-tick`). `ci-red` (FU-115) and `arbitrate` (rounds exhausted) are
-currency-gated too ([SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce)); an un-armed, un-labelled PR is
-a report-only orphan (`unowned-pr-backstop`). ⚖ The `deps-review` and red-`automerge` rows ride the
-`unarmed-major` unit, five rides then a human (FU-046, G12b).
+currency-gated too ([SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce)); an un-armed PR carrying none of the lane labels is
+a report-only orphan, and an un-armed `automerge` or `deps-review` PR older than 24 h is reported as
+an un-armed reviewable bump (`unowned-pr-backstop`). ⚖ The `deps-review` and red-`automerge` rows ride the
+`unarmed-major` unit, five rides then a human (FU-046, G12b): once five rides are recorded the scan
+emits no unit, adds `agent/arbitrate` to the PR and reports one `RIDES EXHAUSTED` line.
 
 **World:** per-case recorded PR lists.
 
@@ -285,18 +307,19 @@ a report-only orphan (`unowned-pr-backstop`). ⚖ The `deps-review` and red-`aut
 
 | description | world | PR state | expect? |
 |---|---|---|---|
-| dispatched | changes-requested/dispatched | CHANGES_REQUESTED, new commit after the verdict | `changes-requested` unit |
+| ⚖ dispatched | changes-requested/dispatched | CHANGES_REQUESTED, nothing newer than the verdict | `changes-requested` unit |
 | blocked-held | changes-requested/blocked-held | CHANGES_REQUESTED + `agent/blocked` | held |
-| reviewable-again-held | changes-requested/reviewable-again-held | CHANGES_REQUESTED, nothing new since the verdict | held |
-| body-edit-held | changes-requested/body-edit-held | only the body edited since the verdict | held for re-review |
+| ⚖ reviewable-again-held | changes-requested/reviewable-again-held | CHANGES_REQUESTED, a content commit newer than the verdict | held (re-review pending) |
+| body-edit-held | changes-requested/body-edit-held | only the body edited since the verdict | held (re-review pending) |
+| ⚖ body-edit-specs-reviewer-held | changes-requested/body-edit-specs-reviewer-held | only the body edited since the verdict, which is the specs reviewer's | held (re-review pending) |
 | clause | merge-conflict/clause | worker PR labelled `merge-conflict` | `merge-conflict` unit |
 | null-author | merge-conflict/null-author | `merge-conflict`, `author: null` | no crash, scoped out |
 | source-issue-blocked | merge-conflict/source-issue-blocked | the PR's issue carries `agent/blocked` | held |
-| cr-emits | unarmed-major/cr-emits | un-armed `major`, CHANGES_REQUESTED | `unarmed-major` unit |
+| ⚖ cr-emits | unarmed-major/cr-emits | un-armed `major` authored by Renovate, CHANGES_REQUESTED | `unarmed-major` unit |
 | automerge-red-emits | unarmed-major/automerge-red-emits | `automerge` ∧ armed, red at a settled head | `unarmed-major` unit |
 | automerge-green-skips | unarmed-major/automerge-green-skips | `automerge` ∧ armed ∧ green | no unit (the reflex's) |
-| deps-review-rides-exhausted | unarmed-major/deps-review-rides-exhausted | `deps-review` after five rides | no unit, human cue |
-| deps-review-unarmed-old | unowned-pr-backstop/deps-review-unarmed-old | un-armed, un-labelled, old | orphan report |
+| ⚖ deps-review-rides-exhausted | unarmed-major/deps-review-rides-exhausted | `deps-review`, armed, red; five `unarmed-major` rides already recorded | no unit; `agent/arbitrate` written, a `RIDES EXHAUSTED` report line |
+| ⚖ deps-review-unarmed-old | unowned-pr-backstop/deps-review-unarmed-old | labels `dependencies`, `deps-review`; un-armed; open 17 days (> 24 h) | an `un-armed reviewable bump` report line |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -315,7 +338,10 @@ the ride's own push, dismissal or rerun is the state change that re-opens the ga
 marker write WARNs and dispatches anyway — it costs the debounce, never the ride. ⚖ `ci-red`
 folds each check's `startedAt` (a rerun re-opens it); `arbitrate` does not (per-check churn
 re-armed it as noise, homelab#1011). The goal-checkpoint units carry their own marker on the Goal
-issue (`goal-checkpoint-b/c-dispatch-marker`).
+issue (`goal-checkpoint-b/c-dispatch-marker`). An assembly PR's (head `goal/**`) CHANGES_REQUESTED
+wakes `goal-checkpoint` for its Goal instead of a fix round, and is debounced by the same
+mechanism under its own clause, `state-fp:assembly-cr:<hash>`: while the marker equals the current
+fingerprint the scan reports `DEBOUNCED` and emits no unit.
 
 **World:** per-case recorded PR views and comment timelines.
 
@@ -328,7 +354,7 @@ issue (`goal-checkpoint-b/c-dispatch-marker`).
 | debounced | unarmed-major/debounced | fingerprint equal | report line, no unit |
 | content-push-rearms | unarmed-major/content-push-rearms | a content commit since the marker | unit |
 | ci-red-rerun-wake-dispatch | ci-red-rounds-two-channels/ci-red-rerun-wake-dispatch | same head, a rerun's new `startedAt` | `ci-red` unit |
-| assembly-cr-debounced | assembly-cr-debounced | goal assembly, CHANGES_REQUESTED, fingerprint equal | no `goal-checkpoint` unit |
+| assembly-cr-debounced | assembly-cr-debounced | goal assembly PR, CHANGES_REQUESTED, `state-fp:assembly-cr` marker equal | a `DEBOUNCED` report line, no `goal-checkpoint` unit |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -349,7 +375,9 @@ reconciles `agent/review` (IL-T27) and a closed issue's stale `agent/blocked`/`a
 comment, never a quote — parks the issue `agent/blocked` (IL-T26). Any unreadable probe skips the
 clause instead of waking.
 
-**World:** `verdict` / `inert` (`c4c5-infeasible`), recorded pod lists.
+**World:** `verdict` / `inert` (`c4c5-infeasible`), recorded pod lists. A probe that cannot read
+an issue's comments skips the park for that issue: nothing is written, one `PROBE_FAILED` report
+line names it, and the issue keeps its ordinary `c4c5-redispatch` unit.
 
 #### What does an abandoned in-progress issue become?
 
@@ -359,7 +387,7 @@ clause instead of waking.
 | probe-fail | c4c5-pod-liveness/probe-fail | the pod read fails (`STUB_KUBECTL=fail`) | clause skipped |
 | parks | verdict | `AGENT_INFEASIBLE: <path>` as a comment's first line | `agent/blocked` + park comment |
 | quoted-inert | inert | the same text quoted mid-body | no park |
-| probe-fail | inert | `STUB_GH=fail` | no write |
+| probe-fail | inert | `STUB_GH=fail` | no write; a `PROBE_FAILED` report line, #66 keeps its `c4c5-redispatch` unit |
 | done-phantom-belt | done-phantom-belt | closed issue, stale `agent/review`, merged PR mentions it, persisted | `agent/done` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -376,7 +404,11 @@ attributed to neither a provider nor a model is the "us" case and latches `agent
 fleet-fault marker (IL-T30), while a class attributed to a cell (a provider latched, a model
 nominated) writes no label. A latched issue unlatches only when the marker's cause is closed and
 the PR's CI is green (an issue with no PR: cause closed and the open-PR list read); an unreadable
-cause, PR or list holds the label (rule #6). The `ci-red` clause holds instead of dispatching when
+cause, PR or list holds the label (rule #6). On the latch side, a strike whose class is not a
+serving class (`unknown`) is attributed to neither a provider nor a model, so it counts as "us";
+an unreadable `/router-status` writes no label, files nothing and reports one `⛔` line (rule #6 —
+never fail into a write); and the `agent/error` label write rides REST, so a drained GraphQL quota
+does not stop it (`gh_label_add`). The `ci-red` clause holds instead of dispatching when
 master shows the same failing step on several PRs (`ci-red-fleet-hold`).
 
 ⚑ gap: the attribution reads the old proxy's `GET /router-status` (`ROUTER_STATUS_URL`,
@@ -394,9 +426,9 @@ contract the attribution is the gateway's — the strike store behind
 | provider-latch | pair | the pair cooled in the router | provider-latch (no label) |
 | model-nomination | across | — | model-nomination (no label) |
 | us-case-labels | spread | — | `agent/error` + fleet-fault marker |
-| us-case-unknown | unknown | — | us-case-unknown |
-| router-unreadable | pair | `CURL_RC=1` | router-unreadable (no label) |
-| us-case-labels-graphql-drained | spread | `STUB_GH_GRAPHQL=drained` | `agent/error` still lands (REST) |
+| us-case-unknown | unknown | — | `agent/error` + fleet-fault marker, on a non-serving class (`unknown`) |
+| router-unreadable | pair | `CURL_RC=1` | no label, no marker; one `⛔` report line |
+| us-case-labels-graphql-drained | spread | `STUB_GH_GRAPHQL=drained` | `agent/error` + fleet-fault marker, written over REST |
 
 #### When does a fleet latch release?
 
@@ -420,7 +452,21 @@ The goal lane: an `agent/queued` Goal emits `goal-decompose` (the session author
 `Base:` is mandatory on a Goal, brief §Goal decompose); an open Goal whose tree holds an
 undispositioned member, or whose members are all closed, emits `goal-checkpoint` — bare members
 are counted, never queued (ADR-122 (1)), `deferred` members are excluded and `adopted` ones counted
-(ADR-122 (4)); a merged PR's issue is closed out by `merged-closeout` (C6, keyed on the pre-merge
+(ADR-122 (4)). A checkpoint is due for any of three reasons, and the unit names them: the
+[findings store](../../../docs/glossary.md) holds at least `GOAL_CHECKPOINT_N` (default 5) undispositioned findings (fewer wake nothing) (total minus
+dispositioned, e.g. `findings 5 undispositioned` for 6 total / 1 dispositioned); the child set
+is complete pre-launch; a member is undispositioned. The child set is complete pre-launch when the
+Goal has no `goal/post-launch` label, at least one member is closed, and no counted member is open.
+A counted member is one ruled `adopted`, or one carrying an `agent/*` state label and not ruled
+`deferred`. An open member that is unruled and unlabelled is undispositioned: it wakes the checkpoint
+and is not counted, so it does not stop the set being complete. When the disposition read fails,
+every open member (except the `post-launch:` bucket) is counted. Dispositions are read from the store comment
+on the Goal; when that read fails the undispositioned-member wake is held this pass, with one
+warning (an unreadable probe never becomes a write). An `adopted` member that is open and carries
+no `agent/*` state label is counted but has no waker of its own, so one orphan line names it
+(visibility only, nothing written). A queued Goal with no `Base:` line is refused (no decompose
+unit) and the refusal names both legal values, `Base: master` and `Base: goal/<branch>`. A merged
+PR's issue is closed out by `merged-closeout` (C6, keyed on the pre-merge
 lifecycle label, #2808). At dispatch, `merged-closeout`, `goal-checkpoint`, `arbitrate` and
 `changes-requested` units carry a **harvest disposition**: the Goal ancestor
 (`goal_resolve_ancestor`, `goal-budget.sh`), its `post-launch:` bucket (created and linked by the
@@ -433,14 +479,14 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 
 #### Does the Goal's tree wake its checkpoint?
 
-| description | world | tree | expect? |
-|---|---|---|---|
-| bare-members-inert | open-pre | members with no disposition, none queued | checkpoint-due |
-| undispositioned-wakes | open-pre | an undispositioned member | undispositioned-wakes |
-| deferred-excluded | open-pre | a `deferred` member open | deferred-excluded |
-| adopted-open-unlabelled | open-pre | an `adopted` member open, no label | adopted-open-unlabelled |
-| dispositions-unreadable | open-pre | the disposition read fails | dispositions-unreadable |
-| base-required | open-pre | a Goal with no `Base:` | base-required |
+| description | world | members | findings store | queued | expect? |
+|---|---|---|---|---|---|
+| ⚖ bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | `goal-checkpoint` emitted: yes — the same reason as the world without the members (`checkpoint-due` template: `findings 5 undispositioned + child-set complete pre-launch`); the members add nothing to it and none is queued |
+| ⚖ undispositioned-wakes | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — reasons `child-set complete pre-launch` + `members 1 undispositioned` |
+| ⚖ deferred-excluded | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, `deferred` | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
+| ⚖ adopted-open-unlabelled | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
+| ⚖ dispositions-unreadable | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
+| ⚖ base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | `goal-decompose` refused: no decompose unit, the refusal names `Base: master` and `Base: goal/<branch>` |
 
 #### Which Goal does a merged PR's finding belong to?
 
@@ -448,9 +494,9 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 |---|---|---|---|
 | goal-open-funded | circles-29-tree | open Goal, budget left | goal-open-funded (store) |
 | goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
-| deep-sprout | deep-sprout | several levels below the Goal | deep-sprout |
-| master-inert | master-inert | no Goal ancestor | master-inert |
-| bucket-child | homelab-278-tree | under the `post-launch:` bucket | bucket-child |
+| ⚖ deep-sprout | deep-sprout | several levels below the Goal | the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
+| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; no `harvest` disposition on the item (inert) |
+| ⚖ bucket-child | homelab-278-tree | under the `post-launch:` bucket | the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -473,7 +519,9 @@ Within a lane the clause priority is fixed — `c4c5-redispatch`, `arbitrate`, `
 loops, and only then new work (`coordinator-scan.sh:6844`). [Aging](glossary.md#aging): a `goal-decompose` /
 `queued-dispatch` unit that has lost `SCAN_AGING_N` (3) lane dispatches since its newest
 `agent/queued` label event jumps the walk once; the loss count is the `agent-event` markers on the
-lane siblings' `agent-summary` comments, read-only. An unreadable probe never ages. The
+lane siblings' `agent-summary` comments, read-only. An unreadable probe never ages: when the
+unit's `agent/queued` label event cannot be read, the scan reports one ``aging: <unit> — no readable `agent/queued` labeled event; ordinary
+walk this pass`` line and walks the lane in clause order. The
 subscription probe before each spawn after the first is the fleet ceiling: when it fails, the
 remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatch-admission)).
 
@@ -481,12 +529,12 @@ remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](
 
 #### What does a pass dispatch?
 
-| description | world | ROW | expect? |
-|---|---|---|---|
-| two-lanes | — | two-lanes | two-lanes (one `changes-requested` on master + one queued child on `goal/x`, two spawns) |
-| aged | — | aged | aged (`goal-decompose` lost 3 → dispatched before the recovery unit) |
-| not-yet | — | not-yet | not-yet (lost 2 → the recovery unit wins) |
-| probe-unreadable | — | probe-unreadable | probe-unreadable (one report line, ordinary walk) |
+| description | world | ROW | lanes | lost dispatches | expect? |
+|---|---|---|---|---|---|
+| two-lanes | — | two-lanes | `master`: one `changes-requested` (#500); `goal/x`: one queued child (#600) | — | two spawns, `master` lane first (oldest item #500), then `goal/x` (#600) |
+| aged | — | aged | one lane (`master`): a `changes-requested` and a `goal-decompose` | 3 | one spawn: `goal-decompose`, before the recovery unit |
+| not-yet | — | not-yet | one lane (`master`): a `changes-requested` and a `goal-decompose` | 2 | one spawn: `changes-requested` (ordinary walk) |
+| probe-unreadable | — | probe-unreadable | one lane (`master`): a `changes-requested` and a `goal-decompose` | unreadable | one spawn: `changes-requested` (ordinary walk), one report line |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

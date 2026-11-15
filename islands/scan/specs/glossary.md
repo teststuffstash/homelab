@@ -80,3 +80,4 @@ machine | none` ([SCAN-SIGNAL-CLASS](signals.md#scan-signal-class)).
 An armed PR with nothing but currency and CI between it and auto-merge: `reviewDecision`
 APPROVED, or `""` with the reviewer bot's APPROVED newer than the newest non-merge commit (or the
 `automerge` label). The updater's leg-1 predicate ([SCAN-UPDATER-PICK](updater.md#scan-updater-pick)).
+For a Renovate PR that is untouched or updater-merged ([SCAN-UPDATER-RENOVATE](updater.md#scan-updater-renovate)) the rollup must also be green, and a CANCELLED check outlived by a same-named sibling is not red.

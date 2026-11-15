@@ -149,6 +149,10 @@ MAP=(
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
   "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
+  # the scan island's gate (homelab#3389, islands/scan/): ruff + pytest incl. the replay-family adapter.
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
+  # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
+  "-- bash islands/scan/scripts/ci.sh:^(islands/scan/|agents/replay/(fixtures/(major-handoff|updater)/|stubs/|run\.sh$)|agents/(major-handoff|update-pr-branch|renovate-currency|machine-comment)\.sh$)"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
