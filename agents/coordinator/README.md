@@ -1149,9 +1149,10 @@ Read the diff + the whole review thread, then rule — exactly one of:
 > fix round, it MUST begin with a line-anchored `ARBITRATE` word (e.g., `ARBITRATE: re-run
 > with the fix below` or `ARBITRATE (context): ...`) — never a bare heading or substring that
 > merely discusses arbitration. The marker may be followed by an optional `(<context>)` and a
-> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher searches
-> both the issue comments AND the PR's conversation comments for this marker; a comment without
-> it is invisible to the worker. The directive may be posted on **either** surface. The marker is
+> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher takes the
+> **newest** marked comment over the issue comments AND the PR's conversation comments together; a
+> comment without it is invisible to the worker. The directive may be posted on **either** surface
+> — no surface takes precedence, a newer ruling anywhere supersedes an older one. The marker is
 > a **documented contract**, not implicit — always begin your arbitration ruling with it.
 
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
