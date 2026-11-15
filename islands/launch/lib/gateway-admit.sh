@@ -50,7 +50,7 @@ GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local
 GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
 GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CONTEXT_TOKENS=""; GW_EXPIRES_AT=""
 GW_HARNESS=""; GW_MODEL=""; GW_WIRE_MODEL=""; GW_PULL_PRELUDE=""; GW_CALLER_DESC=""
-GW_DEFER_REASON=""; GW_RETRY_AFTER=""; GW_LLM_ENV=()
+GW_DEFER_REASON=""; GW_RETRY_AFTER=""
 
 # gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
 # kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
