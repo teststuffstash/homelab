@@ -15409,3 +15409,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   also wrote a wrong third Status form that the worker built verbatim. First sightings only (two needed for a brief
   change): the rows lens must cover the whole page when a body edits its index; a repair checks Status forms against
   rule 10; a residual left `seat` needs an open issue to cite.
+
+## 2026-11-15 (day) — seat: PR #3400's false `blocked-on: human` → pr-hold re-read, island-to-island forward, the loop fixed #3400
+
+- **Condition:** worker PR #3400 (retro island tests root) red on `lock-intake-lint` (`too new ruff@0.17.5`, a fresh
+  `uv.lock`); the ci-red lane ruled "designed wait" 12× in 55 min (the ci-red fingerprint moves on every
+  `iac-sentinel` re-post), ran no worker round, then wrote `blocked-on: human`. Nothing human was needed: `gateway/`
+  already carries `[tool.uv] exclude-newer`.
+- **Trials (seat subagents, one run each):** "is a human needed?" — sonnet, problem-only context: no ×2, instance fix
+  only. Island context + an observation-only fact sheet on fable: requeue + a rule-level class fix ×2, with or without
+  a "which rule caused the stall" question. Retro-island context alone defended the wait — the reader needs the island
+  that owns the red gate. Operator rulings: a rule-level class fix from one item is enough (a retro over a week of
+  rulings finds the rest); the filer names an island and its sitting forwards; unowned paths are commons.
+- **#3421 merged:** `intake-select --source pile` offers an issue whose open PR's newest marker is `blocked-on: human`
+  as a `reread` (`wait: pr-hold`), under `INTAKE_PR_HOLDS=1` (default off; step R rules it report-only).
+- **#3428 merged:** `forward` outcome + step 0 on every `issues:` input + hop cap 2 (`forwards` on the row) + `forward`
+  in the receipt; a split leaves an unclosable input open and files dumb parts; a path no island names is the commons.
+  Reviewer caught two defects before merge (the receipt allowlist dropped `forward`; count vs unruled check disagreed).
+- **Manual trial:** #3424 (named to retro) → retro sitting split it → #3425 (dependency-upgrades), #3426 (agent-loop),
+  #3427 (commons; first ruled `seat`, then forwarded by hand to dependency-upgrades). Dependency sitting on #3425,
+  dry-run: `queue` (the lint's too-new text names `tool.uv.exclude-newer`; one sentence in `docs/renovate.md`).
+- **#3400:** one `ARBITRATE` comment from the operator login 14:01Z released the hold → scan unit 14:03Z → coordinator
+  fix round 14:05Z → worker push 14:09Z → approved + merged 14:14Z.

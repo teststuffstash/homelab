@@ -18,6 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-15 day — island forward + pr-hold re-read on master; TICK-LOG 11-15 day; FU-320).** OPERATOR:
+  (a) what may release a PR-level `blocked-on: human` besides a human comment — until ruled, `INTAKE_PR_HOLDS` stays
+  off and a `pr-hold` row is report-only; (b) confirm or revert #3428's split amendment (an input the sitting may not
+  close stays open; parts for other islands are verbatim copies). SEAT: (c) trial issues open and unruled — #3425,
+  #3427 (dependency-upgrades), #3426 (agent-loop); #3424 open with its `intake: split` ruling; check the next morning
+  sittings rule them (first unattended `forward`/split read); (d) `intake-select.sh` copies the scan's `blocked-on:`
+  grammar (a second reader) — fold into one definition; (e) `docs/intake/retro.md` still says the island is "not yet
+  selectable"; (f) PR #3147's draft `intake-select` spec predates `pr-hold` and `forward`; (g) a plain `forward` and
+  the hop cap have run only in the selector tests and one hand-written comment (#3427).
+
 - **⚑ PICKUP (2026-11-15 — intake review stage live, islands scan/launch/retro started; TICK-LOG 11-14 → 15; FU-320).**
   OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — the `.github/workflows/ci.yaml`
   steps so required `ci` runs each island's suite; (c) launch island: fresh launcher = bash carrying the same blocks over
