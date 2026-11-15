@@ -30,7 +30,7 @@
   replay is a comparison. A `queue`/`goal` body that asks a worker to match, port or carry over an
   old member is not queue-ready.
 - **The comparison** = the replay families the island's specs name per requirement
-  (`retro-quiet-guard`, `retro-gateway-cell`, `retro-key/*`, `retro-cell-report/*`, `retro-harvest`, `retro-harvest-push`, `retro-push-belt`, `retro-activity-window`) — `agents/replay/fixtures/**`, **read-only** — plus the in-process suites `agents/retro-{activity,pipeline,findings}-test.py` (standalone test scripts of the OLD members, not fixtures: run them as the behaviour to match, never edit them from here): each is run against the old member
+  (`retro-quiet-guard`, `retro-gateway-cell`, `retro-key/*`, `retro-cell-report/*`, `retro-harvest`, `retro-harvest-push`, `retro-push-belt`, `retro-activity-window`) — `agents/replay/fixtures/**`, **read-only** — plus the in-process suites `agents/retro-{activity,pipeline,findings}-test.py` (standalone test scripts of the OLD members, not fixtures: they are part of the comparison, never edited from here): each is run against the old member
   and the new component, and every difference gets a ruling (`spec` / `old` / `new`); equality is not
   required and is not the acceptance. A build item never edits a fixture (an existing
   assertion changed is a red flag, `agents/jail-subagent-card.md`). The runtime-read templates `docs/agents/retros/{BRIEF,CROSS-REVIEW,SERIES-BRIEF}.md` stay in place; reports under `docs/agents/retros/` are historical.
