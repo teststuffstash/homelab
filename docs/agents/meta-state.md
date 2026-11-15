@@ -18,6 +18,21 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-15 — intake review stage live, islands scan/launch/retro started; TICK-LOG 11-14 → 15; FU-320).**
+  OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — the `.github/workflows/ci.yaml`
+  steps so required `ci` runs each island's suite; (c) launch island: fresh launcher = bash carrying the same blocks over
+  the same shell variables, or a new shape with its own test hooks? — the rest of that island stays unfiled until
+  answered; (d) intake-workflow defects, unfixed: a dry-run's author/repair sessions hold the write token (only the
+  prompt stops a write); unanswered findings miss the issue when a repair half-runs; a queue ruling without a hold line
+  can be lost; (e) gateway inputs, unfiled: concurrent heavy Go sessions admitted against the 5-hour window;
+  `gw_admit_lane` hard-codes the claude harness; (f) eight spec defects landed unnoticed on master/goal branches — the
+  `real-landed` verdicts in the trial notes `~/.claude/intake-trial-2026-11-14/{v0,v1}/score/`; (g) still owed:
+  #3309, #3308, #3337, PR #3147 (now partly carved into `islands/`), oracle handoff `20261113-1746-…` unclaimed (its
+  three rules-home defects fixed by #3378; asks 1–2 + the issue-review wiring not started). SEAT: (h) an escape read
+  per island worker PR as it merges — first sightings in `~/.claude/intake-trial-2026-11-14/night/escape-3401.md`; a
+  brief change needs a second sighting; (i) unproven on a real author: the unit lens inside 1200 s, the repair's
+  unanswered findings.
+
 - **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The box recreates ci-runners unattended
   (`apply_vm_recreate` mode `on`); the verb's gate is scoped to the VM since #3372 — the NEXT runner template change is
   the first run expected to need no seat close (read its journal: window closed by the verb, `management-apply=success`).
@@ -43,8 +58,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   identities, leg 2 null guards, leg 1 silent skip on a malformed probe) and `pilot/recorder/` (full-shape worlds: bash harness 43/43
   and the strict port 43/43 on the full copy, 0/43 strict on the trimmed original; a missing `author` meant "not Renovate", a missing
   `reviews` meant "unreviewed"). OPERATOR RULINGS OWED: (1) keep the sanitised oracle-fleet recording in the public tree? (2) replace
-  the real updater family's world with the full-shape copy? (3) the ADR-113 revisit — spec-driven strangler per island (updater → review
-  reflex) or keep bash; (4) fix bash findings 2/3/4 before any further port. Also in the session's scratchpad only (not on the PR):
+  the real updater family's world with the full-shape copy? (3) ~~the ADR-113 revisit — spec-driven strangler per island or keep bash~~ ruled
+  2026-11-14: islands built fresh under `islands/` (TICK-LOG 11-14 → 15); (4) fix bash findings 2/3/4 before any further port. Also in the session's scratchpad only (not on the PR):
   the world-mining catalog (391 item-bearing worlds, most persona fields unknown) — re-mine with `pilot`-style recorder data if wanted.
 - **⚑ PICKUP (2026-11-07 — gateway specs in the oracle #977/#998 shape; TICK-LOG 11-06 ~20:00Z + the night entry).**
   DONE: process layer #3182 + five page PRs (#3184 #3186 #3187 #3188 #3189) merged; join baseline zero on all five codes for
