@@ -3,6 +3,8 @@
 # gateway-admit.sh (launch island) — admission through the agent-gateway's POST /sessions. ONE implementation,
 # sourced by a launcher whose LLM session the gateway admits. Written against LAUNCH-ADMIT-HELPER and
 # LAUNCH-ADMIT-BOUND (islands/launch/specs/admission.md); proven by the gateway-admit replay rows.
+# This file implements gw_preflight_caller / gw_admit / gw_release (and gw_preflight_request,
+# gw_auth_header); it does NOT yet implement gw_admit_lane (specified in admission.md, next leg).
 # Nothing live sources this file yet. This file defines functions and
 # resolves two addresses; it never exits and never installs a trap — every refusal is a typed
 # return code, and the CALLER decides what it means (exit, requeue, log-and-skip).
@@ -50,7 +52,7 @@ GW_URL="${AGENT_GATEWAY_URL:-http://agent-gateway.agent-egress.svc.cluster.local
 GW_CALLER_TOKEN_FILE="${AGENT_GATEWAY_CALLER_TOKEN_FILE:-/var/run/secrets/agent-gateway/token}"
 GW_SESSION_ID=""; GW_ENV_KEYS=""; GW_PULL_URL=""; GW_RAIL=""; GW_CONTEXT_TOKENS=""; GW_EXPIRES_AT=""
 GW_HARNESS=""; GW_MODEL=""; GW_WIRE_MODEL=""; GW_PULL_PRELUDE=""; GW_CALLER_DESC=""
-GW_DEFER_REASON=""; GW_RETRY_AFTER=""; GW_LLM_ENV=()
+GW_DEFER_REASON=""; GW_RETRY_AFTER=""
 
 # gw_caller_token — a FRESH caller token on stdout (GW-SESSIONS-AUTH), fetched per call and never
 # kept in a variable: the release may run hours after admission, past a 10-minute mint and past a
