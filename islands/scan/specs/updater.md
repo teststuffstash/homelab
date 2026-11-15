@@ -106,7 +106,7 @@ conflict, deliberately not told apart, homelab#1007) is a skip; the next pass re
 |---|---|---|---|---|
 | conflict-dirty | board | dirty-90 | — | dirty-label |
 | conflict-clear | board | label-conflict-90 | — | label-clear |
-| update-fail | board | conflict-101 (`#101` armed ∧ BEHIND, not DIRTY) | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | no-update-no-label (no `update` action, no `merge-conflict` label op for `#101`) |
+| update-fail | board | conflict-101 (`#101` armed ∧ BEHIND, not DIRTY) | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | update-fail (the `update-branch` PUT for `#101` is attempted and 422s, the skip line prints, and no `merge-conflict` label op is issued for `#101`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
