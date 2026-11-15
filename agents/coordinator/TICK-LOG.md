@@ -15466,4 +15466,7 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `→ #<issue>`; no issue owned it). The seat filed #3461 and pointed the rows at it. Operator, after: no placeholder
   issues from intake/decomposition; the ADR/plan pointer may be the right mark; tally the rejecting rules first, let a
   lint decide what is decidable — no intake-brief change from this sighting.
+- **Wind-down 21:05Z:** #3450 merged 20:42Z; #3462 moved the scan row in `scripts/diff-ci.sh`, #3418 mergeable again.
+  #3418 ends the day CHANGES_REQUESTED by the specs reviewer (four R2: the assembly body lists none of #3450's spec
+  changes) — the operator's accepted end state; nothing else in flight, no subagent running.
 
