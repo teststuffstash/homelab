@@ -6,7 +6,7 @@
 > island's lives in its own repo (ADR-160) —
 > [agent-loop](../docs/intake/agent-loop.md), [substrate](../docs/intake/substrate.md),
 > [dependency-upgrades](../docs/intake/dependency-upgrades.md), [mgmt-box](../docs/intake/mgmt-box.md),
-> [router-pair](../docs/intake/router-pair.md), [scan](../docs/intake/scan.md), [launch](../docs/intake/launch.md), [retro](../docs/intake/retro.md) (facts only — not yet selector rows). A sitting for another island reads this brief, then
+> [router-pair](../docs/intake/router-pair.md), [scan](../docs/intake/scan.md), [launch](../docs/intake/launch.md), [retro](../docs/intake/retro.md). A sitting for another island reads this brief, then
 > that file IN PLACE OF §Island facts and the gateway rows of §What you read (`README.md`,
 > `specs/`, `src/`); membership is `intake-select.sh --island <island>`. Design, evidence and the open
 > questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
@@ -35,7 +35,10 @@ The dispatch prompt names them:
 
 - `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](scripts/intake-select.sh)
   (island membership + no `agent/*` lifecycle label + no standing intake ruling). Trigger: ≥ 3 such
-  issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue. **Attribution inputs**
+  issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue. Membership is the
+  FILER's naming (a title cue, or its `Touches`) — a hint, never a ruling: step 0 tests it. A row
+  carrying `forwards: <n>` reached you by `n` earlier `forward` rulings (another island's sitting
+  named yours). **Attribution inputs**
   (`kind: attribution` — the agent-loop sitting's only): bot-filed (§Hard limits) issues no island
   claims, because the loop's filers leave component attribution to intake. The first act on one is
   naming its island(s) (step 0 of §The procedure).
@@ -48,7 +51,9 @@ The dispatch prompt names them:
   report-only — the source record keeps it (one home per fact), the report says why.
 - `reread:` `<owner/repo>#<n>` … — island issues that an earlier ruling left waiting on a human
   (`agent/blocked`, or a standing `intake: seat`) for `INTAKE_REREAD_AGE_D` days or more
-  (`scripts/intake-select.sh --source pile`). A wait is a claim about ONE fact; facts move. You
+  (`scripts/intake-select.sh --source pile`). A row with `wait: pr-hold` is an issue the loop still
+  holds whose open PR (`pr`) carries `blocked-on: human` as its newest ruling: the wait was
+  written on the PR, by a PR lane, and no label shows it (offered only under `INTAKE_PR_HOLDS=1`). A wait is a claim about ONE fact; facts move. You
   re-verify that fact (§The procedure, step R) and either change the ruling or leave the item
   untouched — a re-read that changes nothing writes nothing. The morning sitting gets these
   together with its `dig` inputs and the island's unruled `issues:`; there an unchanged wait is
@@ -98,16 +103,32 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; §Hard limits — whose issue it is) |
 | **requeue** | a `reread:` input whose blocker no longer holds and whose work is one ride from done (a salvaged branch, a blocker that was that ride's own) | labels: remove `agent/blocked`, add `agent/queued`; `intake: requeue — <the fact that changed, with its evidence>`, naming the resumable branch when the ride record has one (the next round resumes it) |
 | **standing** | a valid gap the island records honestly and nobody should spend a ride on now | `intake: standing — <why not now>` (the selector skips it from then on); no labels |
-| **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it (§Hard limits — whose issue it is). A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling); a part owned by yours is ruled in this sitting like any other input |
-| **file** | a `text:` input worth an issue, or the parity gap inside a `seat` (§The procedure, step 3; `Origin=<the input>`) | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting |
+| **split** | one input carries deliverables owned by two or more islands (typically an attribution input) | `file` one issue per island-owned part — its body names the island, narrows `Touches` to that island's paths, `Origin=<the input>`; one `intake: split → #a, #b` comment on the input, then close it (§Hard limits — whose issue it is; an input you may not close stays OPEN, the split comment its ruling). A part owned by ANOTHER island is filed and left for that island's sitting (no labels, no ruling) and is DUMB: that island's title cue, the input's text verbatim, one line naming the part — you never write another island's deliverable; a part owned by yours is ruled in this sitting like any other input |
+| **file** | a `text:` input worth an issue, or the parity gap inside a `seat` (§The procedure, step 3; `Origin=<the input>`) | create the issue (machine block through the writer, `Origin=<source>` as prose when the source is not an issue), then rule it like any other input in the same sitting — unless ANOTHER island owns it: then title it with that island's cue and leave it for that island's sitting (no labels, no ruling), as `split` does |
+| **forward** | the whole input is another island's (step 0): the fact, gate or path its fix would change is owned there, whatever the filer named | retitle the issue to that island's title cue (its facts file's membership line), nothing else in the body; ONE comment `intake: forward → <island> — <the owned thing, one line>`, quoting the old title. No labels. That island's selector offers it at its next sitting |
 
 ## The procedure, per input, in this order
 
-0. **Whose is it?** (attribution inputs only.) Name the island(s) that own its deliverables, from
-   the facts files' membership lines. All yours → continue as a member. All one OTHER island's →
-   `split` with one part (re-filed under that island's title/`Touches`, so its selector claims it).
-   Two or more islands → `split`. No island owns a part → that part is `seat`, naming the missing
-   owner. You never rule another island's part — its sitting does.
+0. **Whose is it?** (every `issues:` input — a member's island was named by its filer, an
+   attribution input's by nobody.) Name the island(s) that own what its fix would change — the
+   gate that went red, the rule that produced the wait, the path — from the facts files'
+   membership lines ([`docs/intake/`](../docs/intake/), one file per island; you read those
+   lines, never another island's owning docs). All yours → continue. All one OTHER island's →
+   `forward`. Two or more islands → `split`. You never rule another island's part — its sitting
+   does.
+   **A path no island's membership names is the commons, not a missing owner** (operator,
+   2026-11-15: three kinds of ground — the defined islands; the platform not yet split into
+   islands, which the `agent-loop` and other pre-island rows hold; and the rest, which nobody
+   wholly owns and anybody may change within reason). A commons part goes with the island whose
+   own thing it serves — the gate it wires, the lane that reads it: yours → rule it with your
+   part, as your own input; another island's → it rides that island's `forward` or split part.
+   "Within reason" is the queue bar (one ride, a bounded `Touches`, every path `machine-merge`
+   by `classify_touches`); past it the item is `goal` or `seat` by the ordinary tests, never
+   `seat` for want of an owner.
+   **The cap.** An input whose row says `forwards: 2` (or more) is not forwarded again: `seat`,
+   naming the islands that passed it and what each said it lacked. Nor do you forward an input
+   back to the island whose `intake: forward` comment sent it to you — that disagreement is the
+   `seat`.
 1. **Is it still real?** Live-verify against the spec page and the repo: the flag is on the line
    it names; the behaviour the body describes is still what the row says. A claim that no longer
    holds is `close` with the evidence (the line, the PR that changed it, the date). Trust the
@@ -152,7 +173,8 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
    "Worth it" is the island's contract gaining a row it relies on or losing a gap a consumer hits;
    it is not "the issue exists".
 
-**R. A `reread:` input — is the wait still true?** Read the comment that parked it and name the
+**R. A `reread:` input — is the wait still true?** Read the comment that parked it (on a
+`pr-hold` row: the PR's newest ruling, and the failing check it names) and name the
 ONE fact it waits on. Then test that fact, not the comment: the ride record (did the work finish?
 what stopped it?), the loop-worker PRs merged since (was the blocker that ride's own?), the alert
 or gauge, the spec line, the ruling the tracker called pending, the done-when the body offers
@@ -160,7 +182,10 @@ or gauge, the spec line, the ruling the tracker called pending, the done-when th
 `queue` after a rewrite, `close`, `standing`). Unchanged → no write; the report says which fact
 you tested and where. Never restate a wait in a second comment. Step 3's parity check runs on a
 re-read too: a wait that narrows (one of its facts filed as a parity gap) has changed, and gets
-the one comment naming what remains.
+the one comment naming what remains. **A `pr-hold` row is ruled in the report only**: no label
+and no comment on the issue or the PR — the report gives the ruling, the fact tested, and the
+one instruction the next round needs; its receipt line is `deferred`. (The scan releases a
+PR-level `blocked-on: human` on a human's comment only; what else may release it is not ruled.)
 
 **E. An `escape:` input — what intake let through.** Follow
 [`intake-escape.md`](intake-escape.md) on the PR: classify each blocking review finding of each
@@ -320,7 +345,10 @@ Follow the consumer card's three acts exactly, with these pins:
   when you would close a recent one, rule it `seat` with the recommendation instead. Every close
   or rewrite of an operator-login issue keeps the original body recoverable (the comment quotes
   what was removed or says "rewritten; the original is in the edit history") so one push undoes
-  it. Any other human's issue is never closed, folded or rewritten: `seat`.
+  it. Any other human's issue is never closed, folded or rewritten: `seat`. A `forward` is the
+  light edit on any bot-filed or operator-login issue, whatever its age (the title cue only; the
+  comment quotes the old title). A `split` of a recent operator-login issue files the parts and
+  leaves the input open (nothing of its text is lost or closed).
 - **Idempotent writes.** Re-read labels and the last `intake:` comment immediately before writing;
   an item carrying any `agent/*` label or a standing ruling is not yours this sitting — unless it
   came as a `reread:` input, where `agent/blocked` or the `seat` ruling is exactly what you test.

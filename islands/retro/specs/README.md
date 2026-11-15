@@ -8,8 +8,8 @@ it owns lives one level up ([../README.md](../README.md)); the design rulings an
 [docs/agents/observability-and-retro.md §Part B](../../../docs/agents/observability-and-retro.md).
 
 > **Contract for a fresh build** ([../README.md](../README.md)): these pages specify the component
-> to be written under `islands/retro/`; the "code" a row cites is the OLD member it replaces, read as
-> the behaviour to match. Line citations (`file:<n>`) are against the spike's base `c34535a5`
+> to be written under `islands/retro/`; the "code" a row cites is the OLD member it replaces, read
+> to explain a difference, never as the source ([Built from the specs](../../README.md#built-from-the-specs-never-copied)). Line citations (`file:<n>`) are against the spike's base `c34535a5`
 > (2026-11-07) and have drifted on master — the `REPLAY:` sentinels and fixture dirs are the stable
 > anchors. Nothing live reads this directory.
 
@@ -24,10 +24,9 @@ allure-behavior-snippets, pinned:
 What this island adds, by rule:
 
 - **Rule 1 (gate):** intended reviewer-gated, not codeowner-gated
-  ([context-and-autonomy.md §Direction 2](../../../docs/spikes/context-and-autonomy.md)). ⚑ Not
-  wired: the claim's `specs` field admits ONE `{root, tests}` pair per repo and homelab's names the
-  gateway's, so a retro spec change today reaches no specs reviewer — until the field becomes a
-  list, or the island moves, the codeowner read is the only gate.
+  ([context-and-autonomy.md §Direction 2](../../../docs/spikes/context-and-autonomy.md)). The
+  specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379), a rows
+  review with no tests root and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** prefix `RETRO-`; areas `GUARD`, `WINDOW`, `BUNDLE`, `LEDGER`, `PUBLISH`, `STORE`,
   `ACTIVITY`, `RANK`, `CELL`, `REPORT`, `HARVEST`, `BELT`, `FINDINGS`, `ACCEPT`, `KPI`.
 - **Rule 5 (evidence):** **no evidence is generated yet** — this island has no Allure run and no
