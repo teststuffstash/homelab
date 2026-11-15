@@ -1,6 +1,7 @@
 # raw Allure results (pytest --alluredir)
 allure-results/
-# the evidence pack (child 2) lands here
+# the evidence pack (scripts/evidence.sh) lands here
+allure-evidence/
 evidence/
 .devbox/
 .venv/
