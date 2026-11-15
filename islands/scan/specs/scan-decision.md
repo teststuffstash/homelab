@@ -285,8 +285,9 @@ actionable when it is open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-
 (ADR-141). `changes-requested` holds while the PR carries `agent/blocked` or an unresolved
 `blocked-on:` marker, and once the PR is reviewable again — a content commit or a body edit newer
 than the newest verdict means the worker has answered and re-review is the reviewer's, so no fix
-round is spent (the mirror of the reflex's `reviewable_again`); with nothing newer than the
-verdict it dispatches a fix round. `merge-conflict` scopes
+round is spent (the mirror of the reflex's `reviewable_again`). Which reviewer filed the newest
+CHANGES_REQUESTED does not matter: the code reviewer and the specs reviewer both re-open their own
+verdict on a newer body edit. With nothing newer than the verdict it dispatches a fix round. `merge-conflict` scopes
 to worker-authored PRs, tolerates a null author, and holds when the source issue is blocked; a
 Renovate-authored DIRTY PR is rebased by ticking Renovate's own checkbox instead
 (`renovate-rebase-tick`). `ci-red` (FU-115) and `arbitrate` (rounds exhausted) are
@@ -305,6 +306,7 @@ an un-armed reviewable bump (`unowned-pr-backstop`). ⚖ The `deps-review` and r
 | blocked-held | changes-requested/blocked-held | CHANGES_REQUESTED + `agent/blocked` | held |
 | ⚖ reviewable-again-held | changes-requested/reviewable-again-held | CHANGES_REQUESTED, a content commit newer than the verdict | held (re-review pending) |
 | body-edit-held | changes-requested/body-edit-held | only the body edited since the verdict | held (re-review pending) |
+| ⚖ body-edit-specs-reviewer-held | changes-requested/body-edit-specs-reviewer-held | only the body edited since the verdict, which is the specs reviewer's | held (re-review pending) |
 | clause | merge-conflict/clause | worker PR labelled `merge-conflict` | `merge-conflict` unit |
 | null-author | merge-conflict/null-author | `merge-conflict`, `author: null` | no crash, scoped out |
 | source-issue-blocked | merge-conflict/source-issue-blocked | the PR's issue carries `agent/blocked` | held |
