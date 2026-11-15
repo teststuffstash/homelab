@@ -166,7 +166,7 @@ generic `🌱` awaiting-triage line instead — report-only, the same human gate
 | no-agent-fix | queued-derivation/no-agent-fix | `agent/queued` without `agent-fix` | unit emitted |
 | ready | queued-classification/ready | `agent/queued`, every blocker closed | `queued-dispatch` unit |
 | held | queued-classification/held | `agent/queued`, a blocker open | `⏳ queued-blocked`, no unit |
-| blocker-open | unblocked-unlabeled/blocker-open | bot-authored, unlabelled, a blocker open | no `🔓 UNBLOCKED-UNLABELED` line (the generic `🌱` awaiting-triage line only) |
+| ⚖ blocker-open | unblocked-unlabeled/blocker-open | bot-authored, unlabelled, a blocker open | no `🔓 UNBLOCKED-UNLABELED` line (the generic `🌱` awaiting-triage line only) |
 | surfaces | unblocked-unlabeled/surfaces | unlabelled > 24 h, every blocker closed | a `🔓 UNBLOCKED-UNLABELED` line naming the issue and its closed blockers; no label written |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -318,8 +318,8 @@ emits no unit, adds `agent/arbitrate` to the PR and reports one `RIDES EXHAUSTED
 | cr-emits | unarmed-major/cr-emits | un-armed `major`, CHANGES_REQUESTED | `unarmed-major` unit |
 | automerge-red-emits | unarmed-major/automerge-red-emits | `automerge` ∧ armed, red at a settled head | `unarmed-major` unit |
 | automerge-green-skips | unarmed-major/automerge-green-skips | `automerge` ∧ armed ∧ green | no unit (the reflex's) |
-| deps-review-rides-exhausted | unarmed-major/deps-review-rides-exhausted | `deps-review`, armed, red; five `unarmed-major` rides already recorded | no unit; `agent/arbitrate` written, a `RIDES EXHAUSTED` report line |
-| deps-review-unarmed-old | unowned-pr-backstop/deps-review-unarmed-old | labels `dependencies`, `deps-review`; un-armed; open 17 days (> 24 h) | an `un-armed reviewable bump` report line |
+| ⚖ deps-review-rides-exhausted | unarmed-major/deps-review-rides-exhausted | `deps-review`, armed, red; five `unarmed-major` rides already recorded | no unit; `agent/arbitrate` written, a `RIDES EXHAUSTED` report line |
+| ⚖ deps-review-unarmed-old | unowned-pr-backstop/deps-review-unarmed-old | labels `dependencies`, `deps-review`; un-armed; open 17 days (> 24 h) | an `un-armed reviewable bump` report line |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
