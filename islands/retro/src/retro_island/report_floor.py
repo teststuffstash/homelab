@@ -14,24 +14,32 @@ FLOOR = 20
 _NON_CONTENT = re.compile(r"^[ \t\r\n\f\v]*$|^#")
 
 
+def _lines(text: str) -> list[str]:
+    """Split on `\\n` only (awk/grep records), never `\\r`, `\\f` or U+2028; the trailing empty piece is dropped."""
+    parts = text.split("\n")
+    if parts[-1] == "":
+        parts.pop()
+    return parts
+
+
 def _last_block(log: str) -> str:
     """The LAST complete BEGIN/END block, markers and inter-block text dropped (the old awk pass)."""
     buf: list[str] = []
     last: list[str] = []
     inside = False
-    for line in log.splitlines(keepends=True):
+    for line in _lines(log):
         if BEGIN in line:
             buf, inside = [], True
         elif END in line:
             inside, last, buf = False, buf, []
         elif inside:
-            buf.append(line if line.endswith("\n") else line + "\n")
+            buf.append(line + "\n")
     return "".join(last)
 
 
 def content_lines(text: str) -> int:
     """Lines that are neither whitespace-only nor start with `#` in column 0."""
-    return sum(1 for line in text.splitlines() if not _NON_CONTENT.match(line))
+    return sum(1 for line in _lines(text) if not _NON_CONTENT.match(line))
 
 
 def report_floor(text: str, kind: str) -> str:

@@ -87,10 +87,17 @@ def test_definitions_match_old(tmp_path):
         ("log", f"BEGIN-RETRO-REPORT\nEND-RETRO-REPORT\n{filler}"),
         ("log", f"x BEGIN-RETRO-REPORT\n{filler}END-RETRO-REPORT y\n"),  # marker strings anywhere in a line
         ("log", f"BEGIN-RETRO-REPORT\n{filler.rstrip()}\nEND-RETRO-REPORT\n"),
+        # bare \r / \f / U+2028 are not line breaks for the old awk/grep member
+        ("log", "BEGIN-RETRO-REPORT\n" + "progress 10%\rprogress 100%\n" * 10 + "x\n" * 5 + "END-RETRO-REPORT\n"),
+        ("log", "BEGIN-RETRO-REPORT\n" + "a\fb\n" * 10 + "x\n" * 5 + "END-RETRO-REPORT\n"),
+        ("log", "BEGIN-RETRO-REPORT\n" + "a\u2028b\n" * 10 + "x\n" * 5 + "END-RETRO-REPORT\n"),
+        ("report", "a\rb\n" * 10 + "x\n" * 5),
     ]
     for kind, text in cases:
         agree(tmp_path, text, kind)
     assert report_floor("END-RETRO-REPORT\nBEGIN-RETRO-REPORT\n", "log") == "empty"
+    cr = "BEGIN-RETRO-REPORT\n" + "progress 10%\rprogress 100%\n" * 10 + "x\n" * 5 + "END-RETRO-REPORT\n"
+    assert report_floor(cr, "log") == "under-floor: 15 content lines < 20"
 
 
 def test_bad_kind():
