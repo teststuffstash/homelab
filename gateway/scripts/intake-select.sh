@@ -711,7 +711,7 @@ while [ "$i" -lt "$count" ]; do
     [ "$w" = seat ] && wait_kind=seat
     [ "$life" = blocked ] && wait_kind=agent/blocked
     pr=""
-    [ "$life" = loop ] && { wait_kind=pr-hold; pr="${PRHOLD_PR[$num]}"; ruling="blocked-on: human (PR #${pr})"; }
+    [ "$life" = loop ] && { wait_kind="pr-hold"; pr="${PRHOLD_PR[$num]}"; ruling="blocked-on: human (PR #${pr})"; }
     [ -n "$wait_kind" ] || continue
     if [ -n "$pr" ]; then since="${PRHOLD_SINCE[$num]}"; else since="$(lazy "${F_since[$ix]}")" || exit 5; fi
     sts="$(date -u -d "$since" +%s 2>/dev/null || echo "$now")"
