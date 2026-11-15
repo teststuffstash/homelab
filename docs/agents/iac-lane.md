@@ -476,6 +476,10 @@ claim diff, never a silent flip. ⚠ **The first live dispatch is what exposed I
   pushed on every tick incl. zero-PR ones — FU-176: the pushgateway replaces the whole group per
   push, so engine rows legitimately vanish on quiet ticks and are NOT a health signal;
   `IacSentinelSilent` alerts on >30m of heartbeat silence).
+  The status is therefore posted **only when it changes** the head's latest `iac-sentinel` verdict
+  (state or description): GitHub keeps at most 1000 statuses per sha+context, and the old
+  re-post-every-tick froze sleep-iac#80's required check at the cap. One combined-status read per
+  head per tick decides it; `scripts/iac-sentinel-test.sh` pins the rule.
   This — not review — is what closes IAC-G01, because rollback is structurally blind to
   silent security holes (a public bucket never degrades a KPI).
 - **L1 — pre-merge rendered diff:** master-vs-branch manifest diff as a PR comment — grounds any

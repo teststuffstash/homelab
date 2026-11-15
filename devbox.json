@@ -236,7 +236,8 @@
       ],
       "sentinel-smoke": [
         "bash scripts/iac-sentinel.sh --smoke",
-        "bash scripts/iac-policy-test.sh"
+        "bash scripts/iac-policy-test.sh",
+        "bash scripts/iac-sentinel-test.sh"
       ],
       "machines-lint": [
         "bash scripts/machines-lint.sh"
