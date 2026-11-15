@@ -123,7 +123,7 @@ the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the ro
 | harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
 | unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
 | unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
-| unknown-decision | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no session kept | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
+| unknown-decision | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
 The `(exit)` rows run through the worker launcher, which maps rc 3 to exit 1
 ([LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher)).
