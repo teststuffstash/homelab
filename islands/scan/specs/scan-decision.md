@@ -26,7 +26,7 @@ grammar, the hold report line and the clause enum.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-WAKE-DOORBELL](#scan-wake-doorbell) | `doorbell`, `env.SCAN_*` | 🚧 WIP — no evidence pipeline yet (fixture: `doorbell`) |
+| [SCAN-WAKE-DOORBELL](#scan-wake-doorbell) | `doorbell`, `env.SCAN_*` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `doorbell`) |
 | [SCAN-WAKE-FASTPATH](#scan-wake-fastpath) | `doorbell.unit`, `unit` | 🚧 WIP — no evidence pipeline yet (fixture: `unit-fast-path-author`, `unit-fast-path-blocked-on`, `session-belt`) |
 | [SCAN-CLAUSE-OWNERSHIP](#scan-clause-ownership) | `clause` | 🚧 WIP — no evidence pipeline yet (fixture: `clause-coverage`) |
 | [SCAN-CLAUSE-QUEUED](#scan-clause-queued) | `unit` (4/5-field) | 🚧 WIP — no evidence pipeline yet (fixture: `queued-derivation`, `queued-classification`, `review-only-label-combinations`) |
@@ -36,8 +36,8 @@ grammar, the hold report line and the clause enum.
 | [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
 | [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `done-phantom-belt`) |
 | [SCAN-CLAUSE-FLEET](#scan-clause-fleet) | — | 🚧 WIP (fixture: `fleet-reader-rekey`) · ⚑ gap: reads the old proxy's `/router-status` |
-| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
-| [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP — no evidence pipeline yet (fixture: `scan-lane-walk`) |
+| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
+| [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-lane-walk`) |
 
 ## The wake
 
@@ -61,14 +61,14 @@ every pending sibling `coordinate*` workflow in its namespace before listing Git
 
 #### What does a ring cause?
 
-| description | world | ring | expect? |
-|---|---|---|---|
-| collapse | doorbell/collapse | full scan starting with pending sibling `coordinate*` workflows | the siblings deleted before the GitHub list |
-| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | every graduated stack rung, no board scan |
-| switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | the graduated stack rung into its namespace |
-| switchboard-routed | doorbell/switchboard-routed | ring already carrying `loop_ns` | exit, nothing rung |
-| switchboard-unit | doorbell/switchboard-unit | `unit: changes-requested\|<repo>\|pr-N`, no `loop_ns` | the repo's stack rung with that unit |
-| fanout | doorbell/fanout | repo-dumb ring from a stack emitter | the per-stack doorbell rung (FU-144 receiver-side resolution) |
+| description | world | ring | stacks | expect? |
+|---|---|---|---|---|
+| collapse | doorbell/collapse | full scan starting with pending sibling `coordinate*` workflows | — | the siblings deleted before the GitHub list |
+| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | `circles` graduated, `newborn` not | every graduated stack rung, no board scan |
+| switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | `circles` graduated, `newborn` not | ⚖ `circles` (the one graduated stack) rung into its namespace; a no-scan-path warning names `newborn` |
+| switchboard-routed | doorbell/switchboard-routed | ring already carrying `loop_ns` | — | exit, nothing rung |
+| switchboard-unit | doorbell/switchboard-unit | `unit: changes-requested\|<repo>\|pr-N`, no `loop_ns` | — | the repo's stack rung with that unit |
+| fanout | doorbell/fanout | repo-dumb ring from a stack emitter | — | the per-stack doorbell rung (FU-144 receiver-side resolution) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -433,14 +433,14 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 
 #### Does the Goal's tree wake its checkpoint?
 
-| description | world | tree | expect? |
-|---|---|---|---|
-| bare-members-inert | open-pre | members with no disposition, none queued | checkpoint-due |
-| undispositioned-wakes | open-pre | an undispositioned member | undispositioned-wakes |
-| deferred-excluded | open-pre | a `deferred` member open | deferred-excluded |
-| adopted-open-unlabelled | open-pre | an `adopted` member open, no label | adopted-open-unlabelled |
-| dispositions-unreadable | open-pre | the disposition read fails | dispositions-unreadable |
-| base-required | open-pre | a Goal with no `Base:` | base-required |
+| description | world | members | findings store | queued | expect? |
+|---|---|---|---|---|---|
+| bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — for the findings (5 undispositioned) alone; the members add nothing to the reason and none is queued |
+| undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — the reason is the undispositioned member |
+| deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
+| adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
+| dispositions-unreadable | open-pre | one open member, the disposition read fails | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
+| base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | ⚖ `goal-decompose` refused: no decompose unit, the refusal names both legal `Base:` values |
 
 #### Which Goal does a merged PR's finding belong to?
 
@@ -448,9 +448,9 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 |---|---|---|---|
 | goal-open-funded | circles-29-tree | open Goal, budget left | goal-open-funded (store) |
 | goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
-| deep-sprout | deep-sprout | several levels below the Goal | deep-sprout |
-| master-inert | master-inert | no Goal ancestor | master-inert |
-| bucket-child | homelab-278-tree | under the `post-launch:` bucket | bucket-child |
+| deep-sprout | deep-sprout | several levels below the Goal | ⚖ the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
+| master-inert | master-inert | no Goal ancestor | ⚖ no Goal resolved; no `harvest` disposition on the item (inert) |
+| bucket-child | homelab-278-tree | under the `post-launch:` bucket | ⚖ the resolved Goal is #278, one hop above the bucket's parent |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -481,12 +481,12 @@ remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](
 
 #### What does a pass dispatch?
 
-| description | world | ROW | expect? |
-|---|---|---|---|
-| two-lanes | — | two-lanes | two-lanes (one `changes-requested` on master + one queued child on `goal/x`, two spawns) |
-| aged | — | aged | aged (`goal-decompose` lost 3 → dispatched before the recovery unit) |
-| not-yet | — | not-yet | not-yet (lost 2 → the recovery unit wins) |
-| probe-unreadable | — | probe-unreadable | probe-unreadable (one report line, ordinary walk) |
+| description | world | ROW | lanes | lost dispatches | expect? |
+|---|---|---|---|---|---|
+| two-lanes | — | two-lanes | `master`: one `changes-requested`; `goal/x`: one queued child | — | ⚖ two spawns, `master` lane first, then `goal/x` |
+| aged | — | aged | one lane (`master`): a `changes-requested` and a `goal-decompose` | 3 | ⚖ one spawn: `goal-decompose`, before the recovery unit |
+| not-yet | — | not-yet | one lane (`master`): a `changes-requested` and a `goal-decompose` | 2 | ⚖ one spawn: `changes-requested` (ordinary walk) |
+| probe-unreadable | — | probe-unreadable | one lane (`master`): a `changes-requested` and a `goal-decompose` | unreadable | ⚖ one spawn: `changes-requested` (ordinary walk), one report line |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
