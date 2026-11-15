@@ -593,6 +593,7 @@ is stale, so it cannot drift the way the prose register did.
 | `specs-process/pin-missing` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/pin-unpublished` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-review-body-edit` | table | - | `agents/specs-reviewer-session.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `stale-armed-retry/failed-step-left` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |
