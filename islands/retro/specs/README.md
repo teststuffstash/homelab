@@ -8,8 +8,8 @@ it owns lives one level up ([../README.md](../README.md)); the design rulings an
 [docs/agents/observability-and-retro.md §Part B](../../../docs/agents/observability-and-retro.md).
 
 > **Contract for a fresh build** ([../README.md](../README.md)): these pages specify the component
-> to be written under `islands/retro/`; the "code" a row cites is the OLD member it replaces, read as
-> the behaviour to match. Line citations (`file:<n>`) are against the spike's base `c34535a5`
+> to be written under `islands/retro/`; the "code" a row cites is the OLD member it replaces, read
+> to explain a difference, never as the source ([Built from the specs](../../README.md#built-from-the-specs-never-copied)). Line citations (`file:<n>`) are against the spike's base `c34535a5`
 > (2026-11-07) and have drifted on master — the `REPLAY:` sentinels and fixture dirs are the stable
 > anchors. Nothing live reads this directory.
 
