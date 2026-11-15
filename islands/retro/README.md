@@ -22,8 +22,8 @@ act. History goes to git and the bucket; GitHub gets only actionable work. Desig
 
 ## What this replaces — still live
 
-The old members — the running retro. A build reads them as **the behaviour to match** (their
-tests and replay fixtures are the oracle); this directory edits none of them:
+The old members — the running retro. A build reads them to explain a difference, never as its source
+([Built from the specs](../README.md#built-from-the-specs-never-copied); their tests and replay fixtures are the comparison); this directory edits none of them:
 
 | kind | files |
 |---|---|
@@ -70,7 +70,7 @@ notice the switch-over.
 
 A session building this island loads: this README, [specs/](specs/README.md) (≈ 60 KB with
 schemas), the one page its change touches, the fixture or suite its requirement names (read-only —
-the oracle) and the old member file it replaces (read as the behaviour to match). Then, only if the
+the comparison) and the old member file it replaces (read to explain a difference). Then, only if the
 change reaches them: [docs/agents/observability-and-retro.md](../../docs/agents/observability-and-retro.md)
 §Part B (the design and its rulings), `gateway/specs/endpoints/sessions.md` §GW-SESSIONS-ADMIT (a
 cell-path change), `docs/agents/issue-authoring.md` §The lineage contract (a queue/batch change),

@@ -24,8 +24,8 @@ agent-loop cut measured on the PR #3147 branch (C8 of its `context-and-autonomy.
 
 ## What this replaces — still live
 
-The old members — the running scan family. A build reads them as **the behaviour to match**
-(their replay fixtures are the oracle); this directory edits none of them:
+The old members — the running scan family. A build reads them to explain a difference, never as its source
+([Built from the specs](../README.md#built-from-the-specs-never-copied); their replay fixtures are the comparison); this directory edits none of them:
 
 | File | Role |
 |---|---|
@@ -45,7 +45,7 @@ The old members — the running scan family. A build reads them as **the behavio
 | [`docs/agents/issue-lifecycle-fsm.yaml`](../../docs/agents/issue-lifecycle-fsm.yaml) → generated [`.md`](../../docs/agents/issue-lifecycle-fsm.md) | the issue machine the clauses implement (IL-T*; read by `scripts/merge-path-lint.py` — stays in place) |
 | [`docs/agents/merge-path.md`](../../docs/agents/merge-path.md) + [`merge-path-fsm.yaml`](../../docs/agents/merge-path-fsm.yaml) | the PR machine (MP-T*); the updater/reflex mechanism sections moved to [docs/merge-path-mechanism.md](../../docs/agents/merge-path.md) |
 
-Replay fixtures (`agents/replay/fixtures/<dir>/`, read-only — the correctness oracle for the new build): the dirs whose
+Replay fixtures (`agents/replay/fixtures/<dir>/`, read-only — the comparison for the new build): the dirs whose
 `fixture.yaml` sources a member above — about 95, listed per requirement in
 [specs/README.md](specs/README.md#index). Families: `clause-coverage`, `queued-*`, `scan-*`,
 `c4c5-*`, `ci-red-*`, `changes-requested*`, `merge-conflict`, `unarmed-major`, `arbitrate`,
@@ -90,9 +90,9 @@ re-declared).
 
 A session building this island loads, in order: this README → [specs/README.md](specs/README.md)
 → the one contract page its change touches (+ its schema) → the fixture dir(s) the requirement
-names (`agents/replay/fixtures/**`, read-only — the oracle) → the old clause block in
-`coordinator-scan.sh` (or the reflex script) that the requirement replaces, read as the behaviour
-to match → the brief clause the page cites. Only when the change crosses a consumer contract: the
+names (`agents/replay/fixtures/**`, read-only — the comparison) → the old clause block in
+`coordinator-scan.sh` (or the reflex script) that the requirement replaces, read to explain a
+difference → the brief clause the page cites. Only when the change crosses a consumer contract: the
 consumer's page ([gateway/specs/endpoints/sessions.md](../../gateway/specs/endpoints/sessions.md)
 for admission; `agents/agent-session.sh`'s header for the launch). The design narrative of the
 merge path, if the change is to the updater or the reflex:
