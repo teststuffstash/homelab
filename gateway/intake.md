@@ -114,9 +114,17 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
    gate that went red, the rule that produced the wait, the path — from the facts files'
    membership lines ([`docs/intake/`](../docs/intake/), one file per island; you read those
    lines, never another island's owning docs). All yours → continue. All one OTHER island's →
-   `forward`. Two or more islands → `split`. No island owns a part → on a `split`, file that part
-   too and rule IT `seat`, naming the missing owner; when it is the whole input, the input is
-   `seat`. You never rule another island's part — its sitting does.
+   `forward`. Two or more islands → `split`. You never rule another island's part — its sitting
+   does.
+   **A path no island's membership names is the commons, not a missing owner** (operator,
+   2026-11-15: three kinds of ground — the defined islands; the platform not yet split into
+   islands, which the `agent-loop` and other pre-island rows hold; and the rest, which nobody
+   wholly owns and anybody may change within reason). A commons part goes with the island whose
+   own thing it serves — the gate it wires, the lane that reads it: yours → rule it with your
+   part, as your own input; another island's → it rides that island's `forward` or split part.
+   "Within reason" is the queue bar (one ride, a bounded `Touches`, every path `machine-merge`
+   by `classify_touches`); past it the item is `goal` or `seat` by the ordinary tests, never
+   `seat` for want of an owner.
    **The cap.** An input whose row says `forwards: 2` (or more) is not forwarded again: `seat`,
    naming the islands that passed it and what each said it lacked. Nor do you forward an input
    back to the island whose `intake: forward` comment sent it to you — that disagreement is the
