@@ -36,6 +36,31 @@ actions it can emit.
 
 **World for every table below:** [`board`](worlds/README.md#family-worlds-fixture-local-worldsname-named-in-rowspsv) — one repo, `#90` armed ∧ CLEAN, `#91` un-armed ∧ BEHIND; each row's `patch` adds its condition.
 
+**Legend — the `expect?` literals.** Each decodes the recorded action stream (`expected/<literal>.txt`) into what it observes. Every stream starts with the one `gh pr list` snapshot; "probe" is a per-candidate `gh pr view --json commits` call.
+
+| literal | probes | updates issued | other observable |
+|---|---|---|---|
+| `noop` | 0 | none | the line `no armed+BEHIND PR to update` |
+| `noop-probe1` | 1 (the candidate) | none | as `noop` |
+| `noop-probe-hold` | 1, unreadable | none | `commit probe unreadable — HOLDING`, then `no armed+BEHIND PR to update` |
+| `picks` | 0 | one `update-branch` PUT for the picked PR | `updating #n (oldest armed+BEHIND, FIFO)` |
+| `picks-probe1` | 1 | one PUT | as `picks` |
+| `picks-probe2` | 2 (both candidates) | one PUT, for the older PR | as `picks` |
+| `picks-two-probe2` | 2 | two PUTs, one per base lane | an `updating` line per PR |
+| `lane-hop` | 2 | PUT for the older PR (422, skipped), then PUT for the lane's next PR | `update of #n failed (422) — skipping`, then `updating #n (lane hop …)`; gh's stderr passes through |
+| `picks-probe1-renovate` | 1, plus the rollup reads (check-runs, status) | one PUT for the Renovate PR | as `picks` |
+| `renovate-skip-probe1` | 1, plus the rollup reads | none | `Renovate-authored, untouched and not green … skipping` |
+| `renovate-probe-hold` | 1, then the check-runs read fails | none | `commit probe unreadable — HOLDING` |
+| `renovate-handback-probe1` | 1, plus the rollup reads | none | hand-back: the PR body is read, then PATCHed with the rebase box ticked; leg-1b `handed back to Renovate` line, then `no armed+BEHIND PR to update` |
+| `sweep-handback-probe1` | 1, plus the rollup reads | none | the same hand-back (body read, PATCH ticking the box), printed by the sweep as `handback[…]` after `no armed+BEHIND PR to update` |
+| `sweep-silent-probe1` | 1, plus the rollup reads | none | no hand-back, no label op, no skip line: only `no armed+BEHIND PR to update` |
+| `unstrand-yes` | 1 (`--json commits,reviews`) | one PUT for the CR ∧ BEHIND PR | `unstrand: updating CR-and-behind PR #n (new content since verdict)` |
+| `unstrand-no` | 1 (`commits,reviews`) | none | `unstrand: … NO new content since the verdict … not updating` |
+| `unstrand-hold` | 1 (`commits,reviews`), unreadable | none | `unstrand: … probe unreadable — HOLDING` |
+| `dirty-label` | 0 | none | label op (`action.label.op` = add): the label created with `POST …/labels`, then `POST …/issues/n/labels` on the DIRTY PR |
+| `label-clear` | 0 | none | label op (`action.label.op` = remove): `DELETE …/issues/n/labels/merge-conflict` |
+| `update-fail` | 1 | one PUT for `#101`, which fails | `update of #101 failed (422) — skipping; next pass retries`; gh's stderr on ERR; no label op |
+
 ### SCAN-UPDATER-PICK
 
 Leg 1 updates the oldest PR per lane that is **armed ∧ BEHIND ∧ [merge-ready](glossary.md#merge-ready)**
@@ -102,11 +127,11 @@ conflict, deliberately not told apart, homelab#1007) is a skip; the next pass re
 
 #### Does an armed, conflicted PR carry the label — and only while it is?
 
-| description | world | patch | env | expect? |
-|---|---|---|---|---|
-| conflict-dirty | board | dirty-90 | — | dirty-label |
-| conflict-clear | board | label-conflict-90 | — | label-clear |
-| update-fail | board | conflict-101 (`#101` armed ∧ BEHIND, not DIRTY) | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | update-fail (the `update-branch` PUT for `#101` is attempted and 422s, the skip line prints, and no `merge-conflict` label op is issued for `#101`) |
+| description | world | patch | #90 before the pass | env | expect? |
+|---|---|---|---|---|---|
+| conflict-dirty | board | dirty-90 | armed ∧ DIRTY, no `merge-conflict` label | — | dirty-label (`action.label.op` = add) |
+| conflict-clear | board | label-conflict-90 | carries `merge-conflict`, no longer armed ∧ DIRTY | — | label-clear (`action.label.op` = remove) |
+| update-fail | board | conflict-101 (`#101` armed ∧ BEHIND, not DIRTY) | `#90` not exercised | `STUB_GH_api_repos_teststuffstash_testrepo_pulls_101_update_branch=fail` | update-fail (the `update-branch` PUT for `#101` is attempted and 422s, the skip line prints, and no `merge-conflict` label op is issued for `#101`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -129,22 +154,22 @@ CHANGES_REQUESTED) is handed back; a pending, absent or green rollup is left sil
 for the next pass. A worker-pushed Renovate PR (the FU-046 `deps-review` shape) is no longer Renovate's and
 rides the ordinary legs. A CANCELLED check that a same-named sibling outlives is not red (#2754);
 an unreadable rollup holds. A rollup that reports no check runs is not green
-(`renovate_green` requires at least one concluded check, `agents/renovate-currency.sh:54`). The predicate functions live in `agents/renovate-currency.sh`, shared
-with the scan's FU-124 nudge — one copy.
+(`renovate_green` requires at least one concluded check, `agents/renovate-currency.sh:54`). The island's predicate functions live in `islands/scan/src/scan_island/renovate.py` (the shell
+original, `agents/renovate-currency.sh`, remains for the scan's FU-124 nudge until retired).
 
 #### Whose currency is this Renovate PR?
 
-| description | world | patch | commits | checks | env | expect? |
-|---|---|---|---|---|---|---|
-| renovate-untouched-no-update ⚖ | board | add-renovate-approved | Renovate only | none reported | — | renovate-skip-probe1 |
-| renovate-untouched-green-update | board | add-renovate-approved | Renovate only | `ci` success | — | picks-probe1-renovate |
-| renovate-untouched-red-no-update | board | add-renovate-approved | Renovate only | `ci` failure | — | renovate-skip-probe1 |
-| renovate-worker-pushed-update | board | add-renovate-approved | Renovate + a worker commit + a merge commit | none reported | — | picks-probe1-renovate |
-| renovate-updater-merged-red-handback | board | add-renovate-approved | Renovate + a merge commit | `ci` success, `system-test` failure | — | renovate-handback-probe1 |
-| renovate-superseded-cancel-green-update | board | add-renovate-approved | Renovate + a merge commit | `ci` cancelled, outlived by `ci` success | — | picks-probe1-renovate |
-| renovate-checks-unreadable-hold | board | add-renovate-approved | Renovate only | unreadable | `STUB_GH_api_repos_teststuffstash_testrepo_commits_ren150oid789_check_runs_per_page_100=fail` | renovate-probe-hold |
-| renovate-merged-current-red-handback | board | add-renovate-current-review | Renovate + a merge commit | `ci` success, `system-test` failure | — | sweep-handback-probe1 |
-| renovate-merged-current-pending-noop ⚖ | board | add-renovate-current-review | Renovate + a merge commit | `ci` success, `system-test` in progress | — | sweep-silent-probe1 |
+| description | world | patch | review | commits | checks | env | expect? |
+|---|---|---|---|---|---|---|---|
+| renovate-untouched-no-update ⚖ | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate only | none reported | — | renovate-skip-probe1 |
+| renovate-untouched-green-update | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate only | `ci` success | — | picks-probe1-renovate |
+| renovate-untouched-red-no-update | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate only | `ci` failure | — | renovate-skip-probe1 |
+| renovate-worker-pushed-update | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate + a worker commit + an updater merge commit | none reported | — | picks-probe1-renovate |
+| renovate-updater-merged-red-handback | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate + an updater merge commit | `ci` success, `system-test` failure | — | renovate-handback-probe1 |
+| renovate-superseded-cancel-green-update | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate + an updater merge commit | `ci` cancelled, outlived by `ci` success | — | picks-probe1-renovate |
+| renovate-checks-unreadable-hold | board | add-renovate-approved | `APPROVED`, BEHIND | Renovate only | unreadable | `STUB_GH_api_repos_teststuffstash_testrepo_commits_ren150oid789_check_runs_per_page_100=fail` | renovate-probe-hold |
+| renovate-merged-current-red-handback | board | add-renovate-current-review | `REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND) | Renovate + an updater merge commit | `ci` success, `system-test` failure | — | sweep-handback-probe1 |
+| renovate-merged-current-pending-noop ⚖ | board | add-renovate-current-review | `REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND) | Renovate + an updater merge commit | `ci` success, `system-test` in progress | — | sweep-silent-probe1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
