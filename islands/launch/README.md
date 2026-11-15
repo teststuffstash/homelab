@@ -20,8 +20,8 @@ everything a worker sees before its first tool call. Island cut: the one measure
 
 ## What this replaces — still live
 
-The old members — the running launcher. A build reads them as **the behaviour to match** (their
-replay families are the oracle); this directory edits none of them. "Runtime-read" marks the
+The old members — the running launcher. A build reads them to explain a difference, never as its source
+([Built from the specs](../README.md#built-from-the-specs-never-copied); their replay families are the comparison); this directory edits none of them. "Runtime-read" marks the
 files the new component will read in place, never copy:
 
 | member | what it is | runtime-read? |
@@ -34,7 +34,7 @@ files the new component will read in place, never copy:
 | [`agents/model_id.py`](../../agents/model_id.py) + [`agents/model-id-test.sh`](../../agents/model-id-test.sh) | the one model-id parser (old contract — see [specs/admission.md](specs/admission.md#launch-admit-no-model)) | imported |
 | [`agents/ground-rules.md`](../../agents/ground-rules.md) | universal worker rules, injected verbatim into every env card | **yes — never move** |
 | [`.agents/fix.yaml`](../../.agents/fix.yaml), [`.agents/build.yaml`](../../.agents/build.yaml), [`.agents/probe.md`](../../.agents/probe.md) | homelab's own recipes (fixer, build class, prober) | **yes — never edit from here** |
-| replay families (source = a member above; read-only — the oracle) | `agents/replay/fixtures/{argv-max-turns, base-arm-*, major-arm-guard-*, preflight-malformed-block, goal-ancestor, goal-budget-gate, goal-budget-refusal, gateway-admit, gateway-sessions, gateway-env-pull, gateway-outcome, harness-enforce-default, harness-run-cmd, cred-inject-unconditional, context-prefetch*, agent-session-paginated-reviews, ci-failure-run-select, pf-cm-init, fu042-*, env-card-*, specs-process, image-volumes, context-repos-prelude, opencode-session-config, opencode-hostaliases, nix-registry-env, python-profile-env, ride-size, argv-payload, run-phase-metric, transcript-mirror-probe, post-merge-push, strike-quota-classifier, router-report-*, strike-retry, model-id-carrier, go-rail-latch, fu088-ladder, route-request, resolve-model, pick-rail}` | — |
+| replay families (source = a member above; read-only — the comparison) | `agents/replay/fixtures/{argv-max-turns, base-arm-*, major-arm-guard-*, preflight-malformed-block, goal-ancestor, goal-budget-gate, goal-budget-refusal, gateway-admit, gateway-sessions, gateway-env-pull, gateway-outcome, harness-enforce-default, harness-run-cmd, cred-inject-unconditional, context-prefetch*, agent-session-paginated-reviews, ci-failure-run-select, pf-cm-init, fu042-*, env-card-*, specs-process, image-volumes, context-repos-prelude, opencode-session-config, opencode-hostaliases, nix-registry-env, python-profile-env, ride-size, argv-payload, run-phase-metric, transcript-mirror-probe, post-merge-push, strike-quota-classifier, router-report-*, strike-retry, model-id-carrier, go-rail-latch, fu088-ladder, route-request, resolve-model, pick-rail}` | — |
 
 **Not members, though the spike's cut grouped them here** (consumed, owned elsewhere):
 [`agents/resolve-model.sh`](../../agents/resolve-model.sh) — the launcher never calls it (0 call sites);
@@ -76,8 +76,8 @@ notice the switch-over.
 ## Read set
 
 A session building this island loads: this README, [`specs/`](specs/README.md), the one page its
-change touches, the replay fixture its requirement names (read-only — the oracle), the old clause
-of `agent-session.sh` it replaces (read as the behaviour to match), and the supplier page it
+change touches, the replay fixture its requirement names (read-only — the comparison), the old clause
+of `agent-session.sh` it replaces (read to explain a difference), and the supplier page it
 consumes ([`gateway/specs/endpoints/sessions.md`](../../gateway/specs/endpoints/sessions.md) — the
 section the clause cites, not the page). Design prose, linked where a page leans on it:
 [docs/agents/fixer-context.md](../../docs/agents/fixer-context.md) (the worker's three context

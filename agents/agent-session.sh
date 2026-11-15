@@ -801,6 +801,9 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # REPLAY:specs-process-volume once the issue's declared footprint is known (after the body
     # read). Absent field ⇒ empty ⇒ nothing below engages.
     SPECS_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .specs | select(type == "object")] | first // empty' 2>/dev/null)" || SPECS_CLAIM_JSON=""
+    # The repo's FURTHER roots (`extraSpecs: [{root, tests?}]`, a monorepo of islands) — the same
+    # mount for a footprint that reaches one of them, pinned from THAT root's README. Absent ⇒ "".
+    EXTRA_SPECS_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .extraSpecs | select(type == "array")] | first // empty' 2>/dev/null)" || EXTRA_SPECS_CLAIM_JSON=""
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -1096,7 +1099,7 @@ render_env_card() {
   # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
   [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
   # ADR-156: the pinned spec process, mounted by REPLAY:specs-process-volume when the issue's
-  # declared footprint reaches the claim's `specs` roots (SPECS_PROCESS = mounted | unmounted |
+  # declared footprint reaches the claim's `specs` roots or an `extraSpecs` root (SPECS_PROCESS = mounted | unmounted |
   # ""). STATIC text by design — no version (the mount's VERSION file has it), no rule content
   # (the rules ARE the mount): the card points, the process speaks for itself, and the specs
   # reviewer judges the PR's rows against the same pinned text. The degraded arm is said, never
@@ -1252,6 +1255,13 @@ if [ -n "${RECIPE:-}" ]; then
       [ -n "$v" ] || return 1
       printf '%s' "$v"
     }
+    sp_readme_version() {  # <slug> <ref> <path> → the version a specs README's `RULES.md @ v<x>` link names (`…/blob/v0.6.9/…/process/RULES.md` ⇒ 0.6.9); rc 1 if unreadable/unparseable
+      local v
+      v="$(gh api "repos/$1/contents/$3?ref=$2" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+            | sed -n 's#.*allure-behavior-snippets/blob/v\([0-9][0-9A-Za-z.-]*\)/allure_behavior_snippets/process/RULES\.md.*#\1#p' | head -1)" || v=""
+      [ -n "$v" ] || return 1
+      printf '%s' "$v"
+    }
     if [ -n "${SPECS_CLAIM_JSON:-}" ]; then
       # Claim strings are prompt-adjacent input (they reach this log): one path grammar for all
       # three — repo-relative, no leading slash, no dot-led segment, no `//` — the XRD's pattern,
@@ -1281,6 +1291,57 @@ if [ -n "${RECIPE:-}" ]; then
             echo "→ spec process: #${ISSUE_N}'s footprint reaches ${_sp_root}/ or ${_sp_tests}/ — pin v${_sp_ver} (${_sp_pin}@${BASE_REF}) resolves to ${_sp_dig}"
             iv_resolve_entry process "ghcr.io/${SPECS_PROCESS_IMAGE}@${_sp_dig}" "$SPECS_PROCESS_MOUNT" nocard && SPECS_PROCESS="mounted"
           fi
+        fi
+      fi
+    fi
+    # An `extraSpecs` root (a monorepo of islands): engaged only when the primary pair did not reach
+    # (one process mount per ride; the primary wins a footprint that reaches both). The first listed
+    # root the footprint reaches decides. Its version is the one the root's README pins — the
+    # `RULES.md @ v<x>` link every island README carries (gateway/specs/README.md §Rules is the
+    # template) — and a README that pins nothing parseable falls back to the repo's PRIMARY pin
+    # file, said on stderr. Same loud degrade, same card switch, same mount as the primary pair.
+    if [ -z "$SPECS_PROCESS" ] && [ -n "${EXTRA_SPECS_CLAIM_JSON:-}" ] && [ "$EXTRA_SPECS_CLAIM_JSON" != "[]" ]; then
+      _sp_re='^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+      _ib_rc=0
+      ISSUE_TOUCHES="$(printf '%s' "$_ib_body" | ib_get Touches "$_ib_ref")" || _ib_rc=$?
+      [ "$_ib_rc" -eq 0 ] || ib_refuse_malformed Touches "$_ib_ref"
+      _sx_root=""; _sx_tests=""
+      if [ -n "$ISSUE_TOUCHES" ]; then
+        while IFS='|' read -r _sx_r _sx_t; do   # `|` is outside the path grammar, and a non-blank IFS keeps an empty field in place
+          if ! grep -Eq "$_sp_re" <<< "$_sx_r" || { [ -n "$_sx_t" ] && ! grep -Eq "$_sp_re" <<< "$_sx_t"; }; then
+            echo "WARN: an \`extraSpecs\` entry for ${PROJECT} is outside the path grammar — that root NOT considered this ride (ADR-156)" >&2
+            continue
+          fi
+          _sx_fp="${_sx_r}/**"; [ -z "$_sx_t" ] || _sx_fp="${_sx_fp}, ${_sx_t}/**"
+          if fp_conflict "$ISSUE_TOUCHES" "$_sx_fp"; then _sx_root="$_sx_r"; _sx_tests="$_sx_t"; break; fi
+        done < <(printf '%s' "$EXTRA_SPECS_CLAIM_JSON" | jq -r '.[] | select(type == "object") | (if (.root|type)=="string" then .root else "" end) + "|" + (if (.tests|type)=="string" then .tests else "" end)' 2>/dev/null)
+      fi
+      if [ -n "$_sx_root" ]; then
+        SPECS_PROCESS="unmounted"
+        _sx_reach="${_sx_root}/"; [ -z "$_sx_tests" ] || _sx_reach="${_sx_reach} or ${_sx_tests}/"
+        _sx_src="${_sx_root}/README.md"
+        if ! _sp_ver="$(sp_readme_version "${ORG:-teststuffstash}/${PROJECT}" "$BASE_REF" "$_sx_src")"; then
+          # The fallback: the primary pair's pin file (claim `pin`, else the shared layout default).
+          _sx_src=""
+          if [ -n "${SPECS_CLAIM_JSON:-}" ]; then
+            _sx_proot="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.root|type)=="string" then .root else "" end' 2>/dev/null)" || _sx_proot=""
+            _sx_src="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.pin|type)=="string" then .pin else "" end' 2>/dev/null)" || _sx_src=""
+            if [ -z "$_sx_src" ] && [ -n "$_sx_proot" ]; then
+              case "$_sx_proot" in */*) _sx_src="${_sx_proot%/*}/scripts/lib/snippets.sh";; *) _sx_src="scripts/lib/snippets.sh";; esac
+            fi
+            grep -Eq "$_sp_re" <<< "$_sx_src" || _sx_src=""
+          fi
+          echo "WARN: ${_sx_root}/README.md@${BASE_REF} pins no \`RULES.md @ v<version>\` process link — falling back to the repo's primary pin${_sx_src:+ (${_sx_src})} (ADR-156)" >&2
+          _sp_ver=""
+          [ -z "$_sx_src" ] || _sp_ver="$(sp_pin_version "${ORG:-teststuffstash}/${PROJECT}" "$BASE_REF" "$_sx_src")" || _sp_ver=""
+        fi
+        if [ -z "$_sp_ver" ]; then
+          echo "WARN: spec process NOT mounted — neither ${_sx_root}/README.md nor the repo's primary pin names a process version at ${BASE_REF} in ${PROJECT}, while #${ISSUE_N}'s footprint reaches ${_sx_reach}; the ride's card says so (ADR-156)" >&2
+        elif ! _sp_dig="$(iv_digest_of ghcr.io "$SPECS_PROCESS_IMAGE" "v${_sp_ver}")"; then
+          echo "WARN: spec process NOT mounted — ghcr.io/${SPECS_PROCESS_IMAGE}:v${_sp_ver} (the pin at ${_sx_src}@${BASE_REF}) has no anonymously served manifest (release not published as an image? private package?); the ride's card says so (ADR-156)" >&2
+        else
+          echo "→ spec process: #${ISSUE_N}'s footprint reaches ${_sx_reach} (extraSpecs) — pin v${_sp_ver} (${_sx_src}@${BASE_REF}) resolves to ${_sp_dig}"
+          iv_resolve_entry process "ghcr.io/${SPECS_PROCESS_IMAGE}@${_sp_dig}" "$SPECS_PROCESS_MOUNT" nocard && SPECS_PROCESS="mounted"
         fi
       fi
     fi
