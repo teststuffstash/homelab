@@ -681,13 +681,13 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg).** Brief
       [`gateway/intake.md`](../gateway/intake.md), selector `gateway/scripts/intake-select.sh`, design + evidence
-      [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). **WIRED for the dig source 2026-10-28** (#3004 + #3008:
-      `island-intake` CronWorkflow 05:00Z, receipts = the ruled-input ledger, `INTAKE_DAILY_MAX`); dry-run proven in-cluster. **Issue pile + re-reads wired 2026-11-11** (#3259, ADR-163; the sitting asks `prefer: strongest` → Fable, #3266/#3271; in-cluster dry-run proven).
-      **Next:** the first unattended cron sitting over the pile (05:00Z) read against the seat-run results in the spike
-      §Run 3; operator rulings in the spike §Open questions 2, 4, 5 (Goal ceiling, rule 10
-      grammar, the second island — oracle-fleet ASKED 2026-11-07 (handoff: bot-filed feedback-triage lane-B/C issues need
-      admission; RULED: facts stay in the stack repo, platform owns launch mechanics only — ADR-160, #3209). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
-      Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
+      [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). WIRED: dig source 2026-10-28 (#3004 + #3008, `island-intake`
+      CronWorkflow 05:00Z, receipts = the ruled-input ledger); issue pile + re-reads 2026-11-11 (#3259, ADR-163; `prefer: strongest`).
+      **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),
+      `gap` + `escape` sources; islands scan/launch/retro are intake islands (`docs/intake/`, Goals #3389 #3390 #3384).
+      **Next:** the open operator items in `docs/agents/meta-state.md` (11-15 pickup); spike §Open questions 2, 4, 5.
+      oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
+      ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
       never green, pool starved — FU-218). #1489 (ADR-103 addendum) shrank the class to all-vacuous PRs.

@@ -10,8 +10,8 @@ the launcher asks the gateway one question and names no model. Where the code st
 question itself, the row is a `⚑ gap`, never the contract.
 
 > **Contract for a fresh build** ([../README.md](../README.md)): these pages specify the component
-> to be written under `islands/launch/`; the "code" a row cites is the OLD member it replaces, read as
-> the behaviour to match. Line citations (`file:<n>`) are against the spike's base `c34535a5`
+> to be written under `islands/launch/`; the "code" a row cites is the OLD member it replaces, read
+> to explain a difference, never as the source ([Built from the specs](../../README.md#built-from-the-specs-never-copied)). Line citations (`file:<n>`) are against the spike's base `c34535a5`
 > (2026-11-07) and have drifted on master — the `REPLAY:` sentinels and fixture dirs are the stable
 > anchors. Nothing live reads this directory.
 
@@ -27,9 +27,8 @@ What this island adds, by rule:
 
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
-  ⚑ gap: the specs reviewer reads nothing here today — the claim's `specs` field admits one
-  `{root, tests}` pair per repo and homelab's names the gateway's; until it becomes a list,
-  a change to these pages reaches only the ordinary reviewer.
+  The specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379), a rows
+  review with no tests root and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** the prefix is `LAUNCH-`; areas are `DISPATCH`, `PREFLIGHT`, `ADMIT`, `POD`,
   `BUNDLE`, `CARD`, `OUTCOME`, `BUDGET`.
 - **Rule 5 (evidence):** **none is generated.** The proving harness is the clause-replay harness

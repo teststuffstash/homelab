@@ -532,13 +532,16 @@ spec:
                         description: >-
                           The repo's FURTHER spec roots, beside `specs` (a monorepo of islands:
                           homelab's gateway owns `specs`, each island adds its own root here).
-                          Consumed by the SPECS REVIEWER only (specs-reviewer-session.sh
+                          Consumed by the SPECS REVIEWER (specs-reviewer-session.sh
                           pack_root_pairs): a PR touching a listed root gets that root's own
                           context pack and rows review instead of the mechanical approval; a PR
-                          touching several roots gets one pass per root and ONE verdict. NOT read
-                          by the worker launcher (no process mount for these roots yet) and
-                          never an evidence source: the repo's evidence bucket belongs to
-                          `specs`, so an extra root's pack states it carries no evidence.
+                          touching several roots gets one pass per root and ONE verdict. And by
+                          the worker launcher (agent-session.sh REPLAY:specs-process-volume): a
+                          ride whose footprint reaches a listed root (and not `specs`) gets the
+                          pinned process mount, versioned by that root's README.md
+                          `RULES.md @ v<version>` link (else the primary pin). Never an evidence
+                          source: the repo's evidence bucket belongs to `specs`, so an extra
+                          root's pack states it carries no evidence.
                         items:
                           type: object
                           required: [root]
