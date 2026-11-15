@@ -449,13 +449,17 @@ self_test() {
   local gr; gr="$(mktemp -d)"
   (
     set -e; cd "$gr"; git init -q -b master .; git config user.email t@t; git config user.name t
-    mkdir -p launch/specs retro/specs; echo s > shared.md; git add -A; git commit -qm m0
-    git checkout -qb goal; echo a > launch/specs/a.md; git add -A; git commit -qm goal
+    mkdir -p launch/specs retro/specs; echo s > shared.md; echo o > launch/specs/o.md; git add -A; git commit -qm m0
+    git checkout -qb goal; echo a > launch/specs/a.md; echo og > launch/specs/o.md; git add -A; git commit -qm goal
     git checkout -q master; echo g > retro/specs/guard.md; echo s2 > shared.md; git add -A; git commit -qm m1
     git checkout -qb pr goal; echo a2 > launch/specs/a.md; git commit -qam "pr edit"; git merge -q --no-edit master
     git checkout -qb pr-merge-only goal; git merge -q --no-edit master
     git checkout -qb pr-on-master master; echo x > retro/specs/guard.md; git commit -qam "master pr"
-  ) >/dev/null 2>&1
+    # the goal edited launch/specs/o.md, master now edits it too, the PR's merge keeps MASTER's
+    # version: head == M there, but the goal's edit is discarded — a change against the base
+    git checkout -q master; echo om > launch/specs/o.md; git commit -qam "master o"
+    git checkout -qb pr-discard goal; git merge -q --no-edit -X theirs master
+  ) >/dev/null 2>&1 || { echo "  FAIL diff base: the fixture repo could not be built"; fails=$((fails+1)); }
   local hsha db; hsha="$(git -C "$gr" rev-parse pr)"
   db="$(pack_diff_base "$gr" goal pr master 2>/dev/null)"
   check "diff base: master's merged-in paths drop, the PR's own edit stays" "launch/specs/a.md" "$(git -C "$gr" diff --name-only "$db...pr" | paste -sd' ')"
@@ -464,6 +468,8 @@ self_test() {
   check "diff base: a merge-only PR changes nothing of its own" "" "$(git -C "$gr" diff --name-only "$db...pr-merge-only")"
   check "diff base: a PR on the upstream itself keeps its base" master "$(pack_diff_base "$gr" master pr-on-master master 2>/dev/null)"
   check "diff base: no upstream merged in → the base unchanged" goal "$(pack_diff_base "$gr" goal goal master 2>/dev/null)"
+  db="$(pack_diff_base "$gr" goal pr-discard master 2>/dev/null)"
+  check "diff base: a base-side edit the merge discarded (head == upstream) stays the PR's change" "launch/specs/o.md" "$(git -C "$gr" diff --name-only "$db...pr-discard" | paste -sd' ')"
   rm -rf "$gr"
   CLAIMS_JSON=null
   check "pack roots: homelab, claim read failed → table" "gateway/specs gateway/tests" "$(pack_roots homelab 2>/dev/null)"
@@ -955,23 +961,27 @@ evidence_baseline_download() {
 # reviewed where they merged; three-dot `<base>...<head>` (the pinned pack's only diff form) shows
 # them as the PR's. So: M = merge-base(upstream, head) — the newest upstream commit the head holds.
 # When M is already inside B0 = merge-base(base, head), nothing was merged in: <base-rev> unchanged.
-# Else every path whose content at head is byte-identical to M's (present in both, or absent from
-# both) is not the PR's change: a synthetic commit = B0's tree with those paths taken from M, made
+# Else every path the BASE side left alone since X = merge-base(B0, M) and whose content at head is
+# byte-identical to M's (present in both, or absent from both) is not the PR's change — upstream
+# content carried in whole. A path the base side changed since X stays in the diff even when head
+# == M: there the merge DISCARDED the base's edit, and that is the PR's change. a synthetic commit = B0's tree with those paths taken from M, made
 # an ANCESTOR of head by a graft in this throwaway clone (`git replace --graft`, the head keeps its
 # sha and tree — the evidence stamp compares the sha), so three-dot's merge-base is that commit and
 # the diff carries only paths the PR made differ. Path-level: a path both sides changed keeps the
 # upstream's hunks too (no merge-tree, no conflict handling). Reads stay in the clone: no API call.
 pack_diff_base() {
-  local g="$1" base="$2" head="$3" up="$4" b0 m idx tree bp n=0 p entry
+  local g="$1" base="$2" head="$3" up="$4" b0 m x idx tree bp n=0 p entry
   local -a parents
   b0="$(git -C "$g" merge-base "$base" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
   m="$(git -C "$g" merge-base "$up" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
   if git -C "$g" merge-base --is-ancestor "$m" "$b0" 2>/dev/null; then printf '%s' "$base"; return 0; fi
+  x="$(git -C "$g" merge-base "$b0" "$m" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
   idx="$(mktemp)"; rm -f "$idx"
   if ! GIT_INDEX_FILE="$idx" git -C "$g" read-tree "$b0"; then
     log "WARN pack diff base: read-tree ${b0:0:8} failed — the spec diff stays ${base}...head" >&2; printf '%s' "$base"; return 0
   fi
-  # paths B0→head changes MINUS paths M→head changes = the paths where head == M (and != B0)
+  # (paths B0→head changes MINUS paths M→head changes = where head == M and != B0) MINUS paths the
+  # base side changed since X (X→B0)
   while IFS= read -r -d '' p; do
     entry="$(git -C "$g" ls-tree "$m" -- "$p")"
     if [ -n "$entry" ]; then
@@ -980,8 +990,9 @@ pack_diff_base() {
       GIT_INDEX_FILE="$idx" git -C "$g" update-index --force-remove -- "$p"
     fi || { log "WARN pack diff base: index update for ${p} failed — the spec diff stays ${base}...head" >&2; rm -f "$idx"; printf '%s' "$base"; return 0; }
     n=$((n+1))
-  done < <(comm -z -23 <(git -C "$g" diff -z --no-renames --name-only "$b0" "$head" | sort -z) \
-                      <(git -C "$g" diff -z --no-renames --name-only "$m" "$head" | sort -z))
+  done < <(comm -z -23 <(comm -z -23 <(git -C "$g" diff -z --no-renames --name-only "$b0" "$head" | sort -z) \
+                                     <(git -C "$g" diff -z --no-renames --name-only "$m" "$head" | sort -z)) \
+                      <(git -C "$g" diff -z --no-renames --name-only "$x" "$b0" | sort -z))
   if [ "$n" -eq 0 ]; then rm -f "$idx"; printf '%s' "$base"; return 0; fi
   mapfile -t parents < <(git -C "$g" rev-parse "${head}^@")
   if tree="$(GIT_INDEX_FILE="$idx" git -C "$g" write-tree)" \

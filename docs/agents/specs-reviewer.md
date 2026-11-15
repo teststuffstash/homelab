@@ -95,8 +95,9 @@ root this pass reviews, since the pass cannot see the other roots' packs); the h
 2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
 storage — that artifact stays the read fallback until the old runs expire). **The diff base** is what the PR itself changes: the pack diffs three-dot from
 `merge-base(base, head)`, and when a PR on a non-default base (a `goal/**` branch) has merged the
-default branch in, every path whose content at head is byte-identical to the newest default-branch
-commit the head holds is taken from that commit into the diff base (`pack_diff_base`: a synthetic
+default branch in, every path the base side left alone since its merge-base with the newest
+default-branch commit the head holds, and whose content at head is byte-identical to that commit,
+is taken from that commit into the diff base (a base-side edit the merge discarded stays in the diff) (`pack_diff_base`: a synthetic
 commit grafted under the head in the throwaway clone; the head keeps its sha). Upstream content
 reviewed where it merged is not this PR's spec change. Path-level: a path both sides changed keeps
 the upstream's hunks. `evidence-pack` turns these into the model's inputs dir: touched rules,
