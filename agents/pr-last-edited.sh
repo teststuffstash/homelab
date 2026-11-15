@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # pr-last-edited.sh — THE read of `PullRequest.lastEditedAt` (the PR BODY's last edit) for the
-# review edge's `reviewable_again` predicate. Sourced by BOTH readers — agents/review-reflex.sh (the
-# pick) and agents/coordinator-scan.sh (the changes-requested hold) — so the fetch, the merge and the
-# failure posture have one home (the changes-requested-body-edit replay family pins it).
+# review edge's `reviewable_again` predicate. Sourced by every reader — agents/review-reflex.sh (the
+# pick), agents/coordinator-scan.sh (the changes-requested hold) and agents/specs-reviewer-session.sh
+# (the specs reviewer's skip) — so the fetch, the merge and the failure posture have one home (the
+# changes-requested-body-edit and specs-review-body-edit replay families pin it).
 #
-#   pr_last_edited_merge <owner/repo> <prs-json-array>   # stdout = the array, each CHANGES_REQUESTED
-#                                                        # PR gaining .lastEditedAt ("" = never edited)
+#   pr_last_edited_merge <owner/repo> <prs-json-array> [<numbers>]
+#       stdout = the array, each asked-about PR gaining .lastEditedAt ("" = never edited). Asked
+#       about: the PRs whose .reviewDecision is CHANGES_REQUESTED — or, when <numbers> is passed
+#       (whitespace-separated, possibly empty), exactly those: the specs reviewer names the PRs
+#       whose live verdict OF ITS OWN is CHANGES_REQUESTED (a per-identity fact reviewDecision
+#       cannot carry). Either way the set is PRs under a CHANGES_REQUESTED verdict.
 #
 # WHY GRAPHQL. `reviewable_again` re-reviews a CHANGES_REQUESTED PR when the newest non-merge commit
 # OR the body edit is newer than the newest verdict (homelab#2168). #2333 put `lastEditedAt` into
@@ -13,9 +18,9 @@
 # stack's review tick aborted (2026-10-06 23:22Z, quickfix 914b2b3c dropped it), leaving the
 # body-edit leg INERT: `.lastEditedAt // ""` was always "". GraphQL has the field; this reads it.
 #
-# BUDGET (the homelab-agents installation's shared GraphQL pool, FU-290): at most ONE extra query per
-# repo per tick, and NONE when the list holds no CHANGES_REQUESTED PR (the only PRs the predicate
-# asks about). One aliased query for exactly those numbers — `p<N>: pullRequest(number: N)` — selects
+# BUDGET (the homelab-agents installation's shared GraphQL pool, FU-290; the specs reviewer spends
+# its own installation's pool under the same bound): at most ONE extra query per repo per tick, and
+# NONE when the list holds no CHANGES_REQUESTED PR (the only PRs the predicate asks about). One aliased query for exactly those numbers — `p<N>: pullRequest(number: N)` — selects
 # only `number lastEditedAt`; no connection is paginated, so it bills the 1-point minimum whatever
 # the PR count, and merging BY NUMBER cannot mis-join the way an ordering-dependent list would.
 #
@@ -26,7 +31,12 @@
 # commit-time rule alone), with one WARN line on stderr naming the degrade. Always exits 0.
 pr_last_edited_merge() {
   local slug="$1" prs="$2" nums q raw map
-  nums="$(printf '%s' "$prs" | jq -r '[.[]? | select((.reviewDecision // "") == "CHANGES_REQUESTED") | .number] | unique | .[]' 2>/dev/null)" || nums=""
+  if [ "$#" -ge 3 ]; then
+    # shellcheck disable=SC2086 # word-split on purpose: <numbers> is a whitespace-separated list
+    nums="$(printf '%s\n' $3 | grep -E '^[0-9]+$' | sort -un)" || nums=""
+  else
+    nums="$(printf '%s' "$prs" | jq -r '[.[]? | select((.reviewDecision // "") == "CHANGES_REQUESTED") | .number] | unique | .[]' 2>/dev/null)" || nums=""
+  fi
   if [ -z "$nums" ]; then printf '%s' "$prs"; return 0; fi
   q="query(\$owner: String!, \$name: String!) { repository(owner: \$owner, name: \$name) {"
   local n

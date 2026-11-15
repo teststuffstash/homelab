@@ -1,0 +1,30 @@
+# specs-review-body-edit — the SPECS reviewer's re-review decision on a PR body edit.
+#
+# THE CONTRACT. The specs reviewer (agents/specs-reviewer-session.sh) skips a PR that carries its
+# own live verdict at the content commit. Its skip uses the code reviewer's `reviewable_again`
+# shape (agents/review-reflex.sh; family changes-requested-body-edit): its own CHANGES_REQUESTED is
+# answered by a newer content commit OR a PR-body edit newer than that verdict; its own APPROVED
+# never re-opens on an edit. lastEditedAt comes through the ONE home, agents/pr-last-edited.sh,
+# asked ONLY for the PRs under an own live CHANGES_REQUESTED (the budget rule: one 1-point query
+# per repo per tick, none without such a PR).
+#
+# THE DEFECT (homelab#3444, 2026-11-15). The reviewer's finding asked for a `Spec changes:` list in
+# the PR BODY; the author edited the body 28 s later; the reviewer logged "own live verdict at
+# 75aaa056 — nothing to do" every tick after — a finding the author can only satisfy in the body
+# could never be cleared without a dummy commit.
+#
+# THE ROWS (world sr-3444: #3444 under the specs reviewer's CHANGES_REQUESTED at its content
+# commit, the code reviewer's APPROVED live, CI green; #3445 under its APPROVED — never asked):
+#   body-edited  — the edit after the verdict → #3444 `candidate`. THE FIXED ROW: red on base
+#                  (no body-edit leg, no sentinel blocks to extract).
+#   never-edited — GraphQL says never edited → `own-at-head` (skip).
+#   read-fails   — the GraphQL read fails → WARN on stderr, the commit-time rule (`own-at-head`),
+#                  RC 0: the tick is never aborted for this signal.
+# Every row asks GraphQL about #3444 only.
+#
+name: specs-review-body-edit
+mode: table
+source: agents/specs-reviewer-session.sh
+parts:
+  - file:bridge.sh
+rows: rows.psv

@@ -32,10 +32,10 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 | Requirement | section | Status |
 |---|---|---|
-| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP — no evidence pipeline yet (fixture: `gateway-admit`); the lane (`gw_admit_lane`) has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive it, unverified as evidence |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP — no evidence pipeline yet (fixtures: `gateway-admit`, `gateway-sessions`) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
-| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP — no evidence pipeline yet (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
-| [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap: every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
+| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3390 (fixture: `gateway-admit` — its 9 rows pass locally in `islands/launch/tests` against `islands/launch/lib/gateway-admit.sh`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island helper does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
+| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
+| [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
 ## The helper
 
@@ -45,11 +45,17 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 return code, and the caller decides what it means (`agents/gateway-admit.sh` header, :12–58).
 **rc 0** — `dispatch`: `GW_SESSION_ID`, `GW_RAIL`, `GW_HARNESS`, `GW_MODEL`, `GW_WIRE_MODEL` (the
 model with its rail prefix stripped — the harness invocation's id), `GW_CONTEXT_TOKENS`,
-`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`).
+`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`). A bound
+call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (the in-pod pull,
+[LAUNCH-POD-ENV-PULL](pod.md#launch-pod-env-pull)). On an unbound call the dispatch's
+`session.token` and env values go only to the `--env-file`, written 0600, never to a `GW_*` variable.
 **rc 1** — `defer`: `GW_DEFER_REASON` and `GW_RETRY_AFTER` are the gateway's, no session exists.
 **rc 3** — fail closed: unreachable, non-200 (the error envelope, redacted by the supplier, is
 quoted; a 200 that is neither verdict is never printed, since it could carry a token), or an
-unusable dispatch ([LAUNCH-ADMIT-BOUND](#launch-admit-bound)). **rc 2** — refused before any
+unusable dispatch ([LAUNCH-ADMIT-BOUND](#launch-admit-bound)); `GW_DEFER_REASON` names the cause —
+`gateway-unreachable`; `gateway-http <status>: <the redacted envelope>` for a non-200;
+`gateway-http 200, unknown decision '<decision>'` for a 200 that is neither verdict;
+`dispatch-unusable: <what>` for an unusable dispatch — and `GW_RETRY_AFTER` is `?` in every case. **rc 2** — refused before any
 request: `--stack`, `--role`, `--task` missing, neither or both of `--bind` / `--env-file`, a bind
 that is not `<ns>/<sa>/<pod>`, a non-integer round, an attempt < 1. Optional fields reach the
 request only when given; `attempt` only when > 1. The caller's identity is a fresh token per call
@@ -75,14 +81,14 @@ all empty).
 
 | description | world | args | reply | rc? | outputs? |
 |---|---|---|---|---|---|
-| bound-dispatch | gw-dispatch-bound | `--role coordinator --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, prelude set |
-| unbound-dispatch | gw-dispatch-unbound | `--role responder --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
-| defer | gw-defer | `--role coordinator --round 3 --attempt 2 --bind …/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
-| http-503 | gw-error | `--role responder --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
+| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
+| unbound-dispatch | gw-dispatch-unbound | `--role responder --task 'respond homelab#7' --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
+| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
+| http-503 | gw-error | `--role responder --task t --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
 | no-mode | launcher-vars | `--role responder --task t` | — | 2 | — |
-| both-modes | launcher-vars | `--env-file F --bind a/b/c` | — | 2 | — |
-| bad-bind | launcher-vars | `--bind platform-agents/p1` | — | 2 | — |
-| bad-round | launcher-vars | `--round x --bind a/b/c` | — | 2 | — |
+| both-modes | launcher-vars | `--role responder --task t --env-file F --bind a/b/c` | — | 2 | — |
+| bad-bind | launcher-vars | `--role coordinator --task t --bind platform-agents/p1` | — | 2 | — |
+| bad-round | launcher-vars | `--role coordinator --task t --round x --bind a/b/c` | — | 2 | — |
 | missing-role | launcher-vars | `--task t --env-file F` | — | 2 | — |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -94,7 +100,7 @@ all empty).
 ### LAUNCH-ADMIT-BOUND
 
 A dispatch is checked before anything is built on it; once a session exists, every refusal
-releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). The
+releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. The
 session id must match `^[A-Za-z0-9_-]{1,64}$`. **Bound** (`--bind`): the answer carries no
 credential — a `session.token` or an `env` map means the gateway ignored the bind, and the launcher
 refuses rather than hold a token (GW-SESSIONS-PULL); `env_keys` is a non-empty list of shell names
@@ -111,17 +117,19 @@ among the env keys — `ANTHROPIC_MODEL` (claude), `OPENCODE_CONFIG_CONTENT` (op
 #### An unusable dispatch
 
 Legend: `defect` = what is wrong with the answer; `released?` = one DELETE of the session;
-`defer_reason?` = `GW_DEFER_REASON` after `dispatch-unusable: `.
+`defer_reason?` = `GW_DEFER_REASON` after `dispatch-unusable: `, except a cell marked *(whole)*, which is
+the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the row runs through:
+`gw_admit` (rc as returned) or `launcher` (the worker launcher, which maps rc 3 to exit 1).
 
-| description | world | defect | released? | rc? | defer_reason? |
-|---|---|---|---|---|---|
-| credential-in-answer ⚖ | gw-dispatch-bound | `session.token` + `env` in a bound answer, no `env_keys` / `pull_url` | yes | 1 (exit) | `a credential in a bound answer, env_keys, pull_url, env_keys lacks OPENCODE_CONFIG_CONTENT` |
-| bad-pull-url | gw-dispatch-bound | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
-| unusable-env | gw-dispatch-bound | `env_keys` lacks the opencode model key | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
-| harness-not-run | gw-dispatch-bound | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
-| unbound-answer-bound | gw-dispatch-unbound | an unbound call answered without `env` | yes | 3 | `env` |
-| unbound-env-newline | gw-dispatch-unbound | an `env` value with a newline | yes | 3 | `env` |
-| unknown-decision | gw-dispatch-unbound | `decision: maybe` (with a token) | no session kept | 1 (exit) | `gateway-http 200, unknown decision 'maybe'` (body never printed) |
+| description | world | via | defect | released? | rc? | defer_reason? |
+|---|---|---|---|---|---|---|
+| credential-in-answer ⚖ | gw-dispatch-bound | launcher | `session.token` + `env` in a bound answer, no `env_keys` / `pull_url`; harness `opencode` | yes | 1 (exit) | `a credential in a bound answer, env_keys, pull_url, env_keys lacks OPENCODE_CONFIG_CONTENT` |
+| bad-pull-url | gw-dispatch-bound | launcher | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
+| unusable-env | gw-dispatch-bound | launcher | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
+| harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
+| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
+| unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
+| unknown-decision ⚖ | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
 The `(exit)` rows run through the worker launcher, which maps rc 3 to exit 1
 ([LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher)).
@@ -142,8 +150,8 @@ stack row is `platform`; any other stack takes [the old path](glossary.md#the-ol
 `WARN` line (`agents/agent-session.sh` `REPLAY:gateway-sessions`, :272–345). Before any request it
 refuses (exit 2, no session, no pod): `--model` (the gateway owns the model — a contradiction, not
 an override), an interactive ride with neither `--run` nor `--recipe` (the pod pulls its env in its
-command, and an interactive pod has none), a non-integer round, an attempt < 1, and a missing
-caller token. The bind is the pod it is about to create — namespace = the repo, ServiceAccount
+command, and an interactive pod has none), a non-integer round, an attempt < 1, a canary `AGENT_GATEWAY_CALLER_SA` that is not `<ns>/<sa>`
+(whatever the token file holds), and a missing caller token. The bind is the pod it is about to create — namespace = the repo, ServiceAccount
 `agentstack-worker`, name `agent-<repo>-<task>-r<round>` (the pod-name block reuses it verbatim,
 [LAUNCH-POD-IDENTITY](pod.md#launch-pod-identity)). `--harness` reaches the request only when
 explicit (it narrows the walk to that dialect); `AGENT_GATEWAY_RAIL`, `AGENT_GATEWAY_ROLE`,
@@ -167,35 +175,37 @@ decide (unverified — expected once the policy names the other stacks).
 
 #### Admission through the launcher
 
-Legend: `knobs` = the row's `env` column + `vars.sh` flags; `request?` = what the POST body carries
-beyond `{stack: platform, role, task, round}`; `harness?` / `model?` = what the launcher runs.
+Legend: `knobs` = the row's `env` column + `vars.sh` flags; `reply` = the seam's answer (world;
+`—` = no request, so none); `request?` = what the POST body carries beyond `{stack: platform, role,
+task, round}`; `harness?` = what the launcher runs; `model?` = the dispatch's `GW_MODEL` (on the old
+path, the launcher's own default).
 
-| description | world | knobs | request? | harness? | model? | rc? |
-|---|---|---|---|---|---|---|
-| off | launcher-vars | `AGENT_GATEWAY` unset | no request | opencode (old path) | `openrouter/deepseek/deepseek-v4-flash` | — |
-| other-stack | stack-other | `AGENT_GATEWAY=sessions`, stack `circles` | no request (WARN) | opencode (old path) | `openrouter/deepseek/deepseek-v4-flash` | — |
-| model-refused | stack-platform | `--model opencode-go/deepseek-v4-flash` | no request | — | — | 2 |
-| round-refused | stack-platform | `--round r2` | no request | — | — | 2 |
-| attempt-refused | stack-platform | `AGENT_GATEWAY_ATTEMPT=0` | no request | — | — | 2 |
-| interactive-refused | stack-platform | no `--run`, no `--recipe` | no request | — | — | 2 |
-| no-caller-token | stack-platform | token file absent, no canary SA | no request | — | — | 2 |
-| caller-sa-malformed | stack-platform | `AGENT_GATEWAY_CALLER_SA=agentstack-loop` | no request | — | — | 2 |
-| caller-mint-fails | stack-platform | canary SA, mint fails | no request | — | — | 2 |
-| caller-minted | stack-platform · gw-dispatch-bound | canary SA `platform-agents/agentstack-loop`, `AGENT_GATEWAY_RAIL=opencode` | `rail: opencode`, bind, minted bearer | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-opencode | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_RAIL=opencode` | `rail: opencode`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-claude-explicit | stack-platform · gw-dispatch-bound | `--harness claude`, `issue-42` r2 | `harness: claude`, bind | claude | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-claude-subscription | stack-platform · gw-dispatch-bound | `--harness claude` | `harness: claude`, bind | claude | `claude/sonnet` | 0 |
-| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
-| dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
-| dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
-| defer | stack-platform · gw-defer | — | bind | — | — | 1 |
-| http-503 | stack-platform · gw-error | — | bind | — | — | 1 |
-| unreachable | stack-platform · gw-error | — | bind | — | — | 1 |
-| fallback-unreachable ⚖ | stack-platform · gw-error | `AGENT_GATEWAY_FALLBACK_EXIT=75` | bind | — | — | 75 |
-| fallback-no-caller-token ⚖ | stack-platform | `AGENT_GATEWAY_FALLBACK_EXIT=75`, no token | no request | — | — | 75 |
-| fallback-defer | stack-platform · gw-defer | `AGENT_GATEWAY_FALLBACK_EXIT=75` | bind | — | — | 1 |
-| fallback-model-refused | stack-platform | `AGENT_GATEWAY_FALLBACK_EXIT=75`, `--model …` | no request | — | — | 2 |
+| description | world | knobs | reply | request? | harness? | model? | rc? |
+|---|---|---|---|---|---|---|---|
+| off | launcher-vars | `AGENT_GATEWAY` unset | — | no request | opencode (old path) | `openrouter/deepseek/deepseek-v4-flash` | — |
+| other-stack | stack-other | `AGENT_GATEWAY=sessions`, stack `circles` | — | no request (WARN) | opencode (old path) | `openrouter/deepseek/deepseek-v4-flash` | — |
+| model-refused | stack-platform | `--model opencode-go/deepseek-v4-flash` | — | no request | — | — | 2 |
+| round-refused | stack-platform | `--round r2` | — | no request | — | — | 2 |
+| attempt-refused | stack-platform | `AGENT_GATEWAY_ATTEMPT=0` | — | no request | — | — | 2 |
+| interactive-refused | stack-platform | no `--run`, no `--recipe` | — | no request | — | — | 2 |
+| no-caller-token | stack-platform | token file absent, no canary SA | — | no request | — | — | 2 |
+| caller-sa-malformed | stack-platform | `AGENT_GATEWAY_CALLER_SA=agentstack-loop` | — | no request | — | — | 2 |
+| caller-mint-fails | stack-platform | canary SA, mint fails | — | no request | — | — | 2 |
+| caller-minted | stack-platform · gw-dispatch-bound | canary SA `platform-agents/agentstack-loop`, `AGENT_GATEWAY_RAIL=opencode` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `rail: opencode`, bind, minted bearer | opencode | `opencode-go/deepseek-v4-flash` | 0 |
+| dispatch-opencode | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_RAIL=opencode` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `rail: opencode`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
+| dispatch-claude-explicit | stack-platform · gw-dispatch-bound | `--harness claude`, `issue-42` r2 | dispatch `opencode-go/deepseek-v4-flash` on opencode (harness claude) | `harness: claude`, bind | claude | `opencode-go/deepseek-v4-flash` | 0 |
+| dispatch-claude-subscription | stack-platform · gw-dispatch-bound | `--harness claude` | dispatch `claude/sonnet` on anthropic (harness claude) | `harness: claude`, bind | claude | `claude/sonnet` | 0 |
+| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
+| dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
+| dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
+| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
+| defer | stack-platform · gw-defer | — | `defer` with a reason and a retry | bind | — | — | 1 |
+| http-503 | stack-platform · gw-error | — | 503 error envelope | bind | — | — | 1 |
+| unreachable | stack-platform · gw-error | — | no answer | bind | — | — | 1 |
+| fallback-unreachable ⚖ | stack-platform · gw-error | `AGENT_GATEWAY_FALLBACK_EXIT=75` | no answer | bind | — | — | 75 |
+| fallback-no-caller-token ⚖ | stack-platform | `AGENT_GATEWAY_FALLBACK_EXIT=75`, no token | — | no request | — | — | 75 |
+| fallback-defer | stack-platform · gw-defer | `AGENT_GATEWAY_FALLBACK_EXIT=75` | `defer` with a reason and a retry | bind | — | — | 1 |
+| fallback-model-refused | stack-platform | `AGENT_GATEWAY_FALLBACK_EXIT=75`, `--model …` | — | no request | — | — | 2 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

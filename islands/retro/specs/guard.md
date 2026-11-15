@@ -51,17 +51,17 @@ Both cells ride the stack's fixer namespace (the `PROJECT` that
 [`retro-project.sh`](../../../agents/retro-project.sh) maps the stack to: `platform` → `openrouter-operator`,
 `oracle` → `oracle-fleet`, `sleep` → `sleep-tracking`) and may hold its WIP slot, so the guard refuses
 while any `app=agent-session` pod runs there. Only that one namespace is probed — a busy fixer in a
-sibling namespace of the same stack never refuses the run. A probe that fails counts as busy, never
+sibling namespace of the same stack (for `platform`, `homelab` is one) never refuses the run. A probe that fails counts as busy, never
 as idle. A refusal fails the workflow visibly (exit 1). An unknown stack fails the same way.
 
 **World:** none committed — unverified, expected to behave as the rows say.
 
-| description | world | stack | pods_in_PROJECT | probe | rc? |
-|---|---|---|---|---|---|
-| idle ride namespace | — | platform | none | ok | continue |
-| a worker rides the ride namespace | — | platform | ≥ 1 | ok | 1 |
-| ⚖ the probe itself failed — busy, not idle | — | platform | — | error | 1 |
-| ⚖ a fixer in a sibling platform namespace does not refuse | — | platform | none (busy in `homelab`) | ok | continue |
+| description | world | stack | pods_in_PROJECT | pods_in_sibling | probe | rc? |
+|---|---|---|---|---|---|---|
+| idle ride namespace | — | platform | none | — | ok | continue |
+| a worker rides the ride namespace | — | platform | ≥ 1 | — | ok | 1 |
+| ⚖ the probe itself failed — busy, not idle | — | platform | — | — | error | 1 |
+| ⚖ a fixer in a sibling platform namespace does not refuse | — | platform | none | ≥ 1 in `homelab` | ok | continue |
 
 > **External:** kubectl prints "No resources found in <ns> namespace." to STDERR with exit 0 on an
 > empty list — the probe reads stdout only (`retro-argo.yaml` guard comment, homelab#237; verify during
