@@ -1,0 +1,16 @@
+# reviewer-verdict-pin — the decision table (family contract in fixture.yaml).
+# The #3444 row is content-moved-approve-dropped: approval submitted after a push → never filed on
+# the unread head. Expectations from the contract: commit_id is the REVIEWED head 536ed6a0…, never
+# the current head; a write happens only when no non-merge commit follows the reviewed one.
+# id                              | world               | patch | env                       | expect           | params
+unchanged-approve-pinned          | unchanged           |       | VP_FORM=approve           | pinned-approve   |
+unchanged-request-changes-pinned  | unchanged           |       | VP_FORM=request-changes   | pinned-rc        |
+stdin-body-default-pr-pinned      | unchanged           |       | VP_FORM=stdin-default-pr  | pinned-stdin     |
+content-moved-approve-dropped     | content-moved       |       | VP_FORM=approve           | dropped          | KIND=APPROVE
+content-moved-rc-dropped          | content-moved       |       | VP_FORM=request-changes   | dropped          | KIND=REQUEST_CHANGES
+force-pushed-approve-dropped      | force-pushed        |       | VP_FORM=approve           | dropped          | KIND=APPROVE
+merge-only-approve-pinned         | merge-only          |       | VP_FORM=approve           | pinned-approve   |
+moved-during-submit-dismissed     | moved-during-submit |       | VP_FORM=approve           | dismissed        |
+comment-passthrough               | unchanged           |       | VP_FORM=comment           | comment          |
+other-pr-refused                  | unchanged           |       | VP_FORM=other-pr          | other-pr         |
+view-passthrough                  | unchanged           |       | VP_FORM=view              | view             |

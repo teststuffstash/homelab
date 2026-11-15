@@ -2014,18 +2014,19 @@ ${PF_RV_BODY}"
           PF_INDEX_ITEM "reviews.md" "OK"
         # <<<REPLAY:fetch-reviews<<<
 
-        # Coordinator's ruling/arbitration comment (search issue + PR comments for ARBITRATE)
+        # Coordinator's ruling/arbitration comment (the newest ARBITRATE over issue + PR comments)
         PF_ARB_MD=""
         PF_ARB_COMMENT=""
         # Fetch PR conversation comments (the issue-tab comments, not inline review comments)
         PF_PR_ISSUE_COMMENTS=""
         PF_PR_ISSUE_COMMENTS="$(gh api "repos/${PF_SLUG}/issues/${PF_PR}/comments" --paginate 2>/dev/null)" || PF_PR_ISSUE_COMMENTS=""
-        # Search issue comments first for line-anchored ARBITRATE marker (word boundary, not colon)
-        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select(.body | test(\"^ARBITRATE\\\\b\"))] | last" 2>/dev/null)" || PF_ARB_COMMENT=""
-        # If not found on issue, search PR conversation comments
-        if [ -z "$PF_ARB_COMMENT" ] || [ "$PF_ARB_COMMENT" = "null" ]; then
-          PF_ARB_COMMENT="$(printf '%s' "$PF_PR_ISSUE_COMMENTS" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select(.body | test(\"^ARBITRATE\\\\b\"))] | last" 2>/dev/null)" || PF_ARB_COMMENT=""
-        fi
+        # The directive = the NEWEST trusted top-level comment matching `^ARBITRATE\b` over the
+        # issue's comments UNION the PR's conversation comments, by created_at — either surface
+        # may carry it (coordinator README §ARBITRATE marker contract). One select, no surface
+        # precedence: an issue-first fallback handed PR#3337's round 5 the issue's 11-13 ruling
+        # over the PR's newer one. Same rule as coordinator-scan.sh NOOP_RERUN_JQ ($dir), which
+        # reads gh's camelCase `createdAt` and so keeps its own copy — change both together.
+        PF_ARB_COMMENT="$(printf '%s\n%s\n' "${PF_COMMENTS_RAW:-[]}" "${PF_PR_ISSUE_COMMENTS:-[]}" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select((.body // \"\") | test(\"^ARBITRATE\\\\b\"))] | sort_by(.created_at // \"\") | last" 2>/dev/null)" || PF_ARB_COMMENT=""
         if [ -n "$PF_ARB_COMMENT" ] && [ "$PF_ARB_COMMENT" != "null" ]; then
           PF_ARB_AUTHOR="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.user.login // ""')"
           PF_ARB_BODY="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.body // ""')"

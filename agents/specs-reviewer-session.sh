@@ -22,7 +22,9 @@
 # NON-MERGE commit, the reviewer-session.sh / review-reflex.sh grammar — an update-branch merge is
 # not new content):
 #   skip     — our own LIVE verdict (APPROVED/CHANGES_REQUESTED, never DISMISSED) at the content
-#              commit already exists; or no LIVE homelab-reviewer APPROVED at it (the operator's
+#              commit already exists — unless it is CHANGES_REQUESTED and the PR body was edited
+#              after it (the body-edit leg, review-reflex.sh's reviewable_again shape; lastEditedAt
+#              via agents/pr-last-edited.sh); or no LIVE homelab-reviewer APPROVED at it (the operator's
 #              "one old reviewer and THEN the new" — a ride is never spent on a PR the code reviewer
 #              bounced; a Renovate PR gets that approval from the renovate-approve reflex, so this
 #              holds for it too); or CI at head is not green; or label agent/error (touch nothing).
@@ -49,7 +51,7 @@
 #              each held as a SPECS ROOT REVIEW comment, and ONE verdict — aggregate_review),
 #              built BEFORE admission by the pinned allure-behavior-snippets wheel
 #              (`evidence-pack`, digest-checked): touched rules + their sections + the spec diff, the
-#              specs tree, the head's raw Allure results (the pack ci publishes to the bucket) with
+#              specs tree (the diff base: pack_diff_base), the head's raw Allure results (the pack ci publishes to the bucket) with
 #              evidence.json + digest.md + attachments, the base branch's evidence as baseline, the
 #              PR body, the closing issue's acceptance text, the previous review, and process/ (the
 #              pinned RULES, CONVENTIONS and briefs). When the pinned pack offers --mask-descriptions the pass is the
@@ -101,6 +103,7 @@
 # `$`-prefixed numbers in heredocs, PR bodies via --body-file, `gh` has no --arg.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "${HERE}/pr-last-edited.sh"   # pr_last_edited_merge — the body-edit leg of the skip (own CHANGES_REQUESTED only)
 
 ORG="${ORG:-teststuffstash}"
 SPECS_REVIEW_REPOS="${SPECS_REVIEW_REPOS:-homelab}"      # the island repos; another island adds itself
@@ -257,14 +260,19 @@ log() { printf '%s specs-review: %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 # ── the shared grammar (review-reflex.sh / reviewer-session.sh exit contract) ────────────────────
 # One jq prelude every read below composes with. The content commit is the newest NON-MERGE commit
 # (merge classified by GitHub's default message shapes — gh exposes no .parents[]); a review is at
-# head when submitted at or after it (>=, the exit contract's filter); a bot login is matched with
-# the `[bot]` suffix stripped (REST says `x[bot]`, GraphQL says `x`).
+# head when submitted at or after it (>=, the exit contract's filter) AND filed on the content commit
+# or a later one (reviewed_current) — a review filed on an OLDER commit but submitted after a push
+# (homelab#3444: read 536ed6a0, submitted 19 s after 75aaa056 landed) is about a head nobody read;
+# a review with no commit field keeps the time test alone. A bot login is matched with the `[bot]`
+# suffix stripped (REST says `x[bot]`, GraphQL says `x`).
+# >>>REPLAY:specs-reviewable-again>>>
 JQ_PRELUDE='
   def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
   def content_ts: ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
   def content_sha: ([ .commits[]? | select(is_merge | not) ] | sort_by(.committedDate) | last | .oid) // "";
   def login_of: (.author.login // "") | sub("\\[bot\\]$"; "");
-  def live_verdicts($bot): content_ts as $h | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) ];
+  def reviewed_current($cs; $h): (.commit.oid // "") as $c | $c == "" or (([ $cs[] | select(.oid == $c) | .committedDate ] | max // "") >= $h);
+  def live_verdicts($bot): content_ts as $h | (.commits // []) as $cs | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) | select(reviewed_current($cs; $h)) ];
   def green:
     ([ .statusCheckRollup[]? | {n: (.name // .context // ""), c: (.conclusion // .state // "")} ]) as $c
     # A CANCELLED run counts only when NO other run of the same check concluded: concurrency
@@ -274,19 +282,41 @@ JQ_PRELUDE='
       and ([ $c | group_by(.n)[] | [ .[].c | select(. != "CANCELLED") ] as $k
              | select(($k | length) == 0 or ([ $k[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) > 0) ] | length) == 0;
   def has_label($l): ([ .labels[]?.name ] | index($l)) != null;
+  # THE BODY-EDIT LEG of reviewable_again (agents/review-reflex.sh: the code reviewer rule, same shape): a
+  # CHANGES_REQUESTED verdict is answered by a newer content commit OR a newer PR-body edit; an
+  # APPROVED one never re-opens on an edit. .lastEditedAt is merged in by agents/pr-last-edited.sh
+  # for the PRs under an own live CHANGES_REQUESTED ("" = never edited); ABSENT = not read (the
+  # read failed, or no own CHANGES_REQUESTED) — then nothing re-opens (the commit-time rule alone)
+  # and an earlier own CHANGES_REQUESTED is not judged a loop.
+  def own_live($me): live_verdicts($me) | sort_by(.submittedAt);
+  def own_reopened($me): (own_live($me) | last) as $n
+    | $n != null and $n.state == "CHANGES_REQUESTED" and ((.lastEditedAt // "") > $n.submittedAt);
+  # an own live verdict superseded at the same content commit WITHOUT an answering body edit — the
+  # dispatcher loop: an earlier APPROVED (never re-reviewed), or an earlier CHANGES_REQUESTED the
+  # body was not edited after (judged only when .lastEditedAt was read).
+  def own_unanswered($me): has("lastEditedAt") as $known | (.lastEditedAt // "") as $le
+    | [ own_live($me) | .[0:-1][] | select(.state == "APPROVED" or ($known and $le <= .submittedAt)) ];
 '
+
+# own_cr_numbers <prs-json-array> → the PR numbers under a live own CHANGES_REQUESTED at the content
+# commit: the only PRs whose body edit can re-open this reviewer (the set pr_last_edited_merge reads)
+own_cr_numbers() {
+  jq -r --arg me "$SPECS_REVIEWER_LOGIN" "$JQ_PRELUDE"'
+    .[]? | select(.isDraft | not) | select([ live_verdicts($me)[] | select(.state == "CHANGES_REQUESTED") ] | length > 0) | .number' <<< "$1"
+}
 
 # classify <pr-json> → one word: error-label | own-anomaly | own-at-head | partial-held | code-not-approved | ci-not-green | candidate
 classify() {
   jq -r --arg me "$SPECS_REVIEWER_LOGIN" --arg code "$CODE_REVIEWER_LOGIN" "$JQ_PRELUDE"'
     if has_label("agent/error") then "error-label"
-    elif (live_verdicts($me) | length) > 1 then "own-anomaly"
-    elif (live_verdicts($me) | length) == 1 then "own-at-head"
+    elif (own_unanswered($me) | length) > 0 then "own-anomaly"
+    elif (live_verdicts($me) | length) > 0 and (own_reopened($me) | not) then "own-at-head"
     elif (content_sha | .[0:8]) as $h | ([ .comments[]? | select(login_of == $me) | select(.body | contains("<!-- specs-review partial-read head=" + $h)) ] | length) > 0 then "partial-held"
     elif ([ live_verdicts($code)[] | select(.state == "APPROVED") ] | length) == 0 then "code-not-approved"
     elif (green | not) then "ci-not-green"
     else "candidate" end' <<< "$1"
 }
+# <<<REPLAY:specs-reviewable-again<<<
 
 # ── --self-test: bash -n on this file + the predicates on fixtures ──────────────────────────────
 # Expectations are derived from the CONTRACT (review-reflex.sh's filters, the exit contract), not
@@ -310,6 +340,15 @@ self_test() {
   local j
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r' <<< "$base");                       check "code approved at head → candidate" candidate "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_old]" '.reviews=$r' <<< "$base");                      check "code approval older than content → code-not-approved" code-not-approved "$(classify "$j")"
+  # homelab#3444: the approval was SUBMITTED after the content commit (10:30 ≥ 10:00) but FILED on an
+  # older commit (00000000…, the head the session read) → about an unread head → not the code gate.
+  # Filed on the content commit, or on the later update-branch merge (GitHub re-points a review
+  # across one), it is live; a commit gone from the PR (force-push) is not.
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "code approval submitted after the push but filed on the older commit → code-not-approved (#3444)" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"aaaa1111"}' <<< "$base"); check "code approval filed on the content commit → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"bbbb2222"} | .reviews[0].submittedAt="2026-10-16T11:30:00Z"' <<< "$base"); check "code approval filed on the later update-branch merge → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"dead0000"}' <<< "$base"); check "code approval filed on a commit gone from the PR → code-not-approved" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r | .reviews[1].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "own verdict filed on an older commit is not own-at-head → candidate" candidate "$(classify "$j")"
   j=$(jq -c '.reviews=[]' <<< "$base");                                                 check "no code approval → code-not-approved" code-not-approved "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r' <<< "$base");               check "own live verdict at head → own-at-head" own-at-head "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_dismissed]" '.reviews=$r' <<< "$base");        check "own DISMISSED is not a verdict → candidate" candidate "$(classify "$j")"
@@ -323,6 +362,27 @@ self_test() {
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"ci","conclusion":"CANCELLED"},{"name":"ci","conclusion":"FAILURE"}]' <<< "$base"); check "CANCELLED beside a FAILURE → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .labels=[{"name":"agent/error"}]' <<< "$base"); check "agent/error → error-label (touch nothing)" error-label "$(classify "$j")"
   check "content sha skips the merge commit" aaaa1111 "$(jq -r "$JQ_PRELUDE"'content_sha' <<< "$base")"
+  # the body-edit leg (review-reflex.sh reviewable_again: CHANGES_REQUESTED re-opens when the body's
+  # lastEditedAt is newer than the verdict; APPROVED never does). Times from the fixtures above: the
+  # content commit 10:00, own APPROVED 10:40, own CHANGES_REQUESTED 10:50 — an edit at 10:55 is after
+  # the CR, one at 10:45 before it. .lastEditedAt "" = read, never edited; absent = not read.
+  local own_rc2='{"author":{"login":"homelab-specs-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-10-16T10:58:00Z"}'
+  local own_ok2='{"author":{"login":"homelab-specs-reviewer"},"state":"APPROVED","submittedAt":"2026-10-16T10:58:00Z"}'
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "body edited after own CHANGES_REQUESTED → candidate (re-review)" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt=""' <<< "$base");                     check "own CHANGES_REQUESTED, body never edited → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt="2026-10-16T10:45:00Z"' <<< "$base"); check "body edited BEFORE own CHANGES_REQUESTED → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r' <<< "$base");                                        check "own CHANGES_REQUESTED, edit not read (degraded) → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "body edited after own APPROVED → own-at-head (an approval never re-opens)" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_ok2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "CR, body edit, re-review APPROVED → own-at-head, not an anomaly" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_ok2]" '.reviews=$r' <<< "$base");                              check "CR then APPROVED, edit not read (degraded) → own-at-head, not an anomaly" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt=""' <<< "$base");           check "two own CHANGES_REQUESTED, body never edited → own-anomaly (a loop)" own-anomaly "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "CR, body edit, CR again → own-at-head (the round answered, the next one stands)" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:59:00Z"' <<< "$base"); check "CR, edit, CR, edit again → candidate" candidate "$(classify "$j")"
+  # own_cr_numbers — the GraphQL ask set: own live CHANGES_REQUESTED only (not an own APPROVED, not a
+  # CR older than the content commit, not a draft)
+  local crs; crs="$(jq -c --argjson a "[$code_ok,$own_rc]" --argjson b "[$code_ok,$own_ok]" --argjson c '[{"author":{"login":"homelab-specs-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-10-16T09:00:00Z"}]' \
+      '[ (.reviews=$a | .number=1 | .isDraft=false), (.reviews=$b | .number=2 | .isDraft=false), (.reviews=$c | .number=3 | .isDraft=false), (.reviews=$a | .number=4 | .isDraft=true) ]' <<< "$base")"
+  check "own CR numbers: exactly the PR under a live own CHANGES_REQUESTED" "1" "$(own_cr_numbers "$crs" | paste -sd' ')"
   check "specs path predicate: gateway/specs/access.md" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
   check "specs path predicate: specs/x.md at root" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'specs/x.md' >/dev/null; echo $?)"
   check "trigger: homelab rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/tests/test_access.py' >/dev/null; echo $?)"
@@ -378,7 +438,52 @@ self_test() {
   agg="$(aggregate_review aaaa1111bbbb islands/scan/specs="$md/r1.md" islands/launch/specs="$md/r3.md")"
   check "aggregate: every root approved → APPROVE" APPROVE "$(parse_verdict "$agg")"
   check "aggregate: a no-rule root never makes the review read as mechanical (round memory)" 1 "$(prior_review_pick "$(jq -cn --arg b "$agg" '[{user:{login:"homelab-specs-reviewer[bot]"},state:"APPROVED",commit_id:"aaaa1111",submitted_at:"2026-11-14T00:00:00Z",body:$b}]')" | grep -c '^previous review: APPROVED')"
+  # prior_for_root: a root's pass keeps only ITS section of a multi-root verdict (+ the first line and
+  # the head trailer the pack's prior-ruling carry reads); a root without a section is round 1 for
+  # it; a single-root review (no `### Root` section) passes whole. Built from aggregate_review's own
+  # output, so the section shape is the producer's, not a copy.
+  agg="$(aggregate_review aaaa1111bbbb islands/scan/specs="$md/r1.md" islands/launch/specs="$md/r2.md")"
+  local prv; prv="$(printf 'previous review: CHANGES_REQUESTED at aaaa1111bbbb (2026-11-15T16:42:11Z)\n\n%s\n\n<!-- specs-review head=aaaa1111bbbb session=s1 -->\n' "$agg")"
+  check "prior per root: the other root's findings are gone" 0 "$(prior_for_root "$prv" islands/scan/specs | grep -c 'F1 detail')"
+  check "prior per root: this root's section kept" 1 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^Rows: fine$')"
+  check "prior per root: the head trailer kept (it sits in the LAST root's section)" 1 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^<!-- specs-review head=aaaa1111bbbb')"
+  check "prior per root: the first line kept" "previous review: CHANGES_REQUESTED at aaaa1111bbbb (2026-11-15T16:42:11Z)" "$(prior_for_root "$prv" islands/scan/specs | head -1)"
+  check "prior per root: the last root keeps its findings and one trailer" "1 1" "$(prior_for_root "$prv" islands/launch/specs | grep -c 'F1 detail') $(prior_for_root "$prv" islands/launch/specs | grep -c 'specs-review head=')"
+  check "prior per root: the aggregate Verdict line (naming other roots) is not carried" 0 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^Verdict:')"
+  check "prior per root: a root with no section → round 1 for it" 1 "$(prior_for_root "$prv" gateway/specs | grep -c '^previous review: none for root `gateway/specs`')"
+  check "prior per root: a single-root review passes whole" "$(printf 'previous review: X\n\n## Specs review\nVerdict: APPROVE — ok')" "$(prior_for_root "$(printf 'previous review: X\n\n## Specs review\nVerdict: APPROVE — ok')" islands/scan/specs)"
   rm -rf "$md"
+  # pack_diff_base: the PR's spec diff is what the PR itself changes. A real repo, built here: master
+  # m0 → the goal branch adds launch/specs/a.md; master then adds retro/specs/guard.md and edits
+  # shared.md (m1); the PR branches from the goal, edits launch/specs/a.md, merges master. Expected
+  # from the contract (paths byte-identical to the merged-in master are not the PR's): three-dot
+  # from the returned base lists ONLY launch/specs/a.md; a merge-only PR lists nothing; a PR on
+  # master itself gets its base back unchanged; the head keeps its sha.
+  local gr; gr="$(mktemp -d)"
+  (
+    set -e; cd "$gr"; git init -q -b master .; git config user.email t@t; git config user.name t
+    mkdir -p launch/specs retro/specs; echo s > shared.md; echo o > launch/specs/o.md; git add -A; git commit -qm m0
+    git checkout -qb goal; echo a > launch/specs/a.md; echo og > launch/specs/o.md; git add -A; git commit -qm goal
+    git checkout -q master; echo g > retro/specs/guard.md; echo s2 > shared.md; git add -A; git commit -qm m1
+    git checkout -qb pr goal; echo a2 > launch/specs/a.md; git commit -qam "pr edit"; git merge -q --no-edit master
+    git checkout -qb pr-merge-only goal; git merge -q --no-edit master
+    git checkout -qb pr-on-master master; echo x > retro/specs/guard.md; git commit -qam "master pr"
+    # the goal edited launch/specs/o.md, master now edits it too, the PR's merge keeps MASTER's
+    # version: head == M there, but the goal's edit is discarded — a change against the base
+    git checkout -q master; echo om > launch/specs/o.md; git commit -qam "master o"
+    git checkout -qb pr-discard goal; git merge -q --no-edit -X theirs master
+  ) >/dev/null 2>&1 || { echo "  FAIL diff base: the fixture repo could not be built"; fails=$((fails+1)); }
+  local hsha db; hsha="$(git -C "$gr" rev-parse pr)"
+  db="$(pack_diff_base "$gr" goal pr master 2>/dev/null)"
+  check "diff base: master's merged-in paths drop, the PR's own edit stays" "launch/specs/a.md" "$(git -C "$gr" diff --name-only "$db...pr" | paste -sd' ')"
+  check "diff base: the head keeps its sha" "$hsha" "$(git -C "$gr" rev-parse pr)"
+  db="$(pack_diff_base "$gr" goal pr-merge-only master 2>/dev/null)"
+  check "diff base: a merge-only PR changes nothing of its own" "" "$(git -C "$gr" diff --name-only "$db...pr-merge-only")"
+  check "diff base: a PR on the upstream itself keeps its base" master "$(pack_diff_base "$gr" master pr-on-master master 2>/dev/null)"
+  check "diff base: no upstream merged in → the base unchanged" goal "$(pack_diff_base "$gr" goal goal master 2>/dev/null)"
+  db="$(pack_diff_base "$gr" goal pr-discard master 2>/dev/null)"
+  check "diff base: a base-side edit the merge discarded (head == upstream) stays the PR's change" "launch/specs/o.md" "$(git -C "$gr" diff --name-only "$db...pr-discard" | paste -sd' ')"
+  rm -rf "$gr"
   CLAIMS_JSON=null
   check "pack roots: homelab, claim read failed → table" "gateway/specs gateway/tests" "$(pack_roots homelab 2>/dev/null)"
   check "pack roots: default island layout, claim read failed → table" "specs tests" "$(pack_roots some-island 2>/dev/null)"
@@ -658,12 +763,38 @@ prior_review_pick() {
     | "previous review: \(.state) at \((.commit_id // "")[0:12]) (\(.submitted_at))\n\n\(.body)"' <<< "$1"
 }
 
+# prior_for_root <prior-review-text> <root> → the prior review as ONE root's pass may read it. A
+# multi-root verdict (aggregate_review: one `### Root \`<root>\` — …` section per root) carries
+# every root's findings, but a root's pass sees only its own root's pack — handed the whole review,
+# it marks the other roots' findings "still open, not verifiable here". So it keeps the first line
+# (state, head, time), that root's section and the `specs-review head=` trailer (the pack's
+# prior-ruling carry reads it); a root with no section gets a round-1 line for that root. A review
+# with no root sections (a single-root round) is passed whole: nothing in it names a root.
+prior_for_root() {
+  if ! grep -q '^### Root `' <<< "$1"; then printf '%s\n' "$1"; return 0; fi
+  awk -v hdr="### Root \`$2\`" -v root="$2" '
+    NR == 1 { first = $0; next }
+    /^### Root `/ { insec = (index($0, hdr) == 1); if (insec) found = 1 }
+    /<!--[[:space:]]*specs-review[[:space:]]+head=/ { trailer = $0; if (insec) intrailer = 1; else next }
+    insec { sec = sec $0 "\n" }
+    END {
+      if (!found) {
+        sub(/^previous review: /, "", first)
+        printf "previous review: none for root `%s` — the newest own review (%s) covered other roots only; this is round 1 for this root\n", root, first
+        exit
+      }
+      printf "%s\n\n(the section for root `%s` of a multi-root review; each other root is reviewed in its own pass)\n\n## Specs review\n%s", first, root, sec
+      if (trailer != "" && !intrailer) printf "\n%s\n", trailer
+    }' <<< "$1"
+}
+
 # ── several spec roots in one PR: one pass per root, one verdict ────────────────────────────
 # touched-rules and evidence-pack take ONE specs root, so a PR touching N root pairs gets N packs,
 # one per tick (each pass keeps the whole LLM_TIMEOUT_S). Each root's review is held as a COMMENT
 # keyed `<!-- specs-review root=<root> head=<content sha8> -->`; when every touched root has one
 # at the content commit, ONE review carries them all (GitHub counts one approval per identity):
-# CHANGES_REQUESTED when any root's is. A push moves the content commit and every root re-runs.
+# CHANGES_REQUESTED when any root's is. A push moves the content commit and every root re-runs; a
+# body edit that re-opens our CHANGES_REQUESTED drops the root reviews held from before it.
 # root_review_of <own-comments-json [{body}]> <root> <sha8> → that root's review body (from its
 # `## Specs review` line to the marker), newest first; "" = not reviewed at this content commit
 root_review_of() {
@@ -836,6 +967,58 @@ evidence_baseline_download() {
   printf '\n'
 }
 
+# pack_diff_base <git-dir> <base-rev> <head-ref> <upstream-ref> → the rev evidence-pack diffs from
+# (stdout; rc 0 always — a failed step answers <base-rev>, the unnarrowed diff, and says so on
+# stderr). The PR's spec diff is what the PR ITSELF changes. A PR on a non-default base (a
+# `goal/**` branch) that merged the default branch in carries the upstream's commits, already
+# reviewed where they merged; three-dot `<base>...<head>` (the pinned pack's only diff form) shows
+# them as the PR's. So: M = merge-base(upstream, head) — the newest upstream commit the head holds.
+# When M is already inside B0 = merge-base(base, head), nothing was merged in: <base-rev> unchanged.
+# Else every path the BASE side left alone since X = merge-base(B0, M) and whose content at head is
+# byte-identical to M's (present in both, or absent from both) is not the PR's change — upstream
+# content carried in whole. A path the base side changed since X stays in the diff even when head
+# == M: there the merge DISCARDED the base's edit, and that is the PR's change. a synthetic commit = B0's tree with those paths taken from M, made
+# an ANCESTOR of head by a graft in this throwaway clone (`git replace --graft`, the head keeps its
+# sha and tree — the evidence stamp compares the sha), so three-dot's merge-base is that commit and
+# the diff carries only paths the PR made differ. Path-level: a path both sides changed keeps the
+# upstream's hunks too (no merge-tree, no conflict handling). Reads stay in the clone: no API call.
+pack_diff_base() {
+  local g="$1" base="$2" head="$3" up="$4" b0 m x idx tree bp n=0 p entry
+  local -a parents
+  b0="$(git -C "$g" merge-base "$base" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  m="$(git -C "$g" merge-base "$up" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  if git -C "$g" merge-base --is-ancestor "$m" "$b0" 2>/dev/null; then printf '%s' "$base"; return 0; fi
+  x="$(git -C "$g" merge-base "$b0" "$m" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  idx="$(mktemp)"; rm -f "$idx"
+  if ! GIT_INDEX_FILE="$idx" git -C "$g" read-tree "$b0"; then
+    log "WARN pack diff base: read-tree ${b0:0:8} failed — the spec diff stays ${base}...head" >&2; printf '%s' "$base"; return 0
+  fi
+  # (paths B0→head changes MINUS paths M→head changes = where head == M and != B0) MINUS paths the
+  # base side changed since X (X→B0)
+  while IFS= read -r -d '' p; do
+    entry="$(git -C "$g" ls-tree "$m" -- "$p")"
+    if [ -n "$entry" ]; then
+      GIT_INDEX_FILE="$idx" git -C "$g" update-index --add --cacheinfo "$(awk '{print $1}' <<< "$entry"),$(awk '{print $3}' <<< "$entry"),$p"
+    else
+      GIT_INDEX_FILE="$idx" git -C "$g" update-index --force-remove -- "$p"
+    fi || { log "WARN pack diff base: index update for ${p} failed — the spec diff stays ${base}...head" >&2; rm -f "$idx"; printf '%s' "$base"; return 0; }
+    n=$((n+1))
+  done < <(comm -z -23 <(comm -z -23 <(git -C "$g" diff -z --no-renames --name-only "$b0" "$head" | sort -z) \
+                                     <(git -C "$g" diff -z --no-renames --name-only "$m" "$head" | sort -z)) \
+                      <(git -C "$g" diff -z --no-renames --name-only "$x" "$b0" | sort -z))
+  if [ "$n" -eq 0 ]; then rm -f "$idx"; printf '%s' "$base"; return 0; fi
+  mapfile -t parents < <(git -C "$g" rev-parse "${head}^@")
+  if tree="$(GIT_INDEX_FILE="$idx" git -C "$g" write-tree)" \
+     && bp="$(git -C "$g" -c user.name=specs-review -c user.email=specs-review@invalid commit-tree -p "$b0" -p "$m" -m "specs-review: diff base (${b0:0:8} + ${n} path(s) as at upstream ${m:0:8})" "$tree")" \
+     && git -C "$g" replace -f --graft "$(git -C "$g" rev-parse "$head")" "${parents[@]}" "$bp"; then
+    rm -f "$idx"
+    log "pack diff base: head holds upstream ${m:0:8}; ${n} path(s) identical to it are not this PR's change (diff base ${bp:0:8})" >&2
+    printf '%s' "$bp"; return 0
+  fi
+  rm -f "$idx"
+  log "WARN pack diff base: synthetic base failed — the spec diff stays ${base}...head" >&2; printf '%s' "$base"
+}
+
 # ── the context pack (ADR-156): ONE builder for the live pass and the shadow run ────────────────
 # build_pack <repo> <num> <base-branch> <head> [<specs-root> <tests-root|->] → builds $WORK/inputs
 # (the model's cwd) and $WORK/lens.md (the system prompt) for ONE root pair (default: pack_roots). rc 0 built · 1 no review (logged; fail CLOSED) · 2 the head
@@ -876,6 +1059,18 @@ build_pack() {
       || { log "[$repo#$num] merge-base origin/${base} × ${head:0:8} FAILED — no review"; return 1; }
     SHADOW_BASE_COMMIT="$base_rev"
   fi
+  # 2a) the diff base: on a non-default base, the default branch's content the head merged in is
+  #     not the PR's change (pack_diff_base). The default branch is the remote's HEAD symref — a
+  #     git read, no API call; a default-branch PR skips it entirely (its three-dot already holds M).
+  local diff_base="$base_rev" upstream
+  upstream="$(git -C "$WORK/repo" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { sub("^refs/heads/", "", $2); print $2; exit }')" || upstream=""
+  if [ -n "$upstream" ] && [ "$upstream" != "$base" ]; then
+    if git -C "$WORK/repo" fetch -q origin "+refs/heads/${upstream}:refs/remotes/origin/${upstream}"; then
+      diff_base="$(pack_diff_base "$WORK/repo" "$base_rev" "pr-${num}" "origin/${upstream}")"
+    else
+      log "[$repo#$num] WARN fetch of ${upstream} FAILED — the spec diff stays ${base}...head (upstream content the head merged in reads as the PR's)"
+    fi
+  fi
   # 2b) the pinned process: the wheel, verified by digest, extracted (never zip-imported)
   curl -fsSL --max-time 60 --retry 3 --retry-all-errors --retry-max-time 90 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
     || { log "[$repo#$num] snippets wheel fetch FAILED — no review"; return 1; }
@@ -897,6 +1092,7 @@ build_pack() {
   if revs="$(gh api --paginate "repos/${slug}/pulls/${num}/reviews" --jq '.[]' 2>/dev/null | jq -s .)"; then
     [ -n "${SHADOW:-}" ] && revs="$(jq -c --arg t "$SHADOW_ASOF" '[ .[] | select((.submitted_at // "") < $t) ]' <<< "$revs")"
     prior="$(prior_review_pick "$revs")"
+    [ -n "$prior" ] && prior="$(prior_for_root "$prior" "$specs_root")"
     printf '%s\n' "${prior:-previous review: none, this is round 1}" > "$ctx/prior-review.md"
   else
     printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$ctx/prior-review.md"
@@ -930,7 +1126,7 @@ build_pack() {
   #     so rules are reached through the spec pages alone.
   [ "$tests_root" = - ] && tests_root="$specs_root"
   log "[$repo#$num] pack roots: ${specs_root} ${tests_root}"
-  local -a packargs=("$base_rev" "pr-${num}" "$results" --repo "$WORK/repo" --specs-root "$specs_root"
+  local -a packargs=("$diff_base" "pr-${num}" "$results" --repo "$WORK/repo" --specs-root "$specs_root"
     --tests-root "$tests_root" --prior-review "$ctx/prior-review.md" --issue-intent "$ctx/issue-intent.md"
     --pr-body "$ctx/pr-body.md" --out "$inputs")
   [ -n "$bl_json" ] && packargs+=(--baseline "$bl_json" --baseline-commit "$bl_commit")
@@ -1339,7 +1535,7 @@ trap cleanup EXIT
 
 POSTED=""          # "repo#N repo#M …" — the exit contract re-reads these
 claims_load        # the tick's ONE claims read, in this shell (every root reader below is a `$( )`)
-LLM_CANDIDATES=""  # "createdAt repo N base headSha contentSha" lines, oldest first after sort
+LLM_CANDIDATES=""  # "createdAt repo N base headSha contentSha since|-" lines, oldest first after sort
 
 # ── the per-PR walk ─────────────────────────────────────────────────────────────────────────────
 for repo in $SPECS_REVIEW_REPOS; do
@@ -1347,6 +1543,13 @@ for repo in $SPECS_REVIEW_REPOS; do
         --json number,isDraft,createdAt,baseRefName,headRefOid,labels,reviews,commits,statusCheckRollup,comments 2>"$WORK/list.err")"; then
     log "[$repo] PR list FAILED — $(head -c 300 "$WORK/list.err" | tr '\n' ' ') — skipping repo this tick"; N_ERR=$((N_ERR+1)); continue
   fi
+  # the body-edit leg (classify's own_reopened): .lastEditedAt for the PRs under an own live
+  # CHANGES_REQUESTED only — ONE 1-point GraphQL query per repo per tick, none without such a PR; a
+  # failed read degrades to the commit-time rule with a WARN, never aborts the tick (the shared home)
+  # >>>REPLAY:specs-last-edited>>>
+  # shellcheck disable=SC2178,SC2128 # prs is the tick's JSON string; shadow_main's local array of the same name misleads the check
+  prs="$(pr_last_edited_merge "${ORG}/${repo}" "$prs" "$(own_cr_numbers "$prs")")"
+  # <<<REPLAY:specs-last-edited<<<
   n_open="$(jq -r '[ .[] | select(.isDraft | not) ] | length' <<< "$prs")"
   log "[$repo] $n_open open non-draft PR(s)"
   while IFS= read -r pr_json; do
@@ -1391,7 +1594,11 @@ for repo in $SPECS_REVIEW_REPOS; do
       esac
       continue
     fi
-    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head} ${content_sha}"$'\n'
+    # re-opened by a body edit after our own CHANGES_REQUESTED at this content commit: the edit's
+    # time rides along — a SPECS ROOT REVIEW comment older than it is the answered round's, not this one's
+    since="$(jq -r --arg me "$SPECS_REVIEWER_LOGIN" "$JQ_PRELUDE"'if own_reopened($me) then .lastEditedAt else "-" end' <<< "$pr_json")"
+    [ "$since" = - ] || log "[$repo#$num] PR body edited ${since} after our CHANGES_REQUESTED at ${content_sha:0:8} — reviewable again"
+    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head} ${content_sha} ${since}"$'\n'
   done < <(jq -c '.[] | select(.isDraft | not)' <<< "$prs")
 done
 
@@ -1401,7 +1608,7 @@ LLM_RC=0
 if [ -z "$pick" ]; then
   log "no specs PR awaiting the LLM pass this tick"
 else
-  read -r _created repo num base head content_sha <<< "$pick"
+  read -r _created repo num base head content_sha since <<< "$pick"
   n_cand="$(printf '%s' "$LLM_CANDIDATES" | grep -c . || true)"
   log "[$repo#$num] LLM pass (${n_cand} candidate(s); the rest wait for the next tick)"
   run_llm_pass() {
@@ -1416,7 +1623,8 @@ else
     n_roots="${#pairs[@]}"
     if [ "$n_roots" -gt 1 ]; then
       own_comments="$(gh api --paginate "repos/${slug}/issues/${num}/comments" \
-          --jq ".[] | select(.user.login == \"${SPECS_REVIEWER_LOGIN}[bot]\" or .user.login == \"${SPECS_REVIEWER_LOGIN}\") | {body}" 2>/dev/null | jq -s .)" \
+          --jq ".[] | select(.user.login == \"${SPECS_REVIEWER_LOGIN}[bot]\" or .user.login == \"${SPECS_REVIEWER_LOGIN}\") | {body, created_at}" 2>/dev/null \
+          | jq -s --arg since "${since:--}" '[ .[] | select($since == "-" or (.created_at // "") > $since) ]')" \
         || { log "[$repo#$num] comments read FAILED — no review"; return 1; }
       for i in "${!pairs[@]}"; do
         read -r sroot troot <<< "${pairs[$i]}"

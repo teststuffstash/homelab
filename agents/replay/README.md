@@ -234,7 +234,7 @@ is stale, so it cannot drift the way the prose register did.
 | `changes-requested/blocked-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/blocked-on-human-still-blocked` | actions | - | `agents/coordinator-scan.sh` | - |
 | `changes-requested/body-edit-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
-| `changes-requested/body-edit-specs-reviewer-dispatches` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
+| `changes-requested/body-edit-specs-reviewer-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/dispatched` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `changes-requested/reviewable-again-held` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `ci-cause-grammar` | table | - | `-` | - |
@@ -257,6 +257,8 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/ci-red-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/ci-red` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-arbitration-newer-on-issue` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-arbitration-newer-on-pr` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-cm-refused` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
@@ -559,6 +561,7 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-touches/sentinel-exempt` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/unavailable` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-touches/undeclared` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-verdict-pin` | table | - | `agents/reviewer-session.sh` | MP-T03 |
 | `ride-size` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request/workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
@@ -592,6 +595,7 @@ is stale, so it cannot drift the way the prose register did.
 | `specs-process/pin-missing` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/pin-unpublished` | actions | - | `agents/agent-session.sh` | - |
 | `specs-process/reached` | actions | - | `agents/agent-session.sh` | - |
+| `specs-review-body-edit` | table | - | `agents/specs-reviewer-session.sh` | - |
 | `sprout-report-skips-buckets/sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `sprout-report-unbound` | table | normal | `agents/coordinator-scan.sh` | - |
 | `stale-armed-retry/failed-step-left` | actions | homelab-dead-runs-3233-3237 | `agents/coordinator-scan.sh` | - |

@@ -1,0 +1,42 @@
+# reviewer-verdict-pin (homelab#3444) — the pod-side review-submit shim, as a decision table.
+#
+# THE DEFECT. The reviewer session submits with `gh pr review`, which files the review on whatever
+# head exists at SUBMIT time. On #3444 the session read 536ed6a0 ("my re-review at 536ed6a0"), a
+# push landed 75aaa056 at 16:33:57Z, the approval was submitted at 16:34:16Z and GitHub filed it on
+# 75aaa056 — a head nobody read. dismiss_stale_reviews_on_push dismisses only reviews submitted
+# BEFORE a push, so the approval stayed live and the specs reviewer read it as the code gate passed.
+#
+# THE CONTRACT (the block's verdict_pin_gh; the pod installs it first on PATH as `gh`):
+#   --approve / --request-changes on the session's PR, content unchanged since the reviewed head
+#     (head == reviewed, or only merge-shaped commits after it — review-reflex.sh's is_merge
+#     grammar) → ONE REST POST repos/<slug>/pulls/<n>/reviews with commit_id = the REVIEWED head,
+#     the event, and the body; never `gh pr review`.
+#   content moved before submit (a non-merge commit after the reviewed one — the #3444 shape — or
+#     the reviewed commit gone from the PR, a force-push) → NO write; the drop record is written
+#     (the exit contract's verdict-dropped terminal, fixture reviewer-exit-contract).
+#   content moved between the pre-read and the POST → the POST, then a DISMISS of that review id,
+#     and the drop record.
+#   anything else — `gh pr view`, a COMMENT review — passes through to the real gh unchanged; a
+#     verdict on ANOTHER PR is refused (rc 2, no write): the reviewed head is known only for this one.
+#
+# WORLDS (family-local, CONSTRUCTED from #3444's recorded commit list — `gh pr view 3444 --json
+# commits` 2026-11-15; first-8 shas and dates are real, the sha tails are filled in):
+#   unchanged            head == 536ed6a0 (the reviewed head)
+#   content-moved        #3444 at submit: c411d5e9 (non-merge) + 75aaa056 ("Merge master into …" —
+#                        NOT a GitHub default merge shape, so content) after 536ed6a0
+#   merge-only           one "Merge branch 'master' into …" after 536ed6a0 (an updater merge)
+#   force-pushed         536ed6a0 no longer in the PR's commits
+#   moved-during-submit  first read = unchanged, every later read = content-moved
+#
+# Parts: bridge.sh (seams: function-shadow gh as VP_REAL_GH, the pod env) + block (real launcher
+# code: the function + the base64 install it renders) + post.sh (the call the LLM makes, per row).
+pins:
+  - MP-T03
+name: reviewer-verdict-pin
+mode: table
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-verdict-pin
+  - file:post.sh
+rows: rows.psv

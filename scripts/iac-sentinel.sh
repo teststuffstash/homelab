@@ -88,16 +88,50 @@ push_metrics() {
     || log "pushgateway push failed (metrics stay in logs)"
 }
 
-# post_status <repo> <sha> <state> <description> — the enforcement write. A failed POST is loud
-# but non-fatal: the required check simply stays pending/stale and the next tick retries.
+# read_current_status <repo> <sha> — the head's LATEST `iac-sentinel` status, read once per head
+# per tick (the combined-status endpoint returns the newest status per context). Sets CUR_KNOWN=1
+# + CUR_STATE/CUR_DESC (both empty = no iac-sentinel status yet); a failed read leaves CUR_KNOWN=0,
+# and post_status then posts as before (an unreadable head is never left unjudged).
+read_current_status() {
+  CUR_KNOWN=0; CUR_STATE=""; CUR_DESC=""
+  [ -n "$STATUS_TOKEN" ] || return 0
+  local cur
+  cur="$(gh api "repos/${ORG}/$1/commits/$2/status?per_page=100" \
+           --jq '[.statuses[]|select(.context=="iac-sentinel")]|first // empty|"\(.state)\t\(.description // "")"' 2>/dev/null)" || return 0
+  CUR_KNOWN=1
+  [ -n "$cur" ] && IFS=$'\t' read -r CUR_STATE CUR_DESC <<<"$cur"
+  return 0
+}
+
+# post_status <repo> <sha> <state> <description> — the enforcement write, made only when it would
+# CHANGE the head's check: GitHub keeps at most 1000 statuses per sha+context, and a re-post of an
+# unchanged verdict every tick filled sleep-iac#80's head (2026-09-04) — after which its required
+# check could never move again. Liveness never rode these posts (IacSentinelSilent keys on the
+# pushgateway heartbeat, iac-lane.md §L0b). A failed POST is loud but non-fatal: the required check
+# simply stays pending/stale and the next tick retries; a head AT the cap is logged as such and is
+# not a run failure (only a new head push clears it).
 post_status() {
   [ -n "$STATUS_TOKEN" ] || return 0
-  if ! curl -fsS --max-time 10 \
+  if [ "${CUR_KNOWN:-0}" = 1 ] && [ "$CUR_STATE" = "$3" ] && [ "$CUR_DESC" = "$4" ]; then
+    log "[$1@$2] status unchanged ($3) — not re-posted"
+    return 0
+  fi
+  local code
+  code="$(curl -sS --max-time 10 -o "$WORK/status-post.out" -w '%{http_code}' \
        -H "Authorization: token $STATUS_TOKEN" -H "Accept: application/vnd.github+json" \
        "https://api.github.com/repos/${ORG}/$1/statuses/$2" \
-       -d "{\"state\":\"$3\",\"context\":\"iac-sentinel\",\"description\":\"$4\"}" >/dev/null 2>&1; then
-    log "[$1@$2] STATUS POST FAILED ($3) — check stays pending, next tick retries"
-  fi
+       -d "{\"state\":\"$3\",\"context\":\"iac-sentinel\",\"description\":\"$4\"}" 2>/dev/null)" || code="${code:-000}"
+  case "$code" in
+    2??) ;;
+    422)
+      if grep -qi 'maximum number' "$WORK/status-post.out" 2>/dev/null; then
+        log "[$1@$2] STATUS CAP REACHED — GitHub holds 1000 iac-sentinel statuses on this head and refuses more; its check stays '${CUR_STATE:-?}' until a new head is pushed (wanted: $3)"
+      else
+        log "[$1@$2] STATUS POST FAILED ($3, HTTP 422) — check stays pending, next tick retries"
+      fi ;;
+    *) log "[$1@$2] STATUS POST FAILED ($3, HTTP $code) — check stays pending, next tick retries" ;;
+  esac
+  return 0
 }
 
 # post_status_ctx <repo> <sha> <context> <state> <description> — same write, any context (the
@@ -465,9 +499,11 @@ for repo in $SENTINEL_REPOS; do
     # backstop its sparse cadence (hourly since 2026-08-20; operator: sensors do the heavy
     # lifting) and would earn "no cron at all" if it stays silent. Heads younger than 10min are
     # skipped — the exporter's 120s poll simply may not have fired yet.
+    # The ONE status read per head per tick: it feeds both this accounting and post_status's
+    # change test (the backstop's own `have` probe used to be a second read of the same endpoint).
+    read_current_status "$repo" "$sha"
     if [ "$SENTINEL_WAKE" = "cron" ] && [ -n "$STATUS_TOKEN" ]; then
-      have="$(gh api "repos/${ORG}/${repo}/commits/${sha}/status"                 --jq '[.statuses[]|select(.context=="iac-sentinel")]|length' 2>/dev/null || echo probe-fail)"
-      if [ "$have" = "0" ]; then
+      if [ "$CUR_KNOWN" = 1 ] && [ -z "$CUR_STATE" ]; then
         age=$(( $(date +%s) - $(date -d "$(gh api "repos/${ORG}/${repo}/commits/${sha}"                 --jq '.commit.committer.date' 2>/dev/null || echo now)" +%s 2>/dev/null || date +%s) ))
         if [ "$age" -gt 600 ]; then
           log "[$repo#$num@$sha] ⚠ CRON-SERVICED — first status by the BACKSTOP on a ${age}s-old head: the edge missed this ring (homelab#650)"

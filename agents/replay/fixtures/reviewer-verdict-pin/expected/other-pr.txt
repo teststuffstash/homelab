@@ -1,0 +1,4 @@
+OUT SHIM_RC: 2
+OUT DROP: none
+ERR verdict-pin: refused — use exactly: gh pr review 3444 --approve|--request-changes --body-file <file> (got flag '', pr '99'); nothing submitted
+RC 0
