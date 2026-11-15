@@ -15431,3 +15431,35 @@ updates or reverts as much as possible — mechanical revert or a responder."
   dry-run: `queue` (the lint's too-new text names `tool.uv.exclude-newer`; one sentence in `docs/renovate.md`).
 - **#3400:** one `ARBITRATE` comment from the operator login 14:01Z released the hold → scan unit 14:03Z → coordinator
   fix round 14:05Z → worker push 14:09Z → approved + merged 14:14Z.
+
+## 2026-11-15 (evening) — seat: islands are rebuilt from specs, not ported; first legs assembled; five loop faults fixed
+
+- **Operator rulings:** the islands are built from their specifications, never copied — replay and world mining were
+  the worry. The first-leg Goals had made the old replay families the oracle, and the launch helper came out as the old
+  file minus `gw_admit_lane`. New components are Python (answers the launch-shape question). Loop faults are fixed
+  directly by seat subagents while the old loop must hold; the loop is not used to fix the loop.
+- **#3435 merged:** `islands/README.md` §Built from the specs, never copied — rows are the test source, worlds recorded
+  whole (public repos only), new components Python, replay a comparison whose differences are ruled `spec`/`old`/`new`.
+  Facts files and island READMEs link it. Seeds for the next legs filed unruled: #3436 scan, #3437 launch, #3438 retro.
+- **Assemblies:** retro #3443 merged (not by this session); launch #3416 merged 18:58Z after #3440 #3451 #3453 #3455 (+ the
+  loop's #3447); scan #3418 still open (conflict in `scripts/diff-ci.sh`; #3441 #3445 landed, child #3450 in round 3).
+  Cause of the repeat conflicts: all three Goals added their gate row at one spot in `scripts/diff-ci.sh`, and a
+  master merge into a goal branch is squash-merged, so its ancestry is lost — moving the row (#3453) cleared it.
+  #3452: RETRO-GUARD-BUSY gets a `pods_in_sibling` column (raised on a branch that only carried master).
+- **Loop faults fixed (seat subagents, replay fixtures in each):**
+  #3454 a review verdict is filed on the reviewed commit, dropped when content moved (an approval had landed on an
+  unreviewed head, #3444); #3456 the specs reviewer re-opens its own CHANGES_REQUESTED on a body edit, a master merge's
+  carried rows are not the PR's spec change, per-root prior findings; #3458 the sentinel posts a status only on change
+  (1000-statuses-per-commit cap; sleep-iac#80 is at it); #3459 the scan's body-edit hold loses its specs-reviewer
+  exception (one replay assertion flipped, operator-approved); #3460 the launcher takes the newest ARBITRATE over
+  issue ∪ PR (issue-first had fed #3302's rounds 4 and 5 a two-day-old directive — two no-op rounds).
+- **#3337 merged 20:28Z** (into `goal/3300-wire-record`): #3456 brought the specs reviewer back on the old body edit;
+  two more R10 rounds pushed by the seat (one prose sentence; the not-retried row offers a valid credential at the
+  second tick so a retry would be seen — mutation-checked).
+- **Seen, not fixed:** the specs reviewer raises a different R10 on an unchanged page each pass (#3455 took four rounds,
+  #3337 two, #3450 five worker rounds) — no fix-round count is guaranteed to end; a no-op round still flips its issue
+  to `agent/review` (agent-runtime `agent-finalize`); the scan's comment that the sentinel re-posts every ~4 min is stale.
+- **Mine:** answered a specs finding with a body edit and waited on a reviewer that could not see it; closed #3444 as a
+  duplicate of #3447 without diffing them (it carried a fix #3447 lacked); ran three hand fixes in parallel with the
+  loop's own fix children.
+

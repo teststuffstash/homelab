@@ -18,6 +18,19 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a) scan
+  assembly #3418 — once #3450 lands, move the scan row in `scripts/diff-ci.sh` off the spot master's island rows sit
+  on (the #3453 shape; a master merge into a goal branch does not clear it), update the branch, see it merged;
+  (b) then hand-submit the next-leg sittings `argo -n agent-coordinator submit --from cronworkflow/island-intake -p
+  island=scan|launch|retro` over #3436 #3437 #3438 (launch also rules #3408 #3409); each next Goal puts its gate row
+  in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
+  #3456's diff base on a goal-branch master merge. OPERATOR: (d) verdicts on Goals #3384 #3390 (assemblies merged)
+  and #3389; (e) the agent-runtime half — `agent-finalize` skips the `agent/review` flip on a `no-op` round;
+  (f) the specs reviewer finds a different R10 each pass on an unchanged page — bound it (carry forward only rows the
+  diff touched, or a round cap that parks with the finding) before the next-leg Goals ride; (g) sleep-iac#80 needs a
+  new head commit to leave the status cap. Superseded in the bullet below: its (c) is answered (new shape, Python)
+  and #3337 is merged.
+
 - **⚑ PICKUP (2026-11-15 day — island forward + pr-hold re-read on master; TICK-LOG 11-15 day; FU-320).** OPERATOR:
   (a) what may release a PR-level `blocked-on: human` besides a human comment — until ruled, `INTAKE_PR_HOLDS` stays
   off and a `pr-hold` row is report-only; (b) confirm or revert #3428's split amendment (an input the sitting may not
