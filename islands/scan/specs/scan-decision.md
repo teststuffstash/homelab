@@ -49,9 +49,11 @@ the scan re-applies the full predicate (`coordinate-argo.yaml:10-16`). A ring th
 `loop_ns` submits the per-stack scan into that namespace (`--spawn`, `SCAN_STACK`, `LOOP_NS`);
 every other ring submits the [switchboard](../../../docs/glossary.md) (`--switchboard`,
 ADR-120), which lists no GitHub state and spawns no LLM: a capacity ring fans out to every
-graduated stack, a repo-dumb unit ring resolves its repo to its graduated stack and rings it, a
+graduated stack, a repo-dumb full ring (no `unit`, no `loop_ns`) rings each graduated stack with
+its resolved `{stack, loop_ns}` and `unit: -`, a repo-dumb unit ring resolves its repo to its graduated stack and rings it, a
 ring already routed per-stack exits, and a stack that is not graduated is reported as served by
-no scan path (`coordinator-scan.sh` `switchboard` block, :1456). A starting full scan absorbs
+no scan path, a warning that fires on every switchboard pass that reaches the fan-out of a full
+ring, not on a capacity ring (`coordinator-scan.sh` `switchboard` block, :1456). A starting full scan absorbs
 every pending sibling `coordinate*` workflow in its namespace before listing GitHub (the
 `doorbell-collapse` block, ADR-106 (5)), so a burst of rings is one pass.
 
@@ -64,11 +66,11 @@ every pending sibling `coordinate*` workflow in its namespace before listing Git
 | description | world | ring | stacks | expect? |
 |---|---|---|---|---|
 | collapse | doorbell/collapse | full scan starting with pending sibling `coordinate*` workflows | — | the siblings deleted before the GitHub list |
-| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | `circles` graduated, `newborn` not | every graduated stack rung, no board scan |
-| switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | `circles` graduated, `newborn` not | ⚖ `circles` (the one graduated stack) rung into its namespace; a no-scan-path warning names `newborn` |
+| switchboard-capacity | doorbell/switchboard-capacity | `source: capacity` | `circles` graduated, `newborn` not | every graduated stack rung (`circles` only, with `source`, `rail`, `loop_ns`), no board scan, no no-scan-path warning |
+| ⚖ switchboard-fanout | doorbell/switchboard-fanout | repo-dumb full ring | `circles` graduated, `newborn` not | `circles` (the one graduated stack) rung into its namespace; a no-scan-path warning names `newborn` |
 | switchboard-routed | doorbell/switchboard-routed | ring already carrying `loop_ns` | — | exit, nothing rung |
 | switchboard-unit | doorbell/switchboard-unit | `unit: changes-requested\|<repo>\|pr-N`, no `loop_ns` | — | the repo's stack rung with that unit |
-| fanout | doorbell/fanout | repo-dumb ring from a stack emitter | — | the per-stack doorbell rung (FU-144 receiver-side resolution) |
+| fanout | doorbell/fanout | repo-dumb ring from a stack emitter: `{"repo": "all"}`, no `unit`, no `loop_ns`, edge-woken | `circles`, `sleep` graduated | each graduated stack rung with its resolved `{stack, loop_ns}` and `unit: -` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -420,7 +422,16 @@ The goal lane: an `agent/queued` Goal emits `goal-decompose` (the session author
 `Base:` is mandatory on a Goal, brief §Goal decompose); an open Goal whose tree holds an
 undispositioned member, or whose members are all closed, emits `goal-checkpoint` — bare members
 are counted, never queued (ADR-122 (1)), `deferred` members are excluded and `adopted` ones counted
-(ADR-122 (4)); a merged PR's issue is closed out by `merged-closeout` (C6, keyed on the pre-merge
+(ADR-122 (4)). A checkpoint is due for any of three reasons, and the unit names them: the
+[findings store](../../../docs/glossary.md) holds undispositioned findings (total minus
+dispositioned, e.g. `findings 5 undispositioned` for 6 total / 1 dispositioned); the child set
+is complete pre-launch; a member is undispositioned. Dispositions are read from the store comment
+on the Goal; when that read fails the undispositioned-member wake is held this pass, with one
+warning (an unreadable probe never becomes a write). An `adopted` member that is open and carries
+no `agent/*` state label is counted but has no waker of its own, so one orphan line names it
+(visibility only, nothing written). A queued Goal with no `Base:` line is refused (no decompose
+unit) and the refusal names both legal values, `Base: master` and `Base: goal/<branch>`. A merged
+PR's issue is closed out by `merged-closeout` (C6, keyed on the pre-merge
 lifecycle label, #2808). At dispatch, `merged-closeout`, `goal-checkpoint`, `arbitrate` and
 `changes-requested` units carry a **harvest disposition**: the Goal ancestor
 (`goal_resolve_ancestor`, `goal-budget.sh`), its `post-launch:` bucket (created and linked by the
@@ -435,12 +446,12 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 
 | description | world | members | findings store | queued | expect? |
 |---|---|---|---|---|---|
-| bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — the same reason as the world without the members; the members add nothing to it and none is queued |
-| undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — the reason is the undispositioned member |
-| deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
-| adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
-| dispositions-unreadable | open-pre | one open member, the disposition read fails | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
-| base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | ⚖ `goal-decompose` refused: no decompose unit, the refusal names both legal `Base:` values |
+| ⚖ bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | `goal-checkpoint` emitted: yes — reason `findings 5 undispositioned` + child set complete pre-launch (the findings-store reason alone); the members add nothing to it and none is queued |
+| ⚖ undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — the reason is the undispositioned member |
+| ⚖ deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
+| ⚖ adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
+| ⚖ dispositions-unreadable | open-pre | one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
+| ⚖ base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | `goal-decompose` refused: no decompose unit, the refusal names `Base: master` and `Base: goal/<branch>` |
 
 #### Which Goal does a merged PR's finding belong to?
 
@@ -448,9 +459,9 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 |---|---|---|---|
 | goal-open-funded | circles-29-tree | open Goal, budget left | goal-open-funded (store) |
 | goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
-| deep-sprout | deep-sprout | several levels below the Goal | ⚖ the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
-| master-inert | master-inert | no Goal ancestor | ⚖ no Goal resolved; no `harvest` disposition on the item (inert) |
-| bucket-child | homelab-278-tree | under the `post-launch:` bucket | ⚖ the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
+| ⚖ deep-sprout | deep-sprout | several levels below the Goal | the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
+| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; no `harvest` disposition on the item (inert) |
+| ⚖ bucket-child | homelab-278-tree | under the `post-launch:` bucket | the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -483,7 +494,7 @@ remaining lanes are not walked this pass (⚑ gap — [SCAN-DISPATCH-ADMISSION](
 
 | description | world | ROW | lanes | lost dispatches | expect? |
 |---|---|---|---|---|---|
-| two-lanes | — | two-lanes | `master`: one `changes-requested`; `goal/x`: one queued child | — | ⚖ two spawns, `master` lane first, then `goal/x` |
+| two-lanes | — | two-lanes | `master`: one `changes-requested` (#10); `goal/x`: one queued child (#20) | — | ⚖ two spawns, `master` lane first (oldest item #10), then `goal/x` (#20) |
 | aged | — | aged | one lane (`master`): a `changes-requested` and a `goal-decompose` | 3 | ⚖ one spawn: `goal-decompose`, before the recovery unit |
 | not-yet | — | not-yet | one lane (`master`): a `changes-requested` and a `goal-decompose` | 2 | ⚖ one spawn: `changes-requested` (ordinary walk) |
 | probe-unreadable | — | probe-unreadable | one lane (`master`): a `changes-requested` and a `goal-decompose` | unreadable | ⚖ one spawn: `changes-requested` (ordinary walk), one report line |
