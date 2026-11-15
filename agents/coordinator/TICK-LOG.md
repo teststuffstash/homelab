@@ -15379,3 +15379,33 @@ updates or reverts as much as possible — mechanical revert or a responder."
   kargo-e2e janitor prefix + ADR-161 cache cleanup). Detector #3369 (`MgmtRunnerSeedDrift`, VM textfile sha vs
   the belt's state sha) live; both pairs match, drift expression empty.
 - argocd 10.12.1 → 10.14.0 then applied by the box's helm bracket alone (verdict clean); applied-rev = master.
+
+## 2026-11-14 → 15 — seat: intake review trial → review stage live in prod; three islands started fresh (night run, unattended)
+
+- **Trial** (design session, 11-14): would a review of intake-written bodies before queueing have caught what the
+  worker PRs' reviewers later found? Two arms (unit lens, the pinned specs reviewer's rows brief run early), two brief
+  iterations, scored against what merged. Numbers: `docs/spikes/island-intake.md` §Run 4.
+- **Operator decisions:** prod, not shadow; author → two lenses once each → ONE author repair (each finding answered
+  by id) → queue regardless (the review never holds the queue; unresolved findings + advisories go on the issue);
+  minimal model-neutral briefs; one strong model, no second vendor, no agreement gate; new islands built fresh under
+  a provisional top-level `islands/`, nothing live reads them; scan, launch, retro first.
+- **Merged overnight:** #3377 (`islands/{scan,launch,retro}` + `docs/intake/` facts) · #3378 (intake.md §Review and
+  repair, lens + escape briefs, Run 4 + fixtures) · #3379 + #3383 (a claim names several specs roots, `extraSpecs`) ·
+  #3381 + #3406 + #3410 (review stage live in `island-intake`, selector rows for the three islands, `gap`/`escape`
+  sources, lens 1200 s) · #3398 + #3402 (worker gets an `extraSpecs` root's pinned process; docs currency) · #3413
+  (escape read also sees issues a sitting filed and queued).
+- **Goals (hand-run sittings in the decided shape; verified on GitHub at wind-down):** retro #3384 — #3385 in review
+  (PR #3400 open), #3386 #3387 #3388 queued. Launch #3390 — #3392 done (PR #3401 merged), #3393 in review. Scan #3389
+  — #3394 done (PR #3404 merged), #3395 done (PR #3411 merged), #3396 in progress, #3397 queued. Seat issue #3391:
+  the `ci.yaml` steps so required `ci` runs each island's suite (operator path).
+- **Incident — Go-rail latch:** the trial run latched the opencode Go account ~3.5 h; the gateway admitted 3 concurrent
+  heavy sessions against a $3 five-hour window. Nothing ran on the Go rail for the rest of the night.
+- **Incident — scratch collision:** parallel hand-run authors shared a scratch dir; scan's Goal overwrote launch's Goal
+  draft. Both lenses caught it; the author rewrote and the lenses re-ran.
+- **Receipts backfill:** the hand-run sittings wrote no receipts, so the escape source offered nothing; receipts
+  backfilled (marked `backfill`) under `intake-{scan,launch,retro}-2026-11-14/` with per-finding records.
+- **First escape read** (PR #3401 ← #3392, 3 specs-reviewer rounds): 10 blocking findings — 4 intake (A), 2 worker,
+  3 reviewer process. The pre-queue review prevented one certain blocking round (the helper `args` cells); its repair
+  also wrote a wrong third Status form that the worker built verbatim. First sightings only (two needed for a brief
+  change): the rows lens must cover the whole page when a body edits its index; a repair checks Status forms against
+  rule 10; a residual left `seat` needs an open issue to cite.
