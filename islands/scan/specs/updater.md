@@ -41,7 +41,7 @@ actions it can emit.
 Leg 1 updates the oldest PR per lane that is **armed ∧ BEHIND ∧ [merge-ready](glossary.md#merge-ready)**
 (`update-pr-branch.sh:142`, homelab#1452): `reviewDecision` APPROVED, or `""` (a ruleset that
 requires no approval) with the reviewer bot's APPROVED newer than the newest non-merge commit, or
-the `automerge` label. There is **no green requirement** (except for untouched Renovate PRs, see [merge-ready](glossary.md#merge-ready)) — a base-side CI fix can only reach a PR
+the `automerge` label. There is **no green requirement** (except for untouched or updater-merged Renovate PRs, see [merge-ready](glossary.md#merge-ready)) — a base-side CI fix can only reach a PR
 through an update (2026-07-10). `REVIEW_REQUIRED` is a park: never merge-ready, never probed
 (#1649). The commit half of "approved at head" is a per-candidate `gh pr view --json commits`
 probe; an unreadable probe holds. The lane is walked oldest-first and stops at the first
@@ -144,7 +144,7 @@ with the scan's FU-124 nudge — one copy.
 | renovate-superseded-cancel-green-update | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | updater-merged | CANCELLED-outlived (a CANCELLED `ci` beside its SUCCESS sibling) | — | picks-probe1-renovate |
 | renovate-checks-unreadable-hold | board | add-renovate-approved | `reviewDecision` APPROVED, bot APPROVED review | untouched | unreadable | (check-runs read fails) | renovate-probe-hold |
 | renovate-merged-current-red-handback | board | add-renovate-current-review | `reviewDecision` REVIEW_REQUIRED, no review, PR CURRENT (BLOCKED, not BEHIND) | updater-merged | red (`system-test` failure) | — | sweep-handback-probe1 |
-| renovate-merged-current-pending-noop | board | add-renovate-current-review | `reviewDecision` REVIEW_REQUIRED, no review, PR CURRENT (BLOCKED, not BEHIND) | updater-merged | pending (`system-test` in_progress) | — | sweep-silent-probe1 |
+| renovate-merged-current-pending-noop ⚖ | board | add-renovate-current-review | `reviewDecision` REVIEW_REQUIRED, no review, PR CURRENT (BLOCKED, not BEHIND) | updater-merged | pending (`system-test` in_progress) | — | sweep-silent-probe1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
