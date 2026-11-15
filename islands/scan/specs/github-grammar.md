@@ -41,7 +41,7 @@ session's, the worker launcher's or a human's):
 | `agent/blocked` | the scan | added on an `AGENT_INFEASIBLE:` park (IL-T26) |
 | `agent/done` | the scan | the done-phantom reconcile |
 | `agent/error` | the scan (fleet latch), the review reflex (impossible verdict state) | added; the scan removes only its own fleet latch |
-| `agent/arbitrate` | the review reflex | added at the round cap |
+| `agent/arbitrate` | the review reflex; the scan | added at the round cap; the scan adds it when an `unarmed-major` PR's rides are exhausted |
 | `merge-conflict` | the updater | added on armed ∧ DIRTY, removed when no longer |
 | `major/awaiting-human` | `major-handoff.sh` ONLY | added after the evidence check |
 

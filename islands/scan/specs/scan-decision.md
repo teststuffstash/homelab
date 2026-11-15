@@ -258,7 +258,7 @@ younger than 30 s.
 | running-agent-alive | — | Running, agent container running | live |
 | running-agent-terminated-sidecar-held | — | Running, agent terminated, sidecar holding | not live |
 | pending-schedulable | — | Pending, schedulable | live |
-| pending-unschedulable | — | Pending, Unschedulable | not live |
+| pending-unschedulable | — | Pending, Unschedulable, older than 30 s | not live |
 | succeeded-phase | — | Succeeded | not live |
 
 #### Does the per-base PR cap hold?
@@ -294,7 +294,8 @@ Renovate-authored DIRTY PR is rebased by ticking Renovate's own checkbox instead
 currency-gated too ([SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce)); an un-armed PR carrying none of the lane labels is
 a report-only orphan, and an un-armed `automerge` or `deps-review` PR older than 24 h is reported as
 an un-armed reviewable bump (`unowned-pr-backstop`). ⚖ The `deps-review` and red-`automerge` rows ride the
-`unarmed-major` unit, five rides then a human (FU-046, G12b).
+`unarmed-major` unit, five rides then a human (FU-046, G12b): once five rides are recorded the scan
+emits no unit, adds `agent/arbitrate` to the PR and reports one `RIDES EXHAUSTED` line.
 
 **World:** per-case recorded PR lists.
 
@@ -450,7 +451,12 @@ are counted, never queued (ADR-122 (1)), `deferred` members are excluded and `ad
 (ADR-122 (4)). A checkpoint is due for any of three reasons, and the unit names them: the
 [findings store](../../../docs/glossary.md) holds at least `GOAL_CHECKPOINT_N` (default 5) undispositioned findings (fewer wake nothing) (total minus
 dispositioned, e.g. `findings 5 undispositioned` for 6 total / 1 dispositioned); the child set
-is complete pre-launch; a member is undispositioned. Dispositions are read from the store comment
+is complete pre-launch; a member is undispositioned. The child set is complete pre-launch when the
+Goal has no `goal/post-launch` label, at least one member is closed, and no counted member is open.
+A counted member is one ruled `adopted`, or one carrying an `agent/*` state label and not ruled
+`deferred`. An open member that is unruled and unlabelled is undispositioned: it wakes the checkpoint
+and is not counted, so it does not stop the set being complete. When the disposition read fails,
+every open member (except the `post-launch:` bucket) is counted. Dispositions are read from the store comment
 on the Goal; when that read fails the undispositioned-member wake is held this pass, with one
 warning (an unreadable probe never becomes a write). An `adopted` member that is open and carries
 no `agent/*` state label is counted but has no waker of its own, so one orphan line names it

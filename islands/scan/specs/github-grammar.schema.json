@@ -31,7 +31,7 @@
         "agent/blocked": {"island_writes": ["coordinator-scan.sh"], "op": "add", "transport": "REST"},
         "agent/done": {"island_writes": ["coordinator-scan.sh"], "op": "add", "transport": "REST"},
         "agent/error": {"island_writes": ["coordinator-scan.sh", "review-reflex.sh"], "op": "add+remove", "transport": "REST"},
-        "agent/arbitrate": {"island_writes": ["review-reflex.sh"], "op": "add", "transport": "REST"},
+        "agent/arbitrate": {"island_writes": ["coordinator-scan.sh", "review-reflex.sh"], "op": "add", "transport": "REST"},
         "merge-conflict": {"island_writes": ["update-pr-branch.sh"], "op": "add+remove", "transport": "REST"},
         "major/awaiting-human": {"island_writes": ["major-handoff.sh"], "op": "add", "transport": "REST"},
         "agent-fix": {"island_writes": []},
@@ -74,7 +74,7 @@
     "markers": {
       "type": "object",
       "properties": {
-        "state_fp": {"type": "string", "pattern": "^🤖 `state-fp:(arbitrate|ci-red|infra-enrich|merge-conflict|unarmed-major|goal-checkpoint-[bc]):[0-9a-f]+`"},
+        "state_fp": {"type": "string", "pattern": "^🤖 `state-fp:(arbitrate|ci-red|infra-enrich|merge-conflict|unarmed-major|goal-checkpoint-[bc]|assembly-cr):[0-9a-f]+`"},
         "agent_event": {"type": "string", "pattern": "^<!-- agent-event kind=[^ ]+ ts=[^ ]+ -->$"},
         "agent_summary_head": {"const": "<!-- agent-summary -->"},
         "blocked_on": {"type": "string", "pattern": "^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)"},
