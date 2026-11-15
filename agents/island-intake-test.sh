@@ -349,6 +349,29 @@ INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
 [ "$(pk reread)" = "102 103 107 109 115" ] && ok "without INTAKE_PR_HOLDS the pile is the label/ruling waits only (the default)" || bad "pile pr-hold default" "got '$(pk reread)'"
 INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$TMP/nowhere.json" pile; rc=$?
 [ "$rc" = 2 ] && ok "INTAKE_PR_HOLDS=1 with an unreadable PR list is a probe failure (exit 2), never \"no holds\"" || bad "pile rule #6 (prs)" "rc=$rc"
+# forward (gateway/intake.md step 0): an issue whose LATEST intake ruling is `forward` is unruled —
+# a member of whichever island its (retitled) title names now, its row carrying the hop count.
+FISS="$TMP/fwd.json"
+fiss() { jq -nc --argjson n "$1" --arg t "$2" --argjson c "$3" \
+  '{number:$n, title:$t, body:"free text", labels:[], createdAt:"2026-10-01T00:00:00Z", updatedAt:"2026-10-20T00:00:00Z", author:{login:"rsoot",is_bot:false}, comments:$c}'; }
+{ fiss 201 "gateway: passed here by another island" "[$(cm 'intake: forward → gateway — the catalog view is the gateway'"'"'s' 2026-10-20T00:00:00Z)]"
+  fiss 202 "gateway: passed here twice" "[$(cm 'intake: forward → retro — x' 2026-10-18T00:00:00Z),$(cm 'intake: forward → gateway — y' 2026-10-20T00:00:00Z)]"
+  fiss 203 "gateway: forwarded, then ruled seat" "[$(cm 'intake: forward → gateway — x' 2026-10-10T00:00:00Z),$(cm "$SEAT" 2026-10-20T00:00:00Z)]"
+  fiss 204 "dependency: passed on to another island" "[$(cm 'intake: forward → dependency-upgrades — the lint is theirs' 2026-10-20T00:00:00Z)]"
+  fiss 205 "gateway: never forwarded" '[]'
+  fiss 206 "gateway: forwarded with a missed space" "[$(cm 'intake: forward→gateway — z' 2026-10-20T00:00:00Z)]"
+  fiss 207 "gateway: forwarded with a colon" "[$(cm 'intake: forward: gateway — z' 2026-10-20T00:00:00Z)]"
+  fiss 208 "gateway: a ruling that only starts like it" "[$(cm 'intake: forwarded-looking standing note' 2026-10-20T00:00:00Z)]"
+} | jq -s . > "$FISS"
+fwd() { INTAKE_ISSUES_JSON="$FISS" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island "$1" --out "$TMP/fwd-sel.json" 2>"$TMP/fwd.err"; }
+fwd gateway
+[ "$(jq -c '[.inputs[] | select(.kind == "member") | [.number, (.forwards // 0)]] | sort' "$TMP/fwd-sel.json")" = '[[201,1],[202,2],[205,0],[206,1],[207,1]]' ] \
+  && [ "$(jq -c '[.inputs[] | select(.kind == "reread") | .number]' "$TMP/fwd-sel.json")" = '[203]' ] \
+  && ok "a latest ruling of forward is unruled: a member again, with forwards = its hop count (#201 ×1, #202 ×2; #205 carries none); a later seat is a wait again (#203); the count and the unruled check read the comment the same way (\`forward→gateway\` #206, \`forward:\` #207 are members ×1; \`forwarded…\` #208 is neither)" \
+  || bad "forward members" "$(jq -c '.inputs' "$TMP/fwd-sel.json") $(cat "$TMP/fwd.err")"
+fwd dependency-upgrades
+[ "$(jq -c '[.inputs[] | [.number, .kind, .forwards]]' "$TMP/fwd-sel.json")" = '[[204,"member",1]]' ] \
+  && ok "…and it is the member of the island its title names now (#204 → dependency-upgrades)" || bad "forward target" "$(jq -c '.inputs' "$TMP/fwd-sel.json")"
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"
@@ -457,6 +480,7 @@ INTAKE-RULED: $H#102 requeue $H#102
 INTAKE-RULED: $H#103 unchanged -
 INTAKE-RULED: $H#107 split $H#7,$H#8
 INTAKE-RULED: $H#109 reopened -
+INTAKE-RULED: $H#115 forward island:retro
 INTAKE-RULED: $H#999 requeue -
 EOF
 PILE_JSON="$PISS" run_script apply; rc=$?
@@ -474,20 +498,22 @@ PILE_JSON="$PISS" run_script apply; rc=$?
   && ok "…and the in-cluster addresses of the live reads (Prometheus, Alertmanager, the gateway + its caller token)" || bad "brief live reads" "missing an address"
 grep -qF 'AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID"' "$TMP/up/brief.md" \
   && ok "…the bucket read names the READER key by VARIABLE — no key value is rendered into the uploaded brief" || bad "brief reader key" "$(grep -n AWS_ACCESS "$TMP/up/brief.md")"
-[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"]]" ] \
-  && ok "receipt: issue ids with seat / requeue / unchanged / split; an unknown outcome and a forged id dropped" || bad "pile receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
+[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"],[\"$H#115\",\"forward\"]]" ] \
+  && [ "$(jq -c '.ruled[] | select(.outcome == "forward") | .refs' "$TMP/up/receipt.json" 2>/dev/null)" = '["island:retro"]' ] \
+  && ok "receipt: issue ids with seat / requeue / unchanged / split / forward (its ref = the island it went to); an unknown outcome and a forged id dropped" || bad "pile receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
 grep -q '/coordinate' "$TMP/curl.calls" && ok "a \`requeue\` rings /coordinate (it queued work)" || bad "requeue ring" "$(cat "$TMP/curl.calls")"
 mkdir -p "$TSP/homelab/intake-gateway-2026-10-27/r"; cp "$TMP/up/receipt.json" "$TSP/homelab/intake-gateway-2026-10-27/r/"
 rm -rf "$TSP/homelab/intake-gateway-2026-10-24"
 pile
-[ "$(pk reread)" = "109 115" ] && ok "…and the next pile selection reads that receipt back: #102 #103 #107 are not re-read tomorrow, #109 #115 (no line) are" \
+[ "$(pk reread)" = "109" ] && ok "…and the next pile selection reads that receipt back: #102 #103 #107 #115 are not re-read tomorrow, #109 (no line) is" \
   || bad "pile round trip" "got '$(pk reread)'"
 rm -rf "$TSP/homelab/intake-gateway-2026-10-27"
 cat > "$TMP/claude.out" <<EOF
 INTAKE-RULED: $H#103 unchanged -
+INTAKE-RULED: $H#115 forward island:retro
 EOF
 PILE_JSON="$PISS" run_script apply
-grep -q '/coordinate' "$TMP/curl.calls" && bad "unchanged ring" "rang /coordinate" || ok "\`unchanged\` alone rings nothing"
+grep -q '/coordinate' "$TMP/curl.calls" && bad "unchanged ring" "rang /coordinate" || ok "\`unchanged\` and \`forward\` ring nothing (a forward queues no work)"
 echo 'not json' > "$TMP/pile-bad.json"
 PILE_JSON="$TMP/pile-bad.json" run_script apply; rc=$?
 { [ "$rc" = 1 ] && [ ! -s "$TMP/claude.calls" ] && grep -q "selection failed (source pile" "$TMP/run.log"; } \

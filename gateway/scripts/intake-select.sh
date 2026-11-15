@@ -66,7 +66,10 @@
 #
 #   bash gateway/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
 #
-#   member    = the default selection above (unruled, unlabelled) — `kind: member|attribution`
+#   member    = the default selection above (unruled, unlabelled) — `kind: member|attribution`.
+#               An issue whose LATEST `intake:` ruling is `forward` counts as unruled (another
+#               island's sitting passed it on and retitled it — gateway/intake.md step 0); its row
+#               carries `forwards` = how many `intake: forward` comments it has (the hop cap's count).
 #   reread    = `kind: reread`: the island's OPEN issues an earlier ruling left waiting on a human —
 #               label `agent/blocked`, or the LATEST `intake:` ruling is `seat` — whose wait is
 #               ≥ INTAKE_REREAD_AGE_D days old (default 3; the wait's date = the latest `intake:` /
@@ -597,6 +600,7 @@ JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\
   + "F_ruling[\($i)]=\(lazy([.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // "") | @sh); "
   + "F_since[\($i)]=\(lazy(([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
       | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt) | @sh); "
+  + "F_fwd[\($i)]=\([.comments[]? | (.body // "") | split("\n")[0] | select(test("^intake:\\s*forward\\b"))] | length); "
   + "F_author[\($i)]=\(lazy(.author.login) | @sh); F_created[\($i)]=\(.createdAt | r | @sh)"'
 # Touches of every issue through the ONE body parser (agents/issue_body.py's `get`, imported):
 # what `jq -r '.body // ""' | python3 issue_body.py get Touches` printed, "" when it failed.
@@ -620,7 +624,7 @@ for i, row in enumerate(json.load(sys.stdin)):
     v = (v or "").rstrip("\n")
     if v:
         print("F_touches[%d]=%s" % (i, shlex.quote(v)))'
-F_num=(); F_title=(); F_life=(); F_bot=(); F_ruling=(); F_since=(); F_author=(); F_created=(); F_touches=()
+F_num=(); F_title=(); F_life=(); F_bot=(); F_ruling=(); F_since=(); F_author=(); F_created=(); F_touches=(); F_fwd=()
 fields="$(printf '%s' "$issues" | jq -r "$JQ_FIELDS")"
 eval "$fields"
 eval "$(printf '%s' "$issues" | python3 -I -c "$PY_TOUCHES" "$ROOT/agents" 2>/dev/null || true)"
@@ -703,6 +707,10 @@ while [ "$i" -lt "$count" ]; do
   esac
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
+  # …except `intake: forward → <island>`: another sitting passed the item on (gateway/intake.md
+  # step 0) and retitled it, so it is an UNRULED candidate of whichever island its title names now
+  # (the SAME test as F_fwd's count above: `forward` as the outcome word, whatever follows it)
+  [[ "$ruling" =~ ^intake:[[:space:]]*forward($|[^[:alnum:]_]) ]] && ruling=""
   if [ "$life" = blocked ] || [ "$life" = loop ] || [ -n "$ruling" ]; then
     # ruled or blocked: never a candidate; a reread when it is a member's WAIT, old enough
     [ "$REREAD" = 1 ] && [ "$kind" = member ] || continue
@@ -725,7 +733,7 @@ while [ "$i" -lt "$count" ]; do
   cts="$(date -u -d "$created" +%s 2>/dev/null || echo "$now")"
   age_h=$(( (now - cts) / 3600 ))
   author="$(lazy "${F_author[$ix]}")" || exit 5
-  cand_args+=("$num" "$age_h" "$title" "$author" "$kind")
+  cand_args+=("$num" "$age_h" "$title" "$author" "$kind" "${F_fwd[$ix]:-0}")
 done
 # The selections, built once from the walk's rows (the per-row `--argjson` reads are `fromjson`
 # here). Each value rides as an `x`-prefixed positional, so a leading `-` is never an option.
@@ -734,7 +742,8 @@ rows_json() { # <width> <jq object over the row .[0..]> <values…>
   [ $# -gt 0 ] || { printf '[]'; return 0; }
   jq -nc --argjson w "$w" "\$ARGS.positional | map(.[1:]) | [range(0; length; \$w) as \$k | .[\$k:\$k + \$w] | $obj]" --args "${@/#/x}"
 }
-cands="$(rows_json 5 '{number: (.[0] | fromjson), age_h: (.[1] | fromjson), author: .[3], title: .[2], kind: .[4]}' \
+cands="$(rows_json 6 '{number: (.[0] | fromjson), age_h: (.[1] | fromjson), author: .[3], title: .[2], kind: .[4]}
+    + ((.[5] | fromjson) as $f | if $f > 0 then {forwards: $f} else {} end)' \
   ${cand_args[@]+"${cand_args[@]}"})"
 rereads="$(rows_json 9 '{id: .[0], kind: "reread", number: (.[1] | fromjson), title: .[2], author: .[3], wait: .[4],
   since: .[5], wait_d: (.[6] | fromjson), parked_by: .[7]} + (if .[8] == "" then {} else {pr: (.[8] | fromjson)} end)' ${reread_args[@]+"${reread_args[@]}"})"
