@@ -109,13 +109,13 @@ reasoning as the ledger guard's zero-task rule, so `RetroReportOverdue` still pa
 
 **World: [guard-bridge](worlds/README.md)** — `SERIES=feedback-triage`, `GUARD_EXPR=max(g)>bool(604800)`.
 
-| description | world | PROM_VALUE | QUIET? | prepare_called? | rc? |
-|---|---|---|---|---|---|
-| expr-fires | guard-bridge | 1 | false | `--no-ledger` | 0 |
-| expr-quiet | guard-bridge | 0 | true | no | 0 |
-| ⚖ expr-absent | guard-bridge | absent | — | no | 1 |
-| expr-error | guard-bridge | error | — | no | 1 |
-| expr-prom-down | guard-bridge | down | — | no | 1 |
+| description | world | PROM_VALUE | PREP_RC | CURL_RC_1 | QUIET? | prepare_called? | rc? |
+|---|---|---|---|---|---|---|---|
+| expr-fires | guard-bridge | 1 | 0 | — | false | `--no-ledger` | 0 |
+| expr-quiet | guard-bridge | 0 | — | 0 | true | no | 0 |
+| ⚖ expr-absent | guard-bridge | absent | — | — | — | no | 1 |
+| expr-error | guard-bridge | error | — | — | — | no | 1 |
+| expr-prom-down | guard-bridge | down | — | — | — | no | 1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
