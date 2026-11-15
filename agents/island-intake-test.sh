@@ -349,6 +349,26 @@ INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
 [ "$(pk reread)" = "102 103 107 109 115" ] && ok "without INTAKE_PR_HOLDS the pile is the label/ruling waits only (the default)" || bad "pile pr-hold default" "got '$(pk reread)'"
 INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$TMP/nowhere.json" pile; rc=$?
 [ "$rc" = 2 ] && ok "INTAKE_PR_HOLDS=1 with an unreadable PR list is a probe failure (exit 2), never \"no holds\"" || bad "pile rule #6 (prs)" "rc=$rc"
+# forward (gateway/intake.md step 0): an issue whose LATEST intake ruling is `forward` is unruled —
+# a member of whichever island its (retitled) title names now, its row carrying the hop count.
+FISS="$TMP/fwd.json"
+fiss() { jq -nc --argjson n "$1" --arg t "$2" --argjson c "$3" \
+  '{number:$n, title:$t, body:"free text", labels:[], createdAt:"2026-10-01T00:00:00Z", updatedAt:"2026-10-20T00:00:00Z", author:{login:"rsoot",is_bot:false}, comments:$c}'; }
+{ fiss 201 "gateway: passed here by another island" "[$(cm 'intake: forward → gateway — the catalog view is the gateway'"'"'s' 2026-10-20T00:00:00Z)]"
+  fiss 202 "gateway: passed here twice" "[$(cm 'intake: forward → retro — x' 2026-10-18T00:00:00Z),$(cm 'intake: forward → gateway — y' 2026-10-20T00:00:00Z)]"
+  fiss 203 "gateway: forwarded, then ruled seat" "[$(cm 'intake: forward → gateway — x' 2026-10-10T00:00:00Z),$(cm "$SEAT" 2026-10-20T00:00:00Z)]"
+  fiss 204 "dependency: passed on to another island" "[$(cm 'intake: forward → dependency-upgrades — the lint is theirs' 2026-10-20T00:00:00Z)]"
+  fiss 205 "gateway: never forwarded" '[]'
+} | jq -s . > "$FISS"
+fwd() { INTAKE_ISSUES_JSON="$FISS" INTAKE_TS_DIR="$TSP" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island "$1" --out "$TMP/fwd-sel.json" 2>"$TMP/fwd.err"; }
+fwd gateway
+[ "$(jq -c '[.inputs[] | select(.kind == "member") | [.number, (.forwards // 0)]] | sort' "$TMP/fwd-sel.json")" = '[[201,1],[202,2],[205,0]]' ] \
+  && [ "$(jq -c '[.inputs[] | select(.kind == "reread") | .number]' "$TMP/fwd-sel.json")" = '[203]' ] \
+  && ok "a latest ruling of forward is unruled: a member again, with forwards = its hop count (#201 ×1, #202 ×2; #205 carries none); a later seat is a wait again (#203)" \
+  || bad "forward members" "$(jq -c '.inputs' "$TMP/fwd-sel.json") $(cat "$TMP/fwd.err")"
+fwd dependency-upgrades
+[ "$(jq -c '[.inputs[] | [.number, .kind, .forwards]]' "$TMP/fwd-sel.json")" = '[[204,"member",1]]' ] \
+  && ok "…and it is the member of the island its title names now (#204 → dependency-upgrades)" || bad "forward target" "$(jq -c '.inputs' "$TMP/fwd-sel.json")"
 
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"

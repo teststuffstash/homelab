@@ -355,8 +355,9 @@ spec:
               finding id, \`<owner/repo>#<n>\` for an issue or an escape PR, \`<specs page>#<REQ>\` for a
               gap row) print exactly one line, at the end, outside any code fence:
                 INTAKE-RULED: <input id> <outcome> <refs>
-              <outcome> is one of queue|goal|seat|fold|close|requeue|standing|split|file|unchanged|deferred|read
-              (the brief's outcomes; \`unchanged\` = a \`reread:\` input whose wait still holds — you wrote
+              <outcome> is one of queue|goal|seat|fold|close|requeue|standing|split|file|forward|unchanged|deferred|read
+              (the brief's outcomes; \`forward\` = another island's, retitled and passed on — its <refs> is
+              \`island:<name>\`; \`unchanged\` = a \`reread:\` input whose wait still holds — you wrote
               nothing; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap; \`read\` = an
               \`escape:\` PR you read); <refs> is a comma-separated list of the issue/PR refs you wrote or
               relied on (owner/repo#n), or \`-\`. An issue you FILED this sitting (a \`file\`, a parity issue, a
