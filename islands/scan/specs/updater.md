@@ -41,7 +41,7 @@ actions it can emit.
 Leg 1 updates the oldest PR per lane that is **armed ∧ BEHIND ∧ [merge-ready](glossary.md#merge-ready)**
 (`update-pr-branch.sh:142`, homelab#1452): `reviewDecision` APPROVED, or `""` (a ruleset that
 requires no approval) with the reviewer bot's APPROVED newer than the newest non-merge commit, or
-the `automerge` label. There is **no green requirement** (except for Renovate PRs, see [merge-ready](glossary.md#merge-ready)) — a base-side CI fix can only reach a PR
+the `automerge` label. There is **no green requirement** (except for untouched Renovate PRs, see [merge-ready](glossary.md#merge-ready)) — a base-side CI fix can only reach a PR
 through an update (2026-07-10). `REVIEW_REQUIRED` is a park: never merge-ready, never probed
 (#1649). The commit half of "approved at head" is a per-candidate `gh pr view --json commits`
 probe; an unreadable probe holds. The lane is walked oldest-first and stops at the first
