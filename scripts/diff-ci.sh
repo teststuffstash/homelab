@@ -71,7 +71,7 @@ MAP=(
   "component-check:^(argocd/|policy/component/|scripts/(component-check|vendor-kyverno-policies|vendor-garage-chart)\.sh$)"
   "manifest-lint:^argocd/"
   "agentstack-rbac-lint:^argocd/resources/(agentstack|crossplane)/"
-  "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"
+  "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel(-test)?\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"
   "mgmt-policy-test:$MGMT_PATHS"
   "prometheus-rules-lint:$PROM_PATHS"
   "exporter-self-test:^argocd/resources/github-exporter/"
