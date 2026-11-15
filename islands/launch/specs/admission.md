@@ -53,8 +53,9 @@ call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (
 **rc 3** — fail closed: unreachable, non-200 (the error envelope, redacted by the supplier, is
 quoted; a 200 that is neither verdict is never printed, since it could carry a token), or an
 unusable dispatch ([LAUNCH-ADMIT-BOUND](#launch-admit-bound)); `GW_DEFER_REASON` names the cause —
-`gateway-unreachable`, or `gateway-http <status>: <the redacted envelope>` for a non-200 — and
-`GW_RETRY_AFTER` is `?`. **rc 2** — refused before any
+`gateway-unreachable`; `gateway-http <status>: <the redacted envelope>` for a non-200;
+`gateway-http 200, unknown decision '<decision>'` for a 200 that is neither verdict;
+`dispatch-unusable: <what>` for an unusable dispatch — and `GW_RETRY_AFTER` is `?` in every case. **rc 2** — refused before any
 request: `--stack`, `--role`, `--task` missing, neither or both of `--bind` / `--env-file`, a bind
 that is not `<ns>/<sa>/<pod>`, a non-integer round, an attempt < 1. Optional fields reach the
 request only when given; `attempt` only when > 1. The caller's identity is a fresh token per call
