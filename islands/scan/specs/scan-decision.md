@@ -291,7 +291,7 @@ actionable when it is open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-
 than the newest verdict means the worker has answered and re-review is the reviewer's, so no fix
 round is spent (the mirror of the reflex's `reviewable_again`). Which reviewer filed the newest
 CHANGES_REQUESTED does not matter: the code reviewer and the specs reviewer both re-open their own
-verdict on a newer body edit. With nothing newer than the verdict it dispatches a fix round. `merge-conflict` scopes
+verdict on a newer body edit. With nothing newer than the verdict it dispatches a fix round. ⚖ `changes-requested` admits only the worker App's PRs, so an un-armed `major` PR authored by Renovate and carrying CHANGES_REQUESTED is `unarmed-major`'s alone; the lane-walk order ranks clauses only for a PR both admit, which this one is not. `merge-conflict` scopes
 to worker-authored PRs, tolerates a null author, and holds when the source issue is blocked; a
 Renovate-authored DIRTY PR is rebased by ticking Renovate's own checkbox instead
 (`renovate-rebase-tick`). `ci-red` (FU-115) and `arbitrate` (rounds exhausted) are
@@ -315,7 +315,7 @@ emits no unit, adds `agent/arbitrate` to the PR and reports one `RIDES EXHAUSTED
 | clause | merge-conflict/clause | worker PR labelled `merge-conflict` | `merge-conflict` unit |
 | null-author | merge-conflict/null-author | `merge-conflict`, `author: null` | no crash, scoped out |
 | source-issue-blocked | merge-conflict/source-issue-blocked | the PR's issue carries `agent/blocked` | held |
-| cr-emits | unarmed-major/cr-emits | un-armed `major`, CHANGES_REQUESTED | `unarmed-major` unit |
+| ⚖ cr-emits | unarmed-major/cr-emits | un-armed `major` authored by Renovate, CHANGES_REQUESTED | `unarmed-major` unit |
 | automerge-red-emits | unarmed-major/automerge-red-emits | `automerge` ∧ armed, red at a settled head | `unarmed-major` unit |
 | automerge-green-skips | unarmed-major/automerge-green-skips | `automerge` ∧ armed ∧ green | no unit (the reflex's) |
 | ⚖ deps-review-rides-exhausted | unarmed-major/deps-review-rides-exhausted | `deps-review`, armed, red; five `unarmed-major` rides already recorded | no unit; `agent/arbitrate` written, a `RIDES EXHAUSTED` report line |
