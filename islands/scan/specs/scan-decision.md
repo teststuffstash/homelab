@@ -435,7 +435,7 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 
 | description | world | members | findings store | queued | expect? |
 |---|---|---|---|---|---|
-| bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — for the findings (5 undispositioned) alone; the members add nothing to the reason and none is queued |
+| bare-members-inert | open-pre | three bare members, none open in the issue list | 6 total, 1 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — the same reason as the world without the members; the members add nothing to it and none is queued |
 | undispositioned-wakes | open-pre | one open member, undispositioned | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — the reason is the undispositioned member |
 | deferred-excluded | open-pre | one open member, `deferred` | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: yes — child set complete, no undispositioned-member text |
 | adopted-open-unlabelled | open-pre | one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | ⚖ `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
@@ -450,7 +450,7 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 | goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
 | deep-sprout | deep-sprout | several levels below the Goal | ⚖ the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
 | master-inert | master-inert | no Goal ancestor | ⚖ no Goal resolved; no `harvest` disposition on the item (inert) |
-| bucket-child | homelab-278-tree | under the `post-launch:` bucket | ⚖ the resolved Goal is #278, one hop above the bucket's parent |
+| bucket-child | homelab-278-tree | under the `post-launch:` bucket | ⚖ the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
