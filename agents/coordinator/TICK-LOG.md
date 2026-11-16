@@ -15470,3 +15470,37 @@ updates or reverts as much as possible — mechanical revert or a responder."
   #3418 ends the day CHANGES_REQUESTED by the specs reviewer (four R2: the assembly body lists none of #3450's spec
   changes) — the operator's accepted end state; nothing else in flight, no subagent running.
 
+
+
+## 2026-11-16 — seat: meta-state pruned against live state; the gateway named the gate for every island leg; platform singletons doubled
+
+- **Pickup + prune.** #3418 had merged 22:04Z on 11-15 (meta-state said changes-requested). Hand-submitted the next-leg
+  sittings (`island=scan|launch|retro`): Goals #3490 #3480 #3482 written, each `blocked-on: human` on its goal-branch cut
+  (422 under `required-checks` for the intake identity). Two opus verifiers re-read every meta-state bullet against
+  GitHub/the cluster: 353 → ~265 lines, 9 bullets deleted. FU-313 CLOSED — the operator minted a 1-year OpenCode
+  service-account key (`models: request`); probed with the deployed key: console config 200, inference 200.
+- **Pushgateway OOM loop** (128Mi, 24 kills since 11-06, 4.4k groups / 23k series): limit → 512Mi (#3496). FU-182 owns
+  the growth. `RetroReportOverdue` is the stale series-less oracle group (#3166), unrelated.
+- **Jail fault:** since #3471 `devbox run` rewrites `devbox.lock`; the pre-push hook passes its gates then its devbox
+  wrapper dies 127 (three attempts). Direct pushes moved to the PR lane for the day.
+- **Grafana handoff (oracle):** #3499 was a no-op live — the chart already defaults `preinstall_auto_update` off; the
+  subagent's "merging rolls Grafana" was never checked against an unchanged render, and a window was opened for nothing.
+  Handoff closed with that answer.
+- **Two replicas (#3500):** kargo / ESO / cert-manager webhooks, cnpg-operator, the agent-loop event source and the argo
+  workflow-controller at 2 replicas, required hostname anti-affinity, PDB maxUnavailable 1. The reviewer blocked once (the
+  single-node kind e2e could not schedule — fixed in the PR). Rolled 20:41Z inside a window, check clean; lease held by
+  the new controller, both event-source pods behind the Service. Cost read first: 864Mi / 220m requests.
+- **The gateway wedge.** #3303 + #3308 `agent/in-progress` 3.5 d with no pod: both rides died ~25 min in, finalize never
+  ran, and the launcher fallback had died with the coordinator's LLM session (its 10-minute tool limit). The scan holds a
+  no-strike goal child as undecidable; its footprint held #3420, a blocked-by held #3309. `AgentAttentionStanding` fired
+  for all four from 11-13; operator-class, nothing acted. Three fixes dispatched (two PRs).
+- **Operator direction** (memory `gateway-rebuild-and-island-autonomy`): the gateway was a rush-job copy of the old router
+  with specs written after and does not improve itself; no new island leg until it is self-sufficient on intake, specs and
+  specs review, measured by metrics it defines and ships itself (oracle-fleet#1082). Oracle mined for parity (two reports,
+  `~/.claude/oracle-mining-2026-11-16/`): metric hygiene at parity, everything above it missing on the gateway; oracle has
+  claim → verdict → work but runs every brief by hand; neither stack measures its own loop. Rulings: Kargo postponed for
+  the gateway; shared intake → its own island soon; oracle not wired yet; gateway then retro.
+- **Found, not acted on:** the gateway path has no per-session OpenRouter key (the operator's ephemeral `OpenRouterKey`
+  minted none in 7 d; no ruling records the drop) — the prompt for a gateway session: "should the gateway mint a
+  per-session upstream credential instead of resolving the stack's standing key; was the drop ruled (ADR-096/107, FU-270,
+  GW-CRED-RESOLVE); what bounds one OpenRouter session's spend today; can the OpenCode credential API mint scoped keys".
