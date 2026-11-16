@@ -565,6 +565,12 @@ grafana:
   grafana.ini:
     server:
       root_url: https://grafana.teststuff.net
+    plugins:
+      # A pod start must not swap a plugin version under the pinned image (FU-173's no-unpinned-
+      # drift rule): the default `true` upgrades unpinned preinstalled plugins (bundled core
+      # datasources included) to grafana.com's latest at each start, and /api/ds/query 404s
+      # `plugin.notRegistered` mid-swap. The pinned list below still installs.
+      preinstall_auto_update: false
   persistence:
     enabled: false
   plugins:
