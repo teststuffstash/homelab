@@ -60,8 +60,8 @@ A tasked ride whose finalize did not already strike (`strike_by_pod` false) is r
 `budget-403`; `harness-death` with `error_class: turn-cap` → `turn-cap`; `harness-death`,
 `auth-storm`, `timeout` → themselves; anything else `unknown`, refined from the run log
 (`Configuration is invalid` → `harness-death`; opencode's auto-rejected permission → `harness-fault`;
-an `UnknownError` → `harness-death`). **No stats line:** the pod's reason (`DeadlineExceeded` →
-`timeout`, `OOMKilled` → `oom`), then the run log's signatures in a fixed order — config-invalid,
+an `UnknownError` → `harness-death`). **No stats line:** the pod's reason `DeadlineExceeded` →
+`timeout`, then the `agent` container's terminated reason `OOMKilled` → `oom`, then the run log's signatures in a fixed order — config-invalid,
 `harness-fault`, goose `-32602` / truncation / `context_length_exceeded` / a panic, `UnknownError`,
 a 429 quota line (`quota`), the key-limit line (`budget-403-key`), insufficient credit / 402
 (`budget-403-account`), a generic quota/budget line (`budget-403`), goose's output-cap `final_output`
@@ -157,7 +157,7 @@ The old strike store is an issue comment (`REPLAY:strike-line-format`, :3590–3
 (+ ` match=<line>` for a budget match, + ` provider=<p>` when the router report or the stats name
 one), a key retry posts `KEY-RETRY: …` in the same shape, each followed by the last 15 log lines in
 a `<details>` block. The first line's format is a machine interface: the scan's fleet reader greps
-it. Alongside, every tasked ride with stats or a class posts the router report
+it. Alongside, every ride with stats or a class posts the router report, tasked or not
 `POST <proxy>/report {session, task, stack, role: worker, round, model, rail, cost_usd, error_class,
 outcome}` (`REPLAY:router-report`, :3711–3748; the pod also gets `AGENT_REPORT_URL`). The report
 carries `Authorization: Bearer ref:<key ref>` exactly when the ride has a key ref: the ride's
@@ -192,20 +192,22 @@ When finalize never ran (no stats line), the emitter adds two things:
   check. If the comment list cannot be read, nothing is written; the next pass tries again.
 - **The resumable-branch line finalize would have written.** On a `--work-branch` ride it is
   `**Resumable branch pushed:** \`<work branch>\``. Otherwise, when origin holds exactly one
-  `fix/issue-<N>-*` branch, it is `**Resumable branch pushed:** \`<that branch>\``. Zero branches,
-  several, or an unreadable listing give the `unknown` sentence, which never says there is nothing
-  to resume.
+  `fix/issue-<N>-*` branch, it is `**Resumable branch pushed:** \`<that branch>\``. Zero or several
+  branches give `(resumable branch **unknown** — finalize never ran, and origin holds <n> \`fix/issue-<N>-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)` with `<n>` the branch count; an unreadable listing gives `(resumable branch **unknown** — finalize never ran and the branch listing was unreadable; this is not a statement that none exists. Check the run log before restarting from base.)`.
+  Neither says there is nothing to resume.
 
 On the stats path the comment is the same as before, and no extra read is made.
 
 **World:** `launcher-vars` + the proxy seam (`curl` shadowed) for the router-report rows, with
 `TASK=issue-1268` on the tasked ones and `TASK=adhoc-migrate-cert` on the untasked one, and the key
-ref each `ride` cell names. **`died`** for the dead-ride rows: repo `homelab`, pod
+ref (`<project>/<secret>`) each `ride` cell names. **`died`** for the dead-ride rows: repo `homelab`, pod
 `agent-homelab-issue-3303-r1` (created `2026-11-13T00:10:05Z`, task `issue-3303`, round 1, harness
 `claude`, annotation `agent.teststuff.net/struck-model: claude/sonnet`), pod reason `Failed`, a log
 with no strike signature and no stats line, no comments, and one `fix/issue-3303-wire-quarry`
 branch at origin. Its second pod (`agent-homelab-issue-3290-r2`) ended with exit 0 in `Succeeded`,
-is never read, and is deleted by the janitor in every row. **`base`** for the launcher-caller rows:
+is never read, and is deleted by the janitor in every row. Both pods started on 2026-11-13
+(`00:10:10Z` and `00:02:10Z`), and every pass runs later than that day, so each pod's start is more
+than 2 h old in every row. **`base`** for the launcher-caller rows:
 repo `teststuffstash/test-project`, pod `agent-test-project-issue-42-r2` (created
 `2026-11-13T01:00:00Z`), task `issue-42`, model `openrouter/x`, round 2, an empty comment list, a
 three-line run log.
@@ -224,8 +226,8 @@ measured against the settle window (600 s) and `RIDE_ENDED_JANITOR_S`; `stats?` 
 | finalized-control | died | exit 1 `Error`; past both | yes | — | — | — (no GitHub read) | no (deleted) |
 | already-recorded ⚖ | died | exit 1 `Error`; past both | no | after the pod's creation | — | — (already written) | no (deleted) |
 | prior-attempt-record ⚖ | died | exit 1 `Error`; past both | no | before the pod's creation; a quoted copy after it | one | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
-| oom-killed | died | exit 137 `OOMKilled`; past both | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=oom round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
-| branch-ambiguous ⚖ | died | exit 1 `Error`; past both | no | none | two | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + the `unknown` resumable sentence naming 2 branches | no (deleted) |
+| oom-killed | died | exit 137, `agent` terminated reason `OOMKilled` (pod reason `Failed`); past both | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=oom round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
+| branch-ambiguous ⚖ | died | exit 1 `Error`; past both | no | none | two | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `(resumable branch **unknown** — finalize never ran, and origin holds 2 \`fix/issue-3303-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)` | no (deleted) |
 | comments-unreadable | died | exit 1 `Error`; past both | no | the read fails | — | — (retried next pass) | no (deleted) |
 | still-settling | died | exit 1 `Error`; less than 600 s ago | — | — | — | — (pod not read) | yes |
 | deadline-kill-recorded-spared | died | exit 1 `Error`, pod reason `DeadlineExceeded`; past 600 s, inside `RIDE_ENDED_JANITOR_S` | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=timeout round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | yes |
@@ -249,8 +251,8 @@ Legend: `ride` = the ride shape; `auth?` = the report's `Authorization` header.
 |---|---|---|---|
 | router-report-adhoc | launcher-vars | untasked, subscription rail | none |
 | router-report-no-ref | launcher-vars | tasked, subscription rail (no key ref) | none |
-| router-report-session-ref | launcher-vars | tasked, per-session OpenRouter key | `Bearer ref:homelab/homelab-session-1268` |
-| router-report-strike-by-pod | launcher-vars | finalize struck, per-session key | `Bearer ref:homelab/homelab-session-1268-pod-struck` |
+| router-report-session-ref | launcher-vars | tasked, key ref `homelab/homelab-session-1268` | `Bearer ref:homelab/homelab-session-1268` |
+| router-report-strike-by-pod | launcher-vars | tasked, finalize struck, key ref `homelab/homelab-session-1268-pod-struck` | `Bearer ref:homelab/homelab-session-1268-pod-struck` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -289,7 +291,7 @@ Legend: `condition` = what the row changes from the baseline; `fires?` = re-run 
 | fires-serving-timeout | launcher-vars | strike `timeout`, provider openrouter, salvage none | yes (attempt 1/2) |
 | fires-by-pod-tool-loop | launcher-vars | finalize struck `tool-loop`, provider from stats | yes |
 | fires-turn-cap | launcher-vars | strike `turn-cap` | yes |
-| fires-probe-fallback | launcher-vars | `/router-status` blank in-process, the probe URL answers | yes |
+| fires-probe-fallback | launcher-vars | `/router-status` blank in-process, the in-cluster read answers `timeout` as serving | yes |
 | retry-dispatch-failed | launcher-vars | the re-run exits 1 | yes, then falls through to the doorbell |
 | no-retry-cell-seen | launcher-vars | the cell already retried | no |
 | no-retry-task-cap | launcher-vars | 2 retries on the task | no |
@@ -298,7 +300,7 @@ Legend: `condition` = what the row changes from the baseline; `fires?` = re-run 
 | no-retry-salvage-unknown | launcher-vars | salvage undetermined | no |
 | no-retry-nonserving | launcher-vars | `harness-death` | no |
 | no-retry-no-strike | launcher-vars | no strike | no |
-| no-retry-router-unreachable | launcher-vars | `/router-status` unreadable | no |
+| no-retry-router-unreachable | launcher-vars | `/router-status` blank in-process, the in-cluster read fails | no |
 | no-retry-empty-provider | launcher-vars | no provider known | no (fail-closed line) |
 | no-retry-chained-stack | launcher-vars | a stack with a `workerModel` chain | no |
 | no-retry-shadow-mode | launcher-vars | `routerMode: shadow` | no |
