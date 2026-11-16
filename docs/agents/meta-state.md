@@ -141,8 +141,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   (9) Cloudflare `Cache Purge` onto tofu-apply vs relying on oracle-fleet#414's Cache-Control: undecided.
   (10) Whether the 10 `cronjob-needs-priority` Audit-warned CronJobs get a PriorityClass each (10-09).
   (11) HA plugs laptop3/laptop4/pve offline since 10-03 (`HomeAssistantPowerSensorStale` ×6, Tuya — not platform).
-  (12) **FU-313: the OpenCode Go key expires 2026-11-16.** FU-270's "Operator-only" line is stale (oracle-fleet#933 + oracle-iac#1141
-  merged, the codex prober counts sessions) — trim it on the next tracker pass.
 - **⚑ UNOBSERVED FIRSTS (read when they happen; no action until then):**
   `fixer.imageVolumes` (#1808, ADR-135): the first ride with `/corpus` mounted. The first oracle
   closeout under `.agents/closeout.md` (#1806, ADR-134). The first real `CronJobNotSucceeding` fire on a weekly job:

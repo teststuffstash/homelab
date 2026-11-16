@@ -142,18 +142,6 @@ six OVERSIZE items pointer-ized into
 
 - [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
       super admin today, signups disabled).
-- [ ] **FU-313** — **The OpenCode Go API key is a 30-day key: it expires 2026-11-16** (rotated 2026-10-17 after
-      the previous one expired silently at 17:12:49Z, Go rail down ~2 h). Operator-blocked: the move to an
-      OpenCode service-account key (opencode.ai/v2/docs/console/api/#service-accounts) needs the console.
-      Rotation: wallet `opencode-go-api-key` → `devbox run infisical-secret OPENCODE_GO_API_KEY=…` →
-      force-sync ExternalSecret `agent-egress/opencode-go-key` → restart `agent-gateway` + `openrouter-proxy`.
-      Scope settled 2026-10-18: an **"Inference only"** service-account key suffices — its scope covers
-      `GET /api/v2/config` (vendor doc, console/api), the ONLY console call either pod makes (`gateway/src/agent_gateway/catalog.py`;
-      the proxy calls inference only); neither reads Budgets. **Next:** operator mints an Inference-only
-      service-account key before 2026-11-16 (`GoRailCredentialRejected`, #2691/#2693, fires only AFTER expiry; the pre-expiry warning is FU-156's declared half).
-
-## GitOps & platform
-
 - [ ] **FU-317** — **apiserver audit logs never leave the CPs.** Talos writes `kube-apiserver` audit
       logs on each control plane, but nothing ships them to Loki — so "who wrote this RBAC/Secret" has no
       answer off-node (found by the Kargo RBAC hardening, homelab#2798: a denied escalation is visible only
@@ -811,7 +799,7 @@ the block needs pruning, not more headings.
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
       window per 6 h refresh, re-cut when the lists move (last #2903; 11-01 check = derivation, terra in the snapshot, no tier);
       the weekly AA pull misses release-day models (terra, 10-26) — `benchmarks-snapshot.sh`'s cadence knob; hand-passed codex
-      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:** FU-313;
+      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:**
       #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
