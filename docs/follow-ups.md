@@ -581,7 +581,7 @@ the block needs pruning, not more headings.
       rethink. Relates FU-181, FU-131.
 - [ ] **FU-182** — **The pushgateway grows without bound (no TTL on pushed groups).** Writer twin of homelab#807;
       the 08-24 HELP-line log flood fixed (agent-runtime#84, homelab#811). Groups 3223 (10-03) → **3631 (10-14)**,
-      ~37/day. Pattern: [`docs/patterns/observability.md`](patterns/observability.md). **Next:** group hygiene —
+      ~37/day; **4427 (11-16)** — the 128Mi limit OOM-looped from 11-06 (23 kills), raised to 512Mi as a stopgap. Pattern: [`docs/patterns/observability.md`](patterns/observability.md). **Next:** group hygiene —
       a cleanup pass (cron or push-time) deleting terminal-ride groups older than the ledger's retention need,
       sized so reads stay flat. Relates FU-131, observability §B1.
 
