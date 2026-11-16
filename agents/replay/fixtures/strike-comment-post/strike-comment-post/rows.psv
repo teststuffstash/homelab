@@ -1,0 +1,5 @@
+# strike-comment-post — the decision table (family contract in fixture.yaml).
+# id                          | world | patch | env | expect                      | params
+stats-path-unchanged          |       |       |     | stats-path-unchanged        |
+no-stats-work-branch          |       |       |     | no-stats-work-branch        |
+no-stats-key-retry-recorded   |       |       |     | no-stats-key-retry-recorded |

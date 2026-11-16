@@ -1,0 +1,3 @@
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab logs agent-homelab-issue-3303-r1 -c agent
+RC 0

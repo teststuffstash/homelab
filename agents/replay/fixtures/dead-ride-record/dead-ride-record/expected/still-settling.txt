@@ -1,0 +1,2 @@
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+RC 0

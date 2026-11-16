@@ -1,0 +1,4 @@
+[
+  {"created_at": "2026-11-12T22:40:00Z", "body": "AGENT_STRIKE: model=claude/opus error_class=harness-death round=1 session=agent-homelab-issue-3303-r1 provider=anthropic\n\n<details><summary>last 15 log lines (agent-homelab-issue-3303-r1)</summary>\n\n~~~text\n…\n~~~\n\n</details>\n"},
+  {"created_at": "2026-11-13T00:30:00Z", "body": "quoting it: AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1"}
+]

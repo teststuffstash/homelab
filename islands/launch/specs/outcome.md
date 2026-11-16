@@ -19,7 +19,10 @@ grammar and the router report that preceded it are `⚑ gap` rows
 cluster dispatch path the launcher runs inside a coordinator session's time-bounded shell and is
 often killed mid-follow (`agents/agent-session.sh` run-phase clause, :125–170: the `ride` phase
 survived on 5 of 24 rides measured 2026-08-12). The in-pod finalize carries its own bookkeeping for
-that case (the `*_by_pod` flags on its stats line); the gateway outcome has no in-pod twin — ⚑ gap:
+that case (the `*_by_pod` flags on its stats line). When the pod dies hard as well, finalize never
+runs, and the scan's dead-ride pass writes the terminal comment in the launcher's place
+([LAUNCH-OUTCOME-STRIKE-COMMENT](#launch-outcome-strike-comment)). The gateway outcome has no
+in-pod twin and no dead-ride twin — ⚑ gap:
 a killed launcher reports no outcome and releases nothing, and the session ends by the gateway's
 reaper ([GW-SESSIONS-LIVENESS](../../../gateway/specs/endpoints/sessions.md#gw-sessions-liveness))
 with no strike counted.
@@ -164,7 +167,62 @@ outcome for observability (ADR-103 (2): machine residue out of timelines); the c
 (the fleet reader in `coordinator-scan.sh`, the chain walk) move first
 ([docs/agents/model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder) — "the strike comment remains the store FOR NOW").
 
-**World:** `launcher-vars` + the proxy seam (`curl` shadowed).
+**The comment has one emitter and two callers** (`REPLAY:strike-comment-post`). The launcher runs it
+after the classifier. The scan's dead-ride pass runs the same blocks for a ride the launcher did not
+outlive (`REPLAY:dead-ride-record` in `agents/coordinator-scan.sh` → `agents/ride-ended.sh`). That
+pass takes every tasked ride pod whose `agent` container ended non-zero at least
+`RIDE_ENDED_SETTLE_S` (600 s) ago and whose log has no `AGENT_RUN_STATS` line. It runs
+`strike-classifier`, `strike-line-format` and `strike-comment-post`, extracted from the launcher
+between their sentinels, over that pod. The struck model comes from the pod annotation
+`agent.teststuff.net/struck-model`. The pass runs before the pod janitor, only under `--spawn`, and
+only for repos with a fixer.
+
+When finalize never ran (no stats line), the emitter adds two things:
+
+- **Written once per pod lifetime.** The emitter writes nothing when a comment whose first line is
+  `AGENT_STRIKE:` / `KEY-RETRY:` and names `session=<pod>` was posted at or after the pod's
+  creation. A re-admitted attempt reuses the pod name, which is why the creation time bounds the
+  check. If the comment list cannot be read, nothing is written; the next pass tries again.
+- **The resumable-branch line finalize would have written.** On a `--work-branch` ride it is
+  `**Resumable branch pushed:** \`<work branch>\``. Otherwise, when origin holds exactly one
+  `fix/issue-<N>-*` branch, it is `**Resumable branch pushed:** \`<that branch>\``. Zero branches,
+  several, or an unreadable listing give the `unknown` sentence, which never says there is nothing
+  to resume.
+
+On the stats path the comment is the same as before, and no extra read is made.
+
+**World:** `launcher-vars` + the proxy seam (`curl` shadowed); `died` for the dead-ride rows: a
+`Failed` pod for `homelab#3303` round 1, `agent` exit 1 `Error`, no stats line, no comments, one
+`fix/issue-3303-wire-quarry` branch. The world also holds a second pod that ended with exit 0 and is
+never read.
+
+#### The dead-ride pass
+
+Legend: `agent end` = the `agent` container's terminated state; `stats?` = an `AGENT_RUN_STATS`
+line in its log; `prior record` = a terminal comment naming `session=<pod>`; `branches` = the
+`fix/issue-3303-*` refs at origin; `record?` = the comment written (`—` = none).
+
+| description | world | agent end | stats? | prior record | branches | record? |
+|---|---|---|---|---|---|---|
+| died-branch-pushed | died | exit 1 `Error`, 600 s+ ago | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` |
+| finalized-control | died | exit 1 `Error` | yes | — | — | — (no GitHub read) |
+| already-recorded ⚖ | died | exit 1 `Error` | no | after the pod's creation | — | — (already written) |
+| prior-attempt-record ⚖ | died | exit 1 `Error` | no | before the pod's creation; a quoted copy after it | one | the strike, as died-branch-pushed |
+| oom-killed | died | exit 137 `OOMKilled` | no | none | one | `… error_class=oom …` + the resumable line |
+| branch-ambiguous | died | exit 1 `Error` | no | none | two | the strike + the `unknown` resumable sentence |
+| comments-unreadable | died | exit 1 `Error` | no | the read fails | — | — (retried next pass) |
+| still-settling | died | ended less than 600 s ago | — | — | — | — (pod not read) |
+
+#### The launcher's caller
+
+Legend: `stats?` = `STATS`; `line` = the strike or key-retry line; `prior record`, `record?` as
+above.
+
+| description | world | stats? | line | prior record | record? |
+|---|---|---|---|---|---|
+| stats-path-unchanged | base | yes | `AGENT_STRIKE: … error_class=harness-death …` | not read | the strike, no resumable line |
+| no-stats-work-branch | base | no (`WORK_BRANCH=fix/issue-42-tighten`) | `AGENT_STRIKE: … error_class=unknown …` | none | the strike + `**Resumable branch pushed:** \`fix/issue-42-tighten\`` |
+| no-stats-key-retry-recorded | base | no | `KEY-RETRY: … budget-403-key …` | the `KEY-RETRY:` after the pod's creation | — |
 
 #### The router report's credential
 

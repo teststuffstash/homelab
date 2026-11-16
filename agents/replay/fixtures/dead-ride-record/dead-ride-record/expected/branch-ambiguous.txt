@@ -1,0 +1,10 @@
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab logs agent-homelab-issue-3303-r1 -c agent
+CALL kubectl -n homelab get pod agent-homelab-issue-3303-r1 -o jsonpath={.status.reason}/{.status.containerStatuses[?(@.name=="agent")].state.terminated.reason}
+CALL gh api repos/teststuffstash/homelab/issues/3303/comments?per_page=100 --paginate
+CALL gh api repos/teststuffstash/homelab/git/matching-refs/heads/fix/issue-3303- --jq .[].ref
+CALL gh issue comment 3303 --repo teststuffstash/homelab --body AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1\n\n(resumable branch **unknown** — finalize never ran, and origin holds 2 `fix/issue-3303-*` branches; this is not a statement that none exists. Check the run log before restarting from base.)\n\n<details><summary>last 15 log lines (agent-homelab-issue-3303-r1)</summary>\n\n~~~text\nentrypoint: cloning teststuffstash/homelab (base master)\nentrypoint: harness claude, round 1, task issue-3303\n{"type":"assistant","message":{"content":[{"type":"text","text":"Committing the wire step and pushing fix/issue-3303-wire-quarry."}]}}\n{"type":"user","message":{"content":[{"type":"tool_result","content":"To https://github.com/teststuffstash/homelab.git\n * [new branch]      fix/issue-3303-wire-quarry -> fix/issue-3303-wire-quarry"}]}}\n{"type":"assistant","message":{"content":[{"type":"text","text":"Running the acceptance gate next."}]}}\n~~~\n\n</details>
+OUT   [homelab] dead ride agent-homelab-issue-3303-r1 (issue-3303 r1): agent ended non-zero, no AGENT_RUN_STATS — recording it with the launcher's classifier
+OUT → no PR opened — AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1
+OUT → posting strike comment to teststuffstash/homelab#3303
+RC 0

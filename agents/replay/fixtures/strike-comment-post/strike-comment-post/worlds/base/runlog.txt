@@ -1,0 +1,3 @@
+entrypoint: harness opencode, round 2, task issue-42
+working on the fix
+last line before the end

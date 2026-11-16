@@ -2497,6 +2497,19 @@ EOF
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
     # stack-pooled there, so carry the per-repo value out of the loop).
     wipmap="${wipmap}${repo} ${wip_allow}\n"
+    # >>>REPLAY:dead-ride-record>>>
+    # DEAD-RIDE RECORD (islands/launch/specs/outcome.md LAUNCH-OUTCOME-STRIKE-COMMENT): a ride whose
+    # pod died hard (no AGENT_RUN_STATS — finalize never ran) after its launcher was already gone
+    # left NO terminal record, so the issue sat `agent/in-progress` with nothing to decide on.
+    # agents/ride-ended.sh runs the LAUNCHER's own classifier + comment blocks over every such pod —
+    # one emitter, write-once by `session=<pod>`; it never races a live launcher (settle window).
+    # Placed BEFORE the janitor so a pod reaped this pass is read first. Fixer repos only (a
+    # fixerless repo runs no rides and its ns grants no reads); writes only under --spawn.
+    if [ -n "$dispatchable" ] && [ -n "$SPAWN" ]; then
+      KUBECTL="$KUBECTL" KUBE="${KUBE:-}" bash "${HERE}/ride-ended.sh" "$repo" \
+        || echo "  [$repo] ⚠ dead-ride record pass failed — the next pass retries" >&2
+    fi
+    # <<<REPLAY:dead-ride-record<<<
     # COMPLETED-POD JANITOR (2026-07-22 — the #41/#63 scratch-pool exhaustion): a Completed ride
     # pod pins its GENERIC EPHEMERAL docker-lib PVC (20Gi longhorn-scratch each) until the POD
     # object is deleted — 8 kept-for-reading pods held ~160Gi, the pool filled, and every new

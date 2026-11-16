@@ -1,0 +1,67 @@
+{
+  "items": [
+    {
+      "metadata": {
+        "name": "agent-homelab-issue-3303-r1",
+        "creationTimestamp": "2026-11-13T00:10:05Z",
+        "labels": { "app": "agent-session", "project": "homelab", "ride-size": "standard" },
+        "annotations": { "agent.teststuff.net/struck-model": "claude/sonnet" }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "agent",
+            "env": [
+              { "name": "REPO_URL", "value": "https://github.com/teststuffstash/homelab.git" },
+              { "name": "HARNESS", "value": "claude" },
+              { "name": "AGENT_TASK", "value": "issue-3303" },
+              { "name": "AGENT_ROUND", "value": "1" },
+              { "name": "MODEL", "value": "sonnet" },
+              { "name": "GH_TOKEN", "valueFrom": { "secretKeyRef": { "name": "agent-git-token", "key": "token" } } }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Failed",
+        "containerStatuses": [
+          {
+            "name": "agent",
+            "state": { "terminated": { "exitCode": 1, "reason": "Error", "startedAt": "2026-11-13T00:12:40Z", "finishedAt": "2026-11-13T00:43:30Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "agent-homelab-issue-3290-r2",
+        "creationTimestamp": "2026-11-13T00:02:00Z",
+        "labels": { "app": "agent-session", "project": "homelab", "ride-size": "standard" },
+        "annotations": { "agent.teststuff.net/struck-model": "claude/sonnet" }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "agent",
+            "env": [
+              { "name": "REPO_URL", "value": "https://github.com/teststuffstash/homelab.git" },
+              { "name": "HARNESS", "value": "claude" },
+              { "name": "AGENT_TASK", "value": "issue-3290" },
+              { "name": "AGENT_ROUND", "value": "2" },
+              { "name": "MODEL", "value": "sonnet" }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Succeeded",
+        "containerStatuses": [
+          {
+            "name": "agent",
+            "state": { "terminated": { "exitCode": 0, "reason": "Completed", "startedAt": "2026-11-13T00:03:00Z", "finishedAt": "2026-11-13T00:30:00Z" } }
+          }
+        ]
+      }
+    }
+  ]
+}
