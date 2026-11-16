@@ -25,7 +25,8 @@
 # owns write-once (`session=<pod>` since the pod's creation) and the resumable-branch line.
 #
 # Read failures write nothing (rule #6): an unreadable pod list, log or comment list skips that
-# pod for this pass; the janitor's Failed-pod grace (2h) leaves later passes room to retry.
+# pod for this pass; the scan's janitor keeps a Failed pod until its agent container ended
+# RIDE_ENDED_JANITOR_S (3600s) ago, so later passes have room to retry.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="${1:?usage: ride-ended.sh <repo>}"

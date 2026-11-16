@@ -2503,13 +2503,15 @@ EOF
     # left NO terminal record, so the issue sat `agent/in-progress` with nothing to decide on.
     # agents/ride-ended.sh runs the LAUNCHER's own classifier + comment blocks over every such pod —
     # one emitter, write-once by `session=<pod>`; it never races a live launcher (settle window).
-    # Placed BEFORE the janitor so a pod reaped this pass is read first. Fixer repos only (a
-    # fixerless repo runs no rides and its ns grants no reads); writes only under --spawn.
+    # Placed BEFORE the janitor, and the janitor below spares a Failed pod until its agent
+    # container ended RIDE_ENDED_JANITOR_S ago (default 3600s, > the 600s settle window), so every
+    # dead ride gets several passes of being read — a deadline kill included (the pod's Failed
+    # moment is startTime + activeDeadlineSeconds, past any startTime-only grace). Fixer repos only
+    # (a fixerless repo runs no rides and its ns grants no reads); writes only under --spawn.
     if [ -n "$dispatchable" ] && [ -n "$SPAWN" ]; then
       KUBECTL="$KUBECTL" KUBE="${KUBE:-}" bash "${HERE}/ride-ended.sh" "$repo" \
         || echo "  [$repo] ⚠ dead-ride record pass failed — the next pass retries" >&2
     fi
-    # <<<REPLAY:dead-ride-record<<<
     # COMPLETED-POD JANITOR (2026-07-22 — the #41/#63 scratch-pool exhaustion): a Completed ride
     # pod pins its GENERIC EPHEMERAL docker-lib PVC (20Gi longhorn-scratch each) until the POD
     # object is deleted — 8 kept-for-reading pods held ~160Gi, the pool filled, and every new
@@ -2522,17 +2524,24 @@ EOF
     # FU-116: Failed pods leak their ephemeral docker-lib PVCs exactly like Succeeded ones (one
     # r1 PVC sat Bound 18h, regressing the #41/#63 scratch-pool-exhaustion fix) — janitor BOTH
     # terminal phases. Failed gets a longer grace (2h vs 30min): a hard-died ride may not have
-    # uploaded transcripts, so its pod log is briefly the only forensics.
+    # uploaded transcripts, so its pod log is briefly the only forensics. The Failed grace ALSO
+    # counts from the agent container's end (no end recorded → startTime): the dead-ride pass above
+    # reads a Failed pod only after its settle window, so a startTime-only grace deleted every ride
+    # that died past ~1h50m — every deadline kill — before any pass could read it.
     for c in $("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-        -o json 2>/dev/null | jq -r '.items[]
+        -o json 2>/dev/null | jq -r --argjson fend "${RIDE_ENDED_JANITOR_S:-3600}" '.items[]
         | select(.status.phase == "Succeeded" or .status.phase == "Failed")
         | .status.phase as $p
-        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601
-                 < (now - (if $p == "Failed" then 7200 else 1800 end)))
+        | (.status.startTime // "1970-01-01T00:00:00Z") as $st
+        | select(($st | fromdateiso8601) < (now - (if $p == "Failed" then 7200 else 1800 end)))
+        | select($p != "Failed"
+                 or ((([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated.finishedAt
+                       | select(. != null)] | first) // $st) | fromdateiso8601? // 0) < (now - $fend))
         | .metadata.name' 2>/dev/null); do
       echo "  [$repo] janitor: deleting terminal ride pod ${c} (releases its ephemeral scratch PVC)"
       "$KUBECTL" $KUBE -n "$repo" delete pod "$c" --ignore-not-found >/dev/null 2>&1 || true
     done
+    # <<<REPLAY:dead-ride-record<<<
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
     # they never rot silently.

@@ -3903,11 +3903,16 @@ if [ -n "$RUN_CMD" ]; then
     if [ -z "${STATS:-}" ] && { [ -n "$STRIKE_LINE" ] || [ -n "$KEY_RETRY_LINE" ]; } \
        && [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
       [ -n "${RIDE_SINCE:-}" ] || RIDE_SINCE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || true)"
-      if ! _rec_cmts="$(gh api "repos/${SLUG}/issues/${ISSUE_N}/comments?per_page=100" --paginate 2>/dev/null)" \
+      if [ -z "${RIDE_SINCE:-}" ]; then
+        # no creation time = no bound: every earlier attempt's record would match, so the read is
+        # as good as failed (rule #6) — write nothing, the scan's pass retries with the pod's own.
+        RECORD_GO=""
+        echo "  (creation time of ${POD} unreadable — terminal record NOT written this pass; the scan's dead-ride pass retries)"
+      elif ! _rec_cmts="$(gh api "repos/${SLUG}/issues/${ISSUE_N}/comments?per_page=100" --paginate 2>/dev/null)" \
          || ! jq -s -e . >/dev/null 2>&1 <<<"${_rec_cmts:-null}"; then
         RECORD_GO=""
         echo "  (comment list of ${SLUG}#${ISSUE_N} unreadable — terminal record for ${POD} NOT written this pass; the scan's dead-ride pass retries)"
-      elif jq -s -e --arg pod "$POD" --arg since "${RIDE_SINCE:-}" '
+      elif jq -s -e --arg pod "$POD" --arg since "$RIDE_SINCE" '
           [.[][]? | select(((.created_at // "") >= $since)
                            and ((.body // "") | split("\n")[0]
                                 | test("^(AGENT_STRIKE|KEY-RETRY): .* session=" + $pod + "( |$)")))]

@@ -175,7 +175,9 @@ pass takes every tasked ride pod whose `agent` container ended non-zero at least
 `strike-classifier`, `strike-line-format` and `strike-comment-post`, extracted from the launcher
 between their sentinels, over that pod. The struck model comes from the pod annotation
 `agent.teststuff.net/struck-model`. The pass runs before the pod janitor, only under `--spawn`, and
-only for repos with a fixer.
+only for repos with a fixer. The janitor deletes a Failed ride pod only once its start is 2 h old
+**and** its `agent` container ended `RIDE_ENDED_JANITOR_S` (3600 s) ago. Without the second
+condition, a deadline kill (Failed at start + 4 h) would be deleted before any pass could read it.
 
 When finalize never ran (no stats line), the emitter adds two things:
 
@@ -211,7 +213,11 @@ line in its log; `prior record` = a terminal comment naming `session=<pod>`; `br
 | oom-killed | died | exit 137 `OOMKilled` | no | none | one | `… error_class=oom …` + the resumable line |
 | branch-ambiguous | died | exit 1 `Error` | no | none | two | the strike + the `unknown` resumable sentence |
 | comments-unreadable | died | exit 1 `Error` | no | the read fails | — | — (retried next pass) |
-| still-settling | died | ended less than 600 s ago | — | — | — | — (pod not read) |
+| still-settling | died | ended less than 600 s ago | — | — | — | — (pod not read, not deleted) |
+| deadline-kill-recorded-spared | died | `DeadlineExceeded`, ended inside `RIDE_ENDED_JANITOR_S` | no | none | one | `… error_class=timeout …` + the resumable line; the pod is kept |
+
+Every row's janitor deletes the exit-0 pod. It deletes the dead pod only in the rows where that
+pod's end lies outside `RIDE_ENDED_JANITOR_S`, which is every row except the last two.
 
 #### The launcher's caller
 

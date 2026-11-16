@@ -23,8 +23,15 @@
 #   branch-ambiguous        two `fix/issue-3303-*` branches → recorded, resumable `unknown`.
 #   comments-unreadable     the comment list read fails → nothing written (rule #6).
 #   still-settling          the agent ended inside the settle window (finishedAt in the future
-#                           relative to any run of this fixture) → not even read: a live launcher
-#                           writes first.
+#                           relative to any run of this fixture) → not even read (a live launcher
+#                           writes first) AND not deleted by the janitor.
+#   deadline-kill-recorded-spared  DeadlineExceeded with the janitor's finish margin set wide →
+#                           recorded as `timeout` and the pod is kept.
+#
+# The block spans the completed-pod janitor too: a Failed pod is deleted only once its startTime
+# is 2h old AND its agent container ended RIDE_ENDED_JANITOR_S (3600s) ago, so a deadline kill
+# (Failed at startTime + 4h) gets read before it is reaped. Every row's stream therefore ends with
+# the janitor's list + deletes; the exit-0 pod is reaped (Succeeded, 30 min grace) in every row.
 name: dead-ride-record
 mode: table
 source: agents/coordinator-scan.sh
