@@ -1,0 +1,16 @@
+# The CNPG operator's disruption budget — the third leg of the ADR-140 shape (2 replicas spread by
+# required anti-affinity in argocd/platform/cnpg-operator.yaml, zero-unavailable rollout, PDB). The
+# cloudnative-pg chart renders no PDB of its own, so it rides the Application's second source.
+# Selector = the chart's Deployment selector labels; in cnpg-system it matches the operator pods
+# only (plugin-barman-cloud and the pg-backup Job pods carry other names).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cnpg-operator-cloudnative-pg
+  namespace: cnpg-system
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+      app.kubernetes.io/instance: cnpg-operator
