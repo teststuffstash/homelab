@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # the per-pod variables are the launcher blocks' inputs, read via eval
 # ride-ended.sh — the dead-ride recorder: a ride's hard death always leaves its terminal record.
 #
 #   bash agents/ride-ended.sh <repo>        # the repo's worker namespace (= the repo name)
