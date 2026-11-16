@@ -2,12 +2,17 @@
 # id               | world           | patch | env | expect
 # strike-resumable  = #329 has AGENT_STRIKE: + Resumable branch pushed: → decidable: emits C4/C5
 #                     unit with work-branch; #330 beside it keeps its ordinary v2 + unit
-# no-strike         = #329 has NO AGENT_STRIKE: comment → held as today; #330 keeps its v2 + unit
+# no-strike         = #329 has NO terminal comment (no AGENT_STRIKE:/AGENT_REPORT:), no live pod, quiet
+#                     past C4C5_PERSIST_S; nothing merged into goal/1162-scan (recorded `[]`) and no
+#                     origin fix/issue-329-* branch → ABANDONED: the plain c4c5-redispatch unit, no
+#                     work-branch (RESUMABLE <empty>). Until the dead-ride limbo fix (2026-11-16,
+#                     #3303/#3308) this row expected the HELD report (`no-strike.txt`, kept for the
+#                     rows that still hold); the expectation moved, the world gained the two reads.
 # block-class-wins  = the SAME strike-resumable world, with #330's body carrying a machine block
 #                     `Class: build`: the block WINS over the `task/*` label in the C4/C5 class
 #                     derivation (ADR-122 (3), homelab#1460), so its unit re-dispatches as `build`
 strike-resumable | strike-resumable |       |      | strike-resumable
-no-strike        | no-strike        |       |      | no-strike
+no-strike        | no-strike        |       |      | goal-abandoned
 block-class-wins | strike-resumable |       |      | block-class-wins
 # block-class-malformed = the SAME strike-resumable world, with #329's (the decidable goal child's) body
 #                     carrying a block the parser REFUSES (`Nope: x`): the resumable path HOLDS — no
@@ -38,3 +43,23 @@ report-resumable | report-resumable |       |      | report-resumable
 #                     one reader for both AGENT_STRIKE and AGENT_REPORT, anchor the match, strip
 #                     backticks, cut at first whitespace). Same expected stream as report-resumable.
 report-resumable-markdown | report-resumable-markdown |       |      | report-resumable
+# ── the no-terminal-record leg (dead-ride limbo, 2026-11-16): the merge evidence decides ──
+# goal-abandoned-branch = no terminal comment; the merged PRs into goal/1162-scan come from OTHER
+#                     heads (fix/issue-327-*, fix/issue-328-*) and neither cites #329 (one mentions
+#                     "the goal's next child" in prose, no number); origin fix/issue-329-x is 1 ahead
+#                     of the base → c4c5-redispatch carrying work-branch=fix/issue-329-x
+#                     (RESUMABLE line). On master this world emits the HELD report.
+goal-abandoned-branch | goal-abandoned-branch |       |      | goal-abandoned-branch
+# goal-own-head-merged = CONTROL: a merged PR into the base whose HEAD is fix/issue-329-loop, body
+#                     not citing #329 — the circles#36 shape (finished work, unlinked). Stays HELD,
+#                     plus a ⛔ line naming the merged PR; no branch read, no unit for #329.
+goal-own-head-merged | goal-own-head-merged |       |      | goal-own-head-merged
+# goal-merged-probe-fail = the no-strike world, but the merged-PR read into the base FAILS: HELD,
+#                     one PROBE_FAILED line (rule #6), no branch read, no unit for #329.
+goal-merged-probe-fail | no-strike |       | STUB_GH_pr_list_merged=fail | goal-merged-probe-fail
+# goal-refs-probe-fail = the no-strike world, but the origin-branch read FAILS: HELD, one
+#                     PROBE_FAILED line — a resumable branch may exist, so no restart is guessed.
+goal-refs-probe-fail | no-strike |       | STUB_GH_api_repos_teststuffstash_homelab_git_matching_refs_heads_fix_issue_329=fail | goal-refs-probe-fail
+# goal-child-recent = the no-strike world, #329 touched "now": inside the C4C5_PERSIST_S guard the
+#                     evidence is not read at all — the HELD stream byte-for-byte (`no-strike.txt`).
+goal-child-recent | no-strike | gh/issue-list-inprog.json @ patches/goal-child-recent.jq |      | no-strike

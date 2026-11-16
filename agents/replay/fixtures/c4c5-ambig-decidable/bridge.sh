@@ -15,6 +15,15 @@ repo="homelab"
 dispatchable=1
 c6g_nums=""
 goalbased_nums="329"
+# `goalbased` is the `<n>|<base>` list `goalbased_nums` is cut from (the FU-143 detection block);
+# the no-terminal-record leg reads the child's `Base:` from it to scope the merged-PR read.
+goalbased="329|goal/1162-scan"
+# `PODS` is the clause's own live-pod read (the `c4c5-bodies-probe` head); this block only runs
+# once it SUCCEEDED, and this family's world is "no non-terminal agent-session pod".
+PODS=""
+# The scan's default (coordinator-scan.sh top level, not inside a sentinel): the persistence guard
+# the no-terminal-record leg reads before it consults any merge evidence.
+C4C5_PERSIST_S=900
 c4c5_cleared=""
 orphans=""
 units=""

@@ -5310,8 +5310,11 @@ EOF_GTHEMES_OPEN
             # >>>REPLAY:c4c5-ambig-decidable>>>
             # FU-199: a goal child whose newest AGENT_STRIKE: comment carries a Resumable branch
             # pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the branch
-            # so the session resumes with --work-branch <branch> (never a restart). No strike / no
-            # resumable branch ⇒ hold exactly as today. Loop guard: a resumed round that strikes
+            # so the session resumes with --work-branch <branch> (never a restart). A strike with no
+            # resumable branch ⇒ hold exactly as today. NO terminal comment at all ⇒ the merge
+            # evidence decides (abandoned → redispatch, resuming an ahead `fix/issue-<n>-*` branch
+            # when one exists; merged-from-its-own-branch or unreadable → hold) — the branch below
+            # the strike parser. Loop guard: a resumed round that strikes
             # again with the same (model, error_class) pair follows the existing second-strike rule
             # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
             # strike→resume→strike loop.
@@ -5386,6 +5389,68 @@ EOF_GTHEMES_OPEN
                       # neither word-split nor expand (FU-199, folded in 2026-09-20).
                       resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch}"$'\n'
                     fi
+                  else
+                    # ── NO TERMINAL RECORD AT ALL: decide from the GIT evidence (the dead-ride limbo,
+                    # 2026-11-16 — #3303/#3308's pods died mid-ride, no AGENT_STRIKE/AGENT_REPORT,
+                    # held "undecidable" 3.5 days). The hold above exists because "no open PR"
+                    # cannot tell ABANDONED from MERGED-BUT-UNLINKED (circles#36). The goal base
+                    # itself can: merged-but-unlinked work arrived through a merged PR into the
+                    # base, and abandoned work did not. ABANDONED when ALL hold —
+                    #   • no live worker pod for it (the C4C5_SEL pod key `issue-<n>-` over $PODS,
+                    #     which this block only runs with a successful pod read);
+                    #   • quiet past C4C5_PERSIST_S (`updatedAt`; unreadable = -1 = held);
+                    #   • the merged PRs into its `Base:` — read SCOPED TO THAT BASE, not the
+                    #     repo-wide 40 above, whose window a days-old merge scrolls out of — carry no
+                    #     head `fix/issue-<n>-*` (the issue's OWN branch merged = finished work, the
+                    #     circles#36 asymmetry stays a hold), no strong link and no bare mention;
+                    #     a full page (100) is an incomplete window and holds.
+                    # Abandoned + an origin `fix/issue-<n>-*` AHEAD of the base → resume it
+                    # (resumable_branches → the existing --work-branch path); no such branch →
+                    # the plain c4c5-redispatch unit. Every probe failure HOLDS and says so (rule #6).
+                    ge_base="$(sed -n "s/^${ambig_n}|//p" <<< "${goalbased:-}" | sed -n 1p)"
+                    ge_upd="$(jq -r --argjson n "$ambig_n" '[.[] | select(.number == $n) | .updatedAt // ""] | first // ""' <<<"$inprog" 2>/dev/null)" || ge_upd=""
+                    ge_age="$(jq -rn --arg t "$ge_upd" --argjson now "$(date -u +%s)" \
+                      '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                    case "$ge_age" in ''|*[!0-9-]*) ge_age=-1;; esac
+                    ge_live="$(printf '%s\n' "${PODS-}" | grep -c -- "issue-${ambig_n}-" || true)"
+                    if [ -n "$ge_base" ] && [ "${ge_live:-1}" = 0 ] && [ "$ge_age" -ge "$C4C5_PERSIST_S" ]; then
+                      ge_merged="$(gh pr list --repo "$slug" --state merged --base "$ge_base" --limit 100 --json number,headRefName,body 2>/dev/null)" || ge_merged=""
+                      if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ge_merged:-null}"; then
+                        orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading merged PRs into ${ge_base} — goal child #${ambig_n} stays HELD (its abandoned-vs-merged evidence is unreadable; rule #6)\n"
+                      else
+                        ge_own="$(jq -r --arg p "fix/issue-${ambig_n}-" '[.[] | select((.headRefName // "") | startswith($p)) | "#\(.number) (\(.headRefName))"] | join(", ")' <<<"$ge_merged" 2>/dev/null)" || ge_own="?"
+                        ge_hit="$(strong_link_count "$ambig_n" "$ge_merged" "")" || ge_hit=1
+                        ge_men="$(jq -r --argjson n "$ambig_n" '[.[] | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$ge_merged" 2>/dev/null)" || ge_men=1
+                        ge_cnt="$(jq -r 'length' <<<"$ge_merged" 2>/dev/null)" || ge_cnt=100
+                        if [ -n "$ge_own" ]; then
+                          orphans="${orphans}[$repo] ⛔ goal child #${ambig_n} — its OWN branch merged into ${ge_base}: ${ge_own}. Finished work whose PR did not cite it, not an abandoned ride — HELD; close it by hand.\n"
+                        elif [ "${ge_hit:-1}" = 0 ] && [ "${ge_men:-1}" = 0 ] && [ "${ge_cnt:-100}" -lt 100 ]; then
+                          ge_refs="$(gh api "repos/${slug}/git/matching-refs/heads/fix/issue-${ambig_n}-" 2>/dev/null)" || ge_refs=""
+                          if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ge_refs:-null}"; then
+                            orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading origin branches fix/issue-${ambig_n}-* — goal child #${ambig_n} stays HELD (a resumable branch may exist; rule #6)\n"
+                          else
+                            ge_branch=""; ge_best=0; ge_fail=""
+                            while IFS= read -r ge_br; do
+                              [ -n "$ge_br" ] || continue
+                              ge_cmp="$(gh api "repos/${slug}/compare/${ge_base}...${ge_br}" 2>/dev/null)" || ge_cmp=""
+                              ge_ahead="$(jq -r '.ahead_by // empty' <<<"${ge_cmp:-null}" 2>/dev/null)" || ge_ahead=""
+                              case "$ge_ahead" in ''|*[!0-9]*) ge_fail=1; break;; esac
+                              if [ "$ge_ahead" -gt "$ge_best" ]; then ge_best="$ge_ahead"; ge_branch="$ge_br"; fi
+                            done <<< "$(jq -r '.[].ref // empty | ltrimstr("refs/heads/")' <<<"$ge_refs" 2>/dev/null | sort)"
+                            if [ -n "$ge_fail" ]; then
+                              orphans="${orphans}[$repo] ⚠ PROBE_FAILED comparing fix/issue-${ambig_n}-* with ${ge_base} — goal child #${ambig_n} stays HELD (rule #6)\n"
+                            elif [ -n "$ge_branch" ]; then
+                              ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                              ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=ABANDONED-RESUMABLE"$'\n'
+                              resumable_branches="${resumable_branches}${repo}#${ambig_n}=${ge_branch}"$'\n'
+                            else
+                              ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                              ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=ABANDONED"$'\n'
+                            fi
+                          fi
+                        fi
+                      fi
+                    fi
                   fi
                 fi
               done <<< "$ambig"
@@ -5459,7 +5524,15 @@ EOF_GTHEMES_OPEN
                   [ -n "$ad_cv" ] && ad_class="$ad_cv"
                   units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                   item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                  case "$ad_term_type" in
+                    ABANDONED-RESUMABLE)
+                      ad_br="$(sed -n "s|^${ad_qualified}=||p" <<< "$resumable_branches" | sed -n 1p)"
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — goal child ABANDONED (no terminal record, no live pod, nothing merged into its base from or citing it); origin ${ad_br} is ahead of the base → C4/C5 redispatch with --work-branch\n" ;;
+                    ABANDONED)
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — goal child ABANDONED (no terminal record, no live pod, nothing merged into its base from or citing it, no fix/issue-${ad_n}-* branch ahead of it) → C4/C5 redispatch\n" ;;
+                    *)
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n" ;;
+                  esac
                 else
                   orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
                   item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"
