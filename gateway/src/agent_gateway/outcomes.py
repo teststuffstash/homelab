@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 from .logging import redact
 from .store import Session, Store
+from .tiers import same_model
 
 log = logging.getLogger("gateway.outcomes")
 
@@ -141,8 +142,10 @@ class Outcomes:
         refuted = 0
         scope = OUTCOME_CLASSES[klass]
         if scope is None:
+            twins = {st["model"] for st in self.store.strikes_for(row.stack, row.task)
+                     if st["scope"] == "model" and same_model(row.model, st["model"])}
             refuted = self.store.refute_strikes(row.stack, row.task, row.rail, row.model, now,
-                                                providers=self.store.session_providers(row.id), harness=row.harness)
+                                                providers=self.store.session_providers(row.id), harness=row.harness, twins=twins)
             log.info("outcome: session=%s clean — refuted %d strike(s) on task %s", row.id, refuted, row.task)
             if row.canary_provider and self.judge is not None:  # the canary's clean ride: the cell enters
                 self.judge(row.model, row.canary_provider, True, None, now)
