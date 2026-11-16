@@ -647,8 +647,10 @@ lazy() { # <value> → the field, or jq's own error line + exit 5 where the per-
 # The PR-level waits (--source pile only): PRHOLD_PR[<issue>] = the OPEN PR whose newest
 # `blocked-on:` marker is `human`, PRHOLD_SINCE[<issue>] = that comment's date. ONE list call; a
 # failed read is exit 2 (an unread PR list is never "no holds"). The marker grammar is the scan's
-# (`blocked_on_kind`, agents/coordinator-scan.sh §BLOCKED-ON PREDICATE): the LAST line of a comment
-# starting `blocked-on: `, kind human | issue=<n> | pr=<n>; the newest comment carrying one rules.
+# ONE definition, not a copy: `blocked_on_kind` is read out of agents/coordinator-scan.sh's
+# >>>REPLAY:blocked-on-jq>>> block (§BLOCKED-ON PREDICATE — the seam the replay harnesses already
+# extract by), so the two readers cannot drift; a definition that cannot be read is exit 2. The
+# newest comment carrying a marker rules.
 # Offered only under INTAKE_PR_HOLDS=1 (default off: gateway/intake.md step R rules these rows in
 # the report only, until the release of a PR-level hold has a rule — the cron does not set it).
 declare -A PRHOLD_PR=() PRHOLD_SINCE=()
@@ -661,13 +663,18 @@ if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
       || { echo "intake-select: gh pr list failed for $REPO" >&2; exit 2; }
   fi
   printf '%s' "$open_prs" | jq -e 'type == "array"' >/dev/null 2>&1 || { echo "intake-select: the PR list is not a JSON array (not a verdict)" >&2; exit 2; }
+  blocked_on_def="$(awk '$0 == "# >>>REPLAY:blocked-on-jq>>>" { b = 1; next }
+    $0 == "# <<<REPLAY:blocked-on-jq<<<" { b = 0 }
+    b && sub(/^BLOCKED_ON_DEF=\047/, "") && sub(/\047$/, "") { print }' "$ROOT/agents/coordinator-scan.sh" 2>/dev/null)" || blocked_on_def=''
+  case "$blocked_on_def" in
+    'def blocked_on_kind:'*';') ;;
+    *) echo "intake-select: the blocked-on grammar (BLOCKED_ON_DEF in agents/coordinator-scan.sh's blocked-on-jq block) is unreadable" >&2; exit 2;;
+  esac
   # shellcheck disable=SC2016  # a jq program, not a shell expansion
-  holds="$(printf '%s' "$open_prs" | jq -r '
-    def bok: [ split("\n")[] | select(startswith("blocked-on: ")) ] | last // ""
-      | if test("^blocked-on: (human|issue=[0-9]+|pr=[0-9]+)") then capture("^blocked-on: (?<kind>human|issue=[0-9]+|pr=[0-9]+)").kind else "" end;
+  holds="$(printf '%s' "$open_prs" | jq -r "$blocked_on_def"'
     .[] | select((.state // "OPEN") == "OPEN")
-    | ([ .comments[]? | select(((.body // "") | bok) != "") ] | sort_by(.createdAt // "") | last) as $m
-    | select($m != null and (($m.body // "") | bok) == "human")
+    | ([ .comments[]? | select(((.body // "") | blocked_on_kind) != "") ] | sort_by(.createdAt // "") | last) as $m
+    | select($m != null and (($m.body // "") | blocked_on_kind) == "human")
     | .number as $pr
     | ( [ (.closingIssuesReferences // [])[] | .number ]
       + [ (.headRefName // "") | match("(^|[/-])issue-(?<n>[0-9]+)($|[^0-9])"; "g") | .captures[] | select(.name == "n") | .string | tonumber ]
