@@ -22,7 +22,20 @@ spec:
         resources:
           requests: { cpu: "50m", memory: "128Mi" }
           limits: { memory: "256Mi" }
+        # Two webhook pods, one per node (ADR-140 shape): its ExternalSecret/SecretStore validators
+        # are failurePolicy Fail, so a lone pod restarting rejects every write of those kinds.
+        # Selector = the chart's webhook Deployment selector labels.
         webhook:
+          replicaCount: 2
+          podDisruptionBudget: { enabled: true, maxUnavailable: 1 }
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: external-secrets-webhook
+                      app.kubernetes.io/instance: eso-operator
+                  topologyKey: kubernetes.io/hostname
           resources:
             requests: { cpu: "25m", memory: "64Mi" }
             limits: { memory: "128Mi" }

@@ -129,3 +129,20 @@ fix-debounce-decide and specs-review run. The collector has no traces pipeline
 (`argocd/resources/otel-collector/otel-config.yaml`), so the SDK's default `otlp` traces exporter hit
 a 404. After the merge, `count_over_time({namespace="agent-coordinator"} |= "traces export: failed" [1h])`
 reads 0.
+
+## The agent-loop EventSource at two replicas + PDB (fix/platform-two-replicas)
+
+No fixture applies — the same shape as the eventbus entry above. The change sets `spec.replicas: 2`
+and a required `podAntiAffinity` on the `agent-loop` EventSource in
+`agents/coordinator/review-argo.yaml` and adds a `PodDisruptionBudget` beside the EventBus's. These
+are **scheduler and eviction** inputs: how many EventSource pods run, on which nodes, and how many
+may be evicted at once. No webhook endpoint, Sensor, or WorkflowTemplate changes, so every existing
+review fixture asserts exactly what it asserted before and no action stream changes. A fixture here
+could only assert that the manifest contains the fields it contains, which is the cosmetic fixture
+this ratchet exists to prevent.
+
+What pins it is live. Before the merge: `kubectl -n agent-coordinator get pods -l
+eventsource-name=agent-loop -o wide` lists one pod (on wk-04), and `get pdb` shows only
+`eventbus-default-js`. After: two Running pods on two different nodes, `get endpoints
+agent-loop-eventsource-svc` lists both pod IPs, and `agent-loop-eventsource` reports `ALLOWED
+DISRUPTIONS 1`.

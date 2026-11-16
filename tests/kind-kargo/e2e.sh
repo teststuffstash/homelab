@@ -139,6 +139,11 @@ helm_from_app() { # app-yaml [nowait]
   rel=$(yq '.metadata.name' "$f"); vals="$EVID/values-$rel.yaml"
   [ "${2:-}" = nowait ] && wait=()
   yq "$src | .helm.valuesObject // {}" "$f" > "$vals"
+  # KIND-ONLY deviation from SINGLE SOURCE: this cluster has ONE node, and prod's required hostname
+  # anti-affinity (two replicas never share a node) would leave every second replica Pending and
+  # time the install out. Drop the anti-affinity only — replicas, PDBs and everything else stay
+  # exactly what the Application declares.
+  yq -i 'del(.. | select(tag == "!!map" and has("podAntiAffinity")) | .podAntiAffinity)' "$vals"
   local ref="$chart" extra=()
   case "$repo" in
     *://*) extra=(--repo "$repo") ;;
