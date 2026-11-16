@@ -32,6 +32,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: adopt the nameable-split size test (handoff
   `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `gateway/intake.md`; the specs-reviewer rule tally, THEN
   rule #3495 (the escape read's first filing against intake's own rules); a `wait: stalled` re-read kind in `intake-select.sh`.
+  OVERNIGHT TRIAL (operator: "lets see in the morning how it went"): five operator-origin gateway inputs filed 11-16
+  ~21:00Z — #3501 (release on /healthz), #3502 (real vs synthetic traffic), #3503 (dashboard as code), #3504 (outcome
+  alerts), #3505 (claim per change + loop self-metrics, Goal-sized) — and a gateway sitting hand-submitted
+  (`island-intake-bthpn`; the 05:00Z cron follows). MORNING READ: each one's ruling; what was queued, dispatched, built;
+  whether #3308's footprint still held the `gateway/src` ones (the scan fix PR decides that); whether #3505 stalled on a
+  goal-branch cut again.
   IN FLIGHT at wind-down: two subagent PRs — `fix/scan-dead-ride-limbo` (a no-strike goal child decidable from git; a
   writer-less footprint holds no sibling) and `fix/ride-death-terminal-record` (a ride death always leaves its terminal
   record); when the first merges the next scan un-wedges #3303 #3308 #3420 (#3309 follows #3308) — confirm, no hand edits.
