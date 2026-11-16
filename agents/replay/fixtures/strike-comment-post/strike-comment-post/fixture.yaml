@@ -1,0 +1,20 @@
+# THE CONTRACT (islands/launch/specs/outcome.md LAUNCH-OUTCOME-STRIKE-COMMENT): `strike-comment-post`
+# is the terminal record's ONE emitter, run by two callers — the launcher (these rows) and the scan's
+# dead-ride pass (agents/ride-ended.sh; family `dead-ride-record`). On the stats path (finalize ran)
+# it posts exactly what it always posted. On the no-stats path (finalize never ran) it writes the
+# record once per pod lifetime (no `AGENT_STRIKE:` / `KEY-RETRY:` first line naming `session=<pod>`
+# since the pod's creation) and carries the resumable-branch line finalize would have written.
+#
+# Rows:
+#   stats-path-unchanged         stats present → one strike comment, no reads, no resumable line.
+#   no-stats-work-branch         no stats, --work-branch ride → creation read, comment list read,
+#                                strike with `**Resumable branch pushed:** \`<work branch>\``.
+#   no-stats-key-retry-recorded  no stats, the other caller already wrote this pod's KEY-RETRY →
+#                                nothing written.
+name: strike-comment-post
+mode: table
+source: agents/agent-session.sh
+world: base
+parts:
+  - file:bridge.sh
+  - block:strike-comment-post
