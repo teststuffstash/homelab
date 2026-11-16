@@ -18,24 +18,30 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ OPERATOR GATE (2026-11-16): no new island leg until the gateway is self-sufficient on intake, specs and specs review.**
-  The next-leg Goals are written and their branches UNCUT on purpose: retro #3482 (`goal/3482-retro-island-recorded-worlds`,
-  first when the gate lifts), launch #3480, scan #3490. The bar (operator): the island defines and ships its OWN metrics,
-  monitors and improves them — the oracle-fleet#1082 shape (an experiment claim per change: PromQL + pass threshold + baseline,
-  judged on prod after the rollout). PREP DONE 11-16: two mining reports of the oracle stack (observability + delivery loop;
-  intake + feedback loop — verdict per piece, seat prep vs the gateway's Goal, 4 + 9 operator questions) in
-  `~/.claude/oracle-mining-2026-11-16/`. Wedge diagnoses: both rides died ~25 min in with no terminal record (launcher fallback
-  dies with the coordinator session); the scan holds a no-strike goal child as undecidable and its footprint holds siblings —
-  three fixes proposed, none started (operator go-ahead owed). Operator's read: the gateway was a rush-job copy of the old router with
-  specs written after, and it does not improve itself. In flight: two diagnoses of the gateway loop's wedges (#3308 + #3303
-  `agent/in-progress` 3.5 d with no pod; #3309 + #3420 queued, undispatched); PR for 2 replicas + anti-affinity on six
-  platform components (arm inside a window). Jail fault: `devbox run` rewrites `devbox.lock`, the pre-push hook then dies 127 —
-  direct master pushes are blocked; these bookkeeping commits are LOCAL.
+- **⚑ PICKUP (2026-11-16 — the gateway becomes self-sufficient before any new island leg; TICK-LOG 11-16; FU-320).**
+  OPERATOR GATE: retro #3482, launch #3480, scan #3490 are written and their goal branches UNCUT on purpose. Order when it
+  lifts: gateway first, then retro — with retro's own intake doing the work on the schedule. The bar: the island defines and
+  ships its OWN metrics, monitors and improves them (the oracle-fleet#1082 shape: a claim per change — PromQL + pass
+  threshold + baseline — judged on prod). RULED the same evening: (1) Kargo for the gateway POSTPONED — metric claims first,
+  on the existing pin-PR deploy; (2) the shared intake rules are likely their own island soon; (3) oracle is NOT wired into
+  platform intake yet — trial the shape with the specs review in homelab first; (4) where the extracted claim package lives:
+  not now. NEXT (a fresh gateway session, island read only): write the gateway's next Goal from the two mining reports in
+  `~/.claude/oracle-mining-2026-11-16/` (seat prep list vs the loop's Goal are both in there) — release identity on
+  `/healthz`, a synthetic-traffic label, outcome alerts, its dashboard as code (it has none), the claims file + judge, loop
+  self-metrics; and the open question from 11-16: the gateway path dropped the per-session OpenRouter budget key with no
+  ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: adopt the nameable-split size test (handoff
+  `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `gateway/intake.md`; the specs-reviewer rule tally, THEN
+  rule #3495 (the escape read's first filing against intake's own rules); a `wait: stalled` re-read kind in `intake-select.sh`.
+  IN FLIGHT at wind-down: two subagent PRs — `fix/scan-dead-ride-limbo` (a no-strike goal child decidable from git; a
+  writer-less footprint holds no sibling) and `fix/ride-death-terminal-record` (a ride death always leaves its terminal
+  record); when the first merges the next scan un-wedges #3303 #3308 #3420 (#3309 follows #3308) — confirm, no hand edits.
+  JAIL FAULT, unfiled: `devbox run` rewrites `devbox.lock` (`nodejs_22` plugin_version 0.0.6 → 0.0.5, since #3471) and the
+  pre-push hook's devbox wrappers then die 127 after the gate passes — direct master pushes fail; restore the lock after
+  every devbox run. LIVE since 11-16: six platform components at 2 replicas + required anti-affinity + PDB (#3500);
+  pushgateway limit 512Mi (#3496; FU-182 still owns the growth — 4.4k groups). Not done: Alertmanager ×2 waits on
+  duplicate-safe receivers (responder, deploy-pin revert); `RetroReportOverdue` is #3166's stale series, not the pushgateway.
 
-- **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a) #3418 MERGED
-  2026-11-15 22:04Z (specs reviewer approved after the body section); (b) next-leg sittings hand-submitted 2026-11-16 ~17:00Z
-  (`island=scan|launch|retro` over #3436 #3437 #3438, launch also #3408 #3409) — read their rulings; each next Goal puts its gate
-  row in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
+- **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a)+(b) done 11-16 (#3418 merged; the next-leg sittings wrote Goals #3490 #3480 #3482 — see the 11-16 bullet); (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
   #3456's diff base on a goal-branch master merge. OPERATOR: (d) verdicts on Goals #3384 #3390 (assemblies merged)
   and #3389; (e) the agent-runtime half — `agent-finalize` skips the `agent/review` flip on a `no-op` round;
   (f) specs-reviewer rules — operator direction: TALLY which rule rejects the most before any brief or rule change
