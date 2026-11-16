@@ -258,18 +258,14 @@ pod, session-pod or open-PR read keeps every footprint. The footprint is not sco
 
 #### Does an in-progress issue's footprint hold an overlapping queued issue?
 
-In-progress goal child #50 (`Touches: gateway/specs/endpoints/sessions.md,
-gateway/src/agent_gateway/`) beside queued master issue #60 (`Touches: gateway/specs/glossary.md,
-gateway/src/agent_gateway/sessions.py`).
-
-| description | world | #50's writer | probe / label | expect? |
-|---|---|---|---|---|
-| ⚖ no-writer-releases | footprint-hold-writerless/no-writer | none: no pod, no session, no open PR; untouched since 2026-11-13 | all reads succeed | #60 dispatched; a `footprint NOT holding siblings` line names #50 |
-| running-worker-holds | footprint-hold-writerless/running-worker | a Running `agent-homelab-issue-50-r2` pod, agent container running | all reads succeed | #60 held |
-| open-pr-holds | footprint-hold-writerless/open-pr | an open PR `Implements #50` | all reads succeed | #60 held |
-| session-probe-fail-holds | footprint-hold-writerless/no-writer | none | the session-pod read fails | #60 held |
-| recent-holds | footprint-hold-writerless/no-writer | none | #50 updated inside the 900 s guard | #60 held |
-| error-label-holds | footprint-hold-writerless/no-writer | none | #50 also carries `agent/error` | #60 held |
+| description | world | #50 `Touches:` | #60 `Touches:` | #50's writer | #50 updated | #50 labels | probe | expect? |
+|---|---|---|---|---|---|---|---|---|
+| ⚖ no-writer-releases | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none: no pod, no session, no open PR | 2026-11-13 (past the 900 s guard) | `agent/in-progress` | all reads succeed | #60 dispatched; a `footprint NOT holding siblings` line names #50 |
+| running-worker-holds | footprint-hold-writerless/running-worker | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | a Running `agent-homelab-issue-50-r2` pod, agent container running | 2026-11-13 | `agent/in-progress` | all reads succeed | #60 held |
+| open-pr-holds | footprint-hold-writerless/open-pr | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | an open PR `Implements #50` | 2026-11-13 | `agent/in-progress` | all reads succeed | #60 held |
+| session-probe-fail-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | 2026-11-13 | `agent/in-progress` | the session-pod read fails | #60 held |
+| recent-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | inside the 900 s guard | `agent/in-progress` | all reads succeed | #60 held |
+| ⚖ error-label-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | 2026-11-13 | `agent/in-progress` + `agent/error` | all reads succeed | #60 held |
 
 #### Does the footprint entry hold?
 
@@ -436,19 +432,16 @@ line names it, and the issue keeps its ordinary `c4c5-redispatch` unit.
 
 #### Is a goal child with no open PR decidable?
 
-Goal child #329 (`Base: goal/1162-scan`, untouched since 2026-09-01, no worker pod) beside plain
-in-progress #330, which keeps its ordinary `c4c5-redispatch` unit in every row.
-
-| description | world | terminal comment | merged PRs into the base · origin branches | expect? |
-|---|---|---|---|---|
-| strike-resumable | c4c5-ambig-decidable/strike-resumable | `AGENT_STRIKE:` + `Resumable branch pushed: fix/issue-329-loop` | not read | `c4c5-redispatch` with work-branch `fix/issue-329-loop` |
-| strike-no-resumable | c4c5-ambig-decidable/strike-no-resumable | `AGENT_STRIKE:`, no resumable line | not read | held: `undecidable` line, `strike-held` row |
-| ⚖ no-strike | c4c5-ambig-decidable/no-strike | none | none · none | plain `c4c5-redispatch`, no work-branch |
-| goal-abandoned-branch | c4c5-ambig-decidable/goal-abandoned-branch | none | #341 (`fix/issue-327-seam`, `Implements #327`), #340 (`fix/issue-328-probe`) · `fix/issue-329-x`, 1 ahead | `c4c5-redispatch` with work-branch `fix/issue-329-x` |
-| ⚖ goal-own-head-merged | c4c5-ambig-decidable/goal-own-head-merged | none | #342 from `fix/issue-329-loop`, body not citing #329 | held: a line naming #342, then `undecidable` |
-| goal-merged-probe-fail | c4c5-ambig-decidable/no-strike | none | the merged-PR read fails | held: `PROBE_FAILED` line, then `undecidable` |
-| goal-refs-probe-fail | c4c5-ambig-decidable/no-strike | none | none · the branch read fails | held: `PROBE_FAILED` line, then `undecidable` |
-| goal-child-recent | c4c5-ambig-decidable/no-strike | none | not read (#329 updated inside the 900 s guard) | held: `undecidable` line, `strike-held` row |
+| description | world | terminal comment | #329 updated | merged PRs into the base | origin `fix/issue-329-*` branches | expect? |
+|---|---|---|---|---|---|---|
+| strike-resumable | c4c5-ambig-decidable/strike-resumable | `AGENT_STRIKE:` + `Resumable branch pushed: fix/issue-329-loop` | 2026-09-01 | not read | not read | `c4c5-redispatch` with work-branch `fix/issue-329-loop` |
+| strike-no-resumable | c4c5-ambig-decidable/strike-no-resumable | `AGENT_STRIKE:`, no resumable line | 2026-09-01 | not read | not read | held: `undecidable` line, `strike-held` row |
+| ⚖ no-strike | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | none | none | plain `c4c5-redispatch`, no work-branch |
+| goal-abandoned-branch | c4c5-ambig-decidable/goal-abandoned-branch | none | 2026-09-01 | #341 (`fix/issue-327-seam`, `Implements #327`), #340 (`fix/issue-328-probe`) | `fix/issue-329-x`, 1 ahead | `c4c5-redispatch` with work-branch `fix/issue-329-x` |
+| ⚖ goal-own-head-merged | c4c5-ambig-decidable/goal-own-head-merged | none | 2026-09-01 | #342 from `fix/issue-329-loop`, body not citing #329 | not read | held: a line naming #342, then `undecidable` |
+| goal-merged-probe-fail | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | the read fails | not read | held: `PROBE_FAILED` line, then `undecidable` |
+| goal-refs-probe-fail | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | none | the read fails | held: `PROBE_FAILED` line, then `undecidable` |
+| goal-child-recent | c4c5-ambig-decidable/no-strike | none | inside the 900 s guard | not read | not read | held: `undecidable` line, `strike-held` row |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
