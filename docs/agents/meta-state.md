@@ -18,16 +18,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a) scan
-  assembly #3418 — conflict cleared (#3462), code reviewer APPROVED at e37b0f28, specs reviewer CHANGES_REQUESTED
-  21:03Z with four R2 findings, one edit pair: add a `Spec changes:` section to #3418's BODY for the scan-decision.md
-  work #3450 brought (SCAN-CLAUSE-PR hold reversal + five rows, SCAN-CLAUSE-GOAL's nine ⚖ rows + checkpoint prose,
-  SCAN-WAKE-DOORBELL's ⚖ row + warning scope, SCAN-CLAUSE-QUEUED blocker-open; #3450's own body has the text), and
-  mark the blocker-open row ⚖ (a commit through a PR into `goal/3389-scan-island`); the body edit alone re-opens the
-  specs review since #3456;
-  (b) then hand-submit the next-leg sittings `argo -n agent-coordinator submit --from cronworkflow/island-intake -p
-  island=scan|launch|retro` over #3436 #3437 #3438 (launch also rules #3408 #3409); each next Goal puts its gate row
-  in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
+- **⚑ PICKUP (2026-11-15 evening — islands rebuilt from specs; TICK-LOG 11-15 evening; FU-320).** SEAT: (a) #3418 MERGED
+  2026-11-15 22:04Z (specs reviewer approved after the body section); (b) next-leg sittings hand-submitted 2026-11-16 ~17:00Z
+  (`island=scan|launch|retro` over #3436 #3437 #3438, launch also #3408 #3409) — read their rulings; each next Goal puts its gate
+  row in its own place; (c) first live sightings still owed: #3460's selector on a real fix round, #3458's sentinel run,
   #3456's diff base on a goal-branch master merge. OPERATOR: (d) verdicts on Goals #3384 #3390 (assemblies merged)
   and #3389; (e) the agent-runtime half — `agent-finalize` skips the `agent/review` flip on a `no-op` round;
   (f) specs-reviewer rules — operator direction: TALLY which rule rejects the most before any brief or rule change
@@ -43,8 +37,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   (a) what may release a PR-level `blocked-on: human` besides a human comment — until ruled, `INTAKE_PR_HOLDS` stays
   off and a `pr-hold` row is report-only; (b) confirm or revert #3428's split amendment (an input the sitting may not
   close stays open; parts for other islands are verbatim copies). SEAT: (c) trial issues open and unruled — #3425,
-  #3427 (dependency-upgrades), #3426 (agent-loop); #3424 open with its `intake: split` ruling; check the next morning
-  sittings rule them (first unattended `forward`/split read); (d) `intake-select.sh` copies the scan's `blocked-on:`
+  #3427 (dependency-upgrades), #3426 (agent-loop); #3424 open with its `intake: split` ruling; the 11-16 05:00Z sitting ran `island=gateway` only and ruled none —
+  the first unattended `forward`/split read is still owed; (d) `intake-select.sh` copies the scan's `blocked-on:`
   grammar (a second reader) — fold into one definition; (e) `docs/intake/retro.md` still says the island is "not yet
   selectable"; (f) PR #3147's draft `intake-select` spec predates `pr-hold` and `forward`; (g) a plain `forward` and
   the hop cap have run only in the selector tests and one hand-written comment (#3427).
@@ -64,19 +58,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   brief change needs a second sighting; (i) unproven on a real author: the unit lens inside 1200 s, the repair's
   unanswered findings.
 
-- **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The box recreates ci-runners unattended
-  (`apply_vm_recreate` mode `on`); the verb's gate is scoped to the VM since #3372 — the NEXT runner template change is
-  the first run expected to need no seat close (read its journal: window closed by the verb, `management-apply=success`).
-  `MgmtRunnerSeedDrift` live and silent. Handoff inbox unclaimed: oracle ×3 (in-pod kind e2e timeout — its CI half was
-  #3313's mirror env, now live on both runners; KubeJobFailed AnalysisRun exclusion; intake island wiring), circles ×1.
-- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** **#3348** (`minRunners` 1 → 3) merged + synced
-  2026-11-14 09:35Z (live ARS reads 3). On/after **2026-11-21**: re-run the burst-pickup table (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) —
-  PR job pickup by jobs-just-ahead should flatten toward ~3 s; if not, raise again or read the listener. Also expect
-  `GithubCiWallTimeDrift` (week-over-week since #3360) to fire once on homelab push (1.30 at the change) — a true positive
-  about the pre-speedup creep; it clears as the week's median falls. #3362 (reconciler: batched reads, identical output
-  over 168 captured ticks) goes live on the box's next hourly `mgmt-pull` with no rebuild: confirm
-  `mgmt_reconcile_last_run_timestamp_seconds` keeps advancing and `mgmt_reconcile_node_state` stays 13 idle (the
-  baseline at 19:25Z). Delete this bullet after the readout.
+- **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The next ci-runner template change is the first unattended
+  recreate expected to need no seat close (#3372): read its journal for "window closed by the verb" + `management-apply=success`.
+- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** On/after **2026-11-21**: re-run the burst-pickup table
+  (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) — PR job pickup should flatten toward ~3 s after #3348
+  (`minRunners` 3, live); if not, raise again or read the listener. Delete this bullet after the readout.
 
 - **⚑ PICKUP (2026-11-08 — oracle-fleet spec-process mount; operator ruling owed).** oracle-fleet#1026 made `scripts/lib/snippets.sh` set
   `SNIPPETS_RELEASE=<url>` and `SNIPPETS_WHEEL="file://…"`, so `sp_pin_version` (`agents/agent-session.sh`) parses nothing from it (checked against master 11-08; the gateway's still
@@ -89,26 +75,17 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   identities, leg 2 null guards, leg 1 silent skip on a malformed probe) and `pilot/recorder/` (full-shape worlds: bash harness 43/43
   and the strict port 43/43 on the full copy, 0/43 strict on the trimmed original; a missing `author` meant "not Renovate", a missing
   `reviews` meant "unreviewed"). OPERATOR RULINGS OWED: (1) keep the sanitised oracle-fleet recording in the public tree? (2) replace
-  the real updater family's world with the full-shape copy? (3) ~~the ADR-113 revisit — spec-driven strangler per island or keep bash~~ ruled
-  2026-11-14: islands built fresh under `islands/` (TICK-LOG 11-14 → 15); (4) fix bash findings 2/3/4 before any further port. Also in the session's scratchpad only (not on the PR):
+  the real updater family's world with the full-shape copy?  (4) fix bash findings 2/3/4 before any further port. Also in the session's scratchpad only (not on the PR):
   the world-mining catalog (391 item-bearing worlds, most persona fields unknown) — re-mine with `pilot`-style recorder data if wanted.
-- **⚑ PICKUP (2026-11-07 — gateway specs in the oracle #977/#998 shape; TICK-LOG 11-06 ~20:00Z + the night entry).**
-  DONE: process layer #3182 + five page PRs (#3184 #3186 #3187 #3188 #3189) merged; join baseline zero on all five codes for
-  all 34 rules, hygiene baseline empty. (a) DONE 11-07: #3185 admin-merged (4e7101df), both AutoscalingRunnerSets carry `.31`, the ci.yaml step re-landed via #3199 (4cb8e5e6), first master run green with the step executed; NEXT: (b) #3191 (catalog `:free`/`other` fixture rows) rides the loop; (c) the residue list in TICK-LOG (agents/
-  comment citations, metrics.schema enum `order`) is the next gateway PR's.
-- **⚑ HANDOFF PICKUP (2026-11-01 evening; TICK-LOG 11-01 ~17:30Z + ~19:00Z).** DONE: #3138 merged + APPLIED by the operator 2026-11-01 ~20:00Z (2 changed) — `required-approval-goal` reads 2 approvals on oracle-fleet AND homelab (verified live); the first specs-touching goal child now waits for the specs verdict — worth a read on the next goal/** child. OPERATOR: all three ruled 2026-11-02 — the minutark.ee README line LANDED (direct, result handed to oracle via inbox); #3140 = the SECOND RETRO SERIES (ruling + design slice on the issue; oracle's brief + CNP leg asked via inbox `20261102-2130-feedback-triage-series-ruled.md`; homelab's part BUILT: PR #3161 armed, pr-wait running — confirm merged; oracle's answer is in the inbox (`20261106-2238-feedback-triage-oracle-half-numbers.md`, unclaimed): egress oracle-iac#1161 MERGED 11-07; brief oracle-fleet#1011 awaits the operator CODEOWNERS read; gauge oracle-fleet#1013 in fix round 3 (scan wedge fixed by #3197, Refs-linkage by #3198) — once its release reads in Prometheus → hand-fire `argo -n agent-coordinator submit --from cronworkflow/retro-feedback-triage`, unsuspend on a clean landing); FU-218 CLOSED on the static classes (ADR-159, archived). SEAT: #3136 #3137 #3138 #3142 #3143 #3146 #3148 MERGED; confirm the box picked up #3143's `mgmt-rollout-evidence.sh` on its next pull; the first specs review on v0.6.9 (pass-1 `pass1-prior.tsv` line live) is worth a log read; intake rules #3139 #3141 #3145; oracle's loop owns oracle-fleet#994.
-- **⚑ PICKUP (2026-11-01 — gateway platform rollout; TICK-LOG 11-01).** Every platform LLM consumer admits through `agents/gateway-admit.sh` (#3109 #3113 #3114 #3116 #3117 #3120; scout RETIRED #3124); assembly review unpinned + helper rc-3 wording #3135. Goals #1640 + #1769 (+ #1669 #1238 #1680 #1771) CLOSED superseded; #2601 detached standalone. NEXT SESSION (operator): strip `agent/error` from #1941 #2589 #3087 + correct #3095's attribution (#1941 = OOMKill, #2589 never pushed, #3087 pushed); file the agent-runtime half (finalize + launcher classify `Go usage limit exceeded`, today `unknown`); FU-270 pointer += #3105 #3108. RULED: the specs reviewer's untouched-row hygiene blocking → the oracle stack takes it with its other process changes; the shared `agent-coordinator` SA splits per lane only when those lanes get their own island/specs. Goal #3118 admitted, ceiling 0.80.
-- **⚑ S9 (homelab#1985) — re-verified + built 2026-10-31 (TICK-LOG 10-31).** LANDED: #3049 (FU-316), #3050 (doc currency), #3051 + ci.yaml step (#2014 CLOSED), #3052 (FU-305 class fix), #3053 (ADR-158: stack test pins ≤1 minor AHEAD of prod, never behind; sleep-tracking#217 + #184 closed; oracle-fleet#961 queued), #3057 (#1988 base-image half: coordinator previous-tag revert chain, dry-drilled) → agent-coordinator#29 node 26 MAJOR merged 15:41Z on the lens alone → #3059 pin live 15:52Z, 29 workflows clean by 16:15Z — the lane's first proof; #3058 (residual 5: updater hands back every red/changes-requested armed Renovate PR), #3055 (residuals 1+2: chain-agnostic exoneration, grouped-alert fan-out). LEFT: #1988 substrate proposer row (after FU-319's attended bumps); event-gated proofs with the loop (G12b #2995, first lens-gated provider major, first real lock regression, residual 3). OPERATOR: (1) `.github/renovate-global.json` rule for later agent-coordinator base-image majors (snippet in #3057's body); (2) the kps `separateMinorPatch` exemption (G16 resight, #3050 row); (3) a control signal for exonerating the image/provider/chart/coordinator revert chains (fork in docs/designs/fu-1990-workflow-pin-revert.md Part 6); (4) sleep-tracking#199: a red Renovate PR a worker edited — hand back (loses the fix), close, or another fix round (the sleep stack's fix-round lane); (5) sleep-tracking#211 re-review under ADR-158 once Renovate rebases it (box re-ticked 16:12Z). CILIUM 1.20.4 LIVE 17:02Z (FU-319; 24 h soak to 11-01 ~17:00Z). KPS: the #3036 CRD/operator split wedged the kps lease (#3063 → box revert #3066 → #3062 92.11.1; ArgoCD op looping on the postsync hook since 16:56Z, nothing deployed) — forward fix #3065 (92.16.1 = operator v0.94.2) ARMED at wind-down; on its first clean sync the stale lease + MgmtLease*/UpgradeLease*/MgmtBeltCheckFailing clear. If they do not by 11-01: dig `kubectl -n agent-coordinator get cm upgrade-lease-kube-prometheus-stack` + the postsync Job log (TICK-LOG 10-31).
-- **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29 ~17:30Z + the night entry).** ROLLED OUT: snippets
-  v0.6.6 tagged (author brief), homelab#3030 (pins + README links + the homelab claim's `specs` field) and oracle-iac#1151
-  (oracle-fleet claim) MERGED, both claims live; oracle-fleet#958 (pin + process README/conventions links) in the lane.
-  NEXT: (a) retire the restated process text in the recipes — oracle-fleet#947's step 0 (its recipe PR is the oracle
-  seat's) and homelab `.agents/fix.yaml` "Specs are the pinned process" — the card + mount now carry it; (b) read the
-  first gateway/oracle specs ride's log for `→ spec process:` + the mounted card (the `reached` path on live data);
-  (c) the program (snippets as platform infrastructure) = ROADMAP §Backlog / specs-reviewer.md order item 8, NOT STARTED.
-- **LAN certs (FU-297) — DONE 2026-10-26** (detector, cron, carry, guard, rebind all live; `LanCertExpiringSoon`
-  clear). NEXT (FU-297 (1)): schedule `opnsense-cert-carry.sh nx02 pve` on the [management box](../management-box.md) so the BACKUP follows
-  renewals without a seat.
+- **Gateway specs residue (the next gateway PR's; TICK-LOG 11-07).** `metrics.schema.json` `rail_choice_reason` lacks `order`;
+  GW-SESSIONS-ADMIT citations in `agents/gateway-admit.sh` + `agents/agent-session.sh` comments.
+- **Intake owed: #3139, #3141** (unruled since 11-01, no labels).
+- **⚑ PICKUP (2026-11-01 — gateway rollout residue; TICK-LOG 11-01).** Strip `agent/error` from #1941 #2589 #3087 + correct #3095's
+  attribution (#1941 = OOMKill, #2589 never pushed, #3087 pushed); file the agent-runtime half (finalize + launcher classify
+  `Go usage limit exceeded`, today `unknown`); FU-270 pointer += #3105 #3108.
+- **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29).** Retire the restated process text now that the card + mount
+  carry it: homelab `.agents/fix.yaml` "Specs are the pinned process"; oracle-fleet `.agents/fix.yaml` step 0 (the oracle seat's).
+  Read the first specs ride's `→ spec process:` log line.
 - **Security contact + company mail (operator 2026-10-27/28, no FU — pointers below own status).** teststuff.net
   mail is LIVE on Proton (homelab#2974 + #2976 merged + applied); addresses + reasoning in the private teststuff
   repo `docs/company-email.md`. Disclosure policy text = `tofu/github/files/SECURITY.md` (its ONLY home) →
@@ -119,16 +96,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   probe (minutark's copy becomes a consumer); Cloudflare Email Routing for every OTHER domain's
   `security@`/`privacy@`/`abuse@`/`postmaster@`; teststuff.net DMARC `p=quarantine` → `p=reject` once the
   `dmarc@` reports show only Proton sending.
-- **OPNsense 26.7.7 on the test VM (whoever is running that trial — baseline snapshot re-taken 2026-10-26 ~20:40Z,
-  unrecorded):** against it the pinned `oxlorg.opnsense 26.1.11` FAILS the bgp play's neighbor task ("Failed field:
-  'multiprotocol'", os-frr 2.0_2) and the haproxy play timed out — seen by the #2940 gate's BASE step. Prod stays
-  26.7.5 until the collection (Galaxy latest IS 26.1.11; upstream O-X-L/ansible-opnsense#488 covered 26.7 only)
-  handles it or the neighbor task moves to `raw`. Needs an owner + a record before any prod firmware step.
-- **⚑ PICKUP (2026-10-28 — minio-client → rclone; TICK-LOG 10-28).** Workers on oracle-fleet#939 + circles#135 (mc→rclone,
-  scripts/tests only). When each merges: seat PR in that repo dropping `minio-client` from devbox.json/lock (codeowner-author
-  per `classify_touches`) + oracle-fleet's ci.yaml `mc` comment — then the weekly devbox-update's stack legs go green.
-  circles#135 r1/r2 were the opencode 2.x stdin hang (#2998); confirm r3 actually progresses. G12b proof (#2995) FAILED on #3233 2026-11-10 (the ride exited
-  clean on an armed PR) — fix in #3241 / ADR-162; re-prove on the next red or stale ARMED automerge PR whose ride carries `bump-class=automerge` and the FU-187 detector (operator to pick).
+- **⚑ PICKUP (2026-10-28 — minio-client → rclone; TICK-LOG 10-28).** oracle-fleet#939 done — owed: a PR dropping `minio-client` from
+  oracle-fleet `devbox.json`/lock + the `ci.yaml` `mc` comment. circles#135 stalled on `agent/error` since 10-28 (3 strikes,
+  homelab#3002, no r3): un-wedge, then the same drop in circles. G12b (#2995) re-prove after #3241/ADR-162 on the next red or
+  stale ARMED automerge PR whose ride carries `bump-class=automerge` (operator to pick).
 - **⚑ MORNING READS (2026-10-26, operator) — two HELD PRs + one direct push landed overnight (TICK-LOG 10-25):**
   (1) **homelab#2902** Kargo prod install — MERGED + live 2026-10-28, see the KARGO bullet below.
   (2) **homelab#2911** component checker @ 1b720e68 (CI in progress at wind-down) — `scripts/component-check.sh` renders every
