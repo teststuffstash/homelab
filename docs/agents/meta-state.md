@@ -110,7 +110,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ KARGO (LIVE since 10-28).** Seat: `kargo-write-guard` is still `[Warn, Audit]` — the Deny PR once the VAP audit reads clean.
   #2798 (draft): close after the operator rules on `platform-kind-kargo.yaml` (FU-318 c). Residuals: FU-317, FU-318 (a)/(c).
 - **⚑ ESCALATED → operator:** #2588 is `agent/error` again after the 10-31 re-queue. #2589 (`agent/in-progress` + `agent/error`)
-  must land before stint #1418 closes.
+  must land before [stint](chainless-redesign.md) #1418 closes.
 - **wk-metal-04 (Big Data):** the CPU x16 slot stays EMPTY (corrupts data — #2926 #2928 #2931). Seat one-off: read `garage layout
   history` = one version (the last unread item from the 10-26 garage-0 rebuild; needs an exec).
 - **⚑ wk-metal-04 on Big Data (#2758).** Watch the MX500's lifetime used (attr 202 = 34 %, flat since 10-20; no alert watches it).
