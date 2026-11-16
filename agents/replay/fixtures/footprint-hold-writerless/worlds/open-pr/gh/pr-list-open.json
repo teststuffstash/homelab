@@ -1,0 +1,9 @@
+[
+  {
+    "number": 70,
+    "title": "gateway: tiers admit at session open",
+    "headRefName": "fix/issue-50-tiers-admit",
+    "baseRefName": "goal/40-runtime-tiers",
+    "body": "Implements #50\n\nThe sessions door admits by tier."
+  }
+]

@@ -31,7 +31,7 @@ grammar, the hold report line and the clause enum.
 | [SCAN-CLAUSE-OWNERSHIP](#scan-clause-ownership) | `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `clause-coverage`) |
 | [SCAN-CLAUSE-QUEUED](#scan-clause-queued) | `unit` (4/5-field) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `queued-derivation`, `queued-classification`, `review-only-label-combinations`) |
 | [SCAN-HOLD-STRUCTURAL](#scan-hold-structural) | `hold.kind = structural` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-guarded`, `scan-governance`, `classify-touches-repo`) |
-| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `footprint-entry-split`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
+| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `footprint-entry-split`, `footprint-hold-writerless`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
 | [SCAN-CLAUSE-PR](#scan-clause-pr) | `unit` (3-field), `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `changes-requested`, `merge-conflict`, `unarmed-major`) |
 | [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
 | [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `done-phantom-belt`) |
@@ -228,7 +228,8 @@ declaration of its guarded set can be read; `expect?` = held or dispatched, and 
 ### SCAN-HOLD-TRANSIENT
 
 New work is held, one report line each and no label, while: its footprint overlaps an
-in-progress issue's (`fp_conflict_multi`, ADR-097 — Goal-class units exempt, they write no diff);
+in-progress issue's (`fp_conflict_multi`, ADR-097 — Goal-class units exempt, they write no diff)
+that still has a writer;
 the repo has `REPO_MAX_WIP` (3) live workers; a `coordinator-<repo>-issue-<n>` session pod is
 Running for it (FU-146); or the repo carries `REPO_PR_CAP` (3) armed PRs on the **same base** as
 the issue's `Base:` (#849 — a master pile never holds a `goal/**` issue; no `Base:` line means the default branch). In-flight recovery
@@ -241,7 +242,34 @@ worker" is a pod (`live_worker_pod_count`, `kube.sh`) whose phase is not `Succee
 whose `agent` container has not terminated, and — when it is `Pending` — that is schedulable or
 younger than 30 s.
 
+The hold keeps two writers off one surface, so an in-progress issue with **no live writer** holds
+nothing: no live worker pod for it (the `issue-<n>-` pods, counted as above), no
+`coordinator-<repo>-issue-<n>` session pod, no open PR strongly linking it (the one strong-link
+predicate, any base), untouched past `C4C5_PERSIST_S` (900 s — the window between the dispatch's
+label write and its pod never releases), and neither `agent/error` nor `agent/blocked` (a human
+owns those). Its footprint leaves the hold set for that pass with one report line naming it; its
+own phantom handling ([SCAN-CLAUSE-PHANTOM](#scan-clause-phantom)) is unchanged. ⚖ Releasing is
+the judgment: a writer-less label otherwise holds every overlapping sibling for as long as the
+label stands (two goal children held a master sibling 3.5 days, 2026-11-16), while a wrong release
+costs at worst two concurrent PRs on one path, which the merge path already absorbs. An unreadable
+pod, session-pod or open-PR read keeps every footprint. The footprint is not scoped by `Base:`.
+
 **World:** per-row constructed state.
+
+#### Does an in-progress issue's footprint hold an overlapping queued issue?
+
+In-progress goal child #50 (`Touches: gateway/specs/endpoints/sessions.md,
+gateway/src/agent_gateway/`) beside queued master issue #60 (`Touches: gateway/specs/glossary.md,
+gateway/src/agent_gateway/sessions.py`).
+
+| description | world | #50's writer | probe / label | expect? |
+|---|---|---|---|---|
+| ⚖ no-writer-releases | footprint-hold-writerless/no-writer | none: no pod, no session, no open PR; untouched since 2026-11-13 | all reads succeed | #60 dispatched; a `footprint NOT holding siblings` line names #50 |
+| running-worker-holds | footprint-hold-writerless/running-worker | a Running `agent-homelab-issue-50-r2` pod, agent container running | all reads succeed | #60 held |
+| open-pr-holds | footprint-hold-writerless/open-pr | an open PR `Implements #50` | all reads succeed | #60 held |
+| session-probe-fail-holds | footprint-hold-writerless/no-writer | none | the session-pod read fails | #60 held |
+| recent-holds | footprint-hold-writerless/no-writer | none | #50 updated inside the 900 s guard | #60 held |
+| error-label-holds | footprint-hold-writerless/no-writer | none | #50 also carries `agent/error` | #60 held |
 
 #### Does the footprint entry hold?
 

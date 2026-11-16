@@ -1,0 +1,9 @@
+[
+  {
+    "number": 50,
+    "title": "gateway: tiers admit at session open",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/build"}],
+    "body": "---\nTouches: gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/\nBase: goal/40-runtime-tiers\nOrigin: teststuffstash/homelab#40\n---\n## Deliverable\nthe goal child whose ride died with no terminal record\n",
+    "updatedAt": "2026-11-13T02:00:56Z"
+  }
+]

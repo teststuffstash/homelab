@@ -2079,12 +2079,17 @@ EOF_BBM
     # the legacy line-anchored union — the same `flatten | join(",")` semantics this clause had).
     # A body the parser REFUSES stays `*` (exclusive, conflicts with everything): fail-closed is
     # the safe side here, and the malformed pass above already reported it by number.
-    busy_fps=""
+    # `busy_fp_rows` keeps the issue number beside each footprint (`<n>|<touches>`, one per line)
+    # so the writer-less release below (`busy-fps-writerless`) can drop one issue's entry once the
+    # pod and PR reads are in hand; `busy_fps` itself is unchanged until then.
+    busy_fps=""; busy_fp_rows=""
     while IFS='|' read -r _bfn _bfb; do
       [ -n "$_bfn" ] || continue
       _bft="$(ib_get Touches "${repo:-}#${_bfn}" "$(ib_body "$_bfb")")" || _bft=""
       [ -n "$_bft" ] || _bft="*"
       busy_fps="${busy_fps}${_bft}
+"
+      busy_fp_rows="${busy_fp_rows}${_bfn}|${_bft}
 "
     done <<EOF_BUSYFPS
 $(ib_rows "$(printf '%s' "$inprog" | jq '[.[] | select(((.labels|map(.name))|index("task/goal"))|not)]' 2>/dev/null || echo '[]')")
@@ -2425,12 +2430,15 @@ EOF
     # WIPPODS_JSON MUST reset with them (FU-146, 2026-08-06): it is only assigned inside the elif
     # below, so a repo with no dispatchable work leaves the PREVIOUS repo pods in scope. Nothing
     # read it across repos before the per-item hold did; resetting closes that hole at the source.
-    wip_busy=""; wip_allow=1; WIPPODS_JSON=""
+    # `wippods_ok` = the pod list was read AND parsed. The WIP ceiling keeps its fail-open
+    # normalization below; the writer-less footprint release (`busy-fps-writerless`) needs a read
+    # it can trust, so it keys off this flag and holds every footprint without it (rule #6).
+    wip_busy=""; wip_allow=1; WIPPODS_JSON=""; wippods_ok=""
     if [ -z "$dispatchable" ]; then
       :
     elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
-      jq -e . >/dev/null 2>&1 <<<"${WIPPODS_JSON:-null}" || WIPPODS_JSON='{"items":[]}'
+      if jq -e '.items | type == "array"' >/dev/null 2>&1 <<<"${WIPPODS_JSON:-null}"; then wippods_ok=1; else WIPPODS_JSON='{"items":[]}'; fi
       # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
       # terminated but whose sidecar lives (pre-native-sidecar dind) is phase=Running yet holds
       # no work — it wedges this hold AND the launcher WIP=1 forever. Reap when the agent
@@ -2473,12 +2481,14 @@ EOF
     # (rule #6, exactly what the wip_busy else-branch above does).
     # `sess_busy` = newline-joined item keys (issue-N / pr-N) with a live session pod; `sess_nums`
     # = space-joined ISSUE numbers only, for the c4c5 selector's `$sess` exclusion.
-    sess_busy=""; sess_nums=""
+    # `sess_ok` = the session-pod list was read AND parsed (read by `busy-fps-writerless`, which
+    # holds every footprint without it — a dead probe must not read as "no session riding it").
+    sess_busy=""; sess_nums=""; sess_ok=""
     if [ -z "$dispatchable" ]; then
       :
     elif SESSPODS="$("$KUBECTL" $KUBE -n "${LOOP_NS:-agent-coordinator}" get pods -l app=agent-coordinator \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
-      jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}" || SESSPODS='{"items":[]}'
+      if jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}"; then sess_ok=1; else SESSPODS='{"items":[]}'; fi
       # Full-name match, not a bare prefix: `coordinator-circles-` must not capture
       # `coordinator-circles-iac-…` (a repo name that is another's prefix).
       sess_busy="$(printf '%s' "$SESSPODS" | jq -r --arg repo "$repo" '
@@ -2494,6 +2504,56 @@ EOF
       grep -qx -- "$1" <<< "$sess_busy"
     }
     # <<<REPLAY:session-belt<<<
+    # >>>REPLAY:busy-fps-writerless>>>
+    # A WRITER-LESS in-progress issue holds no sibling (the dead-ride limbo, 2026-11-16: goal
+    # children #3303/#3308 lost their worker pods ~25 min into the ride with no terminal record,
+    # and #3308's footprint held the unrelated queued #3420 for 3.5 days). The ADR-097 hold exists
+    # to keep two WRITERS off one surface; an issue with nobody writing has no write surface to
+    # protect. The predicate is the scan's own no-live-writer test, ridden, not re-derived:
+    #   • no live worker pod for the issue — `live_worker_pod_count` (agents/kube.sh) over the
+    #     WIP probe's list narrowed to `issue-<n>-` pods (the C4/C5 selector's naming key);
+    #   • no open PR strongly linking it — `strong_link_count` ($STRONG_LINK_JQ), any base;
+    #   • no coordinator item session riding it — `sess_holds` (FU-146: the session applies the
+    #     label, then triages for minutes before the worker pod exists);
+    #   • quiet past C4C5_PERSIST_S (`updatedAt`) — the same transition-race guard the phantom
+    #     belt uses, so the window between label write and pod create never releases;
+    #   • not `agent/error` / `agent/blocked` — a human owns those, and an errored issue keeps
+    #     its footprint by design (the inprog-selector comment above).
+    # FAIL CLOSED: an unreadable pod list, session list or open-PR list, an unreadable timestamp,
+    # or a jq error keeps EVERY footprint exactly as before. Only the sibling hold changes — the
+    # issue's own C4/C5 report, belt, unit and class row are untouched (it stays in $inprog), and
+    # the footprint is NOT scoped by base (a separate design call).
+    if [ -n "${wippods_ok:-}" ] && [ -n "${sess_ok:-}" ] && [ "${prsjson_fetch_rc:-1}" -eq 0 ] && [ -n "${busy_fp_rows:-}" ]; then
+      bw_now="$(date -u +%s)"; bw_fps=""
+      while IFS='|' read -r _bwn _bwt; do
+        [ -n "$_bwn" ] || continue
+        _bwkeep=1
+        _bwpods="$(jq -c --arg p "issue-${_bwn}-" '{items: [.items[]? | select((.metadata.name // "") | contains($p))]}' <<<"$WIPPODS_JSON" 2>/dev/null)" || _bwpods=""
+        _bwlive=""; [ -n "$_bwpods" ] && _bwlive="$(live_worker_pod_count "$_bwpods")"
+        _bwpr="$(strong_link_count "$_bwn" "$prsjson" "")" || _bwpr=""
+        _bwst="$(jq -r --argjson n "$_bwn" --argjson now "$bw_now" '
+            [.[] | select(.number == $n)] | first // {}
+            | ((.labels // []) | map(.name)) as $L
+            | ((.updatedAt // "") | fromdateiso8601? // null) as $s
+            | "\(if $s == null then -1 else ($now - $s) end)|\(($L | index("agent/error")) != null or ($L | index("agent/blocked")) != null)"' <<<"$inprog" 2>/dev/null)" || _bwst=""
+        _bwage="${_bwst%%|*}"; _bwhuman="${_bwst#*|}"
+        case "$_bwage" in ''|*[!0-9-]*) _bwage=-1;; esac
+        if [ "${_bwlive:-x}" = 0 ] && [ "${_bwpr:-x}" = 0 ] && [ "$_bwhuman" = false ] \
+           && [ "$_bwage" -ge "$C4C5_PERSIST_S" ] && ! sess_holds "issue-${_bwn}"; then
+          _bwkeep=""
+        fi
+        if [ -n "$_bwkeep" ]; then
+          bw_fps="${bw_fps}${_bwt}
+"
+        else
+          orphans="${orphans}[$repo] ⏳ footprint NOT holding siblings — in-progress issue #${_bwn} has no live writer (no worker pod, no item session, no open PR; untouched past the $(( C4C5_PERSIST_S / 60 ))m guard): its \`Touches:\` (${_bwt}) leaves the ADR-097 hold set this pass. Its own C4/C5 handling is unchanged.\n"
+        fi
+      done <<EOF_BUSYFPS_WL
+${busy_fp_rows}
+EOF_BUSYFPS_WL
+      busy_fps="$bw_fps"
+    fi
+    # <<<REPLAY:busy-fps-writerless<<<
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
     # stack-pooled there, so carry the per-repo value out of the loop).
     wipmap="${wipmap}${repo} ${wip_allow}\n"
