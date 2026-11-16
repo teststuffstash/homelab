@@ -10,6 +10,10 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-313** *(archived 2026-11-16)* — **OpenCode Go key: 30-day key → service-account key.** The operator minted a 1-year
+      service-account key (permission `models: request` only) and rolled it 2026-11-16 (ExternalSecret synced 18:43:59Z,
+      `agent-gateway` + `openrouter-proxy` restarted 18:44Z). Probed with the deployed key: `GET /console/api/v2/config` 200,
+      `/zen/go/v1/chat/completions` 200. Expiry ≈ 2027-11; the pre-expiry warning stays FU-156's declared half.
 - **FU-218** *(archived 2026-11-02)* — **ARC runner memory: a node-sized limit, not node removal.** Closed on the static
       class pair (#3132, LIVE 2026-11-01: `normal` 3Gi + 1Gi dind, `large` 12Gi on nx-01 max 2, oracle-fleet `ci` on
       large) — ADR-159; option A's resize controller (spiked PR#2185) is not built, nx-01's free DIMM slots retire the

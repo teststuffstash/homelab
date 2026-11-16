@@ -294,7 +294,11 @@ Unverified: <what you did not read on the wire — "verify during implementation
   `verify during implementation` (rule 10), never asserted.
 - **Quote before you author.** Where an existing row, a sibling's row or the page's own text
   already says it, copy it verbatim and name where it came from; author a new table only for what
-  no row says yet.
+  no row says yet. A quoted row is still read. Before it goes into the body, read it yourself as
+  the rows lens will — the author's own reading, not a lens run: description covered, fixture and
+  patch names ignored, its input cells and the requirement prose must decide every expected cell.
+  Where they do not, `## Spec changes` (`## Key rows` on an island without `specs/`) carries the
+  missing input column or prose clause, and the body does not call that row unchanged.
 - **An exception names the universal it breaks.** When a row adds an exception to a universal
   sentence elsewhere (a sibling's Deliverable, requirement prose, a glossary row), the body names
   that sentence's edit and its file is in `Touches`.
