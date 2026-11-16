@@ -2,50 +2,50 @@
   "lockfile_version": "1",
   "packages": {
     "claude-code@latest": {
-      "last_modified": "2026-11-01T00:57:29Z",
-      "resolved": "github:NixOS/nixpkgs/d357a2b54f0b6dc4aeb4e993190a52cf151b6f24#claude-code",
+      "last_modified": "2026-11-13T07:26:56Z",
+      "resolved": "github:NixOS/nixpkgs/e126e9e73c335158ff8279ac14d5f4afec153716#claude-code",
       "source": "devbox-search",
-      "version": "2.1.316",
+      "version": "2.1.322",
       "systems": {
         "aarch64-darwin": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/aqk7nfa81s27wiamgwpgc362xdr1hhpl-claude-code-2.1.316",
+              "path": "/nix/store/pmg405cp6ykczkqvyv2spqm905zhkpg6-claude-code-2.1.322",
               "default": true
             }
           ],
-          "store_path": "/nix/store/aqk7nfa81s27wiamgwpgc362xdr1hhpl-claude-code-2.1.316"
+          "store_path": "/nix/store/pmg405cp6ykczkqvyv2spqm905zhkpg6-claude-code-2.1.322"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/hg8a2p0vj75bshrkv50v0i47i2z3lsai-claude-code-2.1.316",
+              "path": "/nix/store/6kljj784nl1y0x7qcbhc75wjr9vcha3f-claude-code-2.1.322",
               "default": true
             }
           ],
-          "store_path": "/nix/store/hg8a2p0vj75bshrkv50v0i47i2z3lsai-claude-code-2.1.316"
+          "store_path": "/nix/store/6kljj784nl1y0x7qcbhc75wjr9vcha3f-claude-code-2.1.322"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/pw9hhdspm85i5ljy9cb965nz517qk9f7-claude-code-2.1.316",
+              "path": "/nix/store/1k0q3n9djm1dsbqbvbxfaqvnnskgbd4a-claude-code-2.1.322",
               "default": true
             }
           ],
-          "store_path": "/nix/store/pw9hhdspm85i5ljy9cb965nz517qk9f7-claude-code-2.1.316"
+          "store_path": "/nix/store/1k0q3n9djm1dsbqbvbxfaqvnnskgbd4a-claude-code-2.1.322"
         }
       }
     },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "last_modified": "2026-11-02T01:28:21Z",
-      "resolved": "github:NixOS/nixpkgs/5c9de89ec55bff981cb8da1a4ee92b10f1438ffc?lastModified=1793582901&narHash=sha256-WDValiY9se78X2Wh7aWWaq%2Fc7HN29U555%2BOKbHEzYrw%3D"
+      "last_modified": "2026-11-14T08:26:23Z",
+      "resolved": "github:NixOS/nixpkgs/5d2b81a7a3be3e2f832879028e4d60abbf58e9a0?lastModified=1794644783&narHash=sha256-3GnIGIy15bMduoS9RnWqKTmsJLWThla42UFtm0S7%2Bus%3D"
     },
     "kind@latest": {
-      "last_modified": "2026-10-24T11:44:37Z",
-      "resolved": "github:NixOS/nixpkgs/d3b13ad75cc492690728f9307e443dec9ef9a20e#kind",
+      "last_modified": "2026-11-13T07:26:56Z",
+      "resolved": "github:NixOS/nixpkgs/e126e9e73c335158ff8279ac14d5f4afec153716#kind",
       "source": "devbox-search",
       "version": "0.33.0",
       "systems": {
@@ -53,31 +53,31 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/mdjc40gwimfiaxgxsyfbnl2abrd6zplz-kind-0.33.0",
+              "path": "/nix/store/jfppm6jbi9khz2fvkzylglx07kpb200d-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/mdjc40gwimfiaxgxsyfbnl2abrd6zplz-kind-0.33.0"
+          "store_path": "/nix/store/jfppm6jbi9khz2fvkzylglx07kpb200d-kind-0.33.0"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/brv8i0am9d0ibizipzk45a0lk7cnxqqh-kind-0.33.0",
+              "path": "/nix/store/gsl37l0zg777bgvqpsbql2if18n31acy-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/brv8i0am9d0ibizipzk45a0lk7cnxqqh-kind-0.33.0"
+          "store_path": "/nix/store/gsl37l0zg777bgvqpsbql2if18n31acy-kind-0.33.0"
         },
         "x86_64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/frggqlpvn9ckaa65062jx59vpmdmjgc1-kind-0.33.0",
+              "path": "/nix/store/4vypvrzp83fzdp232mknm1mlp43x9nzb-kind-0.33.0",
               "default": true
             }
           ],
-          "store_path": "/nix/store/frggqlpvn9ckaa65062jx59vpmdmjgc1-kind-0.33.0"
+          "store_path": "/nix/store/4vypvrzp83fzdp232mknm1mlp43x9nzb-kind-0.33.0"
         }
       }
     },
