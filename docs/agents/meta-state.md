@@ -22,7 +22,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   The next-leg Goals are written and their branches UNCUT on purpose: retro #3482 (`goal/3482-retro-island-recorded-worlds`,
   first when the gate lifts), launch #3480, scan #3490. The bar (operator): the island defines and ships its OWN metrics,
   monitors and improves them — the oracle-fleet#1082 shape (an experiment claim per change: PromQL + pass threshold + baseline,
-  judged on prod after the rollout). Operator's read: the gateway was a rush-job copy of the old router with
+  judged on prod after the rollout). PREP DONE 11-16: two mining reports of the oracle stack (observability + delivery loop;
+  intake + feedback loop — verdict per piece, seat prep vs the gateway's Goal, 4 + 9 operator questions) in
+  `~/.claude/oracle-mining-2026-11-16/`. Wedge diagnoses: both rides died ~25 min in with no terminal record (launcher fallback
+  dies with the coordinator session); the scan holds a no-strike goal child as undecidable and its footprint holds siblings —
+  three fixes proposed, none started (operator go-ahead owed). Operator's read: the gateway was a rush-job copy of the old router with
   specs written after, and it does not improve itself. In flight: two diagnoses of the gateway loop's wedges (#3308 + #3303
   `agent/in-progress` 3.5 d with no pod; #3309 + #3420 queued, undispatched); PR for 2 replicas + anti-affinity on six
   platform components (arm inside a window). Jail fault: `devbox run` rewrites `devbox.lock`, the pre-push hook then dies 127 —
