@@ -31,10 +31,10 @@ grammar, the hold report line and the clause enum.
 | [SCAN-CLAUSE-OWNERSHIP](#scan-clause-ownership) | `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `clause-coverage`) |
 | [SCAN-CLAUSE-QUEUED](#scan-clause-queued) | `unit` (4/5-field) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `queued-derivation`, `queued-classification`, `review-only-label-combinations`) |
 | [SCAN-HOLD-STRUCTURAL](#scan-hold-structural) | `hold.kind = structural` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-guarded`, `scan-governance`, `classify-touches-repo`) |
-| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `footprint-entry-split`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
+| [SCAN-HOLD-TRANSIENT](#scan-hold-transient) | `hold.kind = transient` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `footprint-entry-split`, `footprint-hold-writerless`, `pr-cap-per-base`, `session-belt`, `live-worker-pod`) |
 | [SCAN-CLAUSE-PR](#scan-clause-pr) | `unit` (3-field), `clause` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `changes-requested`, `merge-conflict`, `unarmed-major`) |
 | [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
-| [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `done-phantom-belt`) |
+| [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `c4c5-ambig-decidable`, `done-phantom-belt`) |
 | [SCAN-CLAUSE-FLEET](#scan-clause-fleet) | — | 🚧 WIP → #3448 (fixture: `fleet-reader-rekey`) · ⚑ gap (2026-11-15, PR #3450 → work #3448): reads the old proxy's `/router-status` |
 | [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
 | [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-lane-walk`) |
@@ -228,7 +228,8 @@ declaration of its guarded set can be read; `expect?` = held or dispatched, and 
 ### SCAN-HOLD-TRANSIENT
 
 New work is held, one report line each and no label, while: its footprint overlaps an
-in-progress issue's (`fp_conflict_multi`, ADR-097 — Goal-class units exempt, they write no diff);
+in-progress issue's (`fp_conflict_multi`, ADR-097 — Goal-class units exempt, they write no diff)
+that still has a writer;
 the repo has `REPO_MAX_WIP` (3) live workers; a `coordinator-<repo>-issue-<n>` session pod is
 Running for it (FU-146); or the repo carries `REPO_PR_CAP` (3) armed PRs on the **same base** as
 the issue's `Base:` (#849 — a master pile never holds a `goal/**` issue; no `Base:` line means the default branch). In-flight recovery
@@ -241,7 +242,30 @@ worker" is a pod (`live_worker_pod_count`, `kube.sh`) whose phase is not `Succee
 whose `agent` container has not terminated, and — when it is `Pending` — that is schedulable or
 younger than 30 s.
 
+The hold keeps two writers off one surface, so an in-progress issue with **no live writer** holds
+nothing: no live worker pod for it (the `issue-<n>-` pods, counted as above), no
+`coordinator-<repo>-issue-<n>` session pod, no open PR strongly linking it (the one strong-link
+predicate, any base), untouched past `C4C5_PERSIST_S` (900 s — the window between the dispatch's
+label write and its pod never releases), and neither `agent/error` nor `agent/blocked` (a human
+owns those). Its footprint leaves the hold set for that pass with one report line naming it; its
+own phantom handling ([SCAN-CLAUSE-PHANTOM](#scan-clause-phantom)) is unchanged. ⚖ Releasing is
+the judgment: a writer-less label otherwise holds every overlapping sibling for as long as the
+label stands (two goal children held a master sibling 3.5 days, 2026-11-16), while a wrong release
+costs at worst two concurrent PRs on one path, which the merge path already absorbs. An unreadable
+pod, session-pod or open-PR read keeps every footprint. The footprint is not scoped by `Base:`.
+
 **World:** per-row constructed state.
+
+#### Does an in-progress issue's footprint hold an overlapping queued issue?
+
+| description | world | #50 `Touches:` | #60 `Touches:` | #50's writer | #50 updated | #50 labels | probe | expect? |
+|---|---|---|---|---|---|---|---|---|
+| ⚖ no-writer-releases | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none: no pod, no session, no open PR | 2026-11-13 (past the 900 s guard) | `agent/in-progress` | all reads succeed | #60 dispatched; a `footprint NOT holding siblings` line names #50 |
+| running-worker-holds | footprint-hold-writerless/running-worker | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | a Running `agent-homelab-issue-50-r2` pod, agent container running | 2026-11-13 | `agent/in-progress` | all reads succeed | #60 held |
+| open-pr-holds | footprint-hold-writerless/open-pr | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | an open PR `Implements #50` | 2026-11-13 | `agent/in-progress` | all reads succeed | #60 held |
+| session-probe-fail-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | 2026-11-13 | `agent/in-progress` | the session-pod read fails | #60 held |
+| recent-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | inside the 900 s guard | `agent/in-progress` | all reads succeed | #60 held |
+| ⚖ error-label-holds | footprint-hold-writerless/no-writer | `gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/` | `gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py` | none | 2026-11-13 | `agent/in-progress` + `agent/error` | all reads succeed | #60 held |
 
 #### Does the footprint entry hold?
 
@@ -375,6 +399,22 @@ reconciles `agent/review` (IL-T27) and a closed issue's stale `agent/blocked`/`a
 comment, never a quote — parks the issue `agent/blocked` (IL-T26). Any unreadable probe skips the
 clause instead of waking.
 
+A **goal child** (`Base: goal/**`) is not reconciled that way, because "no open PR" cannot tell
+abandoned work from work merged into the goal branch by a PR that did not cite it (the closing
+keyword is inert off the default branch — circles#36). It is held, with one `undecidable` report
+line and a `strike-held` class row, unless it is decidable:
+(a) its newest `AGENT_STRIKE:`/`AGENT_REPORT:` comment names a `Resumable branch pushed:` branch —
+`c4c5-redispatch` resuming that branch (FU-199); a terminal comment without one stays held; or
+(b) it has **no terminal comment at all**, no non-terminal worker pod, has been untouched past
+`C4C5_PERSIST_S`, and the merged PRs into its own `Base:` (read for that base, up to 100 — a full
+page holds) carry none of: a head `fix/issue-<n>-*`, a strong link, a bare `#<n>` mention. It is
+then abandoned: `c4c5-redispatch` resuming the origin `fix/issue-<n>-*` branch with the most
+commits ahead of the base, or a plain `c4c5-redispatch` when none is ahead. ⚖ The issue's own
+head merged into the base holds, with a line naming that PR: it is finished work whose link is
+missing, and re-riding it would put a duplicate armed PR on a protected goal branch; every other
+merged PR into the base is a sibling's and says nothing about this issue. An unreadable merged-PR,
+branch or compare read holds with a `PROBE_FAILED` line.
+
 **World:** `verdict` / `inert` (`c4c5-infeasible`), recorded pod lists. A probe that cannot read
 an issue's comments skips the park for that issue: nothing is written, one `PROBE_FAILED` report
 line names it, and the issue keeps its ordinary `c4c5-redispatch` unit.
@@ -389,6 +429,19 @@ line names it, and the issue keeps its ordinary `c4c5-redispatch` unit.
 | quoted-inert | inert | the same text quoted mid-body | no park |
 | probe-fail | inert | `STUB_GH=fail` | no write; a `PROBE_FAILED` report line, #66 keeps its `c4c5-redispatch` unit |
 | done-phantom-belt | done-phantom-belt | closed issue, stale `agent/review`, merged PR mentions it, persisted | `agent/done` |
+
+#### Is a goal child with no open PR decidable?
+
+| description | world | terminal comment | #329 updated | merged PRs into the base | origin `fix/issue-329-*` branches | expect? |
+|---|---|---|---|---|---|---|
+| strike-resumable | c4c5-ambig-decidable/strike-resumable | `AGENT_STRIKE:` + `Resumable branch pushed: fix/issue-329-loop` | 2026-09-01 | not read | not read | `c4c5-redispatch` with work-branch `fix/issue-329-loop` |
+| strike-no-resumable | c4c5-ambig-decidable/strike-no-resumable | `AGENT_STRIKE:`, no resumable line | 2026-09-01 | not read | not read | held: `undecidable` line, `strike-held` row |
+| ⚖ no-strike | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | none | none | plain `c4c5-redispatch`, no work-branch |
+| goal-abandoned-branch | c4c5-ambig-decidable/goal-abandoned-branch | none | 2026-09-01 | #341 (`fix/issue-327-seam`, `Implements #327`), #340 (`fix/issue-328-probe`) | `fix/issue-329-x`, 1 ahead | `c4c5-redispatch` with work-branch `fix/issue-329-x` |
+| ⚖ goal-own-head-merged | c4c5-ambig-decidable/goal-own-head-merged | none | 2026-09-01 | #342 from `fix/issue-329-loop`, body not citing #329 | not read | held: a line naming #342, then `undecidable` |
+| goal-merged-probe-fail | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | the read fails | not read | held: `PROBE_FAILED` line, then `undecidable` |
+| goal-refs-probe-fail | c4c5-ambig-decidable/no-strike | none | 2026-09-01 | none | the read fails | held: `PROBE_FAILED` line, then `undecidable` |
+| goal-child-recent | c4c5-ambig-decidable/no-strike | none | inside the 900 s guard | not read | not read | held: `undecidable` line, `strike-held` row |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

@@ -414,8 +414,12 @@ transitions:
     when: "goal child ∧ agent/in-progress ∧ no OPEN PR referencing ∧ the issue's newest anchored
       `AGENT_STRIKE:` comment carries a `Resumable branch pushed: <branch>` line ⇒ DECIDABLE —
       emit the ordinary C4/C5 unit carrying the branch so the session resumes with `--work-branch
-      <branch>` (never a restart). No strike / no resumable branch / unreadable probe ⇒ held
-      exactly as today (the FU-143/IL-G06 asymmetry stands unchanged). Loop guard: a resumed
+      <branch>` (never a restart). A strike with no resumable branch / unreadable probe ⇒ held
+      exactly as today (the FU-143/IL-G06 asymmetry stands unchanged). NO terminal comment at
+      all ⇒ the goal base decides: no live pod, quiet past C4C5_PERSIST_S, and no merged PR into
+      the issue's `Base:` from its own `fix/issue-<n>-*` head, strongly linking it or mentioning
+      it ⇒ ABANDONED — the same unit, resuming an origin `fix/issue-<n>-*` branch ahead of the
+      base when one exists (else no work-branch); its own head merged ⇒ held. Loop guard: a resumed
       round that strikes again with the same (model, error_class) pair follows the existing
       second-strike rule (the agent/error STRIKE-channel path) — the narrowed hold must not
       create a strike→resume→strike loop."
@@ -427,8 +431,10 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_STRIKE:"\)' }
       - desc: "the Resumable branch pushed: line is read from the anchored strike comment — matched at line start through the finalizer's markdown bold, backticks stripped, cut at the first whitespace (FU-199 fold-in, the #1780 `work-branch=**` dispatch) — the bare branch is extracted and carried into the dispatch unit"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'select\(test\("\^\\\\\*\{0,2\}Resumable branch pushed:\\\\\*\{0,2\}"\)\)' }
-      - desc: "no strike / no resumable branch / unreadable probe keeps today's behaviour (rule #6 — never fail INTO a write)"
+      - desc: "a strike without a resumable branch / unreadable probe keeps today's behaviour (rule #6 — never fail INTO a write)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "goal child in an undecidable state" }
+      - desc: "no terminal comment: the issue's OWN head merged into its base stays a hold (circles#36 — merged-but-unlinked is finished work); the merged-PR read is scoped to that base, a full page holds"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "its OWN branch merged into" }
       - desc: "loop guard — a resumed round that strikes again with the same (model, error_class) pair follows the existing second-strike rule"
         anchor: { file: agents/coordinator-scan.sh, pattern: "second-strike rule" }
     incidents:

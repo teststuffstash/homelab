@@ -1,0 +1,20 @@
+# footprint-hold-writerless — the decision table (family contract in fixture.yaml).
+# Axis: is anybody writing in-progress #50, and can the scan tell? Queued #60 overlaps #50 throughout.
+#
+# id                       | world          | patch | env | expect
+# no-writer-releases       = no pod, no session, no open PR, quiet since 2026-11-13 → #60 DISPATCHES,
+#                            one report line says #50's footprint left the hold set. RED on master
+#                            (#60 footprint-held behind a writer-less label — the #3420 shape).
+no-writer-releases         | no-writer      |       |     | no-writer-releases
+# running-worker-holds     = CONTROL: a Running worker pod for #50 → #60 is still footprint-held.
+running-worker-holds       | running-worker |       |     | held
+# open-pr-holds            = an open PR strongly links #50 → the work is live branch state: held.
+open-pr-holds              | open-pr        |       |     | held
+# session-probe-fail-holds = the no-writer world, but the session-pod read fails (STUB_KUBECTL=fail):
+#                            "no session" is unknown, not false → every footprint kept, #60 held.
+session-probe-fail-holds   | no-writer      |       | STUB_KUBECTL=fail | session-probe-fail-holds
+# recent-holds             = the no-writer world, #50 touched "now" (inside C4C5_PERSIST_S): the
+#                            label-write → pod-create window never releases → held.
+recent-holds               | no-writer      | gh/issue-list-inprog.json @ patches/recent.jq | | held
+# error-label-holds        = the no-writer world, #50 also `agent/error`: a human owns it → held.
+error-label-holds          | no-writer      | gh/issue-list-inprog.json @ patches/agent-error.jq | | held
