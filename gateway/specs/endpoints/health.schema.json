@@ -7,10 +7,11 @@
   "output": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["ok", "db"],
+    "required": ["ok", "db", "release"],
     "properties": {
       "ok": { "const": true, "description": "the process is serving; a down process answers nothing", "x-requirements": ["GW-HEALTH"] },
-      "db": { "enum": ["pvc", "memory"], "description": "pvc = SQLite on /data/gateway.db; memory = the fail-open in-memory store (sessions do not survive a restart)", "x-requirements": ["GW-HEALTH"] }
+      "db": { "enum": ["pvc", "memory"], "description": "pvc = SQLite on /data/gateway.db; memory = the fail-open in-memory store (sessions do not survive a restart)", "x-requirements": ["GW-HEALTH"] },
+      "release": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$", "description": "the release the process is running — GATEWAY_RELEASE read once at start (the image's CalVer-g<sha> tag the deploy pin carries); `unknown` when none valid is declared", "x-requirements": ["GW-HEALTH"] }
     },
     "x-requirements": ["GW-HEALTH"]
   },

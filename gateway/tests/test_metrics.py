@@ -414,12 +414,13 @@ LABEL_ARGS = ("world", "event", "family", "label", "expected_values_within")
 DRIVEN = "every family driven"
 TWIN = "a worker admitted at tier light, a twin on both rails"
 STATUS_PATTERN = "^[1-5][0-9][0-9]$"
+RELEASE_PATTERN = "^[A-Za-z0-9._-]{1,64}$"
 OR_MODELS, OR_SLUGS = "the openrouter rail's policy models", "the endpoint snapshot's slugs, unattributed"
 
 
 def _allowed(fx: Fixtures, spec: str) -> set[str] | re.Pattern:
     """The legend's literals → the set (or pattern) the seen values must lie within."""
-    if spec == STATUS_PATTERN:
+    if spec in (STATUS_PATTERN, RELEASE_PATTERN):
         return re.compile(spec[1:-1])
     if spec == "the strike classes":
         return {k for k, v in OUTCOME_CLASSES.items() if v}
@@ -476,6 +477,7 @@ CONTROL_LABEL_ROWS = [
     pytest.param(OK, DRIVEN, "gateway_strikes_total", "source", "outcome, gateway", id="source is the strike's writer"),
     pytest.param(OK, DRIVEN, "gateway_requests_incomplete_total", "reason", "no-terminal, timeout, transport-error, client-closed",
                  id="reason is why a 2xx body stopped before its end"),
+    pytest.param(OK, DRIVEN, "gateway_build_info", "release", RELEASE_PATTERN, id="release is one tag-shaped value ⚖"),
     pytest.param(OK, DRIVEN, "gateway_db_mode", "mode", "pvc, memory", id="mode is the store mode the gateway opened at start"),
     pytest.param(OK, DRIVEN, "gateway_go_catalog_refresh_total", "source", "config, docs", id="source is the catalog source"),
     pytest.param(OK, DRIVEN, "gateway_go_catalog_refresh_total", "outcome", "ok, fetch-failed, parse-failed, implausible",
@@ -559,9 +561,9 @@ async def test_every_family_is_declared(fx, world, families, expected_undeclared
 # -- The store mode is a gauge: description | store_state | pvc? | memory? ----------------------------
 # A gateway started on a missing DB directory falls open to memory (store.py Store); the mode is read
 # off the exposition, never off the store, so the row proves the family is what the probe reports.
-def _db_mode_app(policy, secrets, path: str):
+def _db_mode_app(policy, secrets, path: str, extra_env: dict[str, str] | None = None):
     """A gateway on `path` whose rails reach the in-process fakes (no live upstream, ever)."""
-    settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
+    settings = Settings.from_env({**(extra_env or {}), "GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
                                   "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
                                   "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"]})
     fakes = RailTransport({rail: FakeUpstream(rail) for rail in UPSTREAM_BASES}, UPSTREAM_BASES)
@@ -593,3 +595,27 @@ async def test_the_store_mode_is_a_gauge(tmp_path, policy, secrets, store_state,
               expected_memory={"expected": float(expected_memory), "actual": memory}):
         check("expected_pvc", pvc, float(expected_pvc))
         check("expected_memory", memory, float(expected_memory))
+
+
+# -- The running release is an info series: description | world | GATEWAY_RELEASE | series | value? ---
+RELEASE_ROWS = [
+    pytest.param(BASE, "2026.11.16-g3446cf3bba98", 'gateway_build_info{release="2026.11.16-g3446cf3bba98"}', "1", id="the running release is an info series"),
+    pytest.param(BASE, "unset", 'gateway_build_info{release="unknown"}', "1", id="no release declared renders unknown ⚖"),
+    pytest.param(BASE, 'v1 {"x"}', 'gateway_build_info{release="unknown"}', "1", id="a value that is not tag-shaped never becomes a label ⚖"),
+]
+
+
+@pytest.mark.parametrize(("world", "GATEWAY_RELEASE", "series", "expected_value"), RELEASE_ROWS)
+async def test_the_running_release_is_an_info_series(tmp_path, policy, secrets, world, GATEWAY_RELEASE, series, expected_value):  # noqa: N803 — the header cell is the argname
+    name_world(world, note=f"GATEWAY_RELEASE: {GATEWAY_RELEASE}")
+    env = {} if GATEWAY_RELEASE == "unset" else {"GATEWAY_RELEASE": GATEWAY_RELEASE}
+    with given(f"GATEWAY_RELEASE {GATEWAY_RELEASE}: environment {env}"):
+        (tmp_path / "data").mkdir()
+    with when("the gateway starts with that environment, then GET /metrics"):
+        app = _db_mode_app(policy, secrets, str(tmp_path / "data" / "gateway.db"), env)
+        async with ObservedAsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw") as c:
+            with quiet():
+                text = (await c.get("/metrics")).text
+    attach_json("sample: gateway_build_info lines", _lines(text, "gateway_build_info{"))
+    with then(f"{series} = {expected_value}", expected_value={"expected": float(expected_value), "actual": _value(text, series)}):
+        check("expected_value", _value(text, series), float(expected_value))

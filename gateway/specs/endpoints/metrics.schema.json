@@ -725,6 +725,19 @@
         "GW-MODEL-TIERS"
       ]
     },
+    "gateway_build_info": {
+      "type": "gauge",
+      "labels": {
+        "release": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,64}$"
+        }
+      },
+      "description": "1 for the release the process started as (the value /healthz answers) — set once per process; GATEWAY_RELEASE, or unknown (GW-METRICS)",
+      "x-requirements": [
+        "GW-METRICS"
+      ]
+    },
     "gateway_db_mode": {
       "type": "gauge",
       "labels": {

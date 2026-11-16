@@ -5,11 +5,13 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Thirty-eight families in the schema (the codex rail's
+The evidence surface the alert belts read. Thirty-nine families in the schema (the codex rail's
 two render only while the policy declares that rail), Prometheus text format, no auth (in-cluster,
 scraped by the ServiceMonitor). **Every label value is drawn from a bounded set** declared in the
 schema — a [bounded label](../glossary.md#bounded-label): never a task key, a session id, or a model
-string outside the policy's set — so cardinality is a property of the policy, not of traffic.
+string outside the policy's set — so cardinality is a property of the policy, not of traffic. The one
+exception is `release`, the one label whose value comes from the deploy: one value per process, bounded by
+the pattern `^[A-Za-z0-9._-]{1,64}$`, never by traffic.
 
 ## Interface — the machine half
 
@@ -81,7 +83,11 @@ answer, a data-plane answer, a strike written, a session reaped, a credential ve
 and a gauge reads its source at render time (active sessions, cooled cells, rejected credentials,
 the last-seen window headers). Every label value is checked against its family's declared set
 before it becomes a series: a value outside the set renders as `other`, so a task key, a session
-id, a token or a model the policy does not name can never create a series. The families an alert
+id, a token or a model the policy does not name can never create a series. `release` is the exception ⚖:
+it is fixed once at start by [GW-HEALTH's clause](health.md#gw-health), where anything not tag-shaped is
+already `unknown` (which itself matches the pattern), so no out-of-pattern `release` reaches the renderer
+and `other` never appears on it — `other` on the series and `unknown` on `/healthz` would give one fact
+two values. The families an alert
 reads with `increase()` or `== 0` render every label value from `0` on a fresh process (`rail` on
 the credential and session families, every `(route, reason)` on the control-plane family), so a
 flat series reads as "no such event" and an absent one as "never scraped"; the codex rail's two
@@ -149,6 +155,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
 | `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
+| `gateway_build_info` | gauge | `release` | 1 for the release the process started as (the value [`/healthz`](health.md#gw-health) answers) — set once, for the process's life |
 | `gateway_db_mode` | gauge | `mode` | 1 for the [store mode](../glossary.md#store-mode) the gateway opened at start (`pvc`, `memory`), 0 for the other — set once, for the process's life; `GatewayStoreMemoryMode` reads it |
 
 #### Sessions and outcomes are counted
@@ -290,6 +297,7 @@ Legend (above); `the strike classes` = the keys of the one vocabulary
 | class is a strike class of the one vocabulary | `policy-default · upstream-ok` | `every family driven` | `gateway_strikes_total` | `class` | `the strike classes` |
 | source is the strike's writer | `policy-default · upstream-ok` | `every family driven` | `gateway_strikes_total` | `source` | `outcome, gateway` |
 | reason is why a 2xx body stopped before its end | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_incomplete_total` | `reason` | `no-terminal, timeout, transport-error, client-closed` |
+| release is one tag-shaped value ⚖ | `policy-default · upstream-ok` | `every family driven` | `gateway_build_info` | `release` | `^[A-Za-z0-9._-]{1,64}$` |
 | mode is the store mode the gateway opened at start | `policy-default · upstream-ok` | `every family driven` | `gateway_db_mode` | `mode` | `pvc, memory` |
 | source is the catalog source | `policy-default · upstream-ok` | `every family driven` | `gateway_go_catalog_refresh_total` | `source` | `config, docs` |
 | the catalog outcome is the refresh outcome | `policy-default · upstream-ok` | `every family driven` | `gateway_go_catalog_refresh_total` | `outcome` | `ok, fetch-failed, parse-failed, implausible` |
@@ -350,6 +358,20 @@ Legend: `families` = the families to find — `the schema's, less the codex rail
 > a verdict, an admission an answer~~ → the two canary rows; ~~class is a strike class, source the
 > writer~~ → the `class` and `source` rows; ~~no task label, ever~~ (one row, two claims) → the two
 > rows above.
+
+#### The running release is an info series
+
+The release is read once at start ([GW-HEALTH](health.md#gw-health)) and rendered as an info series, so
+a query can join any family on it (`... * on (pod) group_left (release) gateway_build_info`) and select
+the samples since a release started serving. Legend: `GATEWAY_RELEASE` as on the
+[health page](health.md#the-answer-names-the-running-release); `series` = the sample line read from
+`GET /metrics` on a fresh gateway; `value?` = its value.
+
+| description | world | GATEWAY_RELEASE | series | value? |
+|---|---|---|---|---|
+| the running release is an info series | `policy-default` | `2026.11.16-g3446cf3bba98` | `gateway_build_info{release="2026.11.16-g3446cf3bba98"}` | `1` |
+| no release declared renders unknown ⚖ | `policy-default` | `unset` | `gateway_build_info{release="unknown"}` | `1` |
+| a value that is not tag-shaped never becomes a label ⚖ | `policy-default` | `v1 {"x"}` | `gateway_build_info{release="unknown"}` | `1` |
 
 #### The store mode is a gauge
 

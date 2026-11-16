@@ -41,7 +41,7 @@ cd gateway
 devbox run serve          # uvicorn on :8080; GATEWAY_POLICY=/etc/agent-gateway/policy.json, GATEWAY_DB=/data/gateway.db
 ```
 
-Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
+Environment: `GATEWAY_RELEASE` (the running release — the image tag the deploy pin carries, derived at render by the kustomization; answered as `/healthz` `release` and `gateway_build_info{release}`; unset or not tag-shaped = `unknown`), `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
