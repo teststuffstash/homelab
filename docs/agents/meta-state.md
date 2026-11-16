@@ -60,8 +60,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 - **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The next ci-runner template change is the first unattended
   recreate expected to need no seat close (#3372): read its journal for "window closed by the verb" + `management-apply=success`.
-- **⚑ HANDOFF INBOX (triaged 2026-11-16; oracle ×2, circles empty).** `20261115-2215-grafana-plugin-preinstall-auto-update.md`: no swap
-  seen live (Loki, 11-09 → 11-16); `preinstall_auto_update: false` PR in flight — arm it in a window, then close with the result note.
+- **⚑ HANDOFF INBOX (2026-11-16; oracle ×2, circles empty).** Grafana plugin handoff CLOSED (the chart already defaulted
+  `preinstall_auto_update` off; #3499 states it explicitly). NEW, unread: `20261116-2130-intake-size-test-nameable-split.md`.
   `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
   `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `gateway/intake.md` or oracle-only;
   (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.
