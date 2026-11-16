@@ -60,6 +60,11 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 - **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The next ci-runner template change is the first unattended
   recreate expected to need no seat close (#3372): read its journal for "window closed by the verb" + `management-apply=success`.
+- **⚑ HANDOFF INBOX (triaged 2026-11-16; oracle ×2, circles empty).** `20261115-2215-grafana-plugin-preinstall-auto-update.md`: no swap
+  seen live (Loki, 11-09 → 11-16); `preinstall_auto_update: false` PR in flight — arm it in a window, then close with the result note.
+  `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
+  `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `gateway/intake.md` or oracle-only;
+  (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.
 - **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** On/after **2026-11-21**: re-run the burst-pickup table
   (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) — PR job pickup should flatten toward ~3 s after #3348
   (`minRunners` 3, live); if not, raise again or read the listener. Delete this bullet after the readout.
