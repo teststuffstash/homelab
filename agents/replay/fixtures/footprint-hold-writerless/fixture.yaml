@@ -1,0 +1,37 @@
+# footprint-hold-writerless — a writer-less in-progress issue's footprint holds no sibling.
+#
+# THE CONTRACT (the dead-ride limbo, 2026-11-16). The ADR-097 footprint hold keeps two WRITERS
+# off one surface. An `agent/in-progress` issue nobody is writing — no live worker pod
+# (`live_worker_pod_count` over its `issue-<n>-` pods), no coordinator item session riding it
+# (`sess_holds`), no open PR strongly linking it (`strong_link_count`), quiet past
+# C4C5_PERSIST_S, and not `agent/error`/`agent/blocked` — leaves the hold set (`busy_fps`) for
+# this pass. Goal children #3303/#3308 lost their pods ~25 min into the ride with no terminal
+# record, and #3308's `gateway/src/agent_gateway/` held the unrelated queued #3420 for 3.5 days.
+# Only the sibling hold changes: the issue's own C4/C5 report/belt/unit is the c4c5 families'
+# (`c4c5-ambig-decidable` for a goal child) and is not composed here. Not scoped by base.
+#
+# FAIL CLOSED: an unreadable probe (pods, session pods, open PRs) or timestamp keeps every
+# footprint, exactly as before.
+#
+# WORLDS (family-local): in-progress goal child #50 (Touches `gateway/specs/endpoints/sessions.md,
+# gateway/src/agent_gateway/`, Base goal/40-runtime-tiers, untouched since 2026-11-13) beside
+# queued master issue #60 (cases.sh) whose footprint overlaps it.
+#   no-writer       no agent-session pod, no open PR
+#   running-worker  a Running `agent-homelab-issue-50-r2` pod whose agent container runs
+#   open-pr         an open PR `Implements #50`
+name: footprint-hold-writerless
+mode: table
+source: agents/coordinator-scan.sh
+# hermeticity contract (homelab#329): the clause reads issue bodies through agents/issue_body.py.
+requires:
+  - python3
+parts:
+  - file:bridge.sh
+  - block:strong-link-count
+  - block:busy-fps
+  - block:session-belt
+  - block:busy-fps-writerless
+  - file:cases.sh
+  - block:footprint-hold
+  - file:post.sh
+rows: rows.psv

@@ -2079,12 +2079,17 @@ EOF_BBM
     # the legacy line-anchored union — the same `flatten | join(",")` semantics this clause had).
     # A body the parser REFUSES stays `*` (exclusive, conflicts with everything): fail-closed is
     # the safe side here, and the malformed pass above already reported it by number.
-    busy_fps=""
+    # `busy_fp_rows` keeps the issue number beside each footprint (`<n>|<touches>`, one per line)
+    # so the writer-less release below (`busy-fps-writerless`) can drop one issue's entry once the
+    # pod and PR reads are in hand; `busy_fps` itself is unchanged until then.
+    busy_fps=""; busy_fp_rows=""
     while IFS='|' read -r _bfn _bfb; do
       [ -n "$_bfn" ] || continue
       _bft="$(ib_get Touches "${repo:-}#${_bfn}" "$(ib_body "$_bfb")")" || _bft=""
       [ -n "$_bft" ] || _bft="*"
       busy_fps="${busy_fps}${_bft}
+"
+      busy_fp_rows="${busy_fp_rows}${_bfn}|${_bft}
 "
     done <<EOF_BUSYFPS
 $(ib_rows "$(printf '%s' "$inprog" | jq '[.[] | select(((.labels|map(.name))|index("task/goal"))|not)]' 2>/dev/null || echo '[]')")
@@ -2425,12 +2430,15 @@ EOF
     # WIPPODS_JSON MUST reset with them (FU-146, 2026-08-06): it is only assigned inside the elif
     # below, so a repo with no dispatchable work leaves the PREVIOUS repo pods in scope. Nothing
     # read it across repos before the per-item hold did; resetting closes that hole at the source.
-    wip_busy=""; wip_allow=1; WIPPODS_JSON=""
+    # `wippods_ok` = the pod list was read AND parsed. The WIP ceiling keeps its fail-open
+    # normalization below; the writer-less footprint release (`busy-fps-writerless`) needs a read
+    # it can trust, so it keys off this flag and holds every footprint without it (rule #6).
+    wip_busy=""; wip_allow=1; WIPPODS_JSON=""; wippods_ok=""
     if [ -z "$dispatchable" ]; then
       :
     elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
-      jq -e . >/dev/null 2>&1 <<<"${WIPPODS_JSON:-null}" || WIPPODS_JSON='{"items":[]}'
+      if jq -e '.items | type == "array"' >/dev/null 2>&1 <<<"${WIPPODS_JSON:-null}"; then wippods_ok=1; else WIPPODS_JSON='{"items":[]}'; fi
       # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
       # terminated but whose sidecar lives (pre-native-sidecar dind) is phase=Running yet holds
       # no work — it wedges this hold AND the launcher WIP=1 forever. Reap when the agent
@@ -2473,12 +2481,14 @@ EOF
     # (rule #6, exactly what the wip_busy else-branch above does).
     # `sess_busy` = newline-joined item keys (issue-N / pr-N) with a live session pod; `sess_nums`
     # = space-joined ISSUE numbers only, for the c4c5 selector's `$sess` exclusion.
-    sess_busy=""; sess_nums=""
+    # `sess_ok` = the session-pod list was read AND parsed (read by `busy-fps-writerless`, which
+    # holds every footprint without it — a dead probe must not read as "no session riding it").
+    sess_busy=""; sess_nums=""; sess_ok=""
     if [ -z "$dispatchable" ]; then
       :
     elif SESSPODS="$("$KUBECTL" $KUBE -n "${LOOP_NS:-agent-coordinator}" get pods -l app=agent-coordinator \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
-      jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}" || SESSPODS='{"items":[]}'
+      if jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}"; then sess_ok=1; else SESSPODS='{"items":[]}'; fi
       # Full-name match, not a bare prefix: `coordinator-circles-` must not capture
       # `coordinator-circles-iac-…` (a repo name that is another's prefix).
       sess_busy="$(printf '%s' "$SESSPODS" | jq -r --arg repo "$repo" '
@@ -2494,6 +2504,56 @@ EOF
       grep -qx -- "$1" <<< "$sess_busy"
     }
     # <<<REPLAY:session-belt<<<
+    # >>>REPLAY:busy-fps-writerless>>>
+    # A WRITER-LESS in-progress issue holds no sibling (the dead-ride limbo, 2026-11-16: goal
+    # children #3303/#3308 lost their worker pods ~25 min into the ride with no terminal record,
+    # and #3308's footprint held the unrelated queued #3420 for 3.5 days). The ADR-097 hold exists
+    # to keep two WRITERS off one surface; an issue with nobody writing has no write surface to
+    # protect. The predicate is the scan's own no-live-writer test, ridden, not re-derived:
+    #   • no live worker pod for the issue — `live_worker_pod_count` (agents/kube.sh) over the
+    #     WIP probe's list narrowed to `issue-<n>-` pods (the C4/C5 selector's naming key);
+    #   • no open PR strongly linking it — `strong_link_count` ($STRONG_LINK_JQ), any base;
+    #   • no coordinator item session riding it — `sess_holds` (FU-146: the session applies the
+    #     label, then triages for minutes before the worker pod exists);
+    #   • quiet past C4C5_PERSIST_S (`updatedAt`) — the same transition-race guard the phantom
+    #     belt uses, so the window between label write and pod create never releases;
+    #   • not `agent/error` / `agent/blocked` — a human owns those, and an errored issue keeps
+    #     its footprint by design (the inprog-selector comment above).
+    # FAIL CLOSED: an unreadable pod list, session list or open-PR list, an unreadable timestamp,
+    # or a jq error keeps EVERY footprint exactly as before. Only the sibling hold changes — the
+    # issue's own C4/C5 report, belt, unit and class row are untouched (it stays in $inprog), and
+    # the footprint is NOT scoped by base (a separate design call).
+    if [ -n "${wippods_ok:-}" ] && [ -n "${sess_ok:-}" ] && [ "${prsjson_fetch_rc:-1}" -eq 0 ] && [ -n "${busy_fp_rows:-}" ]; then
+      bw_now="$(date -u +%s)"; bw_fps=""
+      while IFS='|' read -r _bwn _bwt; do
+        [ -n "$_bwn" ] || continue
+        _bwkeep=1
+        _bwpods="$(jq -c --arg p "issue-${_bwn}-" '{items: [.items[]? | select((.metadata.name // "") | contains($p))]}' <<<"$WIPPODS_JSON" 2>/dev/null)" || _bwpods=""
+        _bwlive=""; [ -n "$_bwpods" ] && _bwlive="$(live_worker_pod_count "$_bwpods")"
+        _bwpr="$(strong_link_count "$_bwn" "$prsjson" "")" || _bwpr=""
+        _bwst="$(jq -r --argjson n "$_bwn" --argjson now "$bw_now" '
+            [.[] | select(.number == $n)] | first // {}
+            | ((.labels // []) | map(.name)) as $L
+            | ((.updatedAt // "") | fromdateiso8601? // null) as $s
+            | "\(if $s == null then -1 else ($now - $s) end)|\(($L | index("agent/error")) != null or ($L | index("agent/blocked")) != null)"' <<<"$inprog" 2>/dev/null)" || _bwst=""
+        _bwage="${_bwst%%|*}"; _bwhuman="${_bwst#*|}"
+        case "$_bwage" in ''|*[!0-9-]*) _bwage=-1;; esac
+        if [ "${_bwlive:-x}" = 0 ] && [ "${_bwpr:-x}" = 0 ] && [ "$_bwhuman" = false ] \
+           && [ "$_bwage" -ge "$C4C5_PERSIST_S" ] && ! sess_holds "issue-${_bwn}"; then
+          _bwkeep=""
+        fi
+        if [ -n "$_bwkeep" ]; then
+          bw_fps="${bw_fps}${_bwt}
+"
+        else
+          orphans="${orphans}[$repo] ⏳ footprint NOT holding siblings — in-progress issue #${_bwn} has no live writer (no worker pod, no item session, no open PR; untouched past the $(( C4C5_PERSIST_S / 60 ))m guard): its \`Touches:\` (${_bwt}) leaves the ADR-097 hold set this pass. Its own C4/C5 handling is unchanged.\n"
+        fi
+      done <<EOF_BUSYFPS_WL
+${busy_fp_rows}
+EOF_BUSYFPS_WL
+      busy_fps="$bw_fps"
+    fi
+    # <<<REPLAY:busy-fps-writerless<<<
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
     # stack-pooled there, so carry the per-repo value out of the loop).
     wipmap="${wipmap}${repo} ${wip_allow}\n"
@@ -5250,8 +5310,11 @@ EOF_GTHEMES_OPEN
             # >>>REPLAY:c4c5-ambig-decidable>>>
             # FU-199: a goal child whose newest AGENT_STRIKE: comment carries a Resumable branch
             # pushed: <branch> line IS DECIDABLE — emit an ordinary C4/C5 unit carrying the branch
-            # so the session resumes with --work-branch <branch> (never a restart). No strike / no
-            # resumable branch ⇒ hold exactly as today. Loop guard: a resumed round that strikes
+            # so the session resumes with --work-branch <branch> (never a restart). A strike with no
+            # resumable branch ⇒ hold exactly as today. NO terminal comment at all ⇒ the merge
+            # evidence decides (abandoned → redispatch, resuming an ahead `fix/issue-<n>-*` branch
+            # when one exists; merged-from-its-own-branch or unreadable → hold) — the branch below
+            # the strike parser. Loop guard: a resumed round that strikes
             # again with the same (model, error_class) pair follows the existing second-strike rule
             # (the agent/error STRIKE-channel path) — the narrowed hold must not create a
             # strike→resume→strike loop.
@@ -5326,6 +5389,68 @@ EOF_GTHEMES_OPEN
                       # neither word-split nor expand (FU-199, folded in 2026-09-20).
                       resumable_branches="${resumable_branches}${repo}#${ambig_n}=${branch}"$'\n'
                     fi
+                  else
+                    # ── NO TERMINAL RECORD AT ALL: decide from the GIT evidence (the dead-ride limbo,
+                    # 2026-11-16 — #3303/#3308's pods died mid-ride, no AGENT_STRIKE/AGENT_REPORT,
+                    # held "undecidable" 3.5 days). The hold above exists because "no open PR"
+                    # cannot tell ABANDONED from MERGED-BUT-UNLINKED (circles#36). The goal base
+                    # itself can: merged-but-unlinked work arrived through a merged PR into the
+                    # base, and abandoned work did not. ABANDONED when ALL hold —
+                    #   • no live worker pod for it (the C4C5_SEL pod key `issue-<n>-` over $PODS,
+                    #     which this block only runs with a successful pod read);
+                    #   • quiet past C4C5_PERSIST_S (`updatedAt`; unreadable = -1 = held);
+                    #   • the merged PRs into its `Base:` — read SCOPED TO THAT BASE, not the
+                    #     repo-wide 40 above, whose window a days-old merge scrolls out of — carry no
+                    #     head `fix/issue-<n>-*` (the issue's OWN branch merged = finished work, the
+                    #     circles#36 asymmetry stays a hold), no strong link and no bare mention;
+                    #     a full page (100) is an incomplete window and holds.
+                    # Abandoned + an origin `fix/issue-<n>-*` AHEAD of the base → resume it
+                    # (resumable_branches → the existing --work-branch path); no such branch →
+                    # the plain c4c5-redispatch unit. Every probe failure HOLDS and says so (rule #6).
+                    ge_base="$(sed -n "s/^${ambig_n}|//p" <<< "${goalbased:-}" | sed -n 1p)"
+                    ge_upd="$(jq -r --argjson n "$ambig_n" '[.[] | select(.number == $n) | .updatedAt // ""] | first // ""' <<<"$inprog" 2>/dev/null)" || ge_upd=""
+                    ge_age="$(jq -rn --arg t "$ge_upd" --argjson now "$(date -u +%s)" \
+                      '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                    case "$ge_age" in ''|*[!0-9-]*) ge_age=-1;; esac
+                    ge_live="$(printf '%s\n' "${PODS-}" | grep -c -- "issue-${ambig_n}-" || true)"
+                    if [ -n "$ge_base" ] && [ "${ge_live:-1}" = 0 ] && [ "$ge_age" -ge "$C4C5_PERSIST_S" ]; then
+                      ge_merged="$(gh pr list --repo "$slug" --state merged --base "$ge_base" --limit 100 --json number,headRefName,body 2>/dev/null)" || ge_merged=""
+                      if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ge_merged:-null}"; then
+                        orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading merged PRs into ${ge_base} — goal child #${ambig_n} stays HELD (its abandoned-vs-merged evidence is unreadable; rule #6)\n"
+                      else
+                        ge_own="$(jq -r --arg p "fix/issue-${ambig_n}-" '[.[] | select((.headRefName // "") | startswith($p)) | "#\(.number) (\(.headRefName))"] | join(", ")' <<<"$ge_merged" 2>/dev/null)" || ge_own="?"
+                        ge_hit="$(strong_link_count "$ambig_n" "$ge_merged" "")" || ge_hit=1
+                        ge_men="$(jq -r --argjson n "$ambig_n" '[.[] | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$ge_merged" 2>/dev/null)" || ge_men=1
+                        ge_cnt="$(jq -r 'length' <<<"$ge_merged" 2>/dev/null)" || ge_cnt=100
+                        if [ -n "$ge_own" ]; then
+                          orphans="${orphans}[$repo] ⛔ goal child #${ambig_n} — its OWN branch merged into ${ge_base}: ${ge_own}. Finished work whose PR did not cite it, not an abandoned ride — HELD; close it by hand.\n"
+                        elif [ "${ge_hit:-1}" = 0 ] && [ "${ge_men:-1}" = 0 ] && [ "${ge_cnt:-100}" -lt 100 ]; then
+                          ge_refs="$(gh api "repos/${slug}/git/matching-refs/heads/fix/issue-${ambig_n}-" 2>/dev/null)" || ge_refs=""
+                          if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${ge_refs:-null}"; then
+                            orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading origin branches fix/issue-${ambig_n}-* — goal child #${ambig_n} stays HELD (a resumable branch may exist; rule #6)\n"
+                          else
+                            ge_branch=""; ge_best=0; ge_fail=""
+                            while IFS= read -r ge_br; do
+                              [ -n "$ge_br" ] || continue
+                              ge_cmp="$(gh api "repos/${slug}/compare/${ge_base}...${ge_br}" 2>/dev/null)" || ge_cmp=""
+                              ge_ahead="$(jq -r '.ahead_by // empty' <<<"${ge_cmp:-null}" 2>/dev/null)" || ge_ahead=""
+                              case "$ge_ahead" in ''|*[!0-9]*) ge_fail=1; break;; esac
+                              if [ "$ge_ahead" -gt "$ge_best" ]; then ge_best="$ge_ahead"; ge_branch="$ge_br"; fi
+                            done <<< "$(jq -r '.[].ref // empty | ltrimstr("refs/heads/")' <<<"$ge_refs" 2>/dev/null | sort)"
+                            if [ -n "$ge_fail" ]; then
+                              orphans="${orphans}[$repo] ⚠ PROBE_FAILED comparing fix/issue-${ambig_n}-* with ${ge_base} — goal child #${ambig_n} stays HELD (rule #6)\n"
+                            elif [ -n "$ge_branch" ]; then
+                              ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                              ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=ABANDONED-RESUMABLE"$'\n'
+                              resumable_branches="${resumable_branches}${repo}#${ambig_n}=${ge_branch}"$'\n'
+                            else
+                              ambig_decidable="${ambig_decidable}${repo}#${ambig_n} "
+                              ambig_terminal_type="${ambig_terminal_type}${repo}#${ambig_n}=ABANDONED"$'\n'
+                            fi
+                          fi
+                        fi
+                      fi
+                    fi
                   fi
                 fi
               done <<< "$ambig"
@@ -5399,7 +5524,15 @@ EOF_GTHEMES_OPEN
                   [ -n "$ad_cv" ] && ad_class="$ad_cv"
                   units="${units}c4c5-redispatch|${repo}|issue-${ad_n}|${ad_class}\n"
                   item_class_push "$repo" "issue-${ad_n}" "phantom" "machine"
-                  orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n"
+                  case "$ad_term_type" in
+                    ABANDONED-RESUMABLE)
+                      ad_br="$(sed -n "s|^${ad_qualified}=||p" <<< "$resumable_branches" | sed -n 1p)"
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — goal child ABANDONED (no terminal record, no live pod, nothing merged into its base from or citing it); origin ${ad_br} is ahead of the base → C4/C5 redispatch with --work-branch\n" ;;
+                    ABANDONED)
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — goal child ABANDONED (no terminal record, no live pod, nothing merged into its base from or citing it, no fix/issue-${ad_n}-* branch ahead of it) → C4/C5 redispatch\n" ;;
+                    *)
+                      orphans="${orphans}[$repo] ✓ issue #${ad_n} — ${ad_term_type} + Resumable branch pushed → C4/C5 redispatch with --work-branch (FU-199)\n" ;;
+                  esac
                 else
                   orphans="${orphans}[$repo] ⛔ issue #${ad_n} — machine block MALFORMED (issue_body.py exit 2); C4/C5 resumable redispatch HELD (rule #6 — a body the parser refuses never dispatches, resumable branch or not).\n"
                   item_class_push "$repo" "issue-${ad_n}" "strike-held" "machine"

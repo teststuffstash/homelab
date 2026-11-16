@@ -1,0 +1,6 @@
+CALL kubectl -n agent-coordinator get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+OUT CLASS homelab|issue-60|footprint-held|operator|...
+OUT ORPHAN [homelab] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):
+OUT ORPHAN   issue #60 — gateway: sessions retry outcome (declared: gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py)
+OUT REACHED: end
+RC 0

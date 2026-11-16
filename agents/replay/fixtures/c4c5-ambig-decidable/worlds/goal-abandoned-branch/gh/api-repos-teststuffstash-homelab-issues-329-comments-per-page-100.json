@@ -1,0 +1,12 @@
+[
+  {
+    "id": 100,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1)."
+  },
+  {
+    "id": 101,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — the worker went terminal without pushing. No resumable branch available."
+  }
+]
