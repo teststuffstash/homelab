@@ -1191,7 +1191,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: registry.teststuff.net/agent-base:2026.11.13-gcf846e507131
+                      image: registry.teststuff.net/agent-base:2026.11.16-g7296793e6ee9
                       command: ["bash", "-lc"]
                       args:
                         - |
