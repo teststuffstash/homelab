@@ -25,7 +25,7 @@
   by the seat (`opnsense-router-node.sh converge <node>`).
 - **`seat`, always**: any change that needs the MASTER converged, a CARP failover, a window
   (ADR-145's shape), firmware/plugin upgrades (official path, test VM first), the WAN leg, the
-  cert carry to the BACKUP (FU-297), the root password or API users (wallet), and anything the
+  cert carry's identity/privileges (the nightly run itself is the box's, FU-297), the root password or API users (wallet), and anything the
   router-move §Status lists as next. Queue only what the test VM + BACKUP converge prove on their
   own (a play's check-mode fix, a lint, the drill harness, docs).
 - Never iterate destructive OPNsense endpoints (`/reboot`, `/poweroff`) — they execute
