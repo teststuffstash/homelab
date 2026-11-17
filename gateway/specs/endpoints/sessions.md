@@ -1821,7 +1821,7 @@ class again is a replay (200, `replay: true`, nothing new stored); a different c
 reporter is 409 `outcome-conflict`; a judge's outcome is another reporter's and supersedes on
 `GET` (`outcome` = the latest). The checks run in a fixed order: the caller (401 / 403 / 503), the
 id (404), owner or judge (403 `caller-not-owner`), the body (400), a judge-only class (403), the
-window (409), the reporter's earlier class (409).
+window (409), the reporter's earlier class (409). `evidence` is any JSON of at most 4096 bytes — a larger one is 400 `malformed-body` — and an `evidence` or `subclass` value a [GW-REDACT](#gw-redact) pattern matches is 400 `outcome-evidence-refused`, never stored.
 
 **Rounds ≠ strikes** ([model-routing.md §The design's three rules](../../../docs/agents/model-routing.md#the-designs-three-rules)):
 a logic failure, a reviewer's `CHANGES_REQUESTED` or CI red on the change, is a ROUND, owned by
