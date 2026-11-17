@@ -53,7 +53,7 @@ flowchart LR
 | [GW-WIRE-RECORD](#gw-wire-record) | the recorder | v0 |
 | [GW-WIRE-VIEW](#gw-wire-view) | the door | v0 |
 | [GW-WIRE-PROBE](#gw-wire-probe) | the declared probe | — |
-| [GW-WIRE-QUARRY](#gw-wire-quarry) | the quarry tool | ⚑ gap (2026-11-13, PR #3303's PR → work: a provenance lint for fixtures, not yet filed): fixtures cut before the tool carry no provenance sidecar; no lint requires one |
+| [GW-WIRE-QUARRY](#gw-wire-quarry) | the quarry tool | ⚑ gap (2026-11-17, issue #3303 → work: a provenance lint for fixtures, not yet filed): fixtures cut before the tool carry no provenance sidecar; no lint requires one |
 
 ## GW-WIRE-RECORD
 
