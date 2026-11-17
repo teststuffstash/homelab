@@ -343,6 +343,7 @@ TRAFFIC_ROWS = [
     pytest.param(OK, PROBER_CALL, REQUESTS_TOTAL % ("anthropic", "anthropic", "200", "synthetic"), 1, id="a prober's request is synthetic traffic ⚖"),
     pytest.param(CACHED, PROBER_CALL, 'gateway_tokens_total{rail="anthropic",class="in",traffic="synthetic"}', 12, id="a prober's tokens are synthetic"),
     pytest.param(OK, PROBER_CALL, 'gateway_upstream_seconds_count{rail="anthropic",traffic="synthetic"}', 1, id="a prober's upstream time is synthetic"),
+    pytest.param(OK, PROBER_CALL, 'gateway_upstream_seconds_bucket{rail="anthropic",traffic="synthetic",le="+Inf"}', 1, id="a prober's upstream buckets are synthetic"),
     pytest.param(OK, "an expired prober token on /anthropic/v1/messages", REQUESTS_TOTAL % ("none", "anthropic", "401", "none"), 1,
                  id="an expired prober token is none, not synthetic"),
 ]
