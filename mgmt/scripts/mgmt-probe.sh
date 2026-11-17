@@ -53,7 +53,7 @@
 #   TALOS_NODE    a node IP for the client/server skew check (default: the first control plane)
 #   TALOSCONFIG / KUBECONFIG   where the file-shaped creds are (box: /var/lib/mgmt/*, set by the env
 #                 file mgmt/scripts/mgmt-provision-secrets.sh writes; jail default: tofu/{talos,kube}config)
-#   SKIP          space-separated check names to skip: tofu talos nodes seeds ansible creds substrate kps-crds
+#   SKIP          space-separated check names to skip: tofu talos nodes seeds ansible creds substrate kps-crds firmware
 #   GITHUB_TOKEN  the read-only PAT the env file already carries for tofu/github — also used to
 #                 authenticate the substrate check's upstream release reads (5000/hr vs 60/hr);
 #                 absent or insufficient falls back to anonymous
@@ -841,6 +841,196 @@ kps_crds_verdict() {
   fi
 }
 
+# ── check: router firmware currency (class 14, ADR-152 program step 1's belt) ────────────────────
+# Each CARP node (ansible/router-nodes/inventory.yml) and the test VM (role `test`): is an update
+# OFFERED, and since when? The router's own `firmware/check` is the authority (the official update
+# path, docs/opnsense-test-vm.md) — and `GET core/firmware/status` is only that check's CACHED
+# answer: a node nobody checked answers `status: none` + "requires to check for update first" (read
+# 2026-11-17 on opnsense-pve), and the MASTER's answer was five weeks old. So THIS belt runs the
+# check: `POST core/firmware/check` when the node's own `last_check` is older than FW_CHECK_INTERVAL
+# (24 h) — config-neutral (no revision written) and ~3 s per the doc's table — at most once per
+# FW_CHECK_RETRY per node (a failing mirror is not hammered every 15-min tick), and never while
+# `GET core/firmware/running` says a firmware job is busy (an update in flight is not interrupted).
+# FW_CHECK=0 = read-only (GETs only). It never calls update/upgrade — that is program step 4.
+#
+# Identity: the dedicated `firmware` API user (OPN_FIRMWARE_API_* in /var/lib/mgmt/env — the box
+# holds the only copy; the jail falls back to the wallet's opnsense-firmware-api-*), never
+# `automation`: OPNsense has ONE ACL for the whole firmware API (`page-system-firmware-manualupdate`,
+# installs included), so the identity every play runs as stays unable to install packages (the
+# ruling beside opnsense_api_users in ansible/group_vars/opnsense.yml). The test VM reads with its
+# own OPN_TESTVM_API_* pair. Curl reads a pair from a 0600 config file, never argv.
+#
+# ⚠ It REPORTS, it never FAILS the probe (the check_substrate rule): an update offered is a normal
+# state between windows; "too long" is MgmtRouterFirmwareBehind's, "no reading" is
+# MgmtRouterFirmwareUnread's (argocd/resources/mgmt-metrics/router-firmware.yaml). An unreadable node
+# publishes read_ok 0 and NO currency series — never a false "current".
+declare -a FIRMWARE=()   # "<node> <role> <read_ok> <available|-> <reboot|-> <last_check|-> <offered_since|-> <version|-> <offered|->"
+FW_CHECK="${FW_CHECK:-1}"
+FW_CHECK_INTERVAL="${FW_CHECK_INTERVAL:-86400}"   # 24 h: an update is days-scale, the alert 7 d
+FW_CHECK_RETRY="${FW_CHECK_RETRY:-3600}"          # one attempt per node per hour at most
+FW_TEST_HOST="${FW_TEST_HOST:-192.168.2.67}"
+# Poll bounds: mgmt-belt is a oneshot with TimeoutStartSec=30m (mgmt/nixos/hosts/mgmt) shared with
+# tofu plans + ansible --check; each curl is capped at 30 s, so a bound overruns by one call at most.
+FW_CHECK_NODE_SECS="${FW_CHECK_NODE_SECS:-90}"     # one node's check poll
+FW_CHECK_TOTAL_SECS="${FW_CHECK_TOTAL_SECS:-180}"  # every check this tick, all nodes together      # test VM 9110 (mgmt-router-verdict.sh's OPN_TEST_HOST)
+check_firmware() {
+  skip_requested firmware && { skipped firmware requested "SKIP requested"; return; }
+  local inv="$REPO/ansible/router-nodes/inventory.yml" nodes
+  [ -f "$inv" ] || { failed firmware missing "no $inv"; return; }
+  nodes="$(mgmt_x yq -r '.all.children.opnsense.hosts | to_entries[] | "\(.key) \(.value.ansible_host)"' "$inv" 2>/dev/null)" || nodes=""
+  [ -n "$nodes" ] || { failed firmware missing "no router node in $inv"; return; }
+
+  local cdir; cdir="$(fw_cache_dir)" || cdir=""
+  local cfg_prod cfg_test
+  cfg_prod="$(fw_curl_config OPN_FIRMWARE_API_KEY OPN_FIRMWARE_API_SECRET opnsense-firmware-api)"
+  cfg_test="$(fw_curl_config OPN_TESTVM_API_KEY OPN_TESTVM_API_SECRET opnsense-test-api)"
+  if [ ! -s "$cfg_prod" ]; then
+    rm -f "$cfg_prod" "$cfg_test"
+    skipped firmware no-input "no OPNsense firmware pair (OPN_FIRMWARE_API_* or the wallet's opnsense-firmware-api-*)"; return
+  fi
+
+  local name host n=0 ok=0 behind=0 detail=""
+  FW_CHECK_T0="$SECONDS"
+  while read -r name host; do
+    [ -n "$name" ] && [ -n "$host" ] || continue
+    fw_node "$name" node "$host" "$cfg_prod" "$cdir"; n=$((n + 1))
+  done <<< "$nodes"
+  if [ -s "$cfg_test" ]; then fw_node opnsense-test test "$FW_TEST_HOST" "$cfg_test" "$cdir"; n=$((n + 1)); fi
+  rm -f "$cfg_prod" "$cfg_test"
+  local row f
+  for row in "${FIRMWARE[@]}"; do
+    read -r -a f <<< "$row"
+    if [ "${f[2]}" = 1 ]; then ok=$((ok + 1)); [ "${f[3]}" = 1 ] && { behind=$((behind + 1)); detail="$detail, ${f[0]} ${f[7]} → ${f[8]}"; }
+    else detail="$detail, ${f[0]} unread"; fi
+  done
+  if [ "$ok" -eq 0 ]; then
+    skipped firmware unreachable "no router answered a firmware reading ($n tried${detail})"
+    return
+  fi
+  passed firmware "$ok/$n read, $behind with an update offered${detail}"
+}
+
+# fw_node <name> <role> <host> <curl-config> <cache-dir> — read one router, check if stale, append a row.
+fw_node() {
+  local name="$1" role="$2" host="$3" cfg="$4" cdir="$5" body now lc attempt="" st seed=""
+  now="${FW_NOW:-$(date -u +%s)}"
+  body="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/status")" || body=""
+  lc="$(fw_last_check "$body")"
+  # The PRE-check reading's own proof of age: an offer it already carried at its last_check is at
+  # least that old — kept before the check below replaces the reading with a fresh last_check.
+  case "$(fw_json_status "$body")" in update|upgrade) seed="$lc" ;; esac
+  if [ "$FW_CHECK" = 1 ] && [ -n "$body" ] && { [ -z "$lc" ] || [ $((now - lc)) -ge "$FW_CHECK_INTERVAL" ]; }; then
+    [ -n "$cdir" ] && attempt="$cdir/firmware-check.$name"
+    if [ -n "$attempt" ] && [ -f "$attempt" ] && [ $((now - $(cat "$attempt" 2>/dev/null || echo 0))) -lt "$FW_CHECK_RETRY" ]; then
+      log "firmware: $name reading is stale but a check was attempted < ${FW_CHECK_RETRY}s ago — not retrying yet"
+    elif [ $((SECONDS - ${FW_CHECK_T0:-$SECONDS})) -ge "$FW_CHECK_TOTAL_SECS" ]; then
+      log "firmware: $name reading is stale but this tick's check budget (${FW_CHECK_TOTAL_SECS}s) is spent — next tick"
+    elif st="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/running")" && fw_json_status "$st" | grep -qx ready; then
+      [ -n "$attempt" ] && printf '%s\n' "$now" >"$attempt" 2>/dev/null
+      log "firmware: $name last_check ${lc:-never} — POST core/firmware/check"
+      if _fw_curl "$cfg" POST "https://$host/api/core/firmware/check" >/dev/null; then
+        local i=0 t0="$SECONDS"
+        # bounded per node AND per tick (FW_CHECK_NODE_SECS / FW_CHECK_TOTAL_SECS): a slow mirror
+        # must not push the belt toward mgmt-belt's TimeoutStartSec
+        while [ "$i" -lt "${FW_CHECK_POLLS:-30}" ] && [ $((SECONDS - t0)) -lt "$FW_CHECK_NODE_SECS" ] \
+              && [ $((SECONDS - ${FW_CHECK_T0:-$SECONDS})) -lt "$FW_CHECK_TOTAL_SECS" ]; do
+          sleep "${FW_CHECK_POLL_SLEEP:-3}"
+          st="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/upgradestatus")" || st=""
+          [ "$(fw_json_status "$st")" = running ] || break
+          i=$((i + 1))
+        done
+        body="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/status")" || body=""
+        lc="$(fw_last_check "$body")"
+      else
+        log "firmware: $name refused or failed the check POST — keeping the cached reading"
+      fi
+    else
+      log "firmware: $name firmware job busy or unreadable (running: $(fw_json_status "${st:-}")) — no check this tick"
+    fi
+  fi
+  fw_row "$name" "$role" "$body" "$lc" "$cdir" "$now" "$seed"
+}
+
+# fw_row <name> <role> <status-json> <last_check-epoch|""> <cache-dir> <now> [<pre-check offer epoch>] — the verdict for one
+# reading, split out so mgmt-probe-test.sh drives it with captured JSON. A reading COUNTS only with a
+# parseable last_check and a status the official path names (none/update/upgrade) — anything else
+# (no answer, 401/403 JSON, "requires to check first", a check that ended in error) is read_ok 0.
+# offered_since = when this belt first saw the offer, kept box-side and seeded with the router's own
+# last_check (a reading that already said "update" at its check proves the offer that old).
+fw_row() {
+  local name="$1" role="$2" body="$3" lc="$4" cdir="$5" now="$6" seed="${7:-}" st ver offered reboot avail since="-" sf=""
+  st="$(fw_json_status "$body")"
+  [ -n "$cdir" ] && sf="$cdir/firmware-offered.$name"
+  if [ -z "$lc" ] || ! case "$st" in none|update|upgrade) true ;; *) false ;; esac; then
+    FIRMWARE+=("$name $role 0 - - - - - -")
+    log "firmware: $name no usable reading (status '${st:-no answer or an HTTP error — 403 = not the firmware user key, or that user lacks page-system-firmware-manualupdate}')"
+    return
+  fi
+  ver="$(printf '%s' "$body" | _substrate_jq -r '.product.product_version // .product_version // "-"' 2>/dev/null | fw_label)"
+  offered="$(printf '%s' "$body" | _substrate_jq -r '
+      if .status == "upgrade" then (.upgrade_major_version // "-")
+      else ([.upgrade_packages[]? | select(.name == "opnsense") | .new_version][0] // "-") end' 2>/dev/null | fw_label)"
+  reboot="$(printf '%s' "$body" | _substrate_jq -r '(if .status == "upgrade" then .upgrade_needs_reboot else .needs_reboot end) // "0" | tostring' 2>/dev/null)"
+  case "$reboot" in 1) ;; *) reboot=0 ;; esac
+  avail=0
+  case "$st" in update|upgrade) avail=1 ;; esac
+  if [ "$avail" = 1 ]; then
+    since="$lc"
+    case "$seed" in ''|*[!0-9]*) ;; *) [ "$seed" -lt "$since" ] && since="$seed" ;; esac
+    if [ -n "$sf" ] && [ -s "$sf" ]; then
+      local prev; prev="$(cat "$sf" 2>/dev/null)"
+      case "$prev" in ''|*[!0-9]*) ;; *) [ "$prev" -lt "$since" ] && since="$prev" ;; esac
+    fi
+    [ -n "$sf" ] && printf '%s\n' "$since" >"$sf" 2>/dev/null
+  else
+    reboot=0; offered="-"
+    [ -n "$sf" ] && rm -f "$sf"
+  fi
+  FIRMWARE+=("$name $role 1 $avail $reboot $lc $since ${ver:--} ${offered:--}")
+}
+
+# The router's `last_check` ("Sun Oct 11 20:41:27 EEST 2026") as epoch seconds; nothing when absent.
+fw_last_check() {
+  local s
+  s="$(printf '%s' "$1" | _substrate_jq -r '.last_check // .product.product_check.last_check // empty' 2>/dev/null)" || s=""
+  [ -n "$s" ] && [ "$s" != null ] || return 0
+  date -u -d "$s" +%s 2>/dev/null || true
+}
+fw_json_status() { printf '%s' "$1" | tr -d '\000-\037' | _substrate_jq -r '.status // empty | tostring' 2>/dev/null || true; }
+fw_label() { tr -cd 'A-Za-z0-9._-' | cut -c1-40; }
+
+fw_cache_dir() {
+  local d="${MGMT_CACHE_DIR:-/var/lib/mgmt/cache}"
+  mkdir -p "$d" 2>/dev/null && [ -w "$d" ] && { printf '%s' "$d"; return 0; }
+  d="${TMPDIR:-/tmp}/mgmt-firmware-cache"
+  mkdir -p "$d" 2>/dev/null && { printf '%s' "$d"; return 0; }
+  return 1
+}
+
+# fw_curl_config <KEY-var> <SECRET-var> <wallet-entry-stem> → a 0600 curl config path (empty file =
+# no pair). The env wins (the box's /var/lib/mgmt/env); the jail falls back to the wallet, as
+# scripts/opnsense-playbook.sh does. The secret never reaches argv.
+fw_curl_config() {
+  local f k="${!1:-}" s="${!2:-}" db="$HOME/.claude/homelab-keepass/homelab.kdbx"
+  f="$(umask 077; mktemp "${TMPDIR:-/tmp}/mgmt-fw.XXXXXX")" || return 0
+  if [ -z "$k" ] || [ -z "$s" ]; then
+    if [ -z "${MGMT_BOX:-}" ] && [ -f "$db" ]; then
+      k="$(fw_wallet "$3-key")"; s="$(fw_wallet "$3-secret")"
+    fi
+  fi
+  [ -n "$k" ] && [ -n "$s" ] && printf 'user = "%s:%s"\n' "$k" "$s" >"$f"
+  printf '%s' "$f"
+}
+fw_wallet() { mgmt_x keepassxc-cli show -q --no-password -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+
+# _fw_curl <config> <GET|POST> <url> — the one network seam (the test stubs it). Self-signed router
+# certs (the LAN API, as opnsense-playbook.sh's plays use it); a non-2xx is a failure, not a body.
+_fw_curl() {
+  local post_args=()
+  [ "$2" = POST ] && post_args=(-X POST -H 'Content-Type: application/json' -d '{}')
+  mgmt_x curl -fsSk --max-time 30 -K "$1" "${post_args[@]}" "$3" 2>/dev/null
+}
+
 # ── check: every credential the box holds is readable ────────────────────────────────────────────
 # A rotation that half-landed locks the box out of its own job. Read, never print.
 check_creds() {
@@ -1009,6 +1199,42 @@ publish() {
       body+="mgmt_substrate_upstream_fetched_timestamp_seconds{component=\"$scomp\"} $sfetched"$'\n'
     done
   fi
+  # Class 14 — the router firmware currency gauges (check_firmware). read_ok is published for every
+  # router tried (0 = no usable reading, the MgmtRouterFirmwareUnread input); the currency series
+  # only for a reading that counts — an unread node is its own state, never "current".
+  if [ ${#FIRMWARE[@]} -gt 0 ]; then
+    local frow fw fl freadable=0
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] && freadable=1; done
+    body+="# HELP mgmt_router_firmware_read_ok 1 = the router answered firmware/status with a check result the official path names, 0 = no usable reading."$'\n'
+    body+="# TYPE mgmt_router_firmware_read_ok gauge"$'\n'
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; body+="mgmt_router_firmware_read_ok{node=\"${fw[0]}\",role=\"${fw[1]}\"} ${fw[2]}"$'\n'; done
+    if [ "$freadable" = 1 ]; then
+    body+="# HELP mgmt_router_firmware_info 1 per readable router: the running product version and the opnsense build its last check offered (- = none)."$'\n'
+    body+="# TYPE mgmt_router_firmware_info gauge"$'\n'
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] || continue
+      body+="mgmt_router_firmware_info{node=\"${fw[0]}\",role=\"${fw[1]}\",version=\"${fw[7]}\",offered=\"${fw[8]}\"} 1"$'\n'; done
+    body+="# HELP mgmt_router_firmware_update_available 1 = the router's last firmware/check offers an update or upgrade, 0 = checked and current."$'\n'
+    body+="# TYPE mgmt_router_firmware_update_available gauge"$'\n'
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] || continue
+      body+="mgmt_router_firmware_update_available{node=\"${fw[0]}\",role=\"${fw[1]}\"} ${fw[3]}"$'\n'; done
+    body+="# HELP mgmt_router_firmware_update_needs_reboot 1 = the offered update requires a reboot (OPNsense needs_reboot), 0 = it does not or none is offered."$'\n'
+    body+="# TYPE mgmt_router_firmware_update_needs_reboot gauge"$'\n'
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] || continue
+      body+="mgmt_router_firmware_update_needs_reboot{node=\"${fw[0]}\",role=\"${fw[1]}\"} ${fw[4]}"$'\n'; done
+    body+="# HELP mgmt_router_firmware_last_check_timestamp_seconds Unix time of the router's own last successful firmware/check."$'\n'
+    body+="# TYPE mgmt_router_firmware_last_check_timestamp_seconds gauge"$'\n'
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] || continue
+      body+="mgmt_router_firmware_last_check_timestamp_seconds{node=\"${fw[0]}\",role=\"${fw[1]}\"} ${fw[5]}"$'\n'; done
+    fi
+    fl=""
+    for frow in "${FIRMWARE[@]}"; do read -r -a fw <<< "$frow"; [ "${fw[2]}" = 1 ] && [ "${fw[3]}" = 1 ] || continue
+      fl+="mgmt_router_firmware_update_offered_since_timestamp_seconds{node=\"${fw[0]}\",role=\"${fw[1]}\"} ${fw[6]}"$'\n'; done
+    if [ -n "$fl" ]; then
+      body+="# HELP mgmt_router_firmware_update_offered_since_timestamp_seconds Unix time the offered update was first seen (box-kept, seeded by the router's last_check)."$'\n'
+      body+="# TYPE mgmt_router_firmware_update_offered_since_timestamp_seconds gauge"$'\n'
+      body+="$fl"
+    fi
+  fi
   # Atomic (tmp + rename in the same dir — the collector must never read a half file). Never fail
   # the probe on a reporting failure: the deadman's verdict is about the BOX, and Prometheus is
   # in-cluster — exactly the thing that may be down. (The staleness alert notices, from the other side.)
@@ -1049,6 +1275,7 @@ case "$MODE" in
     check_creds
     check_substrate
     check_kps_crds
+    check_firmware
     # devbox on the box (nixpkgs' 0.17.2) rewrote devbox.lock's plugin_version fields when the belt
     # still ran it (2026-09-13; gone since FU-305's OPN_ANSIBLE_BIN) — kept as a cheap guard so the
     # tree stays "what git says" whatever an operator's shell did to it.

@@ -1,0 +1,7 @@
+# Proxmox hypervisors' SSH host keys (pve, nx-02) — PINNED, never keyscanned or trusted on first use.
+# Public keys (not secrets). Verified 2026-11-17 by exact match against the management box's pinned
+# copies. Read by scripts/opnsense-router-node.sh pve() as UserKnownHostsFile with
+# StrictHostKeyChecking=yes: the jail's ~/.ssh/known_hosts does not survive a container restart.
+# A hypervisor reinstall changes its key: replace the line here (read it from the host's console).
+192.168.2.3 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDqBybCNNfNeUmIJQ9DWyMf6q+fg1RNIWpr3hZUl8di2
+192.168.2.59 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKCIuskUUGjPlqnYw67ydqEZrGgEydUg6KLWNw/yk/cF
