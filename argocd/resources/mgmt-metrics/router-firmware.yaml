@@ -59,4 +59,6 @@ spec:
               dedicated `firmware` API user's, or that user lacks page-system-firmware-manualupdate
               (opnsense_api_users in ansible/group_vars/opnsense.yml, converged and minted by
               scripts/opnsense-api-users.sh, carried by mgmt/scripts/mgmt-provision-secrets.sh). No
-              series at all = the box has no firmware pair yet (the check skips no-input). docs/management-box.md §MB2.
+              series at all: the belt published no firmware reading — the same grep shows whether the
+              check skipped (`no-input` = no OPN_FIRMWARE_API_* pair in /var/lib/mgmt/env; `requested` =
+              a SKIP) or never ran. docs/management-box.md §MB2.
