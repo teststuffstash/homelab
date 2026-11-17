@@ -1,0 +1,4 @@
+CALL gh issue comment 42 --repo teststuffstash/test-project --body AGENT_STRIKE: model=openrouter/x error_class=harness-death round=2 session=agent-test-project-issue-42-r2\n\n<details><summary>last 15 log lines (agent-test-project-issue-42-r2)</summary>\n\n~~~text\nentrypoint: harness opencode, round 2, task issue-42\nworking on the fix\nlast line before the end\n~~~\n\n</details>
+OUT → no PR opened — AGENT_STRIKE: model=openrouter/x error_class=harness-death round=2 session=agent-test-project-issue-42-r2
+OUT → posting strike comment to teststuffstash/test-project#42
+RC 0

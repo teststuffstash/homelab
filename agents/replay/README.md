@@ -278,6 +278,7 @@ is stale, so it cannot drift the way the prose register did.
 | `cred-inject-unconditional/gateway` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/no-proxy-breakglass` | actions | - | `agents/agent-session.sh` | - |
 | `cred-inject-unconditional/opt-out-ignored` | actions | - | `agents/agent-session.sh` | - |
+| `dead-ride-record/dead-ride-record` | table | died | `agents/coordinator-scan.sh` | - |
 | `decorrelate-resolution/empty-report` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/malformed-json` | actions | - | `agents/review-reflex.sh` | - |
 | `decorrelate-resolution/no-model` | actions | - | `agents/review-reflex.sh` | - |
@@ -609,6 +610,7 @@ is stale, so it cannot drift the way the prose register did.
 | `stale-stamp-repair-lens-verdict-untouched` | actions | - | `agents/coordinator-scan.sh` | - |
 | `stale-stamp-repair-stamp-and-label` | actions | - | `agents/coordinator-scan.sh` | - |
 | `state-fp/state-fp` | suite | - | `-` | MP-T11 |
+| `strike-comment-post/strike-comment-post` | table | base | `agents/agent-session.sh` | - |
 | `strike-quota-classifier/strike-quota-classifier` | table | - | `agents/agent-session.sh` | - |
 | `strike-retry` | table | - | `agents/agent-session.sh` | - |
 | `summary-comment` | table | - | `-` | - |
