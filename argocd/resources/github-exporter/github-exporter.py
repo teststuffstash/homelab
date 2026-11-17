@@ -4261,6 +4261,22 @@ def self_test():
     _st, _ = mgmt_standing([_ev(1, "failure", _drift), _ev(2, "success", "main: +1 ~0 -0 applied by the management box")])
     assert set(_st) == {"ansible opnsense"}, f"an unrelated success never ends a group refusal: {_st}"
     assert mgmt_subject("stage 1: deny on master diff — human apply") == "stage 1" and mgmt_subject("x") == "-"
+    # Story 1 (2026-11-17, #3527 touching the deny glob `ansible/roles/opnsense-acme*`): the box restates `stage 1: security-boundary (ansible opnsense)` on
+    # every commit; the human applies and `mgmt-tf apply` stamps → the loop posts `baseline: stamped by a
+    # human apply …` (mgmt-lib.sh mgmt_post_human_stamp). A newer verdict on another span-scoped subject:
+    # the boundary refusal ends; a standing group DRIFT refusal does not (only the group's read ends it).
+    _deny = "stage 1: security-boundary (ansible opnsense) — the span touches 1 denied path(s) (WAN firewall/port forwards/WireGuard/ACME-DNS creds) — a human applies"
+    _stamp = "baseline: stamped by a human apply (mgmt-tf plan 20261117T200000Z-abc12345) — the span is accounted for"
+    _st, _ = mgmt_standing([_ev(1, "failure", _deny), _ev(2, "failure", _deny), _ev(3, "failure", _deny)])
+    assert set(_st) == {"stage 1"} and _st["stage 1"]["since"] == 1, _st
+    _st, _ = mgmt_standing([_ev(1, "failure", _drift), _ev(5, "failure", _deny), _ev(6, "failure", _deny),
+                            _ev(7, "success", _stamp)])
+    assert set(_st) == {"ansible opnsense"}, f"the stamp ends the boundary refusal, never the group drift: {_st}"
+    # Story 2 (the 10-31 drift, hand-converged): the box's hourly re-read posts the group's success on
+    # current master — no merge needed — and the refusal ends
+    _st, _ = mgmt_standing([_ev(1, "failure", _drift), _ev(9, "success", "main: +1 ~0 -0 applied by the management box"),
+                            _ev(20, "success", "ansible opnsense: live matches master (--check changed=0) — nothing to apply")])
+    assert _st == {}, f"the group's own success ends it: {_st}"
     # The promtool copies of the two alerts cannot drift from the CR (the mgmt-apply pin's shape).
     for _alert in ("RenovateSilent", "DependencyClassProofStale"):
         _shipped_cov = alert_rule(RULE_FILE, _alert)

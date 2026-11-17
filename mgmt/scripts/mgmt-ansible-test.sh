@@ -298,12 +298,6 @@ has r-good-node-check '^node-check pve$' "$C"
 has r-good-status '^status success ansible opnsense: applied by the management box' "$C"
 L="$(ls -d "$MGMT_ANSIBLE_DIR"/*-opnsense-"${SHA:0:8}" | tail -1)/lease.json"
 has r-good-lease-reason 'target opnsense-pve \(its node-local restore is the revert\)' "$(jq -r .data.reason "$L")"
-# r2b backup-only, live already matches master → converged posts SUCCESS (it ends the group's standing
-# refusal on the wire — the exporter's per-subject tracking); shadow posts nothing (converged-shadow above)
-rrun r-converged backup-only clean - - -
-eq r-converged-rc 0 "$RC"
-has r-converged-status '^status success ansible opnsense: live matches master' "$C"
-eq r-converged-no-arm "0" "$(grep -cE '^(revert-arm|apply) ' <<<"$C")"
 # r3 the node check fails → STOP: the restore stays ARMED (the revert, by construction), lease + window kept
 NODE_OK=0 rrun r-node-bad backup-only changed clean changed clean
 eq r-node-bad-rc 2 "$RC"; eq r-node-bad-no-cancel "0" "$(grep -c '^revert-cancel' <<<"$C")"
@@ -325,11 +319,62 @@ mkdir -p "$R/opnsense"; echo x >"$R/opnsense/tuya-egress.py"; echo c >"$R/ansibl
 git -C "$R" add -A; git -C "$R" commit -qm tuya; SHA2="$(git -C "$R" rev-parse HEAD)"
 rm -f "$T/calls"; rmode backup-only; P_target=changed P_base=clean P_apply=changed P_confirm=clean
 ans_bracket "$T/pol.yaml" opnsense "$SHA2" "$SHA" >"$T/out.r7" 2>&1; RC=$?; C="$(cat "$T/calls" 2>/dev/null)"
-eq r-deny-rc 3 "$RC"; has r-deny-refused '^REFUSE ansible opnsense: security-boundary — the span touches 1 denied path' "$C"; eq r-deny-no-play "0" "$(grep -cE '^(target|apply) ' <<<"$C")"
+eq r-deny-rc 3 "$RC"; has r-deny-refused '^REFUSE stage 1: security-boundary \(ansible opnsense\) — the span touches 1 denied path' "$C"; eq r-deny-no-play "0" "$(grep -cE '^(target|apply) ' <<<"$C")"
+# the security boundary never arms the re-read (the row's plays exclude the denied ones)
+eq r-deny-no-reread-arm "absent" "$( [ -e "$ADIR/ansible-reread-opnsense" ] && echo present || echo absent)"
 # r8 a mode that would reach the MASTER does not exist: `on` without a target is refused for this row
 # (target carp-backup + mode on is not a combination the bracket admits)
 rm -f "$T/calls"; _yq '.apply_ansible.opnsense.mode = "on"' "$POL" >"$T/pol.yaml"
 ans_bracket "$T/pol.yaml" opnsense "$SHA" "$LAST" >/dev/null 2>&1; eq r-on-refused-rc 3 "$?"
+
+# ── 5. the standing-refusal re-read (ans_reread) + the human stamp's status (mgmt_post_human_stamp) ──
+# Contract (mgmt-ansible.sh ans_reread header): an armed re-verifiable refusal, last read ≥ reread_min
+# (60) ago, re-runs ONLY the bracket's target read; clean → the clean branch (success + confirmed sha),
+# dirty → nothing posted; never a security-boundary refusal; shadow posts nothing.
+old() { touch -d '2 hours ago' "$ADIR/ansible-reread-$1"; }
+rr() {  # <name> <mode> <target> [<refused-sha>] → the re-read over the matchbox row
+  rm -f "$T/calls" "$T/applied"; mkpol "$2"; P_target="$3" P_base=- P_apply=- P_confirm=-
+  ans_reread "$T/pol.yaml" "$SHA" "${4:-}" >"$T/out.$1" 2>&1
+  C="$(cat "$T/calls" 2>/dev/null)"; OUT="$(cat "$T/out.$1")"
+}
+# 5a a drift refusal arms the re-read: marker = "<sha>\t<rule>"
+rm -f "$ADIR"/ansible-reread-* "$ADIR/ansible-stopped" "$ADIR/ansible-confirmed-matchbox"
+run rr-arm on changed changed - -
+eq rr-arm-rc 3 "$RC"; eq rr-arm-marker "$SHA	ansible-live-drift" "$(cat "$ADIR/ansible-reread-matchbox" 2>/dev/null)"
+rm -f "$ADIR/refused-rev"   # the stub refuse() wrote it; the re-read below must not write one again
+# 5b not due yet (the marker was just written): no read at all
+rr rr-not-due on clean; eq rr-not-due-no-read "0" "$(grep -c '^target ' <<<"$C")"
+# 5c due, live STILL differs: one target read per play, nothing posted, no refusal, metric refreshed
+old matchbox; rr rr-dirty on changed
+eq rr-dirty-reads "$plays" "$(grep -c '^target ' <<<"$C")"; eq rr-dirty-no-base-or-apply "0" "$(grep -cE '^(base|apply) ' <<<"$C")"
+eq rr-dirty-nothing-posted "0" "$(grep -cE '^(status|REFUSE)' <<<"$C")"; eq rr-dirty-no-refused-rev "absent" "$( [ -e "$ADIR/refused-rev" ] && echo present || echo absent)"
+has rr-dirty-mark '	on	refused	8$' "$(cat "$ADIR/ansible-last-matchbox")"   # 4 plays × changed=2
+eq rr-dirty-still-armed "present" "$( [ -e "$ADIR/ansible-reread-matchbox" ] && echo present || echo absent)"
+# 5d due, live now matches master (a hand converge): the bracket's clean branch — success + confirmed sha
+old matchbox; rr rr-clean on clean
+has rr-clean-status '^status success ansible matchbox: live matches master' "$C"
+eq rr-clean-confirmed "$SHA" "$(cat "$ADIR/ansible-confirmed-matchbox")"; eq rr-clean-disarmed "absent" "$( [ -e "$ADIR/ansible-reread-matchbox" ] && echo present || echo absent)"
+# 5e shadow: the read may run, nothing is posted
+ans_reread_arm matchbox "$SHA" ansible-live-drift; old matchbox; rr rr-shadow shadow clean
+eq rr-shadow-no-status "0" "$(grep -c '^status' <<<"$C")"
+# 5f ansible applies STOPPED: skipped, no read
+ans_reread_arm matchbox "$SHA" ansible-live-drift; old matchbox; printf 'x\tansible/matchbox\t-\tstop\n' >"$ADIR/ansible-stopped"
+rr rr-stopped on clean; eq rr-stopped-no-read "0" "$(grep -c '^target ' <<<"$C")"; rm -f "$ADIR/ansible-stopped"
+# 5g the loop waits on a refusal at ANOTHER sha: this group's marker does not qualify; at THIS sha, a clean
+# read lifts refused-rev so the next tick runs the span on
+old matchbox; rr rr-other-sha on clean "$LAST"; eq rr-other-sha-no-read "0" "$(grep -c '^target ' <<<"$C")"
+printf '%s' "$SHA" >"$ADIR/refused-rev"; old matchbox; rr rr-refused-clean on clean "$SHA"
+eq rr-refused-lifted "absent" "$( [ -e "$ADIR/refused-rev" ] && echo present || echo absent)"
+# 5h the security boundary: a deny refusal leaves no marker, so the re-read has nothing to read
+rm -f "$ADIR"/ansible-reread-*; rr rr-deny on clean; eq rr-deny-no-read "0" "$(grep -c '^target ' <<<"$C")"
+# 5i the human stamp: ONE success on the stamped sha, subject `baseline`; marker consumed; shadow keeps it
+mgmt_post_status() { echo "status $1 $3 $4" >>"$T/calls"; }
+rm -f "$T/calls"; printf '%s\t%s\n' "$SHA" 20261117T200000Z-abc12345 >"$ADIR/human-stamp"
+MGMT_SHADOW=1 mgmt_post_human_stamp >/dev/null 2>&1; eq hs-shadow-kept "present" "$( [ -e "$ADIR/human-stamp" ] && echo present || echo absent)"
+mgmt_post_human_stamp >/dev/null 2>&1; C="$(cat "$T/calls" 2>/dev/null)"
+eq hs-status "status $SHA success baseline: stamped by a human apply (mgmt-tf plan 20261117T200000Z-abc12345) — the span is accounted for" "$C"
+eq hs-consumed "absent" "$( [ -e "$ADIR/human-stamp" ] && echo present || echo absent)"
+rm -f "$T/calls"; mgmt_post_human_stamp; eq hs-none "" "$(cat "$T/calls" 2>/dev/null)"
 
 echo "mgmt-ansible-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]

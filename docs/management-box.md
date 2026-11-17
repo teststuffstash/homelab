@@ -232,7 +232,9 @@ subject** — the description's `<subject>:` prefix (`main`, `stage 1`, `ansible
 a root or `stage 1` refusal stands while it is the newest verdict (the box restates it on every new
 commit until resolved); an `ansible <group>` refusal stands until a later success for THAT group (the
 bracket's converged or confirmed status), because the box re-reads a group only when a span touches it
-and a human `mgmt-tf apply` stamps the baseline past it. Reading only the newest commit missed the
+and a human `mgmt-tf apply` stamps the baseline past it (the box's hourly re-read posts that success
+after a hand converge, §Ansible applies). A root or `stage 1` refusal also ends at the human stamp's
+`baseline:` success. Reading only the newest commit missed the
 router's 2026-10-31 → 11-17 refusal: unrelated clean applies (11-11, 11-14) read as cleared, and every
 status-less head published nothing (`collect_mgmt_apply`, fixture shape 4 in
 `argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
@@ -557,7 +559,11 @@ The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` ref
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
 the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
-`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+`refused-rev` on success; a scoped one does not (finish with a full one). The stamp is the ONE human
+stamp site, and it is observable: it leaves `/var/lib/mgmt/apply/human-stamp`, and the apply loop's next
+tick posts `baseline: stamped by a human apply (mgmt-tf plan <id>) — the span is accounted for` on the
+stamped commit (`mgmt_post_human_stamp`, `mgmt/scripts/mgmt-lib.sh`) — what ends a standing root or
+`stage 1` refusal for `MgmtApplyResidueStanding` (§"A standing refusal is a third verdict shape"). Since the plan-id change
 that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
 rather than from the apply's own flags, which a plan-file apply no longer has. **Since 2026-09-28
 the loop ADMITS the provider-pin shape on a master span exactly as the sentinel does on a head**
@@ -873,8 +879,9 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
 1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
    §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
 2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
-   (a hand converge, or a no-op change): nothing to apply, status success (every enforcing mode, `backup-only`
-   too — that success is what ends the group's standing refusal for `MgmtApplyResidueStanding`), the group's confirmed sha
+   (a hand converge, or a no-op change): nothing to apply, status success (`backup-only` runs as `on` here, so
+   the router row posts it too — that success is what ends the group's standing refusal for
+   `MgmtApplyResidueStanding`), the group's confirmed sha
    advances. The diff hunks go to the journal.
 3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
    (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read
@@ -911,6 +918,18 @@ refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a st
 (`ansible-stopped` names the dir under `/var/lib/mgmt/apply/ansible/`: `summary.txt`, one log per play
 and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
 upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
+
+**The standing-refusal re-read.** A group refusal the box can re-verify — `ansible-live-drift`,
+`ansible-check-failed`, `ansible-unreachable` (never the security boundary) — arms
+`$ADIR/ansible-reread-<group>`. On an IDLE tick (master applied, or the loop waiting on that group's
+refusal at the current sha), outside declared windows and off the shared lock, the loop re-runs ONE
+armed group's target `--check` at most every `reread_min` (row knob, default 60) through the bracket
+itself (`ans_reread` → `ans_bracket` with `ANS_REREAD=1` and an empty span): clean → step 2's clean
+branch (confirmed sha = master, `ansible <group>: live matches master …` posted — in every enforcing mode,
+`backup-only` included); still dirty → nothing posted, the group's metric refreshed. Skipped while
+`ansible-stopped` or the group's lease stands. In the waiting case a clean read also lifts `refused-rev`,
+so the next tick runs the span on. This is what ends a hand-converged refusal within the hour instead of
+at the next span that happens to touch the group.
 
 **The belt sees what the loop does not look at.** The loop only reads a group when a span touches its
 paths; a hand edit on the LXC between merges is the belt's: `check_ansible` (§MB2) runs every play of
@@ -960,7 +979,9 @@ names made mechanical. What it adds to §Ansible applies:
   master, codeowner-gated — over a role-level list in the applier): the row's `deny_paths` name the
   WAN-firewall + port-forward surface (`opnsense/tuya-egress.py`: filter + `d_nat` rules), WireGuard,
   ACME + ddclient (the DNS credentials), the API users and CARP (pair mechanics, and a password the box
-  does not hold). A span touching one is refused to a human (`security-boundary`), whatever else it
+  does not hold). A span touching one is refused to a human (`stage 1: security-boundary (ansible <group>)`
+  — subject `stage 1`, because it is a verdict on the SPAN like the sentinel's `deny_paths`, so it ends with
+  the human apply's stamp, never with a read of the row's plays, which exclude the denied ones), whatever else it
   holds; those plays are not in the row's list either. A `group_vars/opnsense.yml` edit to one of those
   plays' values selects the row and converges nothing (the plays that read it are not run) — the human
   path stays `opnsense-router-node.sh converge`.

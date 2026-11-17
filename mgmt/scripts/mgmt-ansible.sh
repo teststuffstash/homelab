@@ -243,7 +243,16 @@ ans_lease_check() {
 }
 
 # ans_mark <group> <mode> <outcome> <changed-count> — the per-group record emit_metrics publishes
-ans_mark() { printf '%s\t%s\t%s\t%s\n' "$(_ans_now)" "$2" "$3" "${4:-0}" >"$ADIR/ansible-last-$1"; }
+ans_mark() {
+  printf '%s\t%s\t%s\t%s\n' "$(_ans_now)" "$2" "$3" "${4:-0}" >"$ADIR/ansible-last-$1"
+  # live == a declaration again: nothing left for the standing-refusal re-read (ans_reread)
+  case "$3" in converged|applied) rm -f "$ADIR/ansible-reread-$1" ;; esac
+}
+# ans_reread_arm <group> <sha> <rule> — a refusal the box can RE-VERIFY (live drift, a check that failed
+# or did not reach a host) arms the hourly re-read: $ADIR/ansible-reread-<g> = "<sha>\t<rule>", its mtime
+# the last read. NOT the security boundary: the row's plays exclude the denied ones, so a clean read of
+# them says nothing about what the human owes — that refusal ends with the human apply's stamp.
+ans_reread_arm() { printf '%s\t%s\n' "$2" "$3" >"$ADIR/ansible-reread-$1"; }
 _ans_count() { [ "${1%%$'\t'*}" = changed ] || { echo 0; return; }; tr ' ' '\n' <<<"${1#*$'\t'}" | sed -n 's/.*=\([0-9]*\)$/\1/p' | awk '{s+=$1} END {print s+0}'; }
 
 # ── the router row's reads and its LOCAL revert (ADR-152 (2)–(4), step 3) ──────────────────────
@@ -319,6 +328,39 @@ ans_revert_cancel() {  # <ip> → rc 0 cancelled (nothing armed is also rc 0, sa
 }
 
 # ── the bracket ─────────────────────────────────────────────────────────────────────────────────
+# ans_reread <policy> <sha> [<refused-sha>] — the STANDING-REFUSAL RE-READ (docs/management-box.md §Ansible
+# applies). A group refusal the box can re-verify (ans_reread_arm) is otherwise re-read only when a later
+# span touches the group's paths — after a hand converge that can be weeks, and the refusal stands on the
+# wire all that time. So on an idle tick (the caller: mgmt-apply.sh), at most ONE armed group whose last
+# read is older than its row's `reread_min` (default 60) runs ans_bracket's own target read with
+# ANS_REREAD=1 and an empty span: clean → the bracket's clean branch (confirmed sha = <sha>, the group's
+# success posted on <sha>); still dirty → nothing posted. Skipped while ansible applies are STOPPED or the
+# group's lease is held. <refused-sha>: the loop is waiting on a refusal — only the group refused AT that
+# sha qualifies, and a clean read lifts refused-rev so the next tick runs the span on. Returns 0 always.
+ans_reread() {
+  local pol="$1" sha="$2" refused="${3:-}" f g row every m now due="" oldest=""
+  now="$(date +%s)"
+  for f in "$ADIR"/ansible-reread-*; do
+    [ -f "$f" ] || continue
+    g="${f##*/ansible-reread-}"
+    [ -z "$refused" ] || [ "$(cut -f1 "$f")" = "$refused" ] || continue
+    row="$(ans_row "$pol" "$g" 2>/dev/null)" && [ -n "$row" ] && [ "$row" != '""' ] || continue
+    every="$(jq -r '.reread_min // 60' <<<"$row")"; m="$(stat -c %Y "$f")"
+    [ $(( now - m )) -ge $(( every * 60 )) ] || continue
+    if [ -z "$due" ] || [ "$m" -lt "$oldest" ]; then due="$g"; oldest="$m"; fi
+  done
+  [ -n "$due" ] || return 0
+  g="$due"; touch "$ADIR/ansible-reread-$g"
+  [ -s "$ADIR/ansible-stopped" ] && { log "ansible $g: re-read skipped — ansible applies are STOPPED"; return 0; }
+  ans_lease_check "$g" || { log "ansible $g: re-read skipped — lease upgrade-lease-ansible-$g held or unreadable"; return 0; }
+  log "ansible $g: re-reading the standing refusal ($(cut -f2 "$ADIR/ansible-reread-$g")) against ${sha:0:8}"
+  # a subshell: the bracket's refusal paths LOG here (a still-refused re-read posts nothing, writes no refused-rev)
+  ( refuse() { log "ansible $g: re-read: still refused — $2 (nothing posted)"; }
+    ANS_REREAD=1 ans_bracket "$pol" "$g" "$sha" "$sha" ) || true
+  [ -n "$refused" ] && [ ! -e "$ADIR/ansible-reread-$g" ] && rm -f "$ADIR/refused-rev"
+  return 0
+}
+
 # ans_bracket <policy> <group> <sha> <last> → see the header's return codes. Uses refuse() + mgmt_post_status
 # from the caller (mgmt-apply.sh) and REPO (its clone, reset to <sha>).
 ans_bracket() {
@@ -352,7 +394,9 @@ ans_bracket() {
   if [ -n "$hits" ]; then
     ans_mark "$g" "$mode" refused 0
     [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — security-boundary: $(tr '\n' ' ' <<<"$hits")"; return 0; }
-    refuse "$sha" "ansible $g: security-boundary — the span touches $(grep -c . <<<"$hits") denied path(s) (WAN firewall/port forwards/WireGuard/ACME-DNS creds) — a human applies" "$hits"; return 3
+    # subject `stage 1`: the deny_paths check is stage 1's shape (a verdict on the SPAN, not on live), so on
+    # the wire it stands while restated and ends with the human apply's stamp (mgmt_post_human_stamp)
+    refuse "$sha" "stage 1: security-boundary (ansible $g) — the span touches $(grep -c . <<<"$hits") denied path(s) (WAN firewall/port forwards/WireGuard/ACME-DNS creds) — a human applies" "$hits"; return 3
   fi
   if [ "$mode" = on ] && [ -s "$ADIR/ansible-stopped" ]; then
     refuse "$sha" "ansible $g: ansible applies STOPPED since $(cut -f2,4 "$ADIR/ansible-stopped" | tr '\t' ' ' | head -c 80) — a human reads the record, then rm $ADIR/ansible-stopped"
@@ -396,16 +440,24 @@ ans_bracket() {
       ans_mark "$g" "$mode" converged 0
       # an OBSERVATION, in any mode: live holds master's declaration (the drift read's next baseline)
       printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
-      # every enforcing mode posts it (backup-only too): this success is what ENDS the group's standing
-      # refusal on the wire — the github-exporter tracks refusals per `ansible <group>:` subject
-      [ "$mode" != shadow ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
+      # `backup-only` was mapped to `on` above, so the router row posts it too; this success is what ENDS
+      # the group's standing refusal on the wire (github-exporter, per `ansible <group>:` subject)
+      [ "$mode" = on ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
       return 0 ;;
     failed|unreachable)
       local rule="ansible-check-failed"; [ "${j%%$'\t'*}" = unreachable ] && rule="ansible-unreachable"
       ans_mark "$g" "$mode" refused 0
       [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — $rule: ${j#*$'\t'}"; return 0; }
+      ans_reread_arm "$g" "$sha" "$rule"
       refuse "$sha" "ansible $g: $rule on --check of master (${j#*$'\t'}) — human" "$(tail -3 "$d"/target-*.log 2>/dev/null)"; return 3 ;;
   esac
+  # the standing-refusal re-read (ans_reread) stops at the target read: clean took the branch above;
+  # still dirty posts NOTHING new (no hourly status churn) — it refreshes the group's metric only
+  if [ "${ANS_REREAD:-0}" = 1 ]; then
+    ans_mark "$g" "$mode" refused "$n"
+    log "ansible $g: re-read at ${sha:0:8}: live still differs from master (${j#*$'\t'}) — the refusal stands, nothing posted"
+    return 0
+  fi
   # the would-be diff, for the journal (names + the --diff hunks; the plays carry no secrets here)
   grep -hE '^(changed|---|\+\+\+|[-+@])' "$d"/target-*.log 2>/dev/null | head -60 | sed 's/^/    /'
 
@@ -426,6 +478,7 @@ ans_bracket() {
     esac
     ans_mark "$g" "$mode" refused "$n"
     [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — $brule: $bwhy (${jb#*$'\t'})"; return 0; }
+    ans_reread_arm "$g" "$sha" "$brule"
     refuse "$sha" "ansible $g: $brule — $bwhy (${jb#*$'\t'}) — human looks first"; return 3
   fi
   # the drift read was clean: live holds <conf>'s declaration — recorded as an OBSERVATION, so a span
