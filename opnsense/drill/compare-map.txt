@@ -47,6 +47,9 @@ env    value       system/user[backup-puller]/pwd_changed_at
 env    value       system/user[automation]/password
 env    value       system/user[automation]/apikeys
 env    value       system/user[automation]/pwd_changed_at
+env    value       system/user[firmware]/password
+env    value       system/user[firmware]/apikeys
+env    value       system/user[firmware]/pwd_changed_at
 env    drill-only  filter/rule[FU-297: *]
 # ── (b) env: BGP peers — prod's are the cluster nodes, the drill's is its fake peer (drill-overrides.yml)
 env    prod-only   OPNsense/quagga/bgp/neighbors/neighbor[192.168.2.*]
