@@ -298,6 +298,12 @@ has r-good-node-check '^node-check pve$' "$C"
 has r-good-status '^status success ansible opnsense: applied by the management box' "$C"
 L="$(ls -d "$MGMT_ANSIBLE_DIR"/*-opnsense-"${SHA:0:8}" | tail -1)/lease.json"
 has r-good-lease-reason 'target opnsense-pve \(its node-local restore is the revert\)' "$(jq -r .data.reason "$L")"
+# r2b backup-only, live already matches master → converged posts SUCCESS (it ends the group's standing
+# refusal on the wire — the exporter's per-subject tracking); shadow posts nothing (converged-shadow above)
+rrun r-converged backup-only clean - - -
+eq r-converged-rc 0 "$RC"
+has r-converged-status '^status success ansible opnsense: live matches master' "$C"
+eq r-converged-no-arm "0" "$(grep -cE '^(revert-arm|apply) ' <<<"$C")"
 # r3 the node check fails → STOP: the restore stays ARMED (the revert, by construction), lease + window kept
 NODE_OK=0 rrun r-node-bad backup-only changed clean changed clean
 eq r-node-bad-rc 2 "$RC"; eq r-node-bad-no-cancel "0" "$(grep -c '^revert-cancel' <<<"$C")"

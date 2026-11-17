@@ -227,7 +227,15 @@ not liveness. The transport is the hypervisors' pattern: the box runs node_expor
 textfile collector (`mgmt/nixos/hosts/mgmt/default.nix`, 9100 open to the LAN only),
 `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus scrapes it as the
 static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`** (github-exporter,
-from master's commit status). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
+from master's commit status). It reads the statuses of the last master commits as one verdict stream, **per
+subject** — the description's `<subject>:` prefix (`main`, `stage 1`, `ansible <group>`), never a list:
+a root or `stage 1` refusal stands while it is the newest verdict (the box restates it on every new
+commit until resolved); an `ansible <group>` refusal stands until a later success for THAT group (the
+bracket's converged or confirmed status), because the box re-reads a group only when a span touches it
+and a human `mgmt-tf apply` stamps the baseline past it. Reading only the newest commit missed the
+router's 2026-10-31 → 11-17 refusal: unrelated clean applies (11-11, 11-14) read as cleared, and every
+status-less head published nothing (`collect_mgmt_apply`, fixture shape 4 in
+`argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
 status cannot show — a loop or box that stopped posting: `MgmtApplyLoopStale`,
 `MgmtApplyMetricsAbsent`, `MgmtBoxDown`. The operator's at-a-glance PROGRESS view is the Grafana
 dashboard **"Management box — now"** (`https://grafana.teststuff.net`,
@@ -865,7 +873,8 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
 1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
    §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
 2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
-   (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
+   (a hand converge, or a no-op change): nothing to apply, status success (every enforcing mode, `backup-only`
+   too — that success is what ends the group's standing refusal for `MgmtApplyResidueStanding`), the group's confirmed sha
    advances. The diff hunks go to the journal.
 3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
    (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read

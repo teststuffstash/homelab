@@ -396,7 +396,9 @@ ans_bracket() {
       ans_mark "$g" "$mode" converged 0
       # an OBSERVATION, in any mode: live holds master's declaration (the drift read's next baseline)
       printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
-      [ "$mode" = on ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
+      # every enforcing mode posts it (backup-only too): this success is what ENDS the group's standing
+      # refusal on the wire — the github-exporter tracks refusals per `ansible <group>:` subject
+      [ "$mode" != shadow ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
       return 0 ;;
     failed|unreachable)
       local rule="ansible-check-failed"; [ "${j%%$'\t'*}" = unreachable ] && rule="ansible-unreachable"

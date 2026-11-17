@@ -2020,92 +2020,138 @@ def collect_anthropic_status(lines):
 # ── FU-252: the management box's apply loop, seen from the only signal that leaves it ──────────
 MGMT_APPLY_REPO = os.environ.get("MGMT_APPLY_REPO", "homelab")
 MGMT_APPLY_CONTEXT = os.environ.get("MGMT_APPLY_CONTEXT", "management-apply")
-MGMT_APPLY_WALK = int(os.environ.get("MGMT_APPLY_WALK", "40"))
-# Module state, deliberately: once the oldest refused commit is known it does not move until a
-# SUCCESS clears it, so a HEAD change during a standing refusal costs ONE status read, not a
-# re-walk. Without this the 2026-09-14 condition would have re-walked 40 commits per master push
-# for four days — the poll-loop rate-limit shape homelab has been bitten by twice.
-_mgmt_since_ts = None
-_mgmt_since_sha = ""
-_mgmt_floored = False
+# Cold start reads at most MGMT_APPLY_WALK_PAGES × 100 master commits (once per process); every later
+# cycle reads ONE page (the newest 100) and merges it — a terminal status is immutable, so it is cached.
+MGMT_APPLY_WALK_PAGES = int(os.environ.get("MGMT_APPLY_WALK_PAGES", "5"))
+MGMT_APPLY_KEEP_DAYS = int(os.environ.get("MGMT_APPLY_KEEP_DAYS", "45"))
+_MGMT_HISTORY_QUERY = """
+query($owner:String!, $name:String!, $ctx:String!, $after:String) {
+  repository(owner:$owner, name:$name) {
+    ref(qualifiedName:"refs/heads/master") {
+      target { ... on Commit {
+        history(first:100, after:$after) {
+          pageInfo { hasNextPage endCursor }
+          nodes { oid committedDate status { context(name:$ctx) { state description createdAt } } }
+        }
+      } }
+    }
+  }
+}
+"""
+# Module state, deliberately: sha -> (status createdAt epoch, commit epoch, state, description), terminal
+# statuses only. `_mgmt_truncated` = the retained history does not reach back to a clean start (the cold
+# walk hit its cap, or old events were pruned) — the `_floored` label's source.
+_mgmt_events = {}
+_mgmt_cold = True
+_mgmt_truncated = False
 
 
-def _mgmt_status_of(sha):
-    """The management-apply status state + description for one commit, or (None, "")."""
-    st = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits/{sha}/status")
-    for entry in st.get("statuses") or []:
-        if entry.get("context") == MGMT_APPLY_CONTEXT:
-            return entry.get("state"), entry.get("description") or ""
-    return None, ""
+def mgmt_subject(desc):
+    """The status description's SUBJECT — what the box refused or applied. Every description the box
+    posts starts `<subject>: ` (mgmt/scripts/mgmt-apply.sh, mgmt-ansible.sh, mgmt-runner.sh): a root
+    (`main`), `stage 1`, or `ansible <group>`. Derived, never enumerated."""
+    head, sep, _ = (desc or "").partition(": ")
+    return head.strip() if sep and head.strip() else "-"
+
+
+def mgmt_group_scoped(subject):
+    """An `ansible <group>` subject outlives the span: the box re-reads a group only when a span touches
+    its paths, and a human `mgmt-tf apply` stamps the baseline past it without converging it — so its
+    refusal ends ONLY with a later success for the same group (mgmt-ansible.sh posts one on a converged
+    or confirmed bracket). Every other subject is span-scoped: the box restates it on each new master
+    commit until it is resolved, so it stands only while it is the newest verdict."""
+    return subject.startswith("ansible ")
+
+
+def mgmt_standing(events):
+    """Per-subject standing refusals over `events` [(at, committed, sha, state, desc)], any order.
+    Returns ({subject: {"since": commit epoch, "sha": sha, "addresses": n, "cleared_seen": bool}}, known).
+      group-scoped: from its first failure, stands until a success with the SAME subject.
+      span-scoped:  stands while the newest event (any subject) is its failure; `since` = the first
+                    commit of that unbroken run."""
+    standing, known, cleared = {}, set(), set()
+    for at, committed, sha, state, desc in sorted(events):
+        s = mgmt_subject(desc)
+        known.add(s)
+        for k in [k for k in standing if not mgmt_group_scoped(k) and k != s]:
+            standing.pop(k)           # a newer verdict on another subject: the span got past it
+            cleared.add(k)
+        if state == "success":
+            standing.pop(s, None)
+            cleared.add(s)
+            continue
+        if state not in ("failure", "error"):
+            continue
+        if s not in standing:
+            standing[s] = {"since": committed, "sha": sha, "cleared_seen": s in cleared}
+        m = re.search(r"(\d+) address", desc or "")
+        standing[s]["addresses"] = int(m.group(1)) if m else 0
+    return standing, known
 
 
 def collect_mgmt_apply(lines):
     """FU-252 — the management box refuses an apply by posting a COMMIT STATUS on master
-    (`mgmt/scripts/mgmt-apply.sh` → `mgmt_post_status`), and until this collector nothing watched it:
-    no `mgmt_*` series exists, nothing scrapes 192.168.2.53, and a commit STATUS is not a
-    check-run, so `/commits/<sha>/check-runs` reads green while master carries a failure.
+    (`mgmt/scripts/mgmt-apply.sh` → `mgmt_post_status`), and a commit STATUS is not a check-run, so
+    `/commits/<sha>/check-runs` reads green while master carries a failure. What needs alerting is not
+    liveness but the AGE of a standing refusal (2026-09-14..18: 1101 restatements, nothing watching) —
+    `..._refused_since_timestamp`, read by MgmtApplyResidueStanding as `time() -` it.
 
-    What needs alerting is NOT liveness. Measured 2026-09-18: the loop ran perfectly every five
-    minutes and correctly refused the same residue from Sep 14 11:42Z to Sep 18, restating itself
-    1101 times, while the address count ratcheted 2 → 8 (a refusal does not stamp the baseline, so
-    every later master commit joins its residue to the same pending apply). A verdict +
-    `_last_run_timestamp` shape stays GREEN through all of that. So the series here is the AGE of
-    the oldest unapplied residue — `..._refused_since_timestamp`, the commit that first carried the
-    standing refusal — and the alert reads `time() -` it.
+    PER SUBJECT, not per newest commit (2026-10-31 → 11-17): the router's `ansible opnsense` refusal
+    stood on the box for 17 days while this collector read 0 whenever a newer, unrelated commit applied
+    cleanly (11-11, 11-14) and published NOTHING while the newest commit had no status yet (every
+    status-less head restarted the alert's `for:`). So the verdicts of the last master commits are read
+    as one event stream (`mgmt_standing` holds the rule) and each subject carries its own series.
 
-    `_floored=1` says the walk hit MGMT_APPLY_WALK without finding a success, i.e. the real age is
-    at least this: an under-report, never an over-report."""
-    global _mgmt_since_ts, _mgmt_since_sha, _mgmt_floored
-    labels = {"repo": MGMT_APPLY_REPO, "context": MGMT_APPLY_CONTEXT}
+    Budget: ONE GraphQL query per cycle (the newest 100 master commits with their status) — the REST
+    reader made 2 calls per cycle plus a 41-call walk on every new refusal. Cold start: up to
+    MGMT_APPLY_WALK_PAGES queries, once per process. `_floored=1` = the retained history does not reach
+    a clearing verdict for the subject, so its age is a LOWER bound."""
+    global _mgmt_cold, _mgmt_truncated
+    base = {"repo": MGMT_APPLY_REPO, "context": MGMT_APPLY_CONTEXT}
     lines += [
-        "# HELP github_mgmt_apply_refused 1 while the management box is refusing to apply master (FU-252).",
+        "# HELP github_mgmt_apply_refused 1 while the management box's refusal of <subject> stands on master (FU-252), 0 for a subject seen and not refused.",
         "# TYPE github_mgmt_apply_refused gauge",
-        "# HELP github_mgmt_apply_refused_since_timestamp Commit time of the OLDEST commit carrying the standing refusal.",
+        "# HELP github_mgmt_apply_refused_since_timestamp Commit time of the OLDEST commit carrying the subject's standing refusal.",
         "# TYPE github_mgmt_apply_refused_since_timestamp gauge",
-        "# HELP github_mgmt_apply_outside_addresses Addresses outside the apply allowlist, parsed from the status description.",
+        "# HELP github_mgmt_apply_outside_addresses Addresses outside the apply allowlist, parsed from the subject's latest refusal.",
         "# TYPE github_mgmt_apply_outside_addresses gauge",
-        "# HELP github_mgmt_apply_since_floored 1 when the walk found no success within MGMT_APPLY_WALK — the age is a LOWER bound.",
+        "# HELP github_mgmt_apply_since_floored 1 when the retained history holds no clearing verdict for the subject — the age is a LOWER bound.",
         "# TYPE github_mgmt_apply_since_floored gauge",
     ]
-    head = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits/master")
-    head_sha = head.get("sha") or ""
-    state, desc = _mgmt_status_of(head_sha)
-    if state is None:
-        # No verdict on HEAD yet (the loop has not reached this commit). Absent != zero: publish
-        # nothing rather than a green sample the alert would read as "applied".
-        return
-    if state == "success":
-        _mgmt_since_ts, _mgmt_since_sha, _mgmt_floored = None, "", False
-        lines.append(metric("github_mgmt_apply_refused", labels, 0))
-        lines.append(metric("github_mgmt_apply_outside_addresses", labels, 0))
-        return
-    lines.append(metric("github_mgmt_apply_refused", labels, 1))
-    count = 0
-    m = re.search(r"(\d+) address", desc)
-    if m:
-        count = int(m.group(1))
-    lines.append(metric("github_mgmt_apply_outside_addresses", labels, count))
-    if _mgmt_since_ts is None:
-        # First refusal seen this process: walk master back to the newest success. The commit
-        # AFTER it is the oldest refused one — that is the age the operator cares about.
-        commits = gh(f"/repos/{ORG}/{MGMT_APPLY_REPO}/commits"
-                     f"?sha=master&per_page={min(MGMT_APPLY_WALK, 100)}")
-        prev = None
-        _mgmt_floored = True
-        for c in commits:
-            sha = c.get("sha") or ""
-            st, _ = _mgmt_status_of(sha)
-            if st == "success":
-                _mgmt_floored = False
-                break
-            prev = c
-        if prev is not None:
-            _mgmt_since_sha = prev.get("sha") or ""
-            _mgmt_since_ts = epoch(prev["commit"]["committer"]["date"])
-    if _mgmt_since_ts is not None:
-        lines.append(metric("github_mgmt_apply_refused_since_timestamp",
-                            dict(labels, since_sha=_mgmt_since_sha[:8]), _mgmt_since_ts))
-    lines.append(metric("github_mgmt_apply_since_floored", labels, 1 if _mgmt_floored else 0))
+    after, pages = None, (MGMT_APPLY_WALK_PAGES if _mgmt_cold else 1)
+    for page in range(pages):
+        data = graphql(_MGMT_HISTORY_QUERY, {"owner": ORG, "name": MGMT_APPLY_REPO,
+                                             "ctx": MGMT_APPLY_CONTEXT, "after": after})
+        hist = ((((data or {}).get("repository") or {}).get("ref") or {}).get("target") or {}).get("history")
+        if hist is None:
+            raise RuntimeError("mgmt-apply: master history unreadable")   # never a green sample
+        for node in hist.get("nodes") or []:
+            ctx = (node.get("status") or {}).get("context")
+            if ctx and ctx.get("state", "").lower() in ("success", "failure", "error"):
+                _mgmt_events[node["oid"]] = (epoch(ctx["createdAt"]), epoch(node["committedDate"]),
+                                             ctx["state"].lower(), ctx.get("description") or "")
+        info = hist.get("pageInfo") or {}
+        if not info.get("hasNextPage"):
+            break
+        after = info.get("endCursor")
+        if _mgmt_cold and page == pages - 1:
+            _mgmt_truncated = True    # the cold walk stopped at its cap with older history unread
+    _mgmt_cold = False
+    horizon = time.time() - MGMT_APPLY_KEEP_DAYS * 86400
+    for sha in [s for s, ev in _mgmt_events.items() if ev[0] < horizon]:
+        del _mgmt_events[sha]
+        _mgmt_truncated = True
+    standing, known = mgmt_standing([(at, c, sha, st, d) for sha, (at, c, st, d) in _mgmt_events.items()])
+    for s in sorted(known | set(standing)):
+        labels = dict(base, subject=s)
+        row = standing.get(s)
+        lines.append(metric("github_mgmt_apply_refused", labels, 1 if row else 0))
+        lines.append(metric("github_mgmt_apply_outside_addresses", labels, row["addresses"] if row else 0))
+        if row:
+            lines.append(metric("github_mgmt_apply_refused_since_timestamp",
+                                dict(labels, since_sha=row["sha"][:8]), row["since"]))
+            lines.append(metric("github_mgmt_apply_since_floored", labels,
+                                1 if (_mgmt_truncated and not row["cleared_seen"]) else 0))
 
 
 _RENOVATE_QUERY = """
@@ -4133,6 +4179,88 @@ def self_test():
     _stale_expr = " ".join(ln for ln in alert_rule(RULE_FILE, "DependencyClassProofStale") if "86400" in ln)
     assert isinstance(_days, int) and f"> {_days} * 86400" in _stale_expr, (
         f"DependencyClassProofStale must compare against proof_recent_days={_days!r} × 86400; expr: {_stale_expr!r}")
+    # ── FU-252 per-subject refusal tracking (2026-10-31 → 11-17, the router's 17 silent days) ──────
+    # The fixture is the REAL status history's shape (gh: commits/<sha>/statuses, management-apply):
+    # f50222b1 posted `ansible opnsense: ansible-live-drift …` and the box restated it until 11-08;
+    # unrelated `main:` successes landed 11-10/11-11/11-12; the newest commit has no status yet.
+    # Expected values come from mgmt_standing's contract (docstring): a group-scoped subject stands from
+    # its FIRST failure until a success for the SAME group; a span-scoped one only while it is the
+    # newest verdict.
+    _drift = ("ansible opnsense: ansible-live-drift — live differs from ce90ef49 before this span "
+              "(opnsense/kea-dhcp.py:192.168.2.71=2) — hum")
+    def _node(oid, committed, state=None, desc="", at=None):
+        st = {"context": {"state": state, "description": desc, "createdAt": at}} if state else {"context": None}
+        return {"oid": oid + "0" * 32, "committedDate": committed, "status": st}
+    _page2 = [  # newest first, as GitHub returns history
+        _node("751618eb", "2026-11-08T12:42:07Z", "FAILURE", _drift, "2026-11-08T12:46:19Z"),
+        _node("126fe1a5", "2026-11-08T08:56:47Z", "FAILURE", "main: plan errored — see the box journal", "2026-11-08T08:58:12Z"),
+        _node("a92848c1", "2026-10-31T18:07:00Z", "FAILURE", _drift, "2026-10-31T18:20:00Z"),
+        _node("f50222b1", "2026-10-31T18:04:09Z", "FAILURE", _drift, "2026-10-31T18:15:26Z"),
+        _node("51bb530a", "2026-10-31T16:57:09Z", "FAILURE", "main: 1 address(es) outside the apply allowlist — human apply", "2026-10-31T16:58:00Z"),
+    ]
+    _page1 = [
+        _node("headhead", "2026-11-17T20:00:00Z"),   # status-less newest commit
+        _node("365842a8", "2026-11-12T00:05:56Z", "SUCCESS", "main: helm_release.argocd 10.12.0 → 10.12.1 applied by the management box · helm verdict clean", "2026-11-12T00:20:51Z"),
+        _node("c29dcef2", "2026-11-11T13:37:00Z", "SUCCESS", "main: helm_release.argocd 10.11.7 → 10.12.0 applied by the management box · helm verdict clean", "2026-11-11T13:50:36Z"),
+        _node("b7f1e604", "2026-11-10T23:07:47Z", "SUCCESS", "main: helm_release.argocd 10.11.6 → 10.11.7 applied by the management box · helm verdict clean", "2026-11-10T23:26:09Z"),
+        _node("220da63f", "2026-11-08T14:33:26Z"),
+    ]
+    _mgmt_pages = {None: (_page1, True, "p2"), "p2": (_page2, False, None)}
+    _mgmt_calls = []
+    def _fake_mgmt_graphql(query, variables):
+        _mgmt_calls.append(variables.get("after"))
+        nodes, more, cur = _mgmt_pages[variables.get("after")]
+        return {"repository": {"ref": {"target": {"history": {
+            "pageInfo": {"hasNextPage": more, "endCursor": cur}, "nodes": nodes}}}}}
+    _saved_mgmt = {k: globals()[k] for k in ("graphql", "MGMT_APPLY_KEEP_DAYS", "MGMT_APPLY_WALK_PAGES",
+                                             "_mgmt_events", "_mgmt_cold", "_mgmt_truncated")}
+    try:
+        globals().update(graphql=_fake_mgmt_graphql, MGMT_APPLY_KEEP_DAYS=100000, MGMT_APPLY_WALK_PAGES=5,
+                         _mgmt_events={}, _mgmt_cold=True, _mgmt_truncated=False)
+        _l = []; collect_mgmt_apply(_l); _b = "\n".join(_l)
+        _op = 'repo="homelab",subject="ansible opnsense"'
+        _mn = 'repo="homelab",subject="main"'
+        assert _mgmt_calls == [None, "p2"], f"cold start walks both pages: {_mgmt_calls}"
+        # f50222b1's commit time 2026-10-31T18:04:09Z = 1793556249 (its FIRST failure; restatements keep it)
+        assert f'github_mgmt_apply_refused{{context="management-apply",{_op}}} 1' in _b, _b
+        assert ('github_mgmt_apply_refused_since_timestamp{context="management-apply",repo="homelab",'
+                f'since_sha="f50222b1",subject="ansible opnsense"}} '
+                f'{epoch("2026-10-31T18:04:09Z")}') in _b, _b
+        # the unrelated main successes did NOT clear the group; the status-less head published no gap
+        assert f'github_mgmt_apply_refused{{context="management-apply",{_mn}}} 0' in _b, _b
+        assert f'github_mgmt_apply_since_floored{{context="management-apply",{_op}}} 0' in _b, "full history read"
+        # incremental cycle: ONE query; the router converge (mgmt-ansible.sh's converged success) ends it
+        _page1.insert(0, _node("conv0001", "2026-11-17T21:00:00Z", "SUCCESS",
+                               "ansible opnsense: live matches master (--check changed=0) — nothing to apply",
+                               "2026-11-17T21:05:00Z"))
+        _mgmt_calls.clear(); _l = []; collect_mgmt_apply(_l); _b = "\n".join(_l)
+        assert _mgmt_calls == [None], f"a warm cycle reads one page: {_mgmt_calls}"
+        assert f'github_mgmt_apply_refused{{context="management-apply",{_op}}} 0' in _b, _b
+        assert "github_mgmt_apply_refused_since_timestamp{" not in _b, _b
+        # a capped cold walk (1 page): the refusal is out of reach → nothing, never a false 1; with the
+        # refusal inside the one page but no clearing verdict, it is FLOORED
+        globals().update(MGMT_APPLY_WALK_PAGES=1, _mgmt_events={}, _mgmt_cold=True, _mgmt_truncated=False)
+        _page1.pop(0); _page1.insert(0, _node("ff000001", "2026-11-17T22:00:00Z", "FAILURE", _drift, "2026-11-17T22:01:00Z"))
+        _l = []; collect_mgmt_apply(_l); _b = "\n".join(_l)
+        assert f'github_mgmt_apply_since_floored{{context="management-apply",{_op}}} 1' in _b, _b
+        # an unreadable history raises (the collector fails, its last lines carry over) — never a green sample
+        globals()["graphql"] = lambda q, v: {"repository": None}
+        try:
+            collect_mgmt_apply([]); raise AssertionError("unreadable history must raise")
+        except RuntimeError:
+            pass
+    finally:
+        globals().update(_saved_mgmt)
+    # the pure rule, span-scoped half: stands while newest; another subject's verdict ends it
+    _ev = lambda t, st, d: (t, t, f"s{t}", st, d)
+    _st, _ = mgmt_standing([_ev(1, "failure", "main: 2 address(es) outside the apply allowlist — human apply"),
+                            _ev(2, "failure", "main: 4 address(es) outside the apply allowlist — human apply")])
+    assert _st["main"]["since"] == 1 and _st["main"]["addresses"] == 4, _st
+    _st, _ = mgmt_standing([_ev(1, "failure", "main: plan errored"), _ev(2, "failure", _drift)])
+    assert set(_st) == {"ansible opnsense"}, f"a later verdict on another subject ends a span-scoped refusal: {_st}"
+    _st, _ = mgmt_standing([_ev(1, "failure", _drift), _ev(2, "success", "main: +1 ~0 -0 applied by the management box")])
+    assert set(_st) == {"ansible opnsense"}, f"an unrelated success never ends a group refusal: {_st}"
+    assert mgmt_subject("stage 1: deny on master diff — human apply") == "stage 1" and mgmt_subject("x") == "-"
     # The promtool copies of the two alerts cannot drift from the CR (the mgmt-apply pin's shape).
     for _alert in ("RenovateSilent", "DependencyClassProofStale"):
         _shipped_cov = alert_rule(RULE_FILE, _alert)
@@ -4157,7 +4285,7 @@ def self_test():
           "GraphQL partial-data error classification and counter metrics (homelab#1405), "
           "poll_forever incremental-cycle behavior with monotonic _body growth, dedup counter "
           "per cycle, and _last_success-only-on-full-success, dependency coverage gauges + "
-          "Renovate liveness + their alert-copy pins (homelab#1992))")
+          "Renovate liveness + their alert-copy pins (homelab#1992), per-subject mgmt-apply refusals (FU-252))")
     return 0
 
 

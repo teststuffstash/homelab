@@ -1,6 +1,7 @@
 # Belts on the management box itself (FU-252's liveness half). The standing-refusal belt —
 # the AGE of the oldest unapplied residue, the 2026-09-14..18 failure — is `MgmtApplyResidueStanding`
-# in github-exporter, read from master's commit status. These cover the box-side blind spot: a
+# in github-exporter, read from master's commit statuses per subject (a root, `stage 1`, `ansible
+# <group>` — never the box's mgmt_apply_ansible_* self-report). These cover the box-side blind spot: a
 # loop or box that has stopped posting leaves no status for it to read.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule

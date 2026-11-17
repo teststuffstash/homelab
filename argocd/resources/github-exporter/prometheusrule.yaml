@@ -894,13 +894,19 @@ spec:
         # 24h, not shorter: a refusal is the DESIGNED outcome for a non-allowlisted address, so it
         # is normal for the hours between a merge and the operator's next session. A day of it is
         # the thing nobody noticed for four.
+        #
+        # PER SUBJECT (2026-11-17): the router's `ansible opnsense` refusal stood 2026-10-31 → 11-17
+        # while a newest-commit reading went 0 on every unrelated clean apply (11-11, 11-14) and blank on
+        # every status-less head. The exporter now reads the verdict stream of the last master commits
+        # and labels each standing refusal by its `subject` (the description's `<subject>:` prefix); an
+        # `ansible <group>` refusal ends only with a success for that group (collect_mgmt_apply).
         # platform_machinery: a human applies this by construction (docs/management-box.md §The
         # test surface) — the responder investigates, it never dispatches a fixer.
         - alert: MgmtApplyResidueStanding
           expr: |-
             (github_mgmt_apply_refused == 1)
-              and on (repo, context)
-            (time() - max by (repo, context) (github_mgmt_apply_refused_since_timestamp)) > 86400
+              and on (repo, context, subject)
+            (time() - max by (repo, context, subject) (github_mgmt_apply_refused_since_timestamp)) > 86400
           for: 1h
           labels:
             severity: warning
@@ -908,8 +914,8 @@ spec:
             # triage: residue is a pending human apply; addresses are in the box journal and GitHub status
             triage: none
           annotations:
-            summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
-            description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
+            summary: "The management box has been refusing {{ $labels.subject }} on {{ $labels.repo }} master for over a day"
+            description: 'mgmt-apply has held a `{{ $labels.context }}` failure for `{{ $labels.subject }}` on {{ $labels.repo }} master for more than 24h. An `ansible <group>` subject ends only when a later span selecting that group posts success (converged or applied) — an unrelated clean apply does not end it; a human converge shows up at the next span that touches the group. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}",subject="{{ $labels.subject }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
         # ── homelab#1992 / FU-125: Renovate liveness + the dependency coverage table ─────────
         # 2026-08-01: 115 GREEN renovate.yaml runs and ZERO PRs org-wide (every repo aborted after
         # extraction on a missing `statuses` permission). The workflow verdict is not a liveness
