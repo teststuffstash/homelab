@@ -31,6 +31,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# The hypervisors' host keys, pinned in git: the jail's ~/.ssh/known_hosts dies with the container.
+HV_KH="$ROOT/machines/hypervisor_known_hosts"
 log() { echo "[router-node] $*" >&2; }
 die() { log "FAIL: $*"; exit 1; }
 cmd="${1:-}"; NODE="${2:-}"
@@ -40,7 +42,8 @@ cmd="${1:-}"; NODE="${2:-}"
 # (nx-02 eno2 <-> pve enp6s0) makes both nodes' WANs one segment. Runtime-only: `down` removes all.
 if [ "$cmd" = fakeisp ] || [ "$cmd" = probe ]; then
   K="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
-  hyp() { ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=10 "root@$1" "${@:2}"; }
+  hyp() { ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$HV_KH" "root@$1" "${@:2}"; }
   WANMAC="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' machines/machines.yaml)"
   case "$cmd:$NODE" in
     fakeisp:up)
@@ -82,7 +85,15 @@ HOST="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].ansible_host" "$INV")
 STANDBY="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].opnsense_standby" "$INV")"
 case "$HOST" in 192.168.2.1|''|null) die "$INV_HOST's ansible_host is '$HOST' — a node never holds .1" ;; esac
 PVE_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
-pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$HV_KH" "root@$PVE" "$@"; }
+# pve_q <what> <cmd> — a yes/no question to the hypervisor: 0 = yes, 1 = no. FAILS CLOSED: when
+# ssh itself fails (exit 255 — host key, key file, host down) it dies, never reads as "no".
+pve_q() {
+  local what="$1" rc=0; shift
+  pve "$@" || rc=$?
+  case $rc in 0) return 0 ;; 255) die "could not read $what on $PVE (ssh exit 255) — refusing to proceed unguarded" ;; *) return 1 ;; esac
+}
 node_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }   # the seed's root key = the pve key
 KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"
@@ -201,7 +212,7 @@ script_env() {
 converge() {
   local dhcp_enable=0 dhcp_server=kea kea_ha=''   # Kea's config converges on every node; only a LIVE one serves
   if [ "$STANDBY" != true ]; then   # LIVE (ADR-145): the kill switch would trip on the first converge
-    pve "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
+    pve_q "$KS_UNIT's state" "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
       && die "$INV_HOST is LIVE but $KS_UNIT is still armed/enabled on $PVE — retire it first: $VMID in pve_router_live_vmids, then ansible/pve-router-killswitch.yml"
     dhcp_enable=1
     kea_ha="$(kea_ha_env)"
@@ -332,7 +343,7 @@ build() {
   [ "$STANDBY" = true ] || die "$INV_HOST must be opnsense_standby: true to be built"
   pve "qm config $VMID" | grep -q "^name: $VMNAME$" || die "vm $VMID is not $VMNAME on $PVE — apply tofu/opnsense-router.tf first"
   pve "qm config $VMID" | grep -qi "^net0:.*=${LAN_MAC}," || die "vm $VMID's net0 MAC is not $LAN_MAC (the kill switch watches that MAC)"
-  pve "ping -c2 -W1 $HOST >/dev/null 2>&1" && die "$HOST already answers on the LAN — address taken"
+  pve_q "whether $HOST answers" "ping -c2 -W1 $HOST >/dev/null 2>&1" && die "$HOST already answers on the LAN — address taken"
   killswitch_arm
   local M="$ROOT/machines/machines.yaml" wan_mac
   wan_mac="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' "$M")"
