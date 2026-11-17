@@ -131,8 +131,8 @@ class CodexProxy:
         self.turn_states = TurnStates()
         self.recorder = recorder
 
-    def _refuse(self, rail: str, status: int, code: str, message: str, headers: dict | None = None) -> Response:
-        self.metrics.request(rail, DIALECT, status)
+    def _refuse(self, rail: str, role: str | None, status: int, code: str, message: str, headers: dict | None = None) -> Response:
+        self.metrics.request(rail, DIALECT, status, role=role)
         return error(status, code, message, headers)
 
     async def forward(self, request: Request) -> Response:
@@ -153,17 +153,17 @@ class CodexProxy:
         row, code = self.sessions.authenticate(inbound_token(request))
         if code:
             log.info("%s %s → 401 %s", request.method, request.url.path, code)
-            return self._refuse("none", 401, code, "session token unknown, expired or released")
+            return self._refuse("none", None, 401, code, "session token unknown, expired or released")
         assert row is not None
         if row.rail != "codex":
-            return self._refuse(row.rail, 501, "dialect-unsupported-on-rail", f"rail {row.rail} does not serve the responses dialect")
+            return self._refuse(row.rail, row.role, 501, "dialect-unsupported-on-rail", f"rail {row.rail} does not serve the responses dialect")
         raw = await request.body()
         try:
             doc = json.loads(raw) if raw else None
         except ValueError:
             doc = None
         if not isinstance(doc, dict):
-            return self._refuse(row.rail, 400, "malformed-body", "body must be a JSON object")
+            return self._refuse(row.rail, row.role, 400, "malformed-body", "body must be a JSON object")
         cap = self.recorder.start(row.id, row.task) if self.recorder is not None else None
         if cap is not None:
             cap_box.append(cap)
@@ -175,30 +175,30 @@ class CodexProxy:
             raw = json.dumps(doc, separators=(",", ":")).encode()
         elif not isinstance(asked, str) or not model_matches(row.rail, row.model, asked):
             log.warning("model-not-session: session=%s asked=%s session_model=%s", row.id, asked, row.model)
-            return self._refuse(row.rail, 403, "model-not-session", f"this session rides {row.model}")
+            return self._refuse(row.rail, row.role, 403, "model-not-session", f"this session rides {row.model}")
         try:
             responses.check_body(doc)
         except responses.Refused as e:
-            return self._refuse(row.rail, 400, str(e), "the codex rail serves streaming Responses with store=false and array input")
+            return self._refuse(row.rail, row.role, 400, str(e), "the codex rail serves streaming Responses with store=false and array input")
         if self.rail is None or self.rail.lifecycle is None:
             self.metrics.credential(row.rail, "definitive")
-            return self._refuse(row.rail, 401, "credential-unresolved", "the codex rail has no credential backend")
+            return self._refuse(row.rail, row.role, 401, "credential-unresolved", "the codex rail has no credential backend")
         try:
             credential = await asyncio.to_thread(self.rail.lifecycle.acquire)
         except Failure as f:
             self.metrics.credential(row.rail, "transient" if f.code is Code.STORE else "definitive")
             log.warning("codex: credential %s session=%s", f.code.value, row.id)
-            return self._refuse(row.rail, FAILURE_STATUS[f.code], f.code.value, f"the codex credential is not usable: {f.code.value}",
+            return self._refuse(row.rail, row.role, FAILURE_STATUS[f.code], f.code.value, f"the codex credential is not usable: {f.code.value}",
                                 headers={"retry-after": str(self.sessions.policy.defer_retry_s)} if f.code is Code.STORE else None)
         self.metrics.credential(row.rail, "resolved")
         try:
             headers = responses.upstream_headers(credential.access_token, credential.account_id)
         except responses.Refused:
-            return self._refuse(row.rail, 401, "credential-invalid", "the codex credential is not usable: credential-invalid")
+            return self._refuse(row.rail, row.role, 401, "credential-invalid", "the codex credential is not usable: credential-invalid")
         try:
             turn_key = self.turn_states.request(row.id, credential.account_id, doc, request.headers.get(HEADER))
         except ValueError:
-            return self._refuse(row.rail, 400, "turn-state-invalid", "routing state is not bound to this session and turn")
+            return self._refuse(row.rail, row.role, 400, "turn-state-invalid", "routing state is not bound to this session and turn")
         if request.headers.get(HEADER) is not None:
             headers[HEADER] = request.headers[HEADER]
         del credential
@@ -238,7 +238,7 @@ class CodexProxy:
             body = await resp.aread()
             await resp.aclose()
             elapsed = time.monotonic() - t0
-            self.metrics.request(row.rail, DIALECT, 429, elapsed)
+            self.metrics.request(row.rail, DIALECT, 429, elapsed, role=row.role)
             self.sessions.store.record_request(row.id, 429, int(elapsed * 1000))
             out = {"content-type": resp.headers.get("content-type", "application/json"),
                    "retry-after": resp.headers.get("retry-after", "30")}
@@ -277,7 +277,7 @@ class CodexProxy:
 
     def _upstream_error(self, row, status: int, code: str, detail: str, t0: float, cap: Capture | None = None) -> Response:
         elapsed = time.monotonic() - t0
-        self.metrics.request(row.rail, DIALECT, status, elapsed)
+        self.metrics.request(row.rail, DIALECT, status, elapsed, role=row.role)
         self.sessions.store.record_request(row.id, status, int(elapsed * 1000))
         log.warning("%s codex session=%s: %s", code, row.id, detail)
         if cap is not None:
@@ -297,8 +297,8 @@ class CodexProxy:
                 elapsed = time.monotonic() - t0
                 status = OUTCOME_STATUS[obs.outcome]
                 usage = usage_of(obs)
-                self.metrics.request(row.rail, DIALECT, status, elapsed)
-                self.metrics.tokens(row.rail, usage)
+                self.metrics.request(row.rail, DIALECT, status, elapsed, role=row.role)
+                self.metrics.tokens(row.rail, usage, role=row.role)
                 self.sessions.store.record_request(row.id, status, int(elapsed * 1000), usage)
                 log.info("responses rail=codex session=%s outcome=%s status=%d ms=%d in=%d cache_read=%d out=%d",
                          row.id, obs.outcome, status, int(elapsed * 1000), usage.tokens_in, usage.tokens_cache_read,
