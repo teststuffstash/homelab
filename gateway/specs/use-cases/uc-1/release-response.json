@@ -11,6 +11,6 @@
   },
   "expected_metrics": {
     "gateway_sessions_active{rail=\"opencode\"}": 0,
-    "gateway_requests_total{rail=\"none\",dialect=\"openai\",status=\"401\"}": 1
+    "gateway_requests_total{rail=\"none\",dialect=\"openai\",status=\"401\",traffic=\"none\"}": 1
   }
 }

@@ -187,7 +187,7 @@ the body after its first chunk (`timeout` = a read timeout mid-stream, `transpor
 connection breaks; `(none)` = the body is not cut); `stream` = the body's `stream` flag;
 `requests_incomplete?` = the session's counter after the call; `incomplete?` = the request row's
 `incomplete` (`(none)` = null, complete); `row_status?` = the request row's status;
-`incomplete_total?` = `gateway_requests_incomplete_total{rail="openrouter",dialect="openai",reason}`
+`incomplete_total?` = `gateway_requests_incomplete_total{rail="openrouter",dialect="openai",reason,traffic="real"}`
 for the row's reason (`no-terminal` when the row is complete).
 
 | description | upstream | cut | stream | requests_incomplete? | incomplete? | row_status? | incomplete_total? |

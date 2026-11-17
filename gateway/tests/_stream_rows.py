@@ -1,6 +1,6 @@
 """Shared observe helpers for the stream-completeness rows (GW-RAIL-OPENROUTER, GW-RAIL-ANTHROPIC):
 the session's `requests_incomplete` counter, the request row's `incomplete` reason and its status,
-and the `gateway_requests_incomplete_total{rail,dialect,reason}` sample — each returned in its
+and the `gateway_requests_incomplete_total{rail,dialect,reason,traffic}` sample — each returned in its
 column's literal (`(none)` for a null reason) so the row module's `then_eq` carries the cell; they
 attach nothing themselves (the verdicts do)."""
 
@@ -23,11 +23,11 @@ def incomplete_recorded(store, doc: dict) -> tuple[int, str, int | None]:
 
 
 async def incomplete_series(gw, rail: str, dialect: str, reason: str) -> int:
-    """`gateway_requests_incomplete_total{rail,dialect,reason}` as the row's `incomplete_total?`
+    """`gateway_requests_incomplete_total{rail,dialect,reason,traffic}` as the row's `incomplete_total?`
     counts it: 0 when the series is not rendered. The /metrics exposition is muted — the
     `incomplete_total?` verdict names the series and carries the value."""
     with quiet():
         text = (await gw.get("/metrics")).text
-    series = f'gateway_requests_incomplete_total{{rail="{rail}",dialect="{dialect}",reason="{reason}"}}'
+    series = f'gateway_requests_incomplete_total{{rail="{rail}",dialect="{dialect}",reason="{reason}",traffic="real"}}'
     m = re.search("^" + re.escape(series) + r" (\S+)$", text, re.M)
     return int(float(m.group(1))) if m else 0

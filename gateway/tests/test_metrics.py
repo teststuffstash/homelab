@@ -127,10 +127,10 @@ async def _ride(fx: Fixtures, rail: str, behaviour: str | None, event: str, act:
         await fx.gw.post(CHAT, json={"messages": [], **({"stream": True} if stream else {})}, headers=bearer(fx.doc))
 
 
-async def _anthropic_call(fx: Fixtures, behaviour: str | None, event: str, act: bool, expired: bool = False) -> None:
+async def _anthropic_call(fx: Fixtures, behaviour: str | None, event: str, act: bool, expired: bool = False, role: str = "reviewer") -> None:
     _apply(fx, "anthropic", behaviour)
-    with given("a reviewer session on anthropic (harness claude)" + (f", expired (clock +{fx.policy.session_ttl_s + 1} s)" if expired else "")):
-        fx.doc = await open_session(fx.gw, role="reviewer", harness="claude")
+    with given(f"a {role} session on anthropic (harness claude)" + (f", expired (clock +{fx.policy.session_ttl_s + 1} s)" if expired else "")):
+        fx.doc = await open_session(fx.gw, role=role, harness="claude")
         if expired:
             fx.clock.advance(fx.policy.session_ttl_s + 1)
     with (when if act else given)(f"{event}: POST {MESSAGES}"):
@@ -230,8 +230,12 @@ async def _drive(fx: Fixtures, event: str, behaviour: str | None, act: bool) -> 
         await _ride(fx, "opencode", behaviour, event, act, stream=True)
     elif event == "an expired token on /anthropic/v1/messages":
         await _anthropic_call(fx, behaviour, event, act, expired=True)
+    elif event == "an expired prober token on /anthropic/v1/messages":
+        await _anthropic_call(fx, behaviour, event, act, expired=True, role="prober")
     elif event == "one call on anthropic":
         await _anthropic_call(fx, behaviour, event, act)
+    elif event == "one call on anthropic by a prober":
+        await _anthropic_call(fx, behaviour, event, act, role="prober")
     elif event == "the anthropic ref is a definitive miss, a prober asks":
         with given("state: the anthropic ref platform-agents/claude-session is a definitive miss"):
             fx.secrets.secrets.pop("platform-agents/claude-session")
@@ -275,9 +279,10 @@ OK, S429, S401, DOWN, CACHED = ("policy-default · upstream-ok", "policy-default
 BASE, OR_WORLD = "policy-default", "policy-default · openrouter-endpoints"
 DISPATCH, ANTHROPIC, ON_OPENCODE, ON_OPENROUTER = ("a worker dispatched on opencode", "one call on anthropic",
                                                    "one openai call on opencode", "one openai call on openrouter")
+PROBER_CALL = "one call on anthropic by a prober"
 FAILOVER = "deepinfra answers 500, atlas-cloud serves"
 SESSIONS_TOTAL = 'gateway_sessions_total{rail="%s",role="worker",stack="platform",decision="%s"}'
-REQUESTS_TOTAL = 'gateway_requests_total{rail="%s",dialect="%s",status="%s"}'
+REQUESTS_TOTAL = 'gateway_requests_total{rail="%s",dialect="%s",status="%s",traffic="%s"}'
 PROVIDER_TOTAL = 'gateway_provider_requests_total{rail="openrouter",model="%s",provider="%s",outcome="%s"}'
 
 
@@ -308,13 +313,13 @@ async def test_sessions_and_outcomes_are_counted(fx, world, event, series, expec
 
 
 REQUEST_ROWS = [
-    pytest.param(OK, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "200"), 1, id="a served request is counted by status"),
-    pytest.param(OK, "an expired token on /anthropic/v1/messages", REQUESTS_TOTAL % ("none", "anthropic", "401"), 1,
-                 id="a refused request is counted by its status"),
-    pytest.param(S429, ON_OPENROUTER, REQUESTS_TOTAL % ("openrouter", "openai", "429"), 1, id="an upstream 429 keeps its status"),
-    pytest.param(S401, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "424"), 1,
+    pytest.param(OK, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "200", "real"), 1, id="a served request is counted by status"),
+    pytest.param(OK, "an expired token on /anthropic/v1/messages", REQUESTS_TOTAL % ("none", "anthropic", "401", "none"), 1,
+                 id="a refused request is counted by its status ⚖"),
+    pytest.param(S429, ON_OPENROUTER, REQUESTS_TOTAL % ("openrouter", "openai", "429", "real"), 1, id="an upstream 429 keeps its status"),
+    pytest.param(S401, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "424", "real"), 1,
                  id="an upstream auth rejection is answered 424 and counted at it"),
-    pytest.param(DOWN, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "502"), 1,
+    pytest.param(DOWN, ON_OPENCODE, REQUESTS_TOTAL % ("opencode", "openai", "502", "real"), 1,
                  id="an unreachable upstream is answered 502 and counted at it"),
 ]
 
@@ -325,12 +330,27 @@ async def test_requests_are_counted_by_status(fx, world, event, series, expected
 
 
 TOKEN_ROWS = [
-    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="in"}', 12, id="uncached input tokens are counted as in"),
-    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="cache_read"}', 300, id="cache reads are counted as cache_read"),
-    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="cache_write"}', 40, id="cache writes are counted as cache_write"),
-    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="out"}', 7, id="output tokens are counted as out"),
-    pytest.param(OK, ANTHROPIC, 'gateway_upstream_seconds_count{rail="anthropic"}', 1, id="upstream time is observed per rail"),
+    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="in",traffic="real"}', 12, id="uncached input tokens are counted as in"),
+    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="cache_read",traffic="real"}', 300, id="cache reads are counted as cache_read"),
+    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="cache_write",traffic="real"}', 40, id="cache writes are counted as cache_write"),
+    pytest.param(CACHED, ANTHROPIC, 'gateway_tokens_total{rail="anthropic",class="out",traffic="real"}', 7, id="output tokens are counted as out"),
+    pytest.param(OK, ANTHROPIC, 'gateway_upstream_seconds_count{rail="anthropic",traffic="real"}', 1, id="upstream time is observed per rail"),
 ]
+
+
+TRAFFIC_ROWS = [
+    pytest.param(OK, ANTHROPIC, REQUESTS_TOTAL % ("anthropic", "anthropic", "200", "real"), 1, id="a reviewer's request is real traffic"),
+    pytest.param(OK, PROBER_CALL, REQUESTS_TOTAL % ("anthropic", "anthropic", "200", "synthetic"), 1, id="a prober's request is synthetic traffic ⚖"),
+    pytest.param(CACHED, PROBER_CALL, 'gateway_tokens_total{rail="anthropic",class="in",traffic="synthetic"}', 12, id="a prober's tokens are synthetic"),
+    pytest.param(OK, PROBER_CALL, 'gateway_upstream_seconds_count{rail="anthropic",traffic="synthetic"}', 1, id="a prober's upstream time is synthetic"),
+    pytest.param(OK, "an expired prober token on /anthropic/v1/messages", REQUESTS_TOTAL % ("none", "anthropic", "401", "none"), 1,
+                 id="an expired prober token is none, not synthetic"),
+]
+
+
+@pytest.mark.parametrize(SERIES_ARGS, TRAFFIC_ROWS)
+async def test_real_and_synthetic_traffic_are_told_apart(fx, world, event, series, expected_value):
+    await _series_row(fx, world, event, series, expected_value)
 
 
 @pytest.mark.parametrize(SERIES_ARGS, TOKEN_ROWS)
@@ -359,7 +379,7 @@ VERDICT_ROWS = [
     pytest.param(S429, ON_OPENROUTER, 'gateway_cells_cooled{rail="openrouter"}', 1, id="a cooled cell is counted on its rail"),
     pytest.param(S401, ON_OPENROUTER, 'gateway_credentials_rejected{rail="openrouter"}', 1, id="a rejected credential is counted on its rail"),
     pytest.param("policy-default · upstream-stream-truncated", "one streamed openai call on opencode",
-                 'gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"}', 1,
+                 'gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal",traffic="real"}', 1,
                  id="an incomplete stream is counted by reason"),
     pytest.param("policy-default · upstream-401-key-expired", "one openai call on opencode answered 401, 60 s, the re-probe answered upstream-ok",
                  'gateway_credential_probes_total{rail="opencode",outcome="cleared"}', 1, id="a credential re-probe is counted by outcome"),
@@ -457,6 +477,7 @@ SESSION_LABEL_ROWS = [
     pytest.param(OK, DRIVEN, "gateway_requests_total", "dialect", "anthropic, openai, responses", id="dialect is the three paths"),
     pytest.param(OK, DRIVEN, "gateway_requests_total", "status", STATUS_PATTERN, id="status is a numeric HTTP status"),
     pytest.param(OK, DRIVEN, "gateway_tokens_total", "class", "in, cache_read, cache_write, out", id="class is one of the four usage classes"),
+    pytest.param(OK, DRIVEN, "gateway_requests_total", "traffic", "real, synthetic, none", id="traffic is real, synthetic or none"),
     pytest.param(OK, DRIVEN, "gateway_subscription_utilization", "window", "5h, 7d, other", id="window is 5h or 7d"),
 ]
 
