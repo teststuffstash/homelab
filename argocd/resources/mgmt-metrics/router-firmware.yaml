@@ -1,0 +1,60 @@
+# The router FIRMWARE CURRENCY belt (class 14 in docs/dependency-upgrades.md; ROADMAP §Deploy paths,
+# the box-applies-ansible program's step 1 belt). mgmt/scripts/mgmt-probe.sh check_firmware, on the
+# belt (every 15 min), reads `core/firmware/status` on each CARP node and the test VM and runs the
+# router's own `firmware/check` once a day per node (the official update path's authority,
+# docs/opnsense-test-vm.md) — writing mgmt_router_firmware_* to the belt's textfile (job mgmt-node).
+# role="node" = the production pair; the test VM (role="test") is published but alerts nothing —
+# its firmware is the snapshot baseline the harness rolls back to, not a production state.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-router-firmware
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-router-firmware
+      rules:
+        # An update has been OFFERED to a production node for a week. offered_since is box-kept
+        # (seeded from the router's own last_check, so a reading that already offered the update at
+        # an old check counts from then), and published only while the offer stands — so a read
+        # that fails for a tick pauses this alert instead of restarting a week-long `for:`.
+        # 7 days = MgmtSubstrateBehind's: "a newer release exists and nobody has taken it" in the
+        # same shape (a window not yet taken vs nobody's turn).
+        - alert: MgmtRouterFirmwareBehind
+          expr: |
+            (time() - mgmt_router_firmware_update_offered_since_timestamp_seconds{role="node"}) > 7 * 86400
+          for: 30m
+          # triage none: the act is a firmware update along the official path (a seat act until ADR-152 step 4), not an in-cluster fault
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "Router {{ $labels.node }} has had a firmware update offered for over 7 days"
+            description: >-
+              The router's own firmware/check offers an update on {{ $labels.node }} and has for a
+              week. Running and offered versions: mgmt_router_firmware_info{node="{{ $labels.node }}"};
+              whether it reboots: mgmt_router_firmware_update_needs_reboot. Update along the official
+              path — test VM first, then the BACKUP, then the MASTER through carp-maintenance
+              (docs/opnsense-test-vm.md §The official update path; class 14 in
+              docs/dependency-upgrades.md).
+        # No usable firmware reading for a production node: the GET failed or was refused (a 403 =
+        # the automation user lacks page-system-firmware-manualupdate), the router has no check
+        # result, or its last successful check is over two days old although the belt runs one
+        # daily. Or the box publishes no firmware series at all. An unread node is its own state —
+        # never "current" — so MgmtRouterFirmwareBehind cannot speak for it.
+        - alert: MgmtRouterFirmwareUnread
+          expr: |
+            mgmt_router_firmware_read_ok{role="node"} == 0
+              or (time() - mgmt_router_firmware_last_check_timestamp_seconds{role="node"}) > 2 * 86400
+              or (up{job="mgmt-node"} == 1 unless on (instance) count by (instance) (mgmt_router_firmware_read_ok))
+          for: 6h
+          # triage none: the cause is in the box's belt journal (curl/HTTP status), no cluster state explains it
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "No current firmware reading for router {{ with $labels.node }}{{ . }}{{ else }}(no firmware series from {{ $labels.instance }}){{ end }} for 6 hours"
+            description: >-
+              The management box's belt has no usable `core/firmware/status` reading for this router
+              (read_ok 0, a last check older than two days, or no firmware series at all), so nothing
+              would notice an update falling behind. Why is in the belt journal on the box:
+              `journalctl -u mgmt-belt | grep firmware`. A 403 means the automation API user lacks
+              page-system-firmware-manualupdate (opnsense_api_users in ansible/group_vars/opnsense.yml,
+              converged by scripts/opnsense-api-users.sh). docs/management-box.md §MB2.

@@ -311,6 +311,7 @@ opnsense_api_users:
       - page-diagnostics-netflow
       - page-diagnostics-health
       - page-system-hasync
+      - page-system-firmware-manualupdate   # core/firmware/* — the belt's status read + daily check (class 14, mgmt-probe check_firmware)
       - page-system-gateways
       - page-services-dnsforwarder
       - page-dhcp-kea-v4
