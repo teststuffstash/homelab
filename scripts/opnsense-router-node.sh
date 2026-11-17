@@ -140,7 +140,8 @@ deadman_disarm() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\"
 deadman_status() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then echo \"dead-man ARMED (pid \$p)\"; else echo 'no dead-man'; fi; tail -n 2 /tmp/carp-deadman.log 2>/dev/null"; }
 carp_vip1() { api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[]? | select(.subnet=="192.168.2.1") | .status] | join(",")'; }
 carp_maintenance() {   # $1 = enter|leave|status
-  local dem r i; [ -n "$API_CURL" ] || api_setup
+  local dem r i
+  if [ -z "$API_CURL" ]; then case "$1" in enter|leave) api_setup opnsense-api ;; *) api_setup ;; esac; fi
   dem="$(carp_demotion)"; [ -n "$dem" ] || die "cannot read net.inet.carp.demotion on $HOST"
   case "$1" in
     status) echo "$INV_HOST ($HOST): demotion=$dem .1=$(carp_vip1) $( [ "$dem" -ge 240 ] && echo 'IN maintenance' || echo 'not in maintenance'); $(deadman_status | tr '\n' ' ')"; return 0 ;;
@@ -164,14 +165,22 @@ killswitch_disarm() { pve "systemctl stop $KS_UNIT; echo \"\$(date -u +%FT%TZ) d
 killswitch_status() { pve "systemctl is-active -q $KS_UNIT && echo armed || echo NOT-ARMED; c=\$(grep -c TRIPPED $KS_LOG 2>/dev/null); echo \${c:-0}"; }
 
 API_CURL=''
-api_setup() {  # prod's wallet pair — carried to the node, so it authenticates there too
+api_setup() {  # the `automation` API user (FU-013) — carried to the node, so it authenticates there too
   API_CURL="$(mktemp)"; chmod 600 "$API_CURL"
   # a pre-set pair wins (the management box: /var/lib/mgmt/env — it holds no wallet), as in
-  # scripts/opnsense-playbook.sh
+  # scripts/opnsense-playbook.sh; else the wallet's automation pair. Every API read `check` and
+  # `carp-maintenance status` make answers it (probed 2026-11-17) except Status: Interfaces, which
+  # `check` reads over the seed key instead. $1 = another wallet entry prefix: `carp-maintenance
+  # enter|leave` pass root's (opnsense-api), because the toggle POST
+  # (diagnostics/interface/carp_status/maintenance) lies outside page-status-carp's
+  # get_vip_status pattern and no privilege for it is established (it acts, so it is never probed
+  # as `automation` on prod). Root's pair for every verb: OPN_AS_ROOT=1.
+  local entry="${1:-opnsense-automation-api}"
+  if [ "${OPN_AS_ROOT:-0}" = 1 ]; then entry=opnsense-api; unset OPN_API_KEY OPN_API_SECRET; log "API as ROOT (OPN_AS_ROOT=1)"; fi
   if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
     printf 'user = "%s:%s"\n' "$OPN_API_KEY" "$OPN_API_SECRET" > "$API_CURL"
   else
-    printf 'user = "%s:%s"\n' "$(kp opnsense-api-key)" "$(kp opnsense-api-secret)" > "$API_CURL"
+    printf 'user = "%s:%s"\n' "$(kp "$entry-key")" "$(kp "$entry-secret")" > "$API_CURL"
   fi
 }
 api() { curl -sfk -K "$API_CURL" --max-time 30 "https://$HOST/api/$1"; }
