@@ -853,9 +853,12 @@ kps_crds_verdict() {
 # `GET core/firmware/running` says a firmware job is busy (an update in flight is not interrupted).
 # FW_CHECK=0 = read-only (GETs only). It never calls update/upgrade — that is program step 4.
 #
-# Identity: the `automation` pair (OPN_API_*; the test VM's own OPN_TESTVM_API_* pair) — the
-# privilege is `page-system-firmware-manualupdate` in opnsense_api_users (System: Firmware, the one
-# ACL that covers api/core/firmware/*). Curl reads it from a 0600 config file, never argv.
+# Identity: the dedicated `firmware` API user (OPN_FIRMWARE_API_* in /var/lib/mgmt/env — the box
+# holds the only copy; the jail falls back to the wallet's opnsense-firmware-api-*), never
+# `automation`: OPNsense has ONE ACL for the whole firmware API (`page-system-firmware-manualupdate`,
+# installs included), so the identity every play runs as stays unable to install packages (the
+# ruling beside opnsense_api_users in ansible/group_vars/opnsense.yml). The test VM reads with its
+# own OPN_TESTVM_API_* pair. Curl reads a pair from a 0600 config file, never argv.
 #
 # ⚠ It REPORTS, it never FAILS the probe (the check_substrate rule): an update offered is a normal
 # state between windows; "too long" is MgmtRouterFirmwareBehind's, "no reading" is
@@ -879,11 +882,11 @@ check_firmware() {
 
   local cdir; cdir="$(fw_cache_dir)" || cdir=""
   local cfg_prod cfg_test
-  cfg_prod="$(fw_curl_config OPN_API_KEY OPN_API_SECRET opnsense-automation-api)"
+  cfg_prod="$(fw_curl_config OPN_FIRMWARE_API_KEY OPN_FIRMWARE_API_SECRET opnsense-firmware-api)"
   cfg_test="$(fw_curl_config OPN_TESTVM_API_KEY OPN_TESTVM_API_SECRET opnsense-test-api)"
   if [ ! -s "$cfg_prod" ]; then
     rm -f "$cfg_prod" "$cfg_test"
-    skipped firmware no-input "no OPNsense automation pair (env or wallet)"; return
+    skipped firmware no-input "no OPNsense firmware pair (OPN_FIRMWARE_API_* or the wallet's opnsense-firmware-api-*)"; return
   fi
 
   local name host n=0 ok=0 behind=0 detail=""
@@ -960,7 +963,7 @@ fw_row() {
   [ -n "$cdir" ] && sf="$cdir/firmware-offered.$name"
   if [ -z "$lc" ] || ! case "$st" in none|update|upgrade) true ;; *) false ;; esac; then
     FIRMWARE+=("$name $role 0 - - - - - -")
-    log "firmware: $name no usable reading (status '${st:-no answer or an HTTP error — 403 = the user lacks page-system-firmware-manualupdate}')"
+    log "firmware: $name no usable reading (status '${st:-no answer or an HTTP error — 403 = not the firmware user key, or that user lacks page-system-firmware-manualupdate}')"
     return
   fi
   ver="$(printf '%s' "$body" | _substrate_jq -r '.product.product_version // .product_version // "-"' 2>/dev/null | fw_label)"

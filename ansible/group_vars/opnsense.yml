@@ -285,9 +285,16 @@ unbound_advanced:
 #     page-system-certmanager             cert carry           ["System: Trust: Certificates" — api/trust/cert/*]
 #   Found 2026-10-26 by running every play + script as `automation` on test VM 9110 (the harness's
 #   default identity since then — a play needing a privilege this list lacks fails THERE with a 403).
-#   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]) — a package
-#   install is root-equivalent; plugins are part of the router's BUILD (the bootstrap's PLUGINS) and
-#   the ddclient play only asserts its plugin. ADR-152 (4)'s human security boundary (WAN firewall,
+#   Deliberately NOT granted to `automation`: page-system-firmware-manualupdate ([api/core/firmware/*])
+#   — a package install is root-equivalent; plugins are part of the router's BUILD (the bootstrap's
+#   PLUGINS) and the ddclient play only asserts its plugin. OPNsense has ONE ACL for the whole
+#   firmware API, so reading `firmware/status` cannot be split from `update`/`upgrade`/installs: the
+#   identity every play runs as stays unable to install packages, and the one consumer that needs the
+#   firmware API gets its own user — `firmware` below (operator, 2026-11-17, PR #3525; one consumer,
+#   one token — docs/secrets.md §Minting doctrine). Its key is held ONLY by the management box
+#   (/var/lib/mgmt/env OPN_FIRMWARE_API_*): mgmt/scripts/mgmt-probe.sh check_firmware reads
+#   `firmware/status` and runs the daily `firmware/check` (class 14's currency belt); the ADR-152
+#   program step-4 firmware path (ROADMAP §Deploy paths) is its later, second use. ADR-152 (4)'s human security boundary (WAN firewall,
 #   port forwards, WireGuard, ACME/DNS creds) is a PATH policy on what the box applies — this list is
 #   identity, so it carries what the code under review already writes.
 #   page-system-certmanager (2026-11-17): scripts/opnsense-cert-carry.sh, run nightly by the management
@@ -321,7 +328,6 @@ opnsense_api_users:
       - page-diagnostics-netflow
       - page-diagnostics-health
       - page-system-hasync
-      - page-system-firmware-manualupdate   # core/firmware/* — the belt's status read + daily check (class 14, mgmt-probe check_firmware)
       - page-system-gateways
       - page-services-dnsforwarder
       - page-dhcp-kea-v4
@@ -330,6 +336,10 @@ opnsense_api_users:
       - page-firewall-nat-portforward-edit
       - page-status-carp
       - page-system-certmanager
+  - name: firmware
+    description: "management box firmware belt + (later) the ADR-152 step-4 firmware path - class 14"
+    privileges:
+      - page-system-firmware-manualupdate
 
 # --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
 # Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill

@@ -357,7 +357,8 @@ FW_NX_FRESH="$(printf '%s' "$FW_NX" | jq -c '.last_check = "Tue Nov 17 20:00:00 
 printf '%s' "$FW_NX"  >"$FWS/192.168.2.70.status"; printf '%s' "$FW_NX_FRESH" >"$FWS/192.168.2.70.after"
 printf '%s' "$FW_PVE" >"$FWS/192.168.2.71.status"
 printf '%s' "$FW_CUR" >"$FWS/192.168.2.67.status"
-( export MGMT_CACHE_DIR="$FWC" OPN_API_KEY=k OPN_API_SECRET=s OPN_TESTVM_API_KEY=k OPN_TESTVM_API_SECRET=s FW_NOW="$((LC_CUR + 60))" HOME="$T/home"
+( export MGMT_CACHE_DIR="$FWC" OPN_FIRMWARE_API_KEY=k OPN_FIRMWARE_API_SECRET=s OPN_TESTVM_API_KEY=k OPN_TESTVM_API_SECRET=s FW_NOW="$((LC_CUR + 60))" HOME="$T/home"
+  unset OPN_API_KEY OPN_API_SECRET
   check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
 n=$((n+1)); if [ "$(cat "$T/fw.res")" = "firmware pass ok" ]; then echo "ok   check_firmware reports (pass) with a node behind and one unread"; else
   echo "FAIL check_firmware verdict: $(cat "$T/fw.res")"; fails=$((fails+1)); fi
@@ -374,6 +375,17 @@ if [ "$got" = "$want" ]; then echo "ok   publish(): read_ok for all three, curre
 $want
 got
 $got"; fails=$((fails+1)); fi
+# the prod pair is the dedicated `firmware` user's ONLY (operator ruling on #3525): with just the
+# `automation` pair present (the box before provision-secrets carries OPN_FIRMWARE_API_*) the check
+# skips no-input, reads nothing, and publishes no firmware series — MgmtRouterFirmwareUnread's
+# "no series at all" arm (router-firmware.promtool-test) is what sees that box.
+reset; rm -f "$FWC"/*; : >"$FWS/calls"
+( export MGMT_CACHE_DIR="$FWC" OPN_API_KEY=k OPN_API_SECRET=s HOME="$T/home"
+  unset OPN_FIRMWARE_API_KEY OPN_FIRMWARE_API_SECRET OPN_TESTVM_API_KEY OPN_TESTVM_API_SECRET
+  check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
+n=$((n+1)); if [ "$(cat "$T/fw.res")" = "firmware skip no-input" ] && [ ! -s "$FWS/calls" ] \
+   && ! grep -q '^mgmt_router_firmware_' "$prom"; then echo "ok   automation pair only → skip no-input, no router call, no firmware series"; else
+  echo "FAIL automation-only: $(cat "$T/fw.res") calls=$(cat "$FWS/calls") series=$(grep -c '^mgmt_router_firmware_' "$prom")"; fails=$((fails+1)); fi
 unset -f _fw_curl
 
 echo "mgmt-probe-test: $((n-fails))/$n passed"

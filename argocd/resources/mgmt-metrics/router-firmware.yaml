@@ -37,7 +37,7 @@ spec:
               (docs/opnsense-test-vm.md §The official update path; class 14 in
               docs/dependency-upgrades.md).
         # No usable firmware reading for a production node: the GET failed or was refused (a 403 =
-        # the automation user lacks page-system-firmware-manualupdate), the router has no check
+        # the box's key is not the `firmware` user's, or it lacks its one privilege), the router has no check
         # result, or its last successful check is over two days old although the belt runs one
         # daily. Or the box publishes no firmware series at all. An unread node is its own state —
         # never "current" — so MgmtRouterFirmwareBehind cannot speak for it.
@@ -55,6 +55,8 @@ spec:
               The management box's belt has no usable `core/firmware/status` reading for this router
               (read_ok 0, a last check older than two days, or no firmware series at all), so nothing
               would notice an update falling behind. Why is in the belt journal on the box:
-              `journalctl -u mgmt-belt | grep firmware`. A 403 means the automation API user lacks
-              page-system-firmware-manualupdate (opnsense_api_users in ansible/group_vars/opnsense.yml,
-              converged by scripts/opnsense-api-users.sh). docs/management-box.md §MB2.
+              `journalctl -u mgmt-belt | grep firmware`. A 403 means the box's OPN_FIRMWARE_API_* pair is not the
+              dedicated `firmware` API user's, or that user lacks page-system-firmware-manualupdate
+              (opnsense_api_users in ansible/group_vars/opnsense.yml, converged and minted by
+              scripts/opnsense-api-users.sh, carried by mgmt/scripts/mgmt-provision-secrets.sh). No
+              series at all = the box has no firmware pair yet (the check skips no-input). docs/management-box.md §MB2.
