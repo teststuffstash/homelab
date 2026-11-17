@@ -27,7 +27,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | Requirement | operation | Governs (schema) | Error codes | Status |
 |---|---|---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | `POST /sessions` | `post.input` (incl. `prefer` — [§The preferred end of the list](#the-preferred-end-of-the-list) — and `canary` — [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s entry canary, whose rows live there: the defers `canary-not-due`, `canary-budget`, `not-in-catalog`), `post.output` (`dispatch` / `defer`; `dispatch.rail_choice` — [GW-RAIL-CHOICE](catalog.md#gw-rail-choice)'s rail choice, whose rows live there) | `malformed-body`, `harness-rail-mismatch`, `credential-transient` | v0: the walk — rails in the role's order, the twin's cheaper rail first, the harness taken from the cell, each tier list from its head or (`prefer: strongest`) its end; `⚑ gap`: `/route` is not served (consumers move to this endpoint) and the ADR-096 ladder's labels / urgency / budget inputs are not read ([§Named gaps — admission](#named-gaps-admission)) |
-| [GW-SESSIONS-RETRY](#gw-sessions-retry) | `POST /sessions` | `post.input.attempt`, `get.output.attempt`, `post.output.defer.reason` (`cells-exhausted`, the one defer with no `retry_after_s`) | `malformed-body` (`attempt` < 1) | v0 — the walk reads [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s counted strikes, tier lists are ordered, `attempt` makes a re-run detectable; `⚑ gap`: one model across rails is two ids ([§Named gaps — retry](#named-gaps-retry)) |
+| [GW-SESSIONS-RETRY](#gw-sessions-retry) | `POST /sessions` | `post.input.attempt`, `get.output.attempt`, `post.output.defer.reason` (`cells-exhausted`, the one defer with no `retry_after_s`) | `malformed-body` (`attempt` < 1) | v0 — the walk reads [GW-SESSIONS-OUTCOME](#gw-sessions-outcome)'s counted strikes, tier lists are ordered, `attempt` makes a re-run detectable |
 | [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | `POST /sessions` | `post.output.defer.reason` (`rail-window`, `rail-latched`, `cell-cooled`, `credential-rejected`, `not-in-catalog`, `no-eligible-provider`; the Go account headroom's `quota-unknown`, `quota-stale`, `quota-limited`), `post.output.defer.retry_after_s` | — | v0 + the ladder's capacity half (window utilization, the 429 latch, the Go window draw, the Go account headroom ([§Go account headroom](#go-account-headroom)), the per-cell 429 cooldown, the rejected credential and its recovery, the marks kept across a restart) + the openrouter provider axis (the cell is (rail, model, provider), `no-eligible-provider`; homelab#2741); `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402 and the capacity doorbell are rows under [§Named gaps — capacity](#named-gaps-capacity) |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI, and opencode's provider-package fetch under enforced egress is unobserved ([§Evidence outside CI](#evidence-outside-ci)) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
@@ -105,7 +105,7 @@ Every requirement of this page, in reading order; the section flowcharts below l
 | Requirement | Section | Status |
 |---|---|---|
 | [GW-SESSIONS-ADMIT](#gw-sessions-admit) | admission | `⚑ gap`: `/route` is not served; the ADR-096 ladder's labels / urgency / budget inputs are not read |
-| [GW-SESSIONS-RETRY](#gw-sessions-retry) | admission | `⚑ gap`: one model across rails is two ids |
+| [GW-SESSIONS-RETRY](#gw-sessions-retry) | admission | |
 | [GW-SESSIONS-CAPACITY](#gw-sessions-capacity) | admission | `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402 and the capacity doorbell |
 | [GW-SESSIONS-ENV](#gw-sessions-env) | the session | `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off probe, opencode's provider-package fetch under enforced egress unobserved |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | the session | |
@@ -432,16 +432,17 @@ an **ordered list** of models, `rails.<rail>.models.<tier>: [id, …]`; a bare s
 one-item list (every policy written before this keeps loading). The [walk](../glossary.md#walk) reads the task's
 **counted [strikes](../glossary.md#strike)** ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)) and takes, rail by rail, the
 first model of the tier's list that the task has not struck: a cell-scoped strike excludes that
-(rail, model), a model-scoped one excludes the model id on every rail, a harness-scoped one excludes
+(rail, model), a model-scoped one excludes the model id and its [twins](../glossary.md#twin) on every rail, a harness-scoped one excludes
 every cell the struck harness would ride ([§Harness-scoped strikes](#harness-scoped-strikes)), and a cooled cell
 ([GW-SESSIONS-CAPACITY](#gw-sessions-capacity)) is skipped as well. A rail with no admissible
 model is passed over, and the walk moves on to the role's next rail. ⚖ When every candidate cell is
 **struck**, and no rail is held only by time (capacity, latch, window, cooldown — those defer as
 before, because waiting helps there), the answer is `defer` **`cells-exhausted` with no
 `retry_after_s`**. Waiting does not help: the caller escalates (the old ladder's "chain exhausted
-with the strike list"). ⚖ Model identity is the policy id: the same model on another rail is
-another id, so a model strike on `claude/sonnet` does not exclude `opencode-go/claude-haiku-5-5`
-([§Named gaps — retry](#named-gaps-retry)). A strike is the task's: it comes from an earlier
+with the strike list"). ⚖ Model identity for a strike is the policy id and its twins
+([glossary §twin](../glossary.md#twin), `same_model`): a model strike on `deepseek/deepseek-v4.1-flash` excludes
+`opencode-go/deepseek-v4.1-flash` too; an alias twins nothing, so a model strike on `claude/sonnet` does not exclude
+`opencode-go/claude-haiku-5-5`. A strike is the task's: it comes from an earlier
 session of the same task, and a `clean` outcome on the same cell, model or harness refutes it.
 
 `POST /sessions` carries **`attempt`** (default 1): the consumer's automatic re-admission counter at
@@ -478,6 +479,26 @@ transport strike on that session, refuted by its `clean` outcome; `—` = none);
 | a struck list moves the walk to the next rail | policy-default | reviewer | T | no-verdict on claude/sonnet, no-verdict on claude/opus | 3 | dispatch | opencode | opencode-go/claude-haiku-5-5 |
 | a strike is per task | policy-default | reviewer | another task | no-verdict on claude/sonnet for T | 1 | dispatch | anthropic | claude/sonnet |
 | a refuted strike excludes nothing | policy-default | reviewer | T | provider-5xx (gateway) on claude/sonnet, then clean | 2 | dispatch | anthropic | claude/sonnet |
+
+#### A strike crosses the twins
+
+**World: [policy-default](../worlds/README.md#policy-worlds)**; a worker's rails are `opencode` then `openrouter`; the light lists are
+`opencode-go/deepseek-v4.1-flash` and `[deepseek/deepseek-v4-flash, deepseek/deepseek-v4.1-flash]`, and `deepseek/deepseek-v4.1-flash`
+and `opencode-go/deepseek-v4.1-flash` are twins ([GW-RAIL-CHOICE §The twin rule](catalog.md#gw-rail-choice), row "a Go id and its
+openrouter spelling are twins"). Legend: `T` = the task; `strikes` = `class on (rail, model)` for a cell strike, `class on model` for a
+model strike; `tier` is an input (the worker's policy tier is `standard`); `reason?` as [§Cooled, exhausted, or held](#cooled-exhausted-or-held)
+spells it, `—` on a dispatch. In every row one of the twins is struck for T, so no rail choice runs and the role's rail order stands
+(GW-RAIL-CHOICE: "A twin struck for the task is the retry contract's business, not the choice's (no choice; the walk skips it)") — whatever
+the Go cell's price in the world.
+
+| description | world | role | tier | task | strikes | attempt | decision? | rail? | model? | reason? |
+|---|---|---|---|---|---|---|---|---|---|---|
+| a model strike on a twin excludes the twin on the other rail ⚖ | policy-default | worker | light | T | no-pr on deepseek/deepseek-v4.1-flash | 2 | dispatch | openrouter | deepseek/deepseek-v4-flash | — |
+| a cell strike on a twin leaves the other rail's twin cell admissible | policy-default | worker | light | T | harness-gave-up on (openrouter, deepseek/deepseek-v4.1-flash) | 2 | dispatch | opencode | opencode-go/deepseek-v4.1-flash | — |
+| every model struck once its twins count: cells-exhausted | policy-default | worker | light | T | no-pr on opencode-go/deepseek-v4.1-flash, no-pr on deepseek/deepseek-v4-flash | 3 | defer | — | — | cells-exhausted |
+
+⚖ The first row: the alternative is the status quo (two ids, the twin is the retry); the scope table already calls a model-scoped strike the
+model's own fault, not the cell's, so the twin — the same model under another rail's price — inherits it.
 
 #### Cooled, exhausted, or held
 
@@ -541,9 +562,7 @@ round 0, unbound and with no caller token (`observe`) unless the sequence binds 
 
 #### Named gaps — retry
 
-| description | input | v0 answer | the gap |
-|---|---|---|---|
-| ⚑ gap: one model across rails | a model strike on `claude/sonnet` | `opencode-go/claude-haiku-5-5` still admits | the policy names rail-prefixed ids; `model-classes.json` groups them per model, and that grouping is not in the gateway policy |
+No named gap.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -1802,7 +1821,7 @@ class again is a replay (200, `replay: true`, nothing new stored); a different c
 reporter is 409 `outcome-conflict`; a judge's outcome is another reporter's and supersedes on
 `GET` (`outcome` = the latest). The checks run in a fixed order: the caller (401 / 403 / 503), the
 id (404), owner or judge (403 `caller-not-owner`), the body (400), a judge-only class (403), the
-window (409), the reporter's earlier class (409).
+window (409), the reporter's earlier class (409). `evidence` is any JSON of at most 4096 bytes — a larger one is 400 `malformed-body` — and an `evidence` or `subclass` value a [GW-REDACT](#gw-redact) pattern matches is 400 `outcome-evidence-refused`, never stored.
 
 **Rounds ≠ strikes** ([model-routing.md §The design's three rules](../../../docs/agents/model-routing.md#the-designs-three-rules)):
 a logic failure, a reviewer's `CHANGES_REQUESTED` or CI red on the change, is a ROUND, owned by
@@ -1857,7 +1876,7 @@ harness. A judge's outcome (`wrong-verdict`) is on the verdict, not the ride, an
 ride keeps its task strike by [GW-CATALOG-OR-CANARY](catalog.md#gw-catalog-or-canary)'s ruling
 (2026-10-22: the 429 withholds the cell's verdict only). ⚖ A pod that hung up (`client-closed`) writes none either: why it hung up is the
 consumer's to say (unverified — no row). **A clean outcome refutes** the task's counted strikes on the same cell
-(cell-scoped), the same model (model-scoped) and the same harness (harness-scoped): they stay as
+(cell-scoped), the same model (model-scoped — the policy id and its [twins](../glossary.md#twin)) and the same harness (harness-scoped): they stay as
 history, with `refuted_at` set.
 **A bare 2xx refutes nothing**: a provider serving badly behind HTTP 200 is exactly what a strike
 routes around (the old router's refutation rule). ⚖ A clean outcome refutes cell strikes only on
@@ -1960,6 +1979,7 @@ afterwards; `refuted?` = the outcome answer's `refuted` count (`—` = no outcom
 | a clean outcome refutes the task's counted strikes | policy-default · upstream-500 | upstream-500, then the consumer reports clean | none | 1 |
 | a clean outcome on another model refutes nothing there | policy-default | the heavy model struck no-verdict; a standard-tier session of the task reports clean | {opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome} | 0 |
 | a clean outcome after a 429 still refutes ⚖ | policy-default · upstream-429 | an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean | none | 1 |
+| a clean outcome on a twin refutes the model strike on the other rail's twin ⚖ | policy-default | an earlier session of the task on deepseek/deepseek-v4.1-flash and this session on opencode-go/deepseek-v4.1-flash both admitted; the earlier reports no-pr (counted, model-scoped); this session's consumer reports clean | none | 1 |
 
 #### One vocabulary, one view
 
