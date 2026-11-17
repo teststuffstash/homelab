@@ -15,9 +15,16 @@
 # the stores and deletes the tmpdir — the values never reach argv of anything but keepassxc's stdin
 # and the infisical-secret call, and never a log.
 #
-# Idempotent: a user that already has a key gets none. To ROTATE one: delete its key on the router
-# (GET auth/user/search_api_key -> POST auth/user/del_api_key/<id>) and re-run; the new pair
-# overwrites the wallet entries (the router just proved the old ones dead).
+# One user = one key pair, identical on EVERY router node and in the wallet (the CARP pair has no
+# config sync): the play mints a missing key ONCE, on the first node in inventory order, and
+# installs that same pair on the other node; it refuses before any write when the nodes hold
+# different keys or a node holds a key the wallet lacks or contradicts — this script hands it the
+# wallet's PUBLIC halves for that check (roles/opnsense-users, filter_plugins/opn_user_keys.py).
+# `--check` mints nothing and prints the per-node plan ("<node>: firmware mint · automation ok").
+#
+# Idempotent: a user every node holds a key for gets none. To ROTATE one: delete its key on EVERY
+# node (GET auth/user/search_api_key -> POST auth/user/del_api_key/<id>) and re-run; the new pair
+# overwrites the wallet entries (the nodes just proved the old ones dead).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,7 +49,23 @@ kp_put() { # kp_put <entry> <value-file>  (value via stdin, never argv)
 SINK="$(mktemp -d)"; chmod 700 "$SINK"
 trap 'find "$SINK" -type f -exec shred -u {} + 2>/dev/null; rm -rf "$SINK"' EXIT
 
-OPN_AS_ROOT=1 bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml -e "opnsense_users_key_sink=$SINK" "$@"
+# The wallet's public halves, for the play's "the wallet holds the pair a node holds" check. Read
+# from group_vars (the one list); a user with no wallet entry is simply absent from the map.
+WALLET_KEYS="$SINK/.wallet-keys.json"
+{
+  printf '{"opnsense_users_wallet_keys": {'; sep=''
+  for user in $(DEVBOX_QUIET=1 devbox run --quiet -- yq -r '.opnsense_api_users[].name' ansible/group_vars/opnsense.yml); do
+    k="$(kp_get "opnsense-$user-api-key" || true)"
+    [ -n "$k" ] || continue
+    printf '%s"%s": "%s"' "$sep" "$user" "$k"; sep=', '
+  done
+  printf '}}\n'
+} > "$WALLET_KEYS"
+chmod 600 "$WALLET_KEYS"
+
+OPN_AS_ROOT=1 bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml \
+  -e "opnsense_users_key_sink=$SINK" -e "@$WALLET_KEYS" "$@"
+rm -f "$WALLET_KEYS"
 
 minted=0
 for keyf in "$SINK"/*.key; do
