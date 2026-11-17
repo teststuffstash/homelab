@@ -625,6 +625,55 @@ in
     };
   };
 
+  # ── the router CERTIFICATE CARRY (FU-297, docs/management-box.md §Router certificate carry) ─────
+  # Nightly: the CARP BACKUP cannot order certificates (no WAN behind the gate), so the MASTER's renewals
+  # reach it only through scripts/opnsense-cert-carry.sh. mgmt/scripts/mgmt-cert-carry.sh resolves
+  # MASTER/BACKUP LIVE (mgmt-ansible.sh's CARP resolver — roles swap after a failover), yields to a
+  # declared window (the apply loop's gate), and runs the carry as the `automation` API user (the env
+  # file's pair; its trust access is page-system-certmanager in opnsense_api_users). Idempotent: an
+  # up-to-date pair writes nothing. Metrics → mgmt_cert_carry.prom, the belt in
+  # argocd/resources/mgmt-metrics/cert-carry.yaml. Runs from a DETACHED WORKTREE of the checkout (the
+  # drill's reason: mgmt-pull resets the checkout hourly, bash reads scripts as it runs).
+  #   restartIfChanged = false — an activation must not kill a carry between a trust write and the
+  #     HAProxy reconfigure (the next night redoes an interrupted one: the copy reads `carry` again).
+  systemd.services.mgmt-cert-carry = {
+    description = "router cert carry: the CARP MASTER's renewed certificates onto the BACKUP";
+    after = [ "mgmt-checkout.service" "network-online.target" ];
+    wants = [ "mgmt-checkout.service" "network-online.target" ];
+    path = boxTools;
+    restartIfChanged = false;
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "30m";
+      Environment = [
+        "HOME=/root"
+        "MGMT_BOX=1"
+        "MGMT_CERT_CARRY_TEXTFILE=/var/lib/node-exporter-textfile/mgmt_cert_carry.prom"
+        "MGMT_CERT_CARRY_STATE=/var/lib/mgmt/cert-carry"
+      ];
+      EnvironmentFile = [ "-/var/lib/mgmt/env" ];
+    };
+    script = ''
+      set -euo pipefail
+      rev="$(git -C ${repoPath} rev-parse HEAD)"
+      src="$(mktemp -d /var/lib/mgmt/cert-carry-src.XXXXXX)"
+      trap 'git -C ${repoPath} worktree remove --force "$src" >/dev/null 2>&1 || rm -rf "$src"; git -C ${repoPath} worktree prune' EXIT
+      git -C ${repoPath} worktree add --quiet --detach "$src" "$rev"
+      bash "$src/mgmt/scripts/mgmt-cert-carry.sh"
+    '';
+  };
+  systemd.timers.mgmt-cert-carry = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # The routers' acme.sh cron renews at 00:00 Europe/Tallinn (22:00 / 21:00 UTC); the box runs UTC.
+      # 03:15 UTC is hours after it in both seasons and clear of the Sunday drill's 03:30 start (which
+      # touches only its own VM anyway).
+      OnCalendar = "*-*-* 03:15:00";
+      RandomizedDelaySec = "10m";
+      Persistent = true;
+    };
+  };
+
   # ── the ROUTER VERDICT: `opnsense-test-vm` on every open PR head (ADR-152 step 1, §MB3 "The router
   # surface") ─────────────────────────────────────────────────────────────────────────────────────
   # Heads touching a router path (policy `router_test_vm.paths`) are validated on test VM 9110 by

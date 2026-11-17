@@ -281,7 +281,8 @@ unbound_advanced:
 #     page-dhcp-kea-ctrl-agent            opnsense/kea-dhcp.py [api/kea/ctrl_agent/*]
 #     page-firewall-alias-edit            opnsense/tuya-egress.py [api/firewall/alias/*]
 #     page-firewall-nat-portforward-edit  opnsense/tuya-egress.py [api/firewall/d_nat/*]
-#     page-status-carp                    acme (the CARP BACKUP guard) [api/diagnostics/interface/get_vip_status*]
+#     page-status-carp                    acme (the CARP BACKUP guard), cert carry [api/diagnostics/interface/get_vip_status*]
+#     page-system-certmanager             cert carry           ["System: Trust: Certificates" — api/trust/cert/*]
 #   Found 2026-10-26 by running every play + script as `automation` on test VM 9110 (the harness's
 #   default identity since then — a play needing a privilege this list lacks fails THERE with a 403).
 #   Deliberately NOT granted: page-system-firmware-manualupdate ([api/core/firmware/*]) — a package
@@ -289,6 +290,15 @@ unbound_advanced:
 #   the ddclient play only asserts its plugin. ADR-152 (4)'s human security boundary (WAN firewall,
 #   port forwards, WireGuard, ACME/DNS creds) is a PATH policy on what the box applies — this list is
 #   identity, so it carries what the code under review already writes.
+#   page-system-certmanager (2026-11-17): scripts/opnsense-cert-carry.sh, run nightly by the management
+#   box (mgmt-cert-carry.timer), reads the MASTER's trust store (cert + private key) and writes the
+#   BACKUP's. Its other calls already answer `automation`: the GETs (acmeclient/certificates,
+#   get_vip_status, core/hasync, haproxy/service) probed 200 on both nodes, the POSTs
+#   (acmeclient/certificates/update, haproxy/service/reconfigure) are ones the acme/haproxy plays
+#   already make as this user — trust/cert/search was the one 403. No new
+#   reach: the box already holds root ssh to both nodes (the seed key) and the backup-puller pair whose
+#   config.xml carries every key. The ACL pattern is the privilege's label, not read from ACL.xml: the
+#   proof is trust/cert/search answering `automation` once the users play applied it.
 #   A privilege change converges on the existing user and mints nothing: scripts/opnsense-api-users.sh.
 opnsense_api_users:
   - name: backup-puller
@@ -319,6 +329,7 @@ opnsense_api_users:
       - page-firewall-alias-edit
       - page-firewall-nat-portforward-edit
       - page-status-carp
+      - page-system-certmanager
 
 # --- opnsense-system : router-wide settings no service role owns (FU-297) -----------------
 # Prod's CURRENT values (read 2026-09-29), so the play is a no-op against prod; the rebuild drill
