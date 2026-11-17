@@ -248,11 +248,17 @@ ans_mark() {
   # live == a declaration again: nothing left for the standing-refusal re-read (ans_reread)
   case "$3" in converged|applied) rm -f "$ADIR/ansible-reread-$1" ;; esac
 }
-# ans_reread_arm <group> <sha> <rule> — a refusal the box can RE-VERIFY (live drift, a check that failed
-# or did not reach a host) arms the hourly re-read: $ADIR/ansible-reread-<g> = "<sha>\t<rule>", its mtime
+# ans_reread_arm <group> <sha> <rule> — a group refusal the box can RE-VERIFY arms the hourly re-read:
+# live drift, a check that failed or did not reach a host, an unhealthy pair, a runner/toolchain the box
+# could not start, a STOP (read only after a human clears the marker + lease — ans_reread skips while they
+# stand). Those are the refusals whose truthful end is the group reading clean: $ADIR/ansible-reread-<g> = "<sha>\t<rule>", its mtime
 # the last read. NOT the security boundary: the row's plays exclude the denied ones, so a clean read of
 # them says nothing about what the human owes — that refusal ends with the human apply's stamp.
-ans_reread_arm() { printf '%s\t%s\n' "$2" "$3" >"$ADIR/ansible-reread-$1"; }
+ans_reread_arm() {
+  # inside a re-read the marker keeps the sha of the refusal it stands for (the waiting-mode match)
+  [ "${ANS_REREAD:-0}" = 1 ] && [ -f "$ADIR/ansible-reread-$1" ] && return 0
+  printf '%s\t%s\n' "$2" "$3" >"$ADIR/ansible-reread-$1"
+}
 _ans_count() { [ "${1%%$'\t'*}" = changed ] || { echo 0; return; }; tr ' ' '\n' <<<"${1#*$'\t'}" | sed -n 's/.*=\([0-9]*\)$/\1/p' | awk '{s+=$1} END {print s+0}'; }
 
 # ── the router row's reads and its LOCAL revert (ADR-152 (2)–(4), step 3) ──────────────────────
@@ -343,7 +349,9 @@ ans_reread() {
   for f in "$ADIR"/ansible-reread-*; do
     [ -f "$f" ] || continue
     g="${f##*/ansible-reread-}"
-    [ -z "$refused" ] || [ "$(cut -f1 "$f")" = "$refused" ] || continue
+    if [ -n "$refused" ]; then   # waiting: only the group whose refusal wrote refused-rev at that sha
+      [ "$(cut -f1 "$f")" = "$refused" ] && case "$(cat "$ADIR/refused-desc" 2>/dev/null)" in "ansible $g: "*) true ;; *) false ;; esac || continue
+    fi
     row="$(ans_row "$pol" "$g" 2>/dev/null)" && [ -n "$row" ] && [ "$row" != '""' ] || continue
     every="$(jq -r '.reread_min // 60' <<<"$row")"; m="$(stat -c %Y "$f")"
     [ $(( now - m )) -ge $(( every * 60 )) ] || continue
@@ -368,19 +376,19 @@ ans_bracket() {
   local target revmin node="" nodeip="" carp0="" rvline=""
   ANS_LIMIT=""; ANS_PY=""; ANS_SCRIPT_ENV=""; ANS_NODE=""; ANS_D=""
   row="$(ans_row "$pol" "$g")" && [ -n "$row" ] && [ "$row" != '""' ] \
-    || { refuse "$sha" "ansible $g: apply_ansible row unreadable — human apply"; return 3; }
+    || { refuse "$sha" "policy: ansible $g row unreadable — human apply"; return 3; }
   mode="$(jq -r '.mode // "shadow"' <<<"$row")"; plays="$(jq -c '.plays // []' <<<"$row")"
   cap="$(jq -r '.cap_min // 30' <<<"$row")"; hosts="$(jq -r '.hosts // ""' <<<"$row")"
   walerts="$(jq -r '(.window_alerts // ["none"]) | join(",")' <<<"$row")"
-  [ "$(jq 'length' <<<"$plays")" -gt 0 ] || { refuse "$sha" "ansible $g: the row names no plays — human"; return 3; }
+  [ "$(jq 'length' <<<"$plays")" -gt 0 ] || { refuse "$sha" "policy: ansible $g row names no plays — human"; return 3; }
   target="$(jq -r '.target // ""' <<<"$row")"; revmin="$(jq -r '.revert_min // 0' <<<"$row")"
   # backup-only = on, for a row whose target is the CARP BACKUP (ROADMAP §Deploy paths step 3): the
   # MASTER's rolling path is a later step and no mode here can reach it
   case "$mode:$target" in
     on:|shadow:*|backup-only:carp-backup) ;;
-    *) refuse "$sha" "ansible $g: mode '$mode' with target '${target:-none}' is not on|shadow|backup-only(carp-backup) — human"; return 3 ;;
+    *) refuse "$sha" "policy: ansible $g mode '$mode' with target '${target:-none}' is not on|shadow|backup-only(carp-backup) — human"; return 3 ;;
   esac
-  [ "$target" = carp-backup ] && [ "$revmin" -ge "$cap" ] && { refuse "$sha" "ansible $g: revert_min ($revmin) must be below cap_min ($cap) — the lease is the OUTER timer"; return 3; }
+  [ "$target" = carp-backup ] && [ "$revmin" -ge "$cap" ] && { refuse "$sha" "policy: ansible $g revert_min ($revmin) must be below cap_min ($cap) — the lease is the OUTER timer"; return 3; }
   [ "$mode" = backup-only ] && mode=on
   # the loop's own SHADOW (no App token, or MGMT_SHADOW=1) shadows every row: nothing is applied
   [ "${MGMT_SHADOW:-0}" = 1 ] && mode=shadow
@@ -399,17 +407,20 @@ ans_bracket() {
     refuse "$sha" "stage 1: security-boundary (ansible $g) — the span touches $(grep -c . <<<"$hits") denied path(s) (WAN firewall/port forwards/WireGuard/ACME-DNS creds) — a human applies" "$hits"; return 3
   fi
   if [ "$mode" = on ] && [ -s "$ADIR/ansible-stopped" ]; then
+    ans_reread_arm "$g" "$sha" ansible-stopped
     refuse "$sha" "ansible $g: ansible applies STOPPED since $(cut -f2,4 "$ADIR/ansible-stopped" | tr '\t' ' ' | head -c 80) — a human reads the record, then rm $ADIR/ansible-stopped"
     return 3
   fi
   if ! ans_tools 2>"$d/tools.err"; then
     log "ansible $g: toolchain unresolvable: $(tail -1 "$d/tools.err")"
     [ "$mode" = shadow ] && { ans_mark "$g" "$mode" refused 0; log "[shadow] ansible $g: would REFUSE (toolchain)"; return 0; }
+    ans_reread_arm "$g" "$sha" ansible-toolchain
     refuse "$sha" "ansible $g: ansible toolchain unresolvable from devbox.lock — see the box journal"; return 3
   fi
   if [ "$(jq -r '.runner // ""' <<<"$row")" = opnsense ] && ! _ans_runner_opnsense 2>"$d/runner.err"; then
     log "ansible $g: the opnsense runner is not ready: $(tail -1 "$d/runner.err")"
     [ "$mode" = shadow ] && { ans_mark "$g" "$mode" refused 0; log "[shadow] ansible $g: would REFUSE (opnsense runner)"; return 0; }
+    ans_reread_arm "$g" "$sha" ansible-runner
     refuse "$sha" "ansible $g: opnsense runner not ready ($(tail -1 "$d/runner.err" | head -c 60)) — see the box journal"; return 3
   fi
   # the TARGET: the CARP BACKUP, read live from the pair (never a static name)
@@ -420,6 +431,7 @@ ans_bracket() {
       log "ansible $g: no BACKUP to converge — $why"
       ans_mark "$g" "$mode" refused 0
       [ "$mode" = shadow ] && { log "[shadow] ansible $g: would REFUSE — ansible-pair-unhealthy: $why"; return 0; }
+      ans_reread_arm "$g" "$sha" ansible-pair-unhealthy
       refuse "$sha" "ansible $g: ansible-pair-unhealthy — $why — human"; return 3
     fi
     nodeip="${node#*$'\t'}"; node="${node%%$'\t'*}"; ANS_LIMIT="$node"; ANS_NODE="$node"
@@ -493,7 +505,8 @@ ans_bracket() {
   # 4 begin: a stale lease is a STOP; then the window and the lease
   ans_lease_check "$g"; case $? in
     1) log "PROBE-FAIL: ansible $g: lease upgrade-lease-ansible-$g still in flight — not begun"; return 1 ;;
-    2) refuse "$sha" "ansible $g: STOPPED — a stale lease upgrade-lease-ansible-$g (see $ADIR/ansible-stopped)"; return 3 ;;
+    2) ans_reread_arm "$g" "$sha" ansible-stopped
+       refuse "$sha" "ansible $g: STOPPED — a stale lease upgrade-lease-ansible-$g (see $ADIR/ansible-stopped)"; return 3 ;;
     3) log "PROBE-FAIL: ansible $g: lease unreadable — not begun"; return 1 ;;
   esac
   _awin open --reason "box ansible apply: $g ${conf:0:8} → ${sha:0:8} — mgmt/scripts/mgmt-ansible.sh (ADR-152)" \
@@ -555,6 +568,7 @@ ans_bracket() {
         hf="node-local restore NOT cancelled on $node ($cl) — it will restore the pre-apply config"
         printf '%s\t%s\t%s\t%s\n' "$sha" "ansible/$g" "$d" "confirmed, but $hf" >"$ADIR/ansible-stopped"
         ans_mark "$g" "$mode" stopped "$n"
+        ans_reread_arm "$g" "$sha" ansible-stopped
         mgmt_post_status "$sha" "$CTX" failure "ansible $g: applied + confirmed, but the node-local restore could not be cancelled — STOPPED"
         return 2 ;;
       esac
@@ -573,6 +587,7 @@ ans_bracket() {
   printf '%s\t%s\t%s\t%s\n' "$sha" "ansible/$g" "$d" "$why" >"$ADIR/ansible-stopped"
   ans_mark "$g" "$mode" stopped "$n"
   log "ansible $g: STOPPED — $why — lease $lease KEPT, window $wid LEFT OPEN, $ADIR/ansible-stopped written; the box reverts nothing"
+  ans_reread_arm "$g" "$sha" ansible-stopped
   mgmt_post_status "$sha" "$CTX" failure "ansible $g: applied, STOPPED on the confirm: $why"
   return 2
 }

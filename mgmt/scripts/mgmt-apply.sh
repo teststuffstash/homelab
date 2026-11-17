@@ -90,12 +90,13 @@ trap 'emit_metrics $?' EXIT
 last=""; [ -f "$ADIR/applied-rev" ] && last="$(cat "$ADIR/applied-rev")"
 refused=""; [ -f "$ADIR/refused-rev" ] && refused="$(cat "$ADIR/refused-rev")"
 
-stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev" "$ADIR/refused-addresses"; }
+stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev" "$ADIR/refused-addresses" "$ADIR/refused-desc"; }
 refuse() {  # <sha> <desc> <comment-lines>
   log "REFUSED ${1:0:8}: $2"; [ -n "${3:-}" ] && printf '%s\n' "$3" | sed 's/^/    /'
   mgmt_post_status "$1" "$CTX" failure "$2"
   [ "${MGMT_SHADOW:-0}" = 1 ] && return
   printf '%s' "$1" >"$ADIR/refused-rev"
+  printf '%s\n' "$2" >"$ADIR/refused-desc"   # which subject refused (the re-read's waiting-mode match)
   # the address count, when the refusal has one ("N address(es) outside the apply allowlist")
   grep -o '^[^:]*: [0-9]* address' <<<"$2" | grep -o '[0-9]*' >"$ADIR/refused-addresses" || echo 0 >"$ADIR/refused-addresses"
 }
@@ -196,8 +197,9 @@ reread_idle() {  # [<refused-sha>]
   local pol; pol="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || { log "re-read: policy unreadable — not now"; return 0; }
   flock -u 9 2>/dev/null || true
   ans_reread "$pol" "$sha" "${1:-}"
-  flock -w 600 9 2>/dev/null || log "WARN: lock busy re-taking it after the re-read"
   rm -f "$pol"
+  # never go on into a span without the shared lock the sentinel and lease loops rely on
+  flock -w 600 9 2>/dev/null || { log "PROBE-FAIL: lock busy re-taking it after the re-read — next tick"; exit 1; }
 }
 
 if [ -z "$last" ]; then

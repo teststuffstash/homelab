@@ -227,17 +227,23 @@ not liveness. The transport is the hypervisors' pattern: the box runs node_expor
 textfile collector (`mgmt/nixos/hosts/mgmt/default.nix`, 9100 open to the LAN only),
 `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus scrapes it as the
 static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`** (github-exporter,
-from master's commit status). It reads the statuses of the last master commits as one verdict stream, **per
-subject** — the description's `<subject>:` prefix (`main`, `stage 1`, `ansible <group>`), never a list:
-a root or `stage 1` refusal stands while it is the newest verdict (the box restates it on every new
-commit until resolved); an `ansible <group>` refusal stands until a later success for THAT group (the
-bracket's converged or confirmed status), because the box re-reads a group only when a span touches it
-and a human `mgmt-tf apply` stamps the baseline past it (the box's hourly re-read posts that success
-after a hand converge, §Ansible applies). A root or `stage 1` refusal also ends at the human stamp's
-`baseline:` success. Reading only the newest commit missed the
-router's 2026-10-31 → 11-17 refusal: unrelated clean applies (11-11, 11-14) read as cleared, and every
-status-less head published nothing (`collect_mgmt_apply`, fixture shape 4 in
-`argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
+from master's commit status). It reads EVERY `management-apply` status of the last master commits (the box posts
+several on one commit: each root, each ansible bracket, the stamp, the re-read) as one verdict stream,
+**per subject** — the description's `<subject>:` prefix, never a list — and this model says which
+verdict ends which standing refusal (the exporter's header holds the same table; its self-test walks
+every row):
+
+| Kind | Subject | Ends when |
+|---|---|---|
+| restated | a root (`main`), `stage 1` (incl. the security boundary, and its legacy `ansible <g>: security-boundary` text), `policy` (an ansible row the box cannot run as written) — every `refuse()`: it writes `refused-rev`, so the box restates it on each new master commit | a box status on a NEWER commit (the loop got past it); a newer commit left without a status for 30 min (taken silently); a later span-scoped verdict on the SAME commit (the `baseline:` stamp) |
+| stamped | a root failure posted after an apply, then stamped (`<root>: … applied, POST-CHECK regressed` / `… applied, STOPPED on the verdict`) — never restated | a later success of the same root, or the `baseline:` stamp — never another root, never a group's event |
+| group | `ansible <group>` — live state or the box's means to read it (drift, check-failed, unreachable, pair, runner, toolchain, STOPPED) | a later success of the same group: the bracket's clean/confirmed branch, or the hourly re-read (§Ansible applies); nothing else |
+
+A group refusal is not restated after a human stamp, so retention never drops a standing run, and
+`github_mgmt_apply_since_floored` is 1 only when the exporter's capped cold walk may hide the run's
+start. Reading only the newest commit missed the router's 2026-10-31 → 11-17 refusal: unrelated clean
+applies (11-11, 11-14) read as cleared, and every status-less head published nothing
+(`collect_mgmt_apply`, fixture shapes 4–7 in `argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
 status cannot show — a loop or box that stopped posting: `MgmtApplyLoopStale`,
 `MgmtApplyMetricsAbsent`, `MgmtBoxDown`. The operator's at-a-glance PROGRESS view is the Grafana
 dashboard **"Management box — now"** (`https://grafana.teststuff.net`,
@@ -919,10 +925,12 @@ refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a st
 and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
 upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
 
-**The standing-refusal re-read.** A group refusal the box can re-verify — `ansible-live-drift`,
-`ansible-check-failed`, `ansible-unreachable` (never the security boundary) — arms
-`$ADIR/ansible-reread-<group>`. On an IDLE tick (master applied, or the loop waiting on that group's
-refusal at the current sha), outside declared windows and off the shared lock, the loop re-runs ONE
+**The standing-refusal re-read.** Every group refusal whose truthful end is the group reading clean —
+`ansible-live-drift`, `ansible-check-failed`, `ansible-unreachable`, `ansible-pair-unhealthy`, a runner or
+toolchain the box could not start, a STOP (read only once a human cleared the marker and lease) — arms
+`$ADIR/ansible-reread-<group>`. Never the security boundary (subject `stage 1`) or a policy fault (subject
+`policy`): both are span verdicts, ended by a newer evaluated commit or the human stamp. On an IDLE tick (master applied, or the loop waiting on THAT group's
+refusal at the current sha — `refused-desc` names the refusing subject), outside declared windows and off the shared lock, the loop re-runs ONE
 armed group's target `--check` at most every `reread_min` (row knob, default 60) through the bracket
 itself (`ans_reread` → `ans_bracket` with `ANS_REREAD=1` and an empty span): clean → step 2's clean
 branch (confirmed sha = master, `ansible <group>: live matches master …` posted — in every enforcing mode,

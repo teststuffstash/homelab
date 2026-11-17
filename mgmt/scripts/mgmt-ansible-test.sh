@@ -317,7 +317,7 @@ eq r-noarm-rc 1 "$RC"; eq r-noarm-no-apply "0" "$(grep -c '^apply ' <<<"$C")"; h
 # r7 a span touching the security boundary → REFUSED whatever else it holds (shadow: said only)
 mkdir -p "$R/opnsense"; echo x >"$R/opnsense/tuya-egress.py"; echo c >"$R/ansible/matchbox.yml"
 git -C "$R" add -A; git -C "$R" commit -qm tuya; SHA2="$(git -C "$R" rev-parse HEAD)"
-rm -f "$T/calls"; rmode backup-only; P_target=changed P_base=clean P_apply=changed P_confirm=clean
+rm -f "$T/calls" "$ADIR"/ansible-reread-*; rmode backup-only; P_target=changed P_base=clean P_apply=changed P_confirm=clean
 ans_bracket "$T/pol.yaml" opnsense "$SHA2" "$SHA" >"$T/out.r7" 2>&1; RC=$?; C="$(cat "$T/calls" 2>/dev/null)"
 eq r-deny-rc 3 "$RC"; has r-deny-refused '^REFUSE stage 1: security-boundary \(ansible opnsense\) — the span touches 1 denied path' "$C"; eq r-deny-no-play "0" "$(grep -cE '^(target|apply) ' <<<"$C")"
 # the security boundary never arms the re-read (the row's plays exclude the denied ones)
@@ -363,8 +363,21 @@ rr rr-stopped on clean; eq rr-stopped-no-read "0" "$(grep -c '^target ' <<<"$C")
 # 5g the loop waits on a refusal at ANOTHER sha: this group's marker does not qualify; at THIS sha, a clean
 # read lifts refused-rev so the next tick runs the span on
 old matchbox; rr rr-other-sha on clean "$LAST"; eq rr-other-sha-no-read "0" "$(grep -c '^target ' <<<"$C")"
-printf '%s' "$SHA" >"$ADIR/refused-rev"; old matchbox; rr rr-refused-clean on clean "$SHA"
+# a ROOT refusal wrote refused-rev at this sha (refused-desc names it): the group marker does not qualify
+printf '%s' "$SHA" >"$ADIR/refused-rev"; echo 'main: 2 address(es) outside the apply allowlist — human apply' >"$ADIR/refused-desc"
+old matchbox; rr rr-root-refused on clean "$SHA"; eq rr-root-refused-no-read "0" "$(grep -c '^target ' <<<"$C")"
+echo 'ansible matchbox: ansible-live-drift — x' >"$ADIR/refused-desc"; old matchbox; rr rr-refused-clean on clean "$SHA"
 eq rr-refused-lifted "absent" "$( [ -e "$ADIR/refused-rev" ] && echo present || echo absent)"
+# 5h' every group refusal whose truthful end is the group reading clean arms the re-read; a policy fault
+# posts under subject `policy` (restated — a policy commit or the stamp ends it) and arms nothing
+rm -f "$ADIR"/ansible-reread-*; MAP_MODE=two-masters rrun rr-pair-arm backup-only changed clean changed clean
+eq rr-pair-arms "ansible-pair-unhealthy" "$(cut -f2 "$ADIR/ansible-reread-opnsense" 2>/dev/null)"
+rm -f "$ADIR"/ansible-reread-*; NODE_OK=0 rrun rr-stop-arm backup-only changed clean changed clean
+eq rr-stop-arms "ansible-stopped" "$(cut -f2 "$ADIR/ansible-reread-opnsense" 2>/dev/null)"; rm -f "$ADIR/ansible-stopped"
+rm -f "$ADIR"/ansible-reread-* "$T/calls"; _yq '.apply_ansible.opnsense.mode = "on"' "$POL" >"$T/pol.yaml"
+ans_bracket "$T/pol.yaml" opnsense "$SHA" "$LAST" >/dev/null 2>&1; C="$(cat "$T/calls")"
+has rr-policy-subject "^REFUSE policy: ansible opnsense mode 'on' with target 'carp-backup'" "$C"
+eq rr-policy-no-arm "absent" "$( [ -e "$ADIR/ansible-reread-opnsense" ] && echo present || echo absent)"
 # 5h the security boundary: a deny refusal leaves no marker, so the re-read has nothing to read
 rm -f "$ADIR"/ansible-reread-*; rr rr-deny on clean; eq rr-deny-no-read "0" "$(grep -c '^target ' <<<"$C")"
 # 5i the human stamp: ONE success on the stamped sha, subject `baseline`; marker consumed; shadow keeps it

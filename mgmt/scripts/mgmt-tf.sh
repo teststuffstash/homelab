@@ -206,7 +206,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    if [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
       && [ "${PLAN_REF:-}" = origin/master ] && [ -n "${PLAN_SHA:-}" ] \
       && [ "$PLAN_SHA" = "$(git rev-parse origin/master)" ]; then
-     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
+     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev /var/lib/mgmt/apply/refused-desc
      # the stamp made OBSERVABLE: the apply loop posts the `baseline:` success on this commit at its next
      # tick (mgmt-lib.sh mgmt_post_human_stamp — it holds the App credential, this shell does not)
      printf "%s\t%s\n" "$PLAN_SHA" "$PLAN_ID" >/var/lib/mgmt/apply/human-stamp
