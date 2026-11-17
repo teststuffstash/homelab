@@ -206,8 +206,11 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    if [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
       && [ "${PLAN_REF:-}" = origin/master ] && [ -n "${PLAN_SHA:-}" ] \
       && [ "$PLAN_SHA" = "$(git rev-parse origin/master)" ]; then
-     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
-     echo "mgmt-tf: apply loop baseline stamped at ${PLAN_SHA:0:8} (refused-rev cleared)" >&2
+     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev /var/lib/mgmt/apply/refused-desc
+     # the stamp made OBSERVABLE: the apply loop posts the `baseline:` success on this commit at its next
+     # tick (mgmt-lib.sh mgmt_post_human_stamp — it holds the App credential, this shell does not)
+     printf "%s\t%s\n" "$PLAN_SHA" "$PLAN_ID" >/var/lib/mgmt/apply/human-stamp
+     echo "mgmt-tf: apply loop baseline stamped at ${PLAN_SHA:0:8} (refused-rev cleared; the box posts the stamp on its next tick)" >&2
    elif [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
       && [ "${PLAN_REF:-}" = origin/master ]; then
      echo "mgmt-tf: NOT stamping — this plan is ${PLAN_SHA:0:8}, master is now $(git rev-parse --short origin/master). Re-plan and apply that to advance the baseline." >&2

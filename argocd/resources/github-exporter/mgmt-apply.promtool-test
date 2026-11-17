@@ -21,11 +21,11 @@ tests:
   # ── Shape 1 — the 2026-09-14 condition: refused, and it has been days ───────────────────────
   - interval: 10m
     input_series:
-      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="main"}'
         values: "1+0x220"
-      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",since_sha="7d9949ee"}'
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="main",since_sha="7d9949ee"}'
         values: "0+0x220"
-      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply"}'
+      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply",subject="main"}'
         values: "2 2 4 4 8+0x216"
     alert_rule_test:
       # 20h in: still inside the designed post-merge window — silence is CORRECT here.
@@ -45,17 +45,18 @@ tests:
               platform_machinery: "true"
               repo: homelab
               context: management-apply
+              subject: main
               triage: none
             exp_annotations:
-              summary: "The management box has been refusing to apply homelab master for over a day"
-              description: 'mgmt-apply has held a `management-apply` failure on homelab master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="homelab"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/homelab/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
+              summary: "The management box has been refusing main on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `main` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
 
   # ── Shape 2 — the loop applied cleanly: refused=0, no since-timestamp published ─────────────
   - interval: 10m
     input_series:
-      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="main"}'
         values: "0+0x220"
-      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply"}'
+      - series: 'github_mgmt_apply_outside_addresses{repo="homelab",context="management-apply",subject="main"}'
         values: "0+0x220"
     alert_rule_test:
       - eval_time: 26h
@@ -67,11 +68,168 @@ tests:
   # was already resolving.
   - interval: 10m
     input_series:
-      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply"}'
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="main"}'
         values: "1+0x150 0+0x70"
-      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",since_sha="7d9949ee"}'
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="main",since_sha="7d9949ee"}'
         values: "0+0x150 _x70"
     alert_rule_test:
       - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+
+  # ── Shape 4 — REPLAY 2026-10-31 → 11-17: the router's standing refusal, read PER SUBJECT ─────
+  # t=0 = 2026-10-31T18:04:09Z, f50222b1 — the first `ansible opnsense: ansible-live-drift …` refusal
+  # (restated on every master commit until 11-08 13:30, never cleared until the converge on 11-17).
+  # The series are what collect_mgmt_apply publishes for that real status history: the group's
+  # refusal stands through the unrelated `main:` successes (11-10 23:26, 11-11 13:50 — t≈260h, where
+  # the newest-commit reader went to 0 — 11-12 00:20, and 11-14, t≈330h) and through every
+  # status-less newest commit (no gaps). A short `main: plan errored` refusal at 11-08 08:58
+  # (126fe1a5, commit t=658358s; ended by the 12:46 opnsense verdict, t≈23 steps later) stays silent.
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="ansible opnsense"}'
+        values: "1+0x2460"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="ansible opnsense",since_sha="f50222b1"}'
+        values: "0+0x2460"
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="main"}'
+        values: "0+0x1097 1+0x23 0+0x1339"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="main",since_sha="126fe1a5"}'
+        values: "_x1097 658358+0x23 _x1339"
+    alert_rule_test:
+      - eval_time: 24h50m
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+      # 11-01 20:04Z — a day plus `for: 1h`: firing
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: ansible opnsense
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing ansible opnsense on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `ansible opnsense` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+      # 11-11 14:34Z — the old reader read 0 here (an unrelated main success): still firing
+      - eval_time: 260h30m
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: ansible opnsense
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing ansible opnsense on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `ansible opnsense` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+      # 11-14 12:04Z — the second masking success: still firing
+      - eval_time: 330h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: ansible opnsense
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing ansible opnsense on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `ansible opnsense` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+      # 11-17 18:54Z — the day of the window: still firing, one alert, the group named
+      - eval_time: 408h50m
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: ansible opnsense
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing ansible opnsense on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `ansible opnsense` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+
+  # ── Shape 5 — a group refusal PROPERLY cleared: `ansible opnsense: live matches master` at 20h ──
+  # The converge's success ends the subject (refused 0, no since series): silent, before and after 24h.
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="ansible opnsense"}'
+        values: "1+0x120 0+0x100"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="ansible opnsense",since_sha="f50222b1"}'
+        values: "0+0x120 _x100"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+      - eval_time: 36h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+
+  # ── Shape 6 — STORY 1 (2026-11-17): the security boundary, restated, then the human apply's stamp ──
+  # #3527 touches `ansible/roles/opnsense-acme/**` — a `deny_paths` glob of the opnsense row (a role or
+  # play file of a denied play; a group_vars edit to a denied play's VALUES selects the row and converges
+  # nothing, e.g. #3526's opnsense_api_users read clean on f467e541) → `stage 1: security-boundary
+  # (ansible opnsense) …` on every master commit until the stamp. The human is slow (30h): firing at 26h (a state somebody owes); `mgmt-tf apply`
+  # stamps, the box posts `baseline: stamped by a human apply …`, the exporter ends the subject → silent.
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="stage 1"}'
+        values: "1+0x180 0+0x60"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="stage 1",since_sha="d3n1ed00"}'
+        values: "0+0x180 _x60"
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="baseline"}'
+        values: "_x180 0+0x60"
+    alert_rule_test:
+      # a day plus `for:` with the boundary change unapplied: firing
+      - eval_time: 26h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: stage 1
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing stage 1 on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `stage 1` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+      - eval_time: 31h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts: []
+
+  # ── Shape 7 — STORY 2: the 10-31 drift, hand-converged at 100h, cleared by the box's re-read ────
+  # No merge touches the router. The box's hourly re-read (mgmt-ansible.sh ans_reread) reads the group
+  # clean ≤ 60 min after the converge and posts `ansible opnsense: live matches master …` on master
+  # (here at 100h50m) → refused 0 → silent within the hour, never waiting for a span.
+  - interval: 10m
+    input_series:
+      - series: 'github_mgmt_apply_refused{repo="homelab",context="management-apply",subject="ansible opnsense"}'
+        values: "1+0x604 0+0x60"
+      - series: 'github_mgmt_apply_refused_since_timestamp{repo="homelab",context="management-apply",subject="ansible opnsense",since_sha="f50222b1"}'
+        values: "0+0x604 _x60"
+    alert_rule_test:
+      # before the converge: firing
+      - eval_time: 100h
+        alertname: MgmtApplyResidueStanding
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              repo: homelab
+              context: management-apply
+              subject: ansible opnsense
+              triage: none
+            exp_annotations:
+              summary: "The management box has been refusing ansible opnsense on homelab master for over a day"
+              description: 'mgmt-apply has held a `management-apply` failure for `ansible opnsense` on homelab master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/homelab/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
+      - eval_time: 101h
         alertname: MgmtApplyResidueStanding
         exp_alerts: []
