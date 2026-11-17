@@ -19,7 +19,10 @@ grammar and the router report that preceded it are `⚑ gap` rows
 cluster dispatch path the launcher runs inside a coordinator session's time-bounded shell and is
 often killed mid-follow (`agents/agent-session.sh` run-phase clause, :125–170: the `ride` phase
 survived on 5 of 24 rides measured 2026-08-12). The in-pod finalize carries its own bookkeeping for
-that case (the `*_by_pod` flags on its stats line); the gateway outcome has no in-pod twin — ⚑ gap:
+that case (the `*_by_pod` flags on its stats line). When the pod dies hard as well, finalize never
+runs, and the scan's dead-ride pass writes the terminal comment in the launcher's place
+([LAUNCH-OUTCOME-STRIKE-COMMENT](#launch-outcome-strike-comment)). The gateway outcome has no
+in-pod twin and no dead-ride twin — ⚑ gap:
 a killed launcher reports no outcome and releases nothing, and the session ends by the gateway's
 reaper ([GW-SESSIONS-LIVENESS](../../../gateway/specs/endpoints/sessions.md#gw-sessions-liveness))
 with no strike counted.
@@ -41,8 +44,8 @@ with no strike counted.
 |---|---|---|
 | [LAUNCH-OUTCOME-CLASSIFY](#launch-outcome-classify) | the class | 🚧 WIP — no evidence pipeline yet (fixtures: `strike-quota-classifier`, `router-report-*`; the stats-line arm and the pod-reason arms beyond the two budget branches are unpinned) |
 | [LAUNCH-OUTCOME-GATEWAY](#launch-outcome-gateway) | the class | 🚧 WIP — no evidence pipeline yet (fixture: `gateway-outcome`) · ⚑ gap: no outcome when the launcher does not outlive the ride (above) |
-| [LAUNCH-OUTCOME-STRIKE-COMMENT](#launch-outcome-strike-comment) | old contract | ⚑ gap: `AGENT_STRIKE:` / `KEY-RETRY:` comments and `POST /report` are still written on every tasked ride, gateway rides included (the scan's fleet reader greps the comments) |
-| [LAUNCH-OUTCOME-ROUTE-RETRY](#launch-outcome-route-retry) | old contract | ⚑ gap: the old same-round retry reads `/router-status` and needs `routerMode: authoritative` (fixture: `strike-retry`) |
+| [LAUNCH-OUTCOME-STRIKE-COMMENT](#launch-outcome-strike-comment) | old contract | 🚧 WIP → #3390 — no evidence pipeline yet (fixtures: `dead-ride-record`, `strike-comment-post`, `router-report-*`) · ⚑ gap: `AGENT_STRIKE:` / `KEY-RETRY:` comments and `POST /report` are still written on every tasked ride, gateway rides included (the scan's fleet reader greps the comments) |
+| [LAUNCH-OUTCOME-ROUTE-RETRY](#launch-outcome-route-retry) | old contract | 🚧 WIP → #3390 — no evidence pipeline yet · ⚑ gap: the old same-round retry reads `/router-status` and needs `routerMode: authoritative` (fixture: `strike-retry`) |
 | [LAUNCH-OUTCOME-DOORBELL](#launch-outcome-doorbell) | signals | 🚧 WIP — no evidence pipeline yet (fixture: `strike-retry`, its `doorbell-ring` block; the graduated-stack row has none) |
 | [LAUNCH-OUTCOME-PHASES](#launch-outcome-phases) | signals | 🚧 WIP — no evidence pipeline yet (fixture: `run-phase-metric`) |
 
@@ -57,8 +60,8 @@ A tasked ride whose finalize did not already strike (`strike_by_pod` false) is r
 `budget-403`; `harness-death` with `error_class: turn-cap` → `turn-cap`; `harness-death`,
 `auth-storm`, `timeout` → themselves; anything else `unknown`, refined from the run log
 (`Configuration is invalid` → `harness-death`; opencode's auto-rejected permission → `harness-fault`;
-an `UnknownError` → `harness-death`). **No stats line:** the pod's reason (`DeadlineExceeded` →
-`timeout`, `OOMKilled` → `oom`), then the run log's signatures in a fixed order — config-invalid,
+an `UnknownError` → `harness-death`). **No stats line:** the pod's reason `DeadlineExceeded` →
+`timeout`, then the `agent` container's terminated reason `OOMKilled` → `oom`, then the run log's signatures in a fixed order — config-invalid,
 `harness-fault`, goose `-32602` / truncation / `context_length_exceeded` / a panic, `UnknownError`,
 a 429 quota line (`quota`), the key-limit line (`budget-403-key`), insufficient credit / 402
 (`budget-403-account`), a generic quota/budget line (`budget-403`), goose's output-cap `final_output`
@@ -113,7 +116,8 @@ may not have run), so it never re-admits.
 The vocabulary the launcher never emits — `no-verdict`, `wrong-verdict`, `invented-findings`,
 `repetition`, `stream-incomplete`, `refused` — is a reviewer's, a judge's or the gateway's own.
 
-**World:** `launcher-vars` with `GW_SESSIONS=1`, session `0123abcd`; `gw-outcome-strike` where the
+**World:** `launcher-vars` with `GW_SESSIONS=1`, session `0123abcd`. Every row is tasked, has
+salvage `none` and is at attempt 1 unless its `ride` cell says otherwise; `gw-outcome-strike` where the
 row's answer counts one.
 
 #### What is reported, and whether the round re-admits
@@ -153,9 +157,13 @@ The old strike store is an issue comment (`REPLAY:strike-line-format`, :3590–3
 (+ ` match=<line>` for a budget match, + ` provider=<p>` when the router report or the stats name
 one), a key retry posts `KEY-RETRY: …` in the same shape, each followed by the last 15 log lines in
 a `<details>` block. The first line's format is a machine interface: the scan's fleet reader greps
-it. Alongside, every tasked ride with stats or a class posts the router report
+it. Alongside, every ride with stats or a class posts the router report, tasked or not
 `POST <proxy>/report {session, task, stack, role: worker, round, model, rail, cost_usd, error_class,
-outcome}` (`REPLAY:router-report`, :3711–3748; the pod also gets `AGENT_REPORT_URL`).
+outcome}` (`REPLAY:router-report`, :3711–3748; the pod also gets `AGENT_REPORT_URL`). The report
+carries `Authorization: Bearer ref:<key ref>` exactly when the ride has a key ref: the ride's
+OpenRouter key Secret as `<project>/<secret>` (its per-session `--openrouter-secret`, else
+`<project>-openrouter`). A subscription-rail ride (claude, opencode-go, codex) has none and sends
+no header. Whether finalize struck does not change the header; the ref is the ride's own key.
 
 ⚑ gap — both run on gateway rides too: a gateway ride's strike is counted by the gateway
 ([LAUNCH-OUTCOME-GATEWAY](#launch-outcome-gateway)) AND written as a comment AND reported to the old
@@ -164,7 +172,76 @@ outcome for observability (ADR-103 (2): machine residue out of timelines); the c
 (the fleet reader in `coordinator-scan.sh`, the chain walk) move first
 ([docs/agents/model-routing.md §The strike ladder](../../../docs/agents/model-routing.md#the-strike-ladder) — "the strike comment remains the store FOR NOW").
 
-**World:** `launcher-vars` + the proxy seam (`curl` shadowed).
+**The comment has one emitter and two callers** (`REPLAY:strike-comment-post`). The launcher runs it
+after the classifier. The scan's dead-ride pass runs the same blocks for a ride the launcher did not
+outlive (`REPLAY:dead-ride-record` in `agents/coordinator-scan.sh` → `agents/ride-ended.sh`). That
+pass takes every tasked ride pod whose `agent` container ended non-zero at least
+`RIDE_ENDED_SETTLE_S` (600 s) ago and whose log has no `AGENT_RUN_STATS` line. It runs
+`strike-classifier`, `strike-line-format` and `strike-comment-post`, extracted from the launcher
+between their sentinels, over that pod. The struck model comes from the pod annotation
+`agent.teststuff.net/struck-model`. The pass runs before the pod janitor, only under `--spawn`, and
+only for repos with a fixer. The janitor deletes a Failed ride pod only once its start is 2 h old
+**and** its `agent` container ended `RIDE_ENDED_JANITOR_S` (3600 s) ago. Without the second
+condition, a deadline kill (Failed at start + 4 h) would be deleted before any pass could read it.
+
+When finalize never ran (no stats line), the emitter adds two things:
+
+- **Written once per pod lifetime.** The emitter writes nothing when a comment whose first line is
+  `AGENT_STRIKE:` / `KEY-RETRY:` and names `session=<pod>` was posted at or after the pod's
+  creation. A re-admitted attempt reuses the pod name, which is why the creation time bounds the
+  check. If the comment list cannot be read, nothing is written; the next pass tries again.
+- **The resumable-branch line finalize would have written.** On a `--work-branch` ride it is
+  `**Resumable branch pushed:** \`<work branch>\``. Otherwise, when origin holds exactly one
+  `fix/issue-<N>-*` branch, it is `**Resumable branch pushed:** \`<that branch>\``. Zero or several
+  branches give `(resumable branch **unknown** — finalize never ran, and origin holds <n> \`fix/issue-<N>-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)` with `<n>` the branch count; an unreadable listing gives `(resumable branch **unknown** — finalize never ran and the branch listing was unreadable; this is not a statement that none exists. Check the run log before restarting from base.)`.
+  Neither says there is nothing to resume.
+
+On the stats path the comment is the same as before, and no extra read is made.
+
+**World:** `launcher-vars` + the proxy seam (`curl` shadowed) for the router-report rows, with
+`TASK=issue-1268` on the tasked ones and `TASK=adhoc-migrate-cert` on the untasked one, and the key
+ref (`<project>/<secret>`) each `ride` cell names. **`died`** for the dead-ride rows: repo `homelab`, pod
+`agent-homelab-issue-3303-r1` (created `2026-11-13T00:10:05Z`, task `issue-3303`, round 1, harness
+`claude`, annotation `agent.teststuff.net/struck-model: claude/sonnet`), pod reason `Failed`, a log
+with no strike signature and no stats line, no comments, and one `fix/issue-3303-wire-quarry`
+branch at origin. Its second pod (`agent-homelab-issue-3290-r2`) ended with exit 0 in `Succeeded`,
+is never read, and is deleted by the janitor in every row. Both pods started on 2026-11-13
+(`00:10:10Z` and `00:02:10Z`), and every pass runs later than that day, so each pod's start is more
+than 2 h old in every row. **`base`** for the launcher-caller rows:
+repo `teststuffstash/test-project`, pod `agent-test-project-issue-42-r2` (created
+`2026-11-13T01:00:00Z`), task `issue-42`, model `openrouter/x`, round 2, an empty comment list, a
+three-line run log.
+
+#### The dead-ride pass
+
+Legend: `agent end` = the `agent` container's terminated state and how long ago it ended,
+measured against the settle window (600 s) and `RIDE_ENDED_JANITOR_S`; `stats?` = an
+`AGENT_RUN_STATS` line in its log; `prior record` = a terminal comment naming `session=<pod>`;
+`branches` = the `fix/issue-3303-*` refs at origin; `record?` = the comment written (`—` = none);
+`dead pod kept?` = whether the janitor leaves the dead pod in place this pass.
+
+| description | world | agent end | stats? | prior record | branches | record? | dead pod kept? |
+|---|---|---|---|---|---|---|---|
+| died-branch-pushed | died | exit 1 `Error`; past 600 s and past `RIDE_ENDED_JANITOR_S` | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
+| finalized-control | died | exit 1 `Error`; past both | yes | — | — | — (no GitHub read) | no (deleted) |
+| already-recorded ⚖ | died | exit 1 `Error`; past both | no | after the pod's creation | — | — (already written) | no (deleted) |
+| prior-attempt-record ⚖ | died | exit 1 `Error`; past both | no | before the pod's creation; a quoted copy after it | one | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
+| oom-killed | died | exit 137, `agent` terminated reason `OOMKilled` (pod reason `Failed`); past both | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=oom round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | no (deleted) |
+| branch-ambiguous ⚖ | died | exit 1 `Error`; past both | no | none | two | `AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1` + `(resumable branch **unknown** — finalize never ran, and origin holds 2 \`fix/issue-3303-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)` | no (deleted) |
+| comments-unreadable | died | exit 1 `Error`; past both | no | the read fails | — | — (retried next pass) | no (deleted) |
+| still-settling | died | exit 1 `Error`; less than 600 s ago | — | — | — | — (pod not read) | yes |
+| deadline-kill-recorded-spared | died | exit 1 `Error`, pod reason `DeadlineExceeded`; past 600 s, inside `RIDE_ENDED_JANITOR_S` | no | none | one | `AGENT_STRIKE: model=claude/sonnet error_class=timeout round=1 session=agent-homelab-issue-3303-r1` + `**Resumable branch pushed:** \`fix/issue-3303-wire-quarry\`` | yes |
+
+#### The launcher's caller
+
+Legend: `stats?` = `STATS`; `line` = the strike or key-retry line; `prior record`, `record?` as
+above.
+
+| description | world | stats? | line | prior record | record? |
+|---|---|---|---|---|---|
+| stats-path-unchanged | base | yes | `AGENT_STRIKE: model=openrouter/x error_class=harness-death round=2 session=agent-test-project-issue-42-r2` | not read | that line + the log tail, no resumable line |
+| no-stats-work-branch | base | no (`WORK_BRANCH=fix/issue-42-tighten`) | `AGENT_STRIKE: model=openrouter/x error_class=unknown round=2 session=agent-test-project-issue-42-r2` | none | that line + `**Resumable branch pushed:** \`fix/issue-42-tighten\`` + the log tail |
+| no-stats-key-retry-recorded | base | no | `KEY-RETRY: model=openrouter/x error_class=budget-403-key round=2 session=agent-test-project-issue-42-r2 match=key limit exceeded` | a `KEY-RETRY:` naming this session, posted `2026-11-13T01:20:00Z` (after the pod's creation) | — |
 
 #### The router report's credential
 
@@ -174,8 +251,8 @@ Legend: `ride` = the ride shape; `auth?` = the report's `Authorization` header.
 |---|---|---|---|
 | router-report-adhoc | launcher-vars | untasked, subscription rail | none |
 | router-report-no-ref | launcher-vars | tasked, subscription rail (no key ref) | none |
-| router-report-session-ref | launcher-vars | tasked, per-session OpenRouter key | `Bearer ref:homelab/homelab-session-1268` |
-| router-report-strike-by-pod | launcher-vars | finalize struck, per-session key | `Bearer ref:homelab/homelab-session-1268-pod-struck` |
+| router-report-session-ref | launcher-vars | tasked, key ref `homelab/homelab-session-1268` | `Bearer ref:homelab/homelab-session-1268` |
+| router-report-strike-by-pod | launcher-vars | tasked, finalize struck, key ref `homelab/homelab-session-1268-pod-struck` | `Bearer ref:homelab/homelab-session-1268-pod-struck` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -190,24 +267,31 @@ strike ∧ salvage `none` ∧ the class in the router's serving classes (read fr
 `turn-cap` ∧ a known provider ∧ that `(model, provider, class)` cell not already retried ∧ fewer than
 2 retries on the task ∧ a chainless stack under `routerMode: authoritative` ⇒ re-run the round with
 `--model`, `--openrouter-secret` and a goose `--harness` stripped, so `/route` picks again. Otherwise
-one line names the failing condition and the doorbell rings as usual.
+one line names the failing condition and the doorbell rings as usual. The serving classes come
+from the `/router-status` payload the capacity probe already fetched. A ride that skipped that probe
+has none in hand, and the clause reads `/router-status` itself from the router's in-cluster URL. If
+that read fails too, the set is unknown and the retry does not fire.
 
 ⚑ gap — superseded on gateway rides by [LAUNCH-OUTCOME-GATEWAY](#launch-outcome-gateway)'s
 re-admission (the gateway holds the strikes, the launcher holds only the attempt); on a gateway ride
 `AGENT_ROUTER=off`, so this retry never fires there. Deleted with the old path.
 
-**World:** `launcher-vars` (the `RT_*` knobs in the `env` column).
+**World:** `launcher-vars`. The baseline every row varies from: the launcher's own strike,
+class `timeout`, provider `openrouter`, salvage `none`, the cell not yet retried, 0 retries on the
+task, `/router-status` in hand with serving classes `auth-storm`, `provider-5xx`, `timeout`,
+`tool-loop`, a chainless stack, `routerMode: authoritative`. Each `condition` cell names only what
+differs from that baseline.
 
 #### When the old retry fires
 
-Legend: `condition` = the row's `RT_*` knobs; `fires?` = re-run with the cell excluded.
+Legend: `condition` = what the row changes from the baseline; `fires?` = re-run with the cell excluded.
 
 | description | world | condition | fires? |
 |---|---|---|---|
 | fires-serving-timeout | launcher-vars | strike `timeout`, provider openrouter, salvage none | yes (attempt 1/2) |
 | fires-by-pod-tool-loop | launcher-vars | finalize struck `tool-loop`, provider from stats | yes |
 | fires-turn-cap | launcher-vars | strike `turn-cap` | yes |
-| fires-probe-fallback | launcher-vars | `/router-status` blank in-process, the probe URL answers | yes |
+| fires-probe-fallback | launcher-vars | `/router-status` blank in-process, the in-cluster read answers `timeout` as serving | yes |
 | retry-dispatch-failed | launcher-vars | the re-run exits 1 | yes, then falls through to the doorbell |
 | no-retry-cell-seen | launcher-vars | the cell already retried | no |
 | no-retry-task-cap | launcher-vars | 2 retries on the task | no |
@@ -216,7 +300,7 @@ Legend: `condition` = the row's `RT_*` knobs; `fires?` = re-run with the cell ex
 | no-retry-salvage-unknown | launcher-vars | salvage undetermined | no |
 | no-retry-nonserving | launcher-vars | `harness-death` | no |
 | no-retry-no-strike | launcher-vars | no strike | no |
-| no-retry-router-unreachable | launcher-vars | `/router-status` unreadable | no |
+| no-retry-router-unreachable | launcher-vars | `/router-status` blank in-process, the in-cluster read fails | no |
 | no-retry-empty-provider | launcher-vars | no provider known | no (fail-closed line) |
 | no-retry-chained-stack | launcher-vars | a stack with a `workerModel` chain | no |
 | no-retry-shadow-mode | launcher-vars | `routerMode: shadow` | no |

@@ -3165,6 +3165,10 @@ kind: Pod
 metadata:
   name: ${POD}
   labels: { app: agent-session, project: ${PROJECT}, ride-size: ${RIDE_SIZE}${SUB_LABEL} }
+  # The strike's model attribution, carried for agents/ride-ended.sh (the scan-side caller of the
+  # terminal record): it reads an ENDED pod, so the chain-entry model must live on the pod — the
+  # MODEL env below is the resolved id, which is not what the chain walk matches on.
+  annotations: { agent.teststuff.net/struck-model: "${STRUCK_MODEL}" }
 spec:
   restartPolicy: Never
   # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns
@@ -3874,20 +3878,72 @@ if [ -n "$RUN_CMD" ]; then
       [ -z "$KEY_RETRY_LINE" ] || [ -z "$_strike_provider" ] || KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
       # <<<REPLAY:strike-provider-append<<<
 
+    # >>>REPLAY:strike-comment-post>>>
+    # THE TERMINAL RECORD'S ONE EMITTER (islands/launch/specs/outcome.md LAUNCH-OUTCOME-STRIKE-COMMENT).
+    # Two callers run this exact text: this launcher, and agents/ride-ended.sh — the scan's dead-ride
+    # pass, which extracts THIS block and the classifier blocks above (strike-classifier,
+    # strike-line-format) between their sentinels and runs them over an ended pod whose launcher died
+    # first (the launcher runs inside a coordinator session's time-bounded shell, so it often does).
+    # Two things only the no-stats path (finalize never ran) adds, because either caller may get there:
+    #   • ONE record per pod lifetime. A terminal comment whose first line is `AGENT_STRIKE:` /
+    #     `KEY-RETRY:` naming `session=<pod>`, posted at or after the pod's creation, means the other
+    #     caller already wrote it (a re-admitted attempt reuses the pod NAME, hence the creation
+    #     bound). An unreadable comment list writes nothing (rule #6): the next scan pass retries.
+    #   • The resumable-branch line finalize would have written (agent-runtime agent-finalize
+    #     `resumable_note`, the line the scan's C4/C5 reader parses). Without finalize there is no
+    #     salvage verdict, so it is derived from what the remote shows: a `--work-branch` ride's
+    #     branch (it exists by construction), else exactly ONE `fix/issue-<N>-*` branch — the recipe's
+    #     own branch convention (.agents/build.yaml, fix.yaml), issue-scoped, never an `agent/*` scan.
+    #     Zero, several, or an unreadable listing says `unknown` — never "nothing to resume".
+    ISSUE_N=""
+    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+    SLUG=""
+    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+    RECORD_GO=1; RECORD_NOTE=""
+    if [ -z "${STATS:-}" ] && { [ -n "$STRIKE_LINE" ] || [ -n "$KEY_RETRY_LINE" ]; } \
+       && [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      [ -n "${RIDE_SINCE:-}" ] || RIDE_SINCE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || true)"
+      if [ -z "${RIDE_SINCE:-}" ]; then
+        # no creation time = no bound: every earlier attempt's record would match, so the read is
+        # as good as failed (rule #6) — write nothing, the scan's pass retries with the pod's own.
+        RECORD_GO=""
+        echo "  (creation time of ${POD} unreadable — terminal record NOT written this pass; the scan's dead-ride pass retries)"
+      elif ! _rec_cmts="$(gh api "repos/${SLUG}/issues/${ISSUE_N}/comments?per_page=100" --paginate 2>/dev/null)" \
+         || ! jq -s -e . >/dev/null 2>&1 <<<"${_rec_cmts:-null}"; then
+        RECORD_GO=""
+        echo "  (comment list of ${SLUG}#${ISSUE_N} unreadable — terminal record for ${POD} NOT written this pass; the scan's dead-ride pass retries)"
+      elif jq -s -e --arg pod "$POD" --arg since "$RIDE_SINCE" '
+          [.[][]? | select(((.created_at // "") >= $since)
+                           and ((.body // "") | split("\n")[0]
+                                | test("^(AGENT_STRIKE|KEY-RETRY): .* session=" + $pod + "( |$)")))]
+          | length > 0' >/dev/null 2>&1 <<<"$_rec_cmts"; then
+        RECORD_GO=""
+        echo "→ terminal record for ${POD} already on ${SLUG}#${ISSUE_N} — not written twice"
+      elif [ -n "${WORK_BRANCH:-}" ]; then
+        RECORD_NOTE=$'\n\n'"**Resumable branch pushed:** \`${WORK_BRANCH}\` — the ride was dispatched on it, so it holds the work banked so far; the next round can resume from it (C5), not restart."
+      elif _rec_refs="$(gh api "repos/${SLUG}/git/matching-refs/heads/fix/issue-${ISSUE_N}-" --jq '.[].ref' 2>/dev/null)"; then
+        _rec_n="$(grep -c '^refs/heads/' <<<"$_rec_refs" || true)"
+        if [ "$_rec_n" = "1" ]; then
+          RECORD_NOTE=$'\n\n'"**Resumable branch pushed:** \`${_rec_refs#refs/heads/}\` — the next round can resume from it (C5), not restart."
+        else
+          RECORD_NOTE=$'\n\n'"(resumable branch **unknown** — finalize never ran, and origin holds ${_rec_n:-0} \`fix/issue-${ISSUE_N}-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)"
+        fi
+      else
+        RECORD_NOTE=$'\n\n'"(resumable branch **unknown** — finalize never ran and the branch listing was unreadable; this is not a statement that none exists. Check the run log before restarting from base.)"
+      fi
+    fi
     if [ -n "$STRIKE_LINE" ]; then
       if [ -z "${PR_URL:-}" ]; then
         echo "→ no PR opened — ${STRIKE_LINE}"
       else
         echo "→ harness death with PR — ${STRIKE_LINE}"
       fi
-      ISSUE_N=""
-      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-      SLUG=""
-      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      if [ -z "$RECORD_GO" ]; then
+        :
+      elif [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
         # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
-        STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-          "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        STRIKE_BODY="$(printf '%s%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$STRIKE_LINE" "$RECORD_NOTE" "$POD" "$(tail -n 15 "$RUNLOG")")"
         echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
         gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
           || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
@@ -3897,13 +3953,11 @@ if [ -n "$RUN_CMD" ]; then
     fi
     if [ -n "$KEY_RETRY_LINE" ]; then
       echo "→ key-class failure — ${KEY_RETRY_LINE}"
-      ISSUE_N=""
-      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-      SLUG=""
-      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
-        KEY_RETRY_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-          "$KEY_RETRY_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+      if [ -z "$RECORD_GO" ]; then
+        :
+      elif [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        KEY_RETRY_BODY="$(printf '%s%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$KEY_RETRY_LINE" "$RECORD_NOTE" "$POD" "$(tail -n 15 "$RUNLOG")")"
         echo "→ posting key-retry marker to ${SLUG}#${ISSUE_N}"
         gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$KEY_RETRY_BODY" 2>&1 | tail -1 \
           || echo "  (key-retry marker failed — non-fatal; the marker still shows in these logs)"
@@ -3911,6 +3965,7 @@ if [ -n "$RUN_CMD" ]; then
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — key-retry not posted, logged above only)"
       fi
     fi
+    # <<<REPLAY:strike-comment-post<<<
   fi
 
   # Goal #1640 acceptance 4: the retry's re-run. A FUNCTION so the clause-replay fixture can stub

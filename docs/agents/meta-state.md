@@ -38,9 +38,17 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   (`island-intake-bthpn`; the 05:00Z cron follows). MORNING READ: each one's ruling; what was queued, dispatched, built;
   whether #3308's footprint still held the `gateway/src` ones (the scan fix PR decides that); whether #3505 stalled on a
   goal-branch cut again.
-  IN FLIGHT at wind-down: two subagent PRs — `fix/scan-dead-ride-limbo` (a no-strike goal child decidable from git; a
-  writer-less footprint holds no sibling) and `fix/ride-death-terminal-record` (a ride death always leaves its terminal
-  record); when the first merges the next scan un-wedges #3303 #3308 #3420 (#3309 follows #3308) — confirm, no hand edits.
+  FIXES MERGED 11-16: #3507 (22:03Z — a no-strike goal child is decided from its goal base; a writer-less footprint holds
+  no sibling) and #3508 (22:52Z — the scan's `dead-ride-record` pass writes the terminal record the dead launcher could
+  not; the janitor keeps a Failed pod 1 h for it). FIRST LIVE PASS, read at 22:55Z: the 22:09Z scan resumed #3303 on its
+  branch, re-dispatched #3308 and dispatched #3420 (→ PR #3511, in review); #3501 dispatched 22:41Z, running. MORNING
+  CHECKS: (i) #3308-r2 died 3 min in (exit 255, both containers at once, while devbox was still copying nix store paths) —
+  the coordinator parked it `blocked-on: human`; is there an `AGENT_STRIKE` on #3308 from the new pass (the first live
+  proof of #3508)? what kills a kata ride during the nix copy (r1's cgroup hit its 5 GiB ceiling — the classifier reads
+  `unknown`, kata never reports `OOMKilled`)? (ii) #3303-r2 sat Pending 44 min+: the `agentstack-storage` quota is 40Gi of
+  `longhorn-scratch` = TWO 20Gi `docker-lib` volumes, and the dead #3308-r2 pod holds one until the janitor reaps it
+  (now ≥1 h after death) — a dead ride costs half the stack's docker-ride capacity for an hour; (iii) #3309 still waits
+  on #3308; (iv) #3503 (dashboard) got no ruling from the 21:00Z sitting — did the 05:00Z one rule it?
   JAIL FAULT, unfiled: `devbox run` rewrites `devbox.lock` (`nodejs_22` plugin_version 0.0.6 → 0.0.5, since #3471) and the
   pre-push hook's devbox wrappers then die 127 after the gate passes — direct master pushes fail; restore the lock after
   every devbox run. LIVE since 11-16: six platform components at 2 replicas + required anti-affinity + PDB (#3500);

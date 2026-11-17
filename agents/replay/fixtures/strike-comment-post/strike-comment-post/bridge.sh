@@ -1,0 +1,16 @@
+# ── bridge ── the launcher state the strike-comment-post block reads after the classifier and
+# strike-line-format blocks ran. Each row's delta (STATS, the lines, WORK_BRANCH) is its vars.sh.
+KUBECTL="kubectl"
+KUBE=""
+NS="test-project"
+POD="agent-test-project-issue-42-r2"
+TASK="issue-42"
+REPO_URL="https://github.com/teststuffstash/test-project.git"
+RUNLOG="$REPLAY_WORLD/runlog.txt"
+GH_TOKEN="stub-token"
+PR_URL=""
+WORK_BRANCH=""
+STATS=""
+STRIKE_LINE=""
+KEY_RETRY_LINE=""
+. "$REPLAY_WORLD/vars.sh"

@@ -1,0 +1,13 @@
+# dead-ride-record — the decision table (family contract in fixture.yaml).
+# id                     | world | patch                                         | env | expect                 | params
+died-branch-pushed       |       |                                               |     | died-branch-pushed     |
+finalized-control        |       |                                               |     | finalized-control      |
+already-recorded         |       |                                               |     | already-recorded       |
+prior-attempt-record     |       |                                               |     | prior-attempt-record   |
+oom-killed               |       | kubectl/get-pods.json @ patches/oom.jq        |     | oom-killed             |
+branch-ambiguous         |       |                                               |     | branch-ambiguous       |
+comments-unreadable      |       |                                               | STUB_GH_api_repos_teststuffstash_homelab_issues_3303_comments_per_page_100=fail | comments-unreadable    |
+still-settling           |       | kubectl/get-pods.json @ patches/settling.jq   |     | still-settling         |
+# the janitor spares a Failed pod until its agent ended RIDE_ENDED_JANITOR_S ago (a deadline kill's
+# Failed moment is past any startTime-only grace): the margin set wide, the death is recorded AND kept.
+deadline-kill-recorded-spared |  |                                          | RIDE_ENDED_JANITOR_S=999999999 | deadline-kill-recorded-spared |

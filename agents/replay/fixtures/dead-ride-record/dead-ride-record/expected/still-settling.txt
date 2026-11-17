@@ -1,0 +1,5 @@
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab delete pod agent-homelab-issue-3290-r2 --ignore-not-found
+OUT   [homelab] janitor: deleting terminal ride pod agent-homelab-issue-3290-r2 (releases its ephemeral scratch PVC)
+RC 0
