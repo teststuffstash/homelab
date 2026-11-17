@@ -196,10 +196,12 @@ spec:
                 cat /tmp/dig-select.log; _push 0 0 0 0 0 0; echo "deep-dig: selection failed — no session"; exit 1
               fi
               cat /tmp/dig-select.log
-              CAND="$(jq -r '.counts.candidates' /tmp/dig.json)"; GROUPS="$(jq -r '.counts.selected' /tmp/dig.json)"; EXPL="$(jq -r '.counts.explained' /tmp/dig.json)"
+              # NGROUPS, never GROUPS: bash owns $GROUPS (the caller's gids; assignment is silently dropped), so
+              # the zero-group exit below never fired and the gauge + manifest read the gid (1000).
+              CAND="$(jq -r '.counts.candidates' /tmp/dig.json)"; NGROUPS="$(jq -r '.counts.selected' /tmp/dig.json)"; EXPL="$(jq -r '.counts.explained' /tmp/dig.json)"
               _ts_put /tmp/dig.json digest.json
               _ts_put /tmp/dig-select.log select.log
-              if [ "${GROUPS:-0}" -eq 0 ]; then
+              if [ "${NGROUPS:-0}" -eq 0 ]; then
                 _push 1 "$CAND" 0 "$EXPL" 0 0
                 echo "deep-dig: nothing unexplained is standing or recurring — no session today (digest → $TS_PREFIX)"; exit 0
               fi
@@ -213,10 +215,10 @@ spec:
               _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role responder --task "dig-$DAY" || _gw=$?
               case "$_gw" in
                 0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
-                1) _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
+                1) _push 1 "$CAND" "$NGROUPS" "$EXPL" 0 0; echo "deep-dig: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
                 *)
               rail="$(SUBSCRIPTION_TIER=dispatch bash agents/subscription-latch.sh --pick-rail)" || rail=""
-              if [ -z "$rail" ]; then _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
+              if [ -z "$rail" ]; then _push 1 "$CAND" "$NGROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
               TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)";;
               esac
 
@@ -256,11 +258,11 @@ spec:
               if DIG_DIGEST=/tmp/dig.json DIG_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" DIG_RUN="dig-${DAY}/dig-r1-${TS_RUN}" bash agents/deep-dig-select.sh harvest /tmp/dig.log /tmp/findings; then
                 N="$(ls /tmp/findings/finding-*.json 2>/dev/null | wc -l | tr -d ' ')"
               else
-                echo "deep-dig: the session produced NO valid finding block for $GROUPS group(s) — the transcript is the only record"
+                echo "deep-dig: the session produced NO valid finding block for $NGROUPS group(s) — the transcript is the only record"
               fi
               jq -n --arg role responder --arg lane dig --arg project homelab --arg task "dig-$DAY" \
                     --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
-                    --argjson groups "$GROUPS" --argjson findings "$N" \
+                    --argjson groups "$NGROUPS" --argjson findings "$N" \
                     '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
                       session_key:"coordinator-claude", pod:$pod, timestamp:$ts, groups:$groups, findings:$findings,
                       files:["digest.json","brief.md","dig.log","select.log"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
@@ -268,8 +270,8 @@ spec:
               _ts_put /tmp/ts-manifest.json manifest.json
               for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && _ts_put "$f" "$(basename "$f")"; done
               { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")"; done
-              _push 1 "$CAND" "$GROUPS" "$EXPL" 1 "$N"
-              echo "deep-dig: $GROUPS group(s) dug, $N finding(s) → $TS_PREFIX"
+              _push 1 "$CAND" "$NGROUPS" "$EXPL" 1 "$N"
+              echo "deep-dig: $NGROUPS group(s) dug, $N finding(s) → $TS_PREFIX"
               for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && jq -r '"  \(.verdict) \(.group): \(.cause | .[0:160])\(if .pr != "" then " [PR \(.pr)]" else "" end)"' "$f"; done
               exit 0
           resources:
