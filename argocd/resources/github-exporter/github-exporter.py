@@ -2033,7 +2033,8 @@ def collect_anthropic_status(lines):
 #              STOPPED on the verdict`) — never restated                 a group's event
 #   group      `ansible <group>` — live state or the box's means to     a later success of the SAME group (the
 #              read it (drift, check-failed, unreachable, pair,         bracket's clean/confirmed branch, or the
-#              runner, toolchain, STOPPED)                              hourly re-read); nothing else
+#              runner, toolchain, STOPPED); re-posted by the box every  hourly re-read); nothing else. A re-post
+#              7 days while it stands (`… refused since <epoch> …`)     continues the run: `since` = the epoch
 #
 # Group events never end restated/stamped refusals except as a status on a NEWER commit (the loop
 # only reaches a group after the roots of that span passed; the re-read posts only on the refused sha
@@ -2128,6 +2129,12 @@ def mgmt_standing(events, commits=None, now=None, grace=None):
         row.update(kind=kind, last_committed=max(committed, row.get("last_committed", committed)), last_sha=sha)
         m = re.search(r"(\d+) address", desc or "")
         row["addresses"] = int(m.group(1)) if m else 0
+        # the box's periodic re-post of a standing group refusal carries the run's first epoch, so the
+        # age survives a cold walk that no longer reaches the original refusal (mgmt-ansible.sh ans_reread)
+        m = re.search(r"refused since (\d{9,})", desc or "")
+        if m:
+            row["since"] = min(row["since"], int(m.group(1)))
+            row["since_known"] = True
     # restated: a newer commit the box left without a status past the grace was taken silently
     with_status = {e[2] for e in events}
     for k in [k for k, r in standing.items() if r["kind"] == "restated"]:
@@ -2215,8 +2222,8 @@ def collect_mgmt_apply(lines):
             # floored per SUBJECT, decided once per run: the cold walk was capped and nothing read is
             # older than the run's first failure (its real start may lie in the unread history)
             if _mgmt_floored.get(s, (None,))[0] != row["first_at"]:
-                _mgmt_floored[s] = (row["first_at"],
-                                    _mgmt_walk_floor and not any(e[0] < row["first_at"] for e in events))
+                _mgmt_floored[s] = (row["first_at"], _mgmt_walk_floor and not row.get("since_known")
+                                    and not any(e[0] < row["first_at"] for e in events))
             lines.append(metric("github_mgmt_apply_since_floored", labels, 1 if _mgmt_floored[s][1] else 0))
 
 
@@ -4291,6 +4298,9 @@ def self_test():
         "finding 1's scenario: the stamp on the refused sha does not erase the group refusal"
     assert _std([_e(1, 100, "failure", _drift), _e(9, 900, "success", _conv)]) == set(), "the group's own success (bracket or hourly re-read) ends it"
     assert _std([_e(1, 100, "failure", _drift)], {"c100": 100, "c200": 200}, now=10**6) == {"ansible opnsense"}, "a group refusal survives status-less commits"
+    _rp = mgmt_standing([_e(1793500000, 1793500000, "failure", _drift),
+                         _e(1793900000, 1793900000, "failure", "ansible opnsense: ansible-live-drift still stands (re-read: live differs from master) — refused since 1793469849 — human")])[0]
+    assert _rp["ansible opnsense"]["since"] == 1793469849, f"a re-post continues the run; its epoch can only move since EARLIER: {_rp}"
 
     # ── the collector end to end: EVERY status per sha (finding 1), retention (3), floored per subject (6)
     def _node(c, latest=None):
@@ -4355,6 +4365,22 @@ def self_test():
         assert f'github_mgmt_apply_since_floored{{{_op}}} 1' in _b, _b
         assert 'github_mgmt_apply_since_floored{context="management-apply",repo="homelab",subject="main"} 0' in _b, \
             "finding 6: a subject whose run starts after read history is not floored\n" + _b
+        # round 2, the cold-walk half of finding 3: a group refusal whose ONLY record lies beyond a capped
+        # walk is invisible (no series at all) — which is why the box re-posts a standing one every 7 days
+        _statuses.clear()
+        _statuses["c%d" % _T0] = [(_T0 + 600, "failure", _drift)]
+        _mgmt_pages.update({None: (_page([_T0 + 30 * 86400, _T0 + 31 * 86400]), True, "p2"),
+                            "p2": (_page([_T0]), False, None)})
+        _reset(walk=1); _b = _run()
+        assert 'subject="ansible opnsense"' not in _b, "beyond the walk: unseen (the limit the re-post covers)\n" + _b
+        # … and with the box's re-post inside the walk, the refusal stands with its ORIGINAL age, not floored
+        _repost = f"ansible opnsense: ansible-live-drift still stands (re-read: live differs from master) — refused since {_T0} — human"
+        _statuses["c%d" % (_T0 + 30 * 86400)] = [(_T0 + 30 * 86400 + 60, "failure", _repost)]
+        _mgmt_pages[None] = (_page([_T0 + 30 * 86400, _T0 + 31 * 86400]), True, "p2")
+        _reset(walk=1); _b = _run()
+        assert f'github_mgmt_apply_refused{{{_op}}} 1' in _b, _b
+        assert f'subject="ansible opnsense"}} {_T0}' in _b, "the re-post carries the run's first epoch: age kept\n" + _b
+        assert f'github_mgmt_apply_since_floored{{{_op}}} 0' in _b, "its start is known: not floored\n" + _b
         # an unreadable history raises (the collector fails, its last lines carry over) — never a green sample
         globals()["graphql"] = lambda q, v: {"repository": None}
         try:

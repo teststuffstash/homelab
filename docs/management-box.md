@@ -235,13 +235,23 @@ every row):
 
 | Kind | Subject | Ends when |
 |---|---|---|
-| restated | a root (`main`), `stage 1` (incl. the security boundary, and its legacy `ansible <g>: security-boundary` text), `policy` (an ansible row the box cannot run as written) — every `refuse()`: it writes `refused-rev`, so the box restates it on each new master commit | a box status on a NEWER commit (the loop got past it); a newer commit left without a status for 30 min (taken silently); a later span-scoped verdict on the SAME commit (the `baseline:` stamp) |
+| restated | a root (`main`), `stage 1` (incl. the security boundary, and its legacy `ansible <g>: security-boundary` text), `policy` (an ansible row the box cannot run as written) — every `refuse()`: it writes `refused-rev`, so the box restates it on each new master commit | a box status on a NEWER commit (the loop got past it); a newer commit left without a status for 30 min; a later span-scoped verdict on the SAME commit (the `baseline:` stamp) |
 | stamped | a root failure posted after an apply, then stamped (`<root>: … applied, POST-CHECK regressed` / `… applied, STOPPED on the verdict`) — never restated | a later success of the same root, or the `baseline:` stamp — never another root, never a group's event |
-| group | `ansible <group>` — live state or the box's means to read it (drift, check-failed, unreachable, pair, runner, toolchain, STOPPED) | a later success of the same group: the bracket's clean/confirmed branch, or the hourly re-read (§Ansible applies); nothing else |
+| group | `ansible <group>` — live state or the box's means to read it (drift, check-failed, unreachable, pair, runner, toolchain, STOPPED) | a later success of the same group: the bracket's clean/confirmed branch, or the hourly re-read (§Ansible applies); nothing else. While it stands the box re-posts it every 7 days (`… refused since <epoch> …`, same run, same age) |
 
-A group refusal is not restated after a human stamp, so retention never drops a standing run, and
-`github_mgmt_apply_since_floored` is 1 only when the exporter's capped cold walk may hide the run's
-start. Reading only the newest commit missed the router's 2026-10-31 → 11-17 refusal: unrelated clean
+"A newer commit left without a status for 30 min" is the OPTIMISTIC reading of a status-less commit: it
+also happens while a declared window defers the loop or the box is down. The refusal then blanks, and
+when the box restates it `since` returns but the alert's 1 h `for:` restarts — a held or dead loop is
+`MgmtApplyDeferredByWindow`'s, `MgmtApplyLoopStale`'s and `MgmtBoxDown`'s, not this alert's.
+
+A group refusal is not restated after a human stamp, so two things keep it visible: the exporter's
+retention never drops a standing run, and the box re-posts a still-dirty group refusal every
+`ANS_REPOST_DAYS` (7, `mgmt/scripts/mgmt-ansible.sh`) carrying the run's first epoch — inside the
+exporter's cold walk after a restart (≤500 master commits, about 19 days on 2026-11-17), with its
+original age. `github_mgmt_apply_since_floored` is 1 only when that walk was capped and nothing it read
+is older than the run's first retained failure (a refusal whose start, and any re-post, lie beyond it
+is not seen at all). A lost group-success post is retried: the re-read marker stays armed
+(`success-unposted`) until a success post lands. Reading only the newest commit missed the router's 2026-10-31 → 11-17 refusal: unrelated clean
 applies (11-11, 11-14) read as cleared, and every status-less head published nothing
 (`collect_mgmt_apply`, fixture shapes 4–7 in `argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
 status cannot show — a loop or box that stopped posting: `MgmtApplyLoopStale`,

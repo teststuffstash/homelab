@@ -243,10 +243,17 @@ ans_lease_check() {
 }
 
 # ans_mark <group> <mode> <outcome> <changed-count> — the per-group record emit_metrics publishes
-ans_mark() {
-  printf '%s\t%s\t%s\t%s\n' "$(_ans_now)" "$2" "$3" "${4:-0}" >"$ADIR/ansible-last-$1"
-  # live == a declaration again: nothing left for the standing-refusal re-read (ans_reread)
-  case "$3" in converged|applied) rm -f "$ADIR/ansible-reread-$1" ;; esac
+ans_mark() { printf '%s\t%s\t%s\t%s\n' "$(_ans_now)" "$2" "$3" "${4:-0}" >"$ADIR/ansible-last-$1"; }
+# ans_post_success <group> <sha> <description> — the group's SUCCESS, the only thing that ends its standing
+# refusal on the wire (github-exporter's state model). The re-read marker goes only once the post landed:
+# a failed post (or no App token) re-arms it as `success-unposted`, so the next idle tick's re-read reads
+# clean again and re-posts — never a refusal left standing with nothing armed to end it.
+ans_post_success() {
+  if mgmt_post_status "$2" "$CTX" success "$3"; then rm -f "$ADIR/ansible-reread-$1"; return 0; fi
+  local first; first="$(cut -f3 "$ADIR/ansible-reread-$1" 2>/dev/null)"
+  printf '%s\t%s\t%s\t%s\n' "$2" success-unposted "${first:-$(_ans_epoch)}" "$(_ans_epoch)" >"$ADIR/ansible-reread-$1"
+  log "ansible $1: the success post failed — re-read re-armed (success-unposted), the next idle tick re-posts"
+  return 1
 }
 # ans_reread_arm <group> <sha> <rule> — a group refusal the box can RE-VERIFY arms the hourly re-read:
 # live drift, a check that failed or did not reach a host, an unhealthy pair, a runner/toolchain the box
@@ -254,11 +261,20 @@ ans_mark() {
 # stand). Those are the refusals whose truthful end is the group reading clean: $ADIR/ansible-reread-<g> = "<sha>\t<rule>", its mtime
 # the last read. NOT the security boundary: the row's plays exclude the denied ones, so a clean read of
 # them says nothing about what the human owes — that refusal ends with the human apply's stamp.
+# Marker fields: <sha>\t<rule>\t<first refused epoch>\t<last posted epoch>. A restatement keeps the first
+# epoch (one run); the last-posted epoch drives the re-post below.
 ans_reread_arm() {
   # inside a re-read the marker keeps the sha of the refusal it stands for (the waiting-mode match)
   [ "${ANS_REREAD:-0}" = 1 ] && [ -f "$ADIR/ansible-reread-$1" ] && return 0
-  printf '%s\t%s\n' "$2" "$3" >"$ADIR/ansible-reread-$1"
+  local first; first="$(cut -f3 "$ADIR/ansible-reread-$1" 2>/dev/null)"
+  printf '%s\t%s\t%s\t%s\n' "$2" "$3" "${first:-$(_ans_epoch)}" "$(_ans_epoch)" >"$ADIR/ansible-reread-$1"
 }
+_ans_epoch() { date +%s; }   # seam
+# A group refusal is not restated after a human stamp, and a still-dirty re-read posts nothing — so its
+# only record would age out of the exporter's cold walk (≤500 master commits, ~19 days). Every
+# ANS_REPOST_DAYS a still-dirty re-read RE-POSTS it on the commit it read, carrying the run's first epoch
+# (`refused since <epoch>`) so the exporter keeps the age (same subject = same run) — never refused-rev.
+ANS_REPOST_DAYS="${MGMT_ANSIBLE_REPOST_DAYS:-7}"
 _ans_count() { [ "${1%%$'\t'*}" = changed ] || { echo 0; return; }; tr ' ' '\n' <<<"${1#*$'\t'}" | sed -n 's/.*=\([0-9]*\)$/\1/p' | awk '{s+=$1} END {print s+0}'; }
 
 # ── the router row's reads and its LOCAL revert (ADR-152 (2)–(4), step 3) ──────────────────────
@@ -366,6 +382,16 @@ ans_reread() {
   ( refuse() { log "ansible $g: re-read: still refused — $2 (nothing posted)"; }
     ANS_REREAD=1 ans_bracket "$pol" "$g" "$sha" "$sha" ) || true
   [ -n "$refused" ] && [ ! -e "$ADIR/ansible-reread-$g" ] && rm -f "$ADIR/refused-rev"
+  # still standing and not merely an unposted success: re-post every ANS_REPOST_DAYS (the age travels along)
+  local f="$ADIR/ansible-reread-$g" rule first lastp
+  if [ -e "$f" ]; then
+    IFS=$'\t' read -r _ rule first lastp <"$f"
+    if [ "$rule" != success-unposted ] && [ $(( $(_ans_epoch) - ${lastp:-0} )) -ge $(( ANS_REPOST_DAYS * 86400 )) ]; then
+      if mgmt_post_status "$sha" "$CTX" failure "ansible $g: $rule still stands (re-read: live differs from master) — refused since ${first:-0} — human"; then
+        printf '%s\t%s\t%s\t%s\n' "$(cut -f1 "$f")" "$rule" "$first" "$(_ans_epoch)" >"$f"
+      fi
+    fi
+  fi
   return 0
 }
 
@@ -454,7 +480,8 @@ ans_bracket() {
       printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
       # `backup-only` was mapped to `on` above, so the router row posts it too; this success is what ENDS
       # the group's standing refusal on the wire (github-exporter, per `ansible <group>:` subject)
-      [ "$mode" = on ] && mgmt_post_status "$sha" "$CTX" success "ansible $g: live matches master (--check changed=0) — nothing to apply"
+      if [ "$mode" = on ]; then ans_post_success "$g" "$sha" "ansible $g: live matches master (--check changed=0) — nothing to apply" || true
+      else rm -f "$ADIR/ansible-reread-$g"; fi   # shadow posts nothing: no record to retry
       return 0 ;;
     failed|unreachable)
       local rule="ansible-check-failed"; [ "${j%%$'\t'*}" = unreachable ] && rule="ansible-unreachable"
@@ -578,7 +605,7 @@ ans_bracket() {
     printf '%s' "$sha" >"$ADIR/ansible-confirmed-$g"
     ans_mark "$g" "$mode" applied "$n"
     log "ansible $g: CONFIRMED ${sha:0:8} — lease deleted, window closed"
-    mgmt_post_status "$sha" "$CTX" success "ansible $g: applied by the management box ($n change(s)) · confirm clean"
+    ans_post_success "$g" "$sha" "ansible $g: applied by the management box ($n change(s)) · confirm clean" || true
     return 0
   fi
   local why

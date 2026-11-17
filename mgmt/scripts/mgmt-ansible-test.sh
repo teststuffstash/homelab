@@ -340,7 +340,7 @@ rr() {  # <name> <mode> <target> [<refused-sha>] → the re-read over the matchb
 # 5a a drift refusal arms the re-read: marker = "<sha>\t<rule>"
 rm -f "$ADIR"/ansible-reread-* "$ADIR/ansible-stopped" "$ADIR/ansible-confirmed-matchbox"
 run rr-arm on changed changed - -
-eq rr-arm-rc 3 "$RC"; eq rr-arm-marker "$SHA	ansible-live-drift" "$(cat "$ADIR/ansible-reread-matchbox" 2>/dev/null)"
+eq rr-arm-rc 3 "$RC"; eq rr-arm-marker "$SHA	ansible-live-drift" "$(cut -f1,2 "$ADIR/ansible-reread-matchbox" 2>/dev/null)"
 rm -f "$ADIR/refused-rev"   # the stub refuse() wrote it; the re-read below must not write one again
 # 5b not due yet (the marker was just written): no read at all
 rr rr-not-due on clean; eq rr-not-due-no-read "0" "$(grep -c '^target ' <<<"$C")"
@@ -380,6 +380,27 @@ has rr-policy-subject "^REFUSE policy: ansible opnsense mode 'on' with target 'c
 eq rr-policy-no-arm "absent" "$( [ -e "$ADIR/ansible-reread-opnsense" ] && echo present || echo absent)"
 # 5h the security boundary: a deny refusal leaves no marker, so the re-read has nothing to read
 rm -f "$ADIR"/ansible-reread-*; rr rr-deny on clean; eq rr-deny-no-read "0" "$(grep -c '^target ' <<<"$C")"
+# 5j a lost group-success post is retried, at BOTH sites that post one (the clean branch, the confirm):
+# the marker survives as `success-unposted`, the next idle re-read re-posts, then it goes
+mgmt_post_status() { echo "status $3 $4" >>"$T/calls"; [ "$3" != success ] || [ "${POST_FAIL:-0}" = 0 ]; }
+ans_reread_arm matchbox "$SHA" ansible-live-drift; old matchbox; POST_FAIL=1 rr rr-post-lost on clean
+eq rr-post-lost-rearmed "success-unposted" "$(cut -f2 "$ADIR/ansible-reread-matchbox" 2>/dev/null)"
+old matchbox; rr rr-post-retry on clean
+has rr-post-retry-status '^status success ansible matchbox: live matches master' "$C"
+eq rr-post-retry-disarmed "absent" "$( [ -e "$ADIR/ansible-reread-matchbox" ] && echo present || echo absent)"
+rm -f "$ADIR"/ansible-reread-*; POST_FAIL=1 rrun rr-confirm-post-lost backup-only changed clean changed clean
+eq rr-confirm-post-lost-rc 0 "$RC"; eq rr-confirm-post-lost-rearmed "success-unposted" "$(cut -f2 "$ADIR/ansible-reread-opnsense" 2>/dev/null)"
+rm -f "$ADIR"/ansible-reread-*
+# 5k a still-dirty re-read RE-POSTS the standing refusal once its last post is ≥ ANS_REPOST_DAYS (7) old,
+# carrying the run's first epoch (`refused since <first>`); younger → nothing posted (no hourly churn)
+now_e="$(date +%s)"
+printf '%s\t%s\t%s\t%s\n' "$SHA" ansible-live-drift 1793469849 "$(( now_e - 8 * 86400 ))" >"$ADIR/ansible-reread-matchbox"; old matchbox
+rr rr-repost on changed
+has rr-repost-status '^status failure ansible matchbox: ansible-live-drift still stands \(re-read: live differs from master\) — refused since 1793469849 — human' "$C"
+eq rr-repost-first-kept "1793469849" "$(cut -f3 "$ADIR/ansible-reread-matchbox")"
+eq rr-repost-no-refused-rev "absent" "$( [ -e "$ADIR/refused-rev" ] && echo present || echo absent)"
+old matchbox; rr rr-repost-young on changed; eq rr-repost-young-nothing "0" "$(grep -c '^status' <<<"$C")"
+rm -f "$ADIR"/ansible-reread-*
 # 5i the human stamp: ONE success on the stamped sha, subject `baseline`; marker consumed; shadow keeps it
 mgmt_post_status() { echo "status $1 $3 $4" >>"$T/calls"; }
 rm -f "$T/calls"; printf '%s\t%s\n' "$SHA" 20261117T200000Z-abc12345 >"$ADIR/human-stamp"
