@@ -41,7 +41,7 @@ the deployed policy only ⚖.
 A wire shape in a fixture is **mined from a recorded answer**, never hand-copied and never invented
 (Goal #3300). The gateway records what its vendors answered ([GW-WIRE-RECORD](../endpoints/wire.md#gw-wire-record))
 and serves it read-only ([GW-WIRE-VIEW](../endpoints/wire.md#gw-wire-view)); a fixture is cut from that
-answer with `devbox run wire-quarry -- cut <source> --path <a.b.c> --out gateway/tests/fixtures/<name>.json`
+answer with `devbox run wire-quarry -- cut <source> --path <a.b.c> --out tests/fixtures/<name>.json`
 ([GW-WIRE-QUARRY](../endpoints/wire.md#gw-wire-quarry)). The sidecar it writes beside the fixture
 (`<name>.provenance.json`: source, class, url, sha256, fetched_at, path) is committed with it. A shape no source
 has recorded is not written: a missing record is the finding (the tool exits `4`), and the fixture waits for the
