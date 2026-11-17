@@ -102,6 +102,22 @@ mgmt_post_status() {
   log "[${sha:0:8}] status $ctx=$state: $desc"
 }
 
+# mgmt_post_human_stamp — a human `mgmt-tf apply` that stamps the apply loop's baseline (mgmt-tf.sh, the
+# ONE human stamp site) leaves $ADIR/human-stamp = "<sha>\t<plan-id>"; the loop posts ONE success on that
+# commit under subject `baseline`. On the wire (github-exporter collect_mgmt_apply) it is a newer verdict on
+# a span-scoped subject, so it ends every standing root and `stage 1` refusal — the security boundary
+# included — which is true: the human applied the whole span the loop refused. It ends no `ansible <group>`
+# refusal: that is about LIVE state, which only the group's own read (the bracket or ans_reread) can show.
+# Shadow keeps the marker for a tick that can post; a failed post keeps it for the next tick.
+mgmt_post_human_stamp() {
+  local f="$ADIR/human-stamp" s id
+  [ -s "$f" ] || return 0
+  s="$(cut -f1 "$f")"; id="$(cut -f2 "$f")"
+  [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] human stamp at ${s:0:8} — not posted, marker kept"; return 0; }
+  mgmt_post_status "$s" "$CTX" success "baseline: stamped by a human apply (mgmt-tf plan ${id:0:25}) — the span is accounted for" \
+    && rm -f "$f"
+}
+
 # mgmt_upsert_comment <pr> <marker> <body-file> — one comment per PR, edited in place.
 mgmt_upsert_comment() {
   local pr="$1" marker="$2" bodyf="$3" existing body
