@@ -306,7 +306,7 @@ _fw_curl() {
     "GET status")        cat "$FWS/$host.status" 2>/dev/null || return 22 ;;
     "GET running")       cat "$FWS/$host.running" 2>/dev/null || echo '{"status":"ready"}' ;;
     "POST check")        cp "$FWS/$host.after" "$FWS/$host.status" 2>/dev/null; echo '{"status":"ok"}' ;;
-    "GET upgradestatus") echo '{"status":"done","log":"***DONE***"}' ;;
+    "GET upgradestatus") if [ -e "$FWS/$host.stuck" ]; then echo '{"status":"running"}'; else echo '{"status":"done","log":"***DONE***"}'; fi ;;
     *) return 22 ;;
   esac
 }
@@ -335,11 +335,26 @@ reset; rm -f "$FWC"/*; : >"$FWS/calls"
 FW_CHECK=0 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
 n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   FW_CHECK=0 → GETs only" || { echo "FAIL FW_CHECK=0 posted: $(cat "$FWS/calls")"; fails=$((fails+1)); }
 
+# the poll is BOUNDED (mgmt-belt's TimeoutStartSec=30m): a check that never finishes stops polling
+# after FW_CHECK_NODE_SECS (2 s at 1 s sleeps → ≤ 3 polls, never the 30 the count alone allows) …
+reset; rm -f "$FWC"/*; : >"$FWS/calls"; printf '%s' "$FW_NX" >"$FWS/h1.status"; printf '%s' "$FW_NX" >"$FWS/h1.after"; : >"$FWS/h1.stuck"
+FW_CHECK_POLL_SLEEP=1 FW_CHECK_NODE_SECS=2 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+polls="$(grep -c '^GET h1 upgradestatus$' "$FWS/calls")"
+n=$((n+1)); [ "$polls" -ge 1 ] && [ "$polls" -le 3 ] && echo "ok   a stuck check stops polling at FW_CHECK_NODE_SECS ($polls polls)" || { echo "FAIL per-node poll bound: $polls polls"; fails=$((fails+1)); }
+rm -f "$FWS/h1.stuck"
+# … and a spent per-tick budget (FW_CHECK_TOTAL_SECS) starts no further check at all
+reset; rm -f "$FWC"/*; : >"$FWS/calls"
+FW_CHECK_T0="$SECONDS" FW_CHECK_TOTAL_SECS=0 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   a spent tick budget → no check POST" || { echo "FAIL posted past the tick budget: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+
 # check_firmware end to end: the REAL inventory's nodes (yq over ansible/router-nodes/inventory.yml)
 # + the test VM, the env pair → one row per router, and publish() writes no currency series for the
 # unread node (the never-checked BACKUP, with its check POST refused).
 reset; rm -f "$FWC"/* "$FWS"/*
-printf '%s' "$FW_NX"  >"$FWS/192.168.2.70.status"; printf '%s' "$FW_NX" >"$FWS/192.168.2.70.after"
+# the post-check body a real router returns: the SAME offer, a FRESH last_check (LC_CUR) — the offer
+# must still date from the pre-check reading's 10-11 check (reviewer finding on #3525)
+FW_NX_FRESH="$(printf '%s' "$FW_NX" | jq -c '.last_check = "Tue Nov 17 20:00:00 EET 2026"')"
+printf '%s' "$FW_NX"  >"$FWS/192.168.2.70.status"; printf '%s' "$FW_NX_FRESH" >"$FWS/192.168.2.70.after"
 printf '%s' "$FW_PVE" >"$FWS/192.168.2.71.status"
 printf '%s' "$FW_CUR" >"$FWS/192.168.2.67.status"
 ( export MGMT_CACHE_DIR="$FWC" OPN_API_KEY=k OPN_API_SECRET=s OPN_TESTVM_API_KEY=k OPN_TESTVM_API_SECRET=s FW_NOW="$((LC_CUR + 60))" HOME="$T/home"

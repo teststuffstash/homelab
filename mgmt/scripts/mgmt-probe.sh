@@ -865,7 +865,11 @@ declare -a FIRMWARE=()   # "<node> <role> <read_ok> <available|-> <reboot|-> <la
 FW_CHECK="${FW_CHECK:-1}"
 FW_CHECK_INTERVAL="${FW_CHECK_INTERVAL:-86400}"   # 24 h: an update is days-scale, the alert 7 d
 FW_CHECK_RETRY="${FW_CHECK_RETRY:-3600}"          # one attempt per node per hour at most
-FW_TEST_HOST="${FW_TEST_HOST:-192.168.2.67}"      # test VM 9110 (mgmt-router-verdict.sh's OPN_TEST_HOST)
+FW_TEST_HOST="${FW_TEST_HOST:-192.168.2.67}"
+# Poll bounds: mgmt-belt is a oneshot with TimeoutStartSec=30m (mgmt/nixos/hosts/mgmt) shared with
+# tofu plans + ansible --check; each curl is capped at 30 s, so a bound overruns by one call at most.
+FW_CHECK_NODE_SECS="${FW_CHECK_NODE_SECS:-90}"     # one node's check poll
+FW_CHECK_TOTAL_SECS="${FW_CHECK_TOTAL_SECS:-180}"  # every check this tick, all nodes together      # test VM 9110 (mgmt-router-verdict.sh's OPN_TEST_HOST)
 check_firmware() {
   skip_requested firmware && { skipped firmware requested "SKIP requested"; return; }
   local inv="$REPO/ansible/router-nodes/inventory.yml" nodes
@@ -883,6 +887,7 @@ check_firmware() {
   fi
 
   local name host n=0 ok=0 behind=0 detail=""
+  FW_CHECK_T0="$SECONDS"
   while read -r name host; do
     [ -n "$name" ] && [ -n "$host" ] || continue
     fw_node "$name" node "$host" "$cfg_prod" "$cdir"; n=$((n + 1))
@@ -904,20 +909,28 @@ check_firmware() {
 
 # fw_node <name> <role> <host> <curl-config> <cache-dir> — read one router, check if stale, append a row.
 fw_node() {
-  local name="$1" role="$2" host="$3" cfg="$4" cdir="$5" body now lc attempt="" st
+  local name="$1" role="$2" host="$3" cfg="$4" cdir="$5" body now lc attempt="" st seed=""
   now="${FW_NOW:-$(date -u +%s)}"
   body="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/status")" || body=""
   lc="$(fw_last_check "$body")"
+  # The PRE-check reading's own proof of age: an offer it already carried at its last_check is at
+  # least that old — kept before the check below replaces the reading with a fresh last_check.
+  case "$(fw_json_status "$body")" in update|upgrade) seed="$lc" ;; esac
   if [ "$FW_CHECK" = 1 ] && [ -n "$body" ] && { [ -z "$lc" ] || [ $((now - lc)) -ge "$FW_CHECK_INTERVAL" ]; }; then
     [ -n "$cdir" ] && attempt="$cdir/firmware-check.$name"
     if [ -n "$attempt" ] && [ -f "$attempt" ] && [ $((now - $(cat "$attempt" 2>/dev/null || echo 0))) -lt "$FW_CHECK_RETRY" ]; then
       log "firmware: $name reading is stale but a check was attempted < ${FW_CHECK_RETRY}s ago — not retrying yet"
+    elif [ $((SECONDS - ${FW_CHECK_T0:-$SECONDS})) -ge "$FW_CHECK_TOTAL_SECS" ]; then
+      log "firmware: $name reading is stale but this tick's check budget (${FW_CHECK_TOTAL_SECS}s) is spent — next tick"
     elif st="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/running")" && fw_json_status "$st" | grep -qx ready; then
       [ -n "$attempt" ] && printf '%s\n' "$now" >"$attempt" 2>/dev/null
       log "firmware: $name last_check ${lc:-never} — POST core/firmware/check"
       if _fw_curl "$cfg" POST "https://$host/api/core/firmware/check" >/dev/null; then
-        local i=0
-        while [ "$i" -lt "${FW_CHECK_POLLS:-30}" ]; do
+        local i=0 t0="$SECONDS"
+        # bounded per node AND per tick (FW_CHECK_NODE_SECS / FW_CHECK_TOTAL_SECS): a slow mirror
+        # must not push the belt toward mgmt-belt's TimeoutStartSec
+        while [ "$i" -lt "${FW_CHECK_POLLS:-30}" ] && [ $((SECONDS - t0)) -lt "$FW_CHECK_NODE_SECS" ] \
+              && [ $((SECONDS - ${FW_CHECK_T0:-$SECONDS})) -lt "$FW_CHECK_TOTAL_SECS" ]; do
           sleep "${FW_CHECK_POLL_SLEEP:-3}"
           st="$(_fw_curl "$cfg" GET "https://$host/api/core/firmware/upgradestatus")" || st=""
           [ "$(fw_json_status "$st")" = running ] || break
@@ -932,17 +945,17 @@ fw_node() {
       log "firmware: $name firmware job busy or unreadable (running: $(fw_json_status "${st:-}")) — no check this tick"
     fi
   fi
-  fw_row "$name" "$role" "$body" "$lc" "$cdir" "$now"
+  fw_row "$name" "$role" "$body" "$lc" "$cdir" "$now" "$seed"
 }
 
-# fw_row <name> <role> <status-json> <last_check-epoch|""> <cache-dir> <now> — the verdict for one
+# fw_row <name> <role> <status-json> <last_check-epoch|""> <cache-dir> <now> [<pre-check offer epoch>] — the verdict for one
 # reading, split out so mgmt-probe-test.sh drives it with captured JSON. A reading COUNTS only with a
 # parseable last_check and a status the official path names (none/update/upgrade) — anything else
 # (no answer, 401/403 JSON, "requires to check first", a check that ended in error) is read_ok 0.
 # offered_since = when this belt first saw the offer, kept box-side and seeded with the router's own
 # last_check (a reading that already said "update" at its check proves the offer that old).
 fw_row() {
-  local name="$1" role="$2" body="$3" lc="$4" cdir="$5" now="$6" st ver offered reboot avail since="-" sf=""
+  local name="$1" role="$2" body="$3" lc="$4" cdir="$5" now="$6" seed="${7:-}" st ver offered reboot avail since="-" sf=""
   st="$(fw_json_status "$body")"
   [ -n "$cdir" ] && sf="$cdir/firmware-offered.$name"
   if [ -z "$lc" ] || ! case "$st" in none|update|upgrade) true ;; *) false ;; esac; then
@@ -960,6 +973,7 @@ fw_row() {
   case "$st" in update|upgrade) avail=1 ;; esac
   if [ "$avail" = 1 ]; then
     since="$lc"
+    case "$seed" in ''|*[!0-9]*) ;; *) [ "$seed" -lt "$since" ] && since="$seed" ;; esac
     if [ -n "$sf" ] && [ -s "$sf" ]; then
       local prev; prev="$(cat "$sf" 2>/dev/null)"
       case "$prev" in ''|*[!0-9]*) ;; *) [ "$prev" -lt "$since" ] && since="$prev" ;; esac
