@@ -218,7 +218,7 @@ subscription rail whose `session_ttl_s` has passed, then one `POST /anthropic/v1
 | a reviewer's request is real traffic | `policy-default · upstream-ok` | `one call on anthropic` | `gateway_requests_total{rail="anthropic",dialect="anthropic",status="200",traffic="real"}` | `1` |
 | a prober's request is synthetic traffic ⚖ | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_requests_total{rail="anthropic",dialect="anthropic",status="200",traffic="synthetic"}` | `1` |
 | a prober's tokens are synthetic | `policy-default · upstream-ok-cached` | `one call on anthropic by a prober` | `gateway_tokens_total{rail="anthropic",class="in",traffic="synthetic"}` | `12` |
-| an expired prober token is none, not synthetic | `policy-default · upstream-ok` | `an expired prober token on /anthropic/v1/messages` | `gateway_requests_total{rail="none",dialect="anthropic",status="401",traffic="none"}` | `1` |
+| an expired prober token is none, not synthetic ⚖ | `policy-default · upstream-ok` | `an expired prober token on /anthropic/v1/messages` | `gateway_requests_total{rail="none",dialect="anthropic",status="401",traffic="none"}` | `1` |
 | a prober's upstream time is synthetic | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_upstream_seconds_count{rail="anthropic",traffic="synthetic"}` | `1` |
 | a prober's upstream buckets are synthetic | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_upstream_seconds_bucket{rail="anthropic",traffic="synthetic",le="+Inf"}` | `1` |
 
