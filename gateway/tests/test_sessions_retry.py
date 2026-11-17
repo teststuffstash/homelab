@@ -114,6 +114,42 @@ async def test_strikes_walk_the_list(gw, upstreams, world, role, task, strikes, 
     expect(r.json(), decision=expected_decision, rail=expected_rail, model=expected_model)
 
 
+# -- a strike crosses the twins (GW-RAIL-CHOICE §The twin rule: a Go id and its openrouter spelling are twins) ----
+WORKER_LIGHT = {"stack": "platform", "role": "worker", "tier": "light", "task": T, "round": 0}
+TWIN_STRIKES = {
+    "no-pr on deepseek/deepseek-v4.1-flash": [("strike", {**WORKER_LIGHT, "rail": "openrouter", "prefer": "strongest", "harness": "goose"}, 1, "no-pr")],
+    "harness-gave-up on (openrouter, deepseek/deepseek-v4.1-flash)": [
+        ("strike", {**WORKER_LIGHT, "rail": "openrouter", "prefer": "strongest", "harness": "goose"}, 1, "harness-gave-up")],
+    "no-pr on opencode-go/deepseek-v4.1-flash, no-pr on deepseek/deepseek-v4-flash": [
+        ("strike", {**WORKER_LIGHT, "rail": "opencode"}, 1, "no-pr"),
+        ("strike", {**WORKER_LIGHT, "rail": "openrouter", "harness": "goose"}, 2, "no-pr")],
+}
+TWIN_ROWS = [
+    pytest.param("policy-default", "worker", "light", "T", "no-pr on deepseek/deepseek-v4.1-flash", 2, "dispatch", "openrouter",
+                 "deepseek/deepseek-v4-flash", DASH, id="a model strike on a twin excludes the twin on the other rail ⚖"),
+    pytest.param("policy-default", "worker", "light", "T", "harness-gave-up on (openrouter, deepseek/deepseek-v4.1-flash)", 2, "dispatch", "opencode",
+                 "opencode-go/deepseek-v4.1-flash", DASH, id="a cell strike on a twin leaves the other rail's twin cell admissible"),
+    pytest.param("policy-default", "worker", "light", "T", "no-pr on opencode-go/deepseek-v4.1-flash, no-pr on deepseek/deepseek-v4-flash", 3,
+                 "defer", DASH, DASH, "cells-exhausted", id="every model struck once its twins count: cells-exhausted"),
+]
+
+
+@pytest.mark.parametrize(("world", "role", "tier", "task", "strikes", "attempt", "expected_decision", "expected_rail", "expected_model",
+                          "expected_reason"), TWIN_ROWS)
+async def test_a_strike_crosses_the_twins(gw, upstreams, world, role, tier, task, strikes, attempt, expected_decision, expected_rail,
+                                          expected_model, expected_reason):
+    enter_world(world)
+    inputs(role=role, tier=tier, task=task, strikes=strikes, attempt=attempt)
+    with given(f"strikes = {strikes}"):
+        for _, body, n, klass in TWIN_STRIKES[strikes]:
+            await strike(gw, upstreams, {**body, "attempt": n}, klass)
+    body = {"stack": "platform", "role": role, "tier": tier, "task": TASKS[task], "round": 0, "attempt": attempt}
+    with when(f"POST /sessions {body}"):
+        r = await gw.post("/sessions", json=body)
+    assert r.status_code == 200, r.text
+    expect(r.json(), decision=expected_decision, rail=expected_rail, model=expected_model, reason=expected_reason)
+
+
 # -- cooled, exhausted, or held ---------------------------------------------------------------------
 LEFT_ROWS = [
     pytest.param("policy-default · upstream-429", "worker", "light", "openrouter", "a 429 cooled (openrouter, deepseek/deepseek-v4-flash)", 1,

@@ -340,6 +340,9 @@ REFUTE_ROWS = [
                  "{opencode, opencode-go/claude-haiku-5-5, claude, no-verdict, model, outcome}", 0, id="a clean outcome on another model refutes nothing there"),
     pytest.param("policy-default · upstream-429", "an earlier session's counted no-verdict on opencode-go/deepseek-v4.1-flash; this session upstream-429, then the consumer reports clean",
                  "none", 1, id="a clean outcome after a 429 still refutes ⚖"),
+    pytest.param("policy-default", "an earlier session of the task on deepseek/deepseek-v4.1-flash and this session on opencode-go/deepseek-v4.1-flash both admitted; "
+                 "the earlier reports no-pr (counted, model-scoped); this session's consumer reports clean",
+                 "none", 1, id="a clean outcome on a twin refutes the model strike on the other rail's twin ⚖"),
 ]
 
 
@@ -362,6 +365,20 @@ async def test_refutation(gw, upstreams, store, world, sequence, expected_strike
                 r = await _report(gw, doc["session"]["id"], {"class": "clean"}, None)
             refuted = r.json()["refuted"]
             attach_json("strikes after (all, refuted kept)", _strikes(store, counted=False))
+    elif sequence.startswith("an earlier session of the task on deepseek"):
+        with given("two worker sessions on the task, both admitted first: the earlier on openrouter's deepseek/deepseek-v4.1-flash, this one on its Go twin"):
+            with quiet():
+                a1 = await open_session(gw, **WORKER, tier="light", rail="openrouter", prefer="strongest", harness="goose")
+                a2 = await open_session(gw, **{**WORKER, "round": 2}, tier="light", rail="opencode")
+            assert (a1["model"], a2["model"]) == ("deepseek/deepseek-v4.1-flash", "opencode-go/deepseek-v4.1-flash"), (a1["model"], a2["model"])
+        with given("the earlier session's no-pr is counted (model-scoped)"):
+            with quiet():
+                await _report(gw, a1["session"]["id"], {"class": "no-pr"}, None)
+            attach_json("strikes before", _strikes(store))
+            assert len(_strikes(store)) == 1, _strikes(store)
+        with when("POST /sessions/{id}/outcome {class: clean} on the Go twin's session"):
+            r = await _report(gw, a2["session"]["id"], {"class": "clean"}, None)
+        refuted = r.json()["refuted"]
     elif sequence.startswith("an earlier session"):
         with given("two worker sessions on the task, both admitted on the same model (round 2 does not supersede round 1)"):
             with quiet():

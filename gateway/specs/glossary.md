@@ -366,7 +366,7 @@ A row of the outcome store keyed `(stack, task, rail, model, provider, harness)`
 **scope** and a **source**: `outcome` when the consumer reported how its ride ended, `gateway` when
 the gateway saw the transport fact itself ([GW-SESSIONS-OUTCOME](endpoints/sessions.md#gw-sessions-outcome)).
 Scope says what the next [walk](#walk) excludes for the task: a cell-scoped strike the
-[cell](#cell), a model-scoped one the policy id on every rail, a harness-scoped one every cell the
+[cell](#cell), a model-scoped one the policy id and its [twins](#twin) on every rail, a harness-scoped one every cell the
 struck harness would ride. A strike is **counted** until a `clean` outcome on the same cell, model
 or harness refutes it (it stays as history with `refuted_at` set); a bare 2xx refutes nothing. Not a
 round: a logic failure is the consumer's round counter's, never a class here.

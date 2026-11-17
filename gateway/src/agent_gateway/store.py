@@ -590,7 +590,7 @@ class Store:
             return cur.rowcount == 1
 
     def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset(),
-                       harness: str = "") -> int:
+                       harness: str = "", twins: set[str] = frozenset()) -> int:
         """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
         its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
         provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
@@ -598,13 +598,16 @@ class Store:
         cell (§Harness-scoped strikes: a clean ride proves the harness's machinery works)."""
         ps = sorted(providers)
         marks = ",".join("?" for _ in ps)
+        ts = sorted(twins)  # the model's twins: a model-scoped strike on one is refuted from either (GW-SESSIONS-RETRY §A strike crosses the twins)
+        tmarks = ",".join("?" for _ in ts)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
                 " AND ((scope = 'harness' AND harness = ? AND harness != '')"
                 " OR (scope != 'harness' AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''"
-                + (f" OR provider IN ({marks})" if ps else "") + ")))))",
-                (at, stack, task, at, harness, model, rail, *ps),
+                + (f" OR provider IN ({marks})" if ps else "") + "))))"
+                + (f" OR (scope = 'model' AND model IN ({tmarks}))" if ts else "") + ")",
+                (at, stack, task, at, harness, model, rail, *ps, *ts),
             )
             return cur.rowcount
 
