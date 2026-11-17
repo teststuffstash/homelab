@@ -120,7 +120,7 @@ READ_ROWS = [
     pytest.param("go-models-dev at T0", "show codex-models", 4, "nothing", "`wire: codex-models not recorded`",
                  id="a source nobody recorded is an error, never an empty answer"),
     pytest.param("go-models-dev at T0", "find --key nothing-has-this", 0, "nothing", "—",
-                 id="a key no source has is an empty answer, not an error"),
+                 id="a key no source has is an empty answer, not an error ⚖"),
     pytest.param("nothing recorded", "list", 0, "nothing", "—",
                  id="a door with no record lists nothing"),
     pytest.param("unreachable", "show go-models-dev", 3, "nothing", "`wire: door unreachable: <url>`",

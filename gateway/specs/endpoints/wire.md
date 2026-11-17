@@ -232,7 +232,7 @@ query `client_version=0.155.0`, interval 21600 s; the fake `/models` answer is a
 
 Legend: `declarations` = the file `GATEWAY_WIRE` names; `lifecycle` = the rail's credential at the
 read; `at` = the clock when the schedule runs; `request?` = what the fake upstream received;
-`outcome?` = the probe counter's outcome; `recorded_class?` = the class the source is recorded under.
+`outcome?` = the probe counter's outcome(s) counted by the ticks of the row, after the last tick; `—` when none; `recorded_class?` = the class the source is recorded under.
 
 | description | declarations | lifecycle | at | request? | outcome? | recorded_class? |
 |---|---|---|---|---|---|---|
@@ -242,7 +242,7 @@ read; `at` = the clock when the schedule runs; `request?` = what the fake upstre
 | no usable credential, no fetch ⚖ | wire-codex | the lifecycle refuses | T0 | none | no-credential | — |
 | an upstream error is counted and recorded as the failure | wire-codex, the fake answers 503 | a valid credential | T0 | as the first row | fetch-failed | account |
 | a missing path, nothing read ⚖ | `GATEWAY_WIRE` names a path that does not exist | a valid credential | T0 | none | — | — |
-| no credential is not retried inside the interval ⚖ | wire-codex, a no-credential tick at T0 | refuses at T0, a valid credential at T0 + 60 s | a second tick at T0 + 60 s | none | no-credential | — |
+| no credential is not retried inside the interval ⚖ | wire-codex, a no-credential tick at T0 | refuses at T0, a valid credential at T0 + 60 s | a second tick at T0 + 60 s | none | no-credential ×1 (the T0 attempt only; the second tick counts nothing) | — |
 | a restart inside the interval probes nothing at start | wire-codex, a record at T0 | a valid credential | restart at T0 + 3600 s | none | — | account |
 
 #### What a probe may be
@@ -315,7 +315,7 @@ arguments; `exit?`, `stdout?`, `stderr?` = what the process returns.
 | `show` prints one member verbatim and one provenance line | `go-models-dev at T0` | `show go-models-dev` | `0` | the stored bytes, byte-identical | `wire: source=go-models-dev class=public sha256=<…> fetched_at=T0` |
 | `list` prints the index | `go-models-dev at T0` | `list` | `0` | one line per source: name, class, status, age | — |
 | `find` names the sources that have a key, with its path ⚖ | `go-models-dev at T0` | `find --key cost` | `0` | `go-models-dev` and each JSON path ending in `cost` | — |
-| a key no source has is an empty answer, not an error | `go-models-dev at T0` | `find --key nothing-has-this` | `0` | nothing | — |
+| a key no source has is an empty answer, not an error ⚖ | `go-models-dev at T0` | `find --key nothing-has-this` | `0` | nothing | — |
 | a door with no record lists nothing | `nothing recorded` | `list` | `0` | nothing | — |
 | a source nobody recorded is an error, never an empty answer | `go-models-dev at T0` | `show codex-models` | `4` | nothing | `wire: codex-models not recorded` |
 | a silent door is an error that names the door ⚖ | `unreachable` | `show go-models-dev` | `3` | nothing | `wire: door unreachable: <url>` |
