@@ -995,6 +995,42 @@ names made mechanical. What it adds to §Ansible applies:
 fixture `py-no-check-support-*`): it would ignore the flag and write. A span whose drift base
 predates check mode therefore refuses once (`ansible-check-failed`), by design.
 
+### Router certificate carry — nightly, as `automation`
+
+The CARP BACKUP cannot order a certificate (the WAN gate gives it no WAN link), so its copies follow
+the MASTER's Let's Encrypt renewals only through
+[`scripts/opnsense-cert-carry.sh`](../scripts/opnsense-cert-carry.sh): each renewed cert + key from
+the MASTER's trust store onto the BACKUP under the same refid, the BACKUP's ACME row status, one
+HAProxy reconfigure ([`router-move.md`](router-move.md) §The identity the new router carries). The box
+runs it nightly — unit + timer `mgmt-cert-carry` (03:15 UTC, hours after the routers' 00:00
+Europe/Tallinn acme.sh cron), wrapper [`mgmt/scripts/mgmt-cert-carry.sh`](../mgmt/scripts/mgmt-cert-carry.sh)
+from a detached worktree (the drill's reason):
+
+- **Who is MASTER is read live**, with the converge's own resolver (`ans_carp_map` +
+  `ans_carp_backup` in `mgmt-ansible.sh`, §Router config converge): exactly one MASTER + one BACKUP
+  and hasync config sync off, or the run fails. After a failover the arguments swap by themselves;
+  the carry script's own guard (refuse unless `<master>` is CARP MASTER) still runs.
+- **Declared windows hold it** (`mgmt_apply_window_gate`, §Declared windows hold the apply loop): a
+  live window not opened with `--admit-apply` — the box's own BACKUP converge opens one — means no
+  router call that night (outcome `held`).
+- **Identity: the `automation` API user**, the env file's pair. The carry needed one privilege it
+  lacked, `page-system-certmanager` (trust/cert/search answered 403 on both nodes, 2026-11-17; every
+  other call already answered it) — declared in `opnsense_api_users`, applied once by the seat with
+  `scripts/opnsense-api-users.sh` (an API-users edit is on the human side of ADR-152 (4)'s
+  `deny_paths`; the box never applies it). It adds no reach: the box already holds root ssh to both
+  nodes (the seed key) and the `backup-puller` pair, whose `config.xml` download carries every
+  private key. Revisions are attributed to `automation`, so the click detector stays quiet — each
+  root-key run used to be a row. The env file's `OPN_BACKUP_API_*` (the puller's pair) are unset
+  before the carry, which would read them as the backup node's own creds. Root's pair is a jail
+  opt-in only (`OPN_AS_ROOT=1`).
+- **Metrics + the belt**: `mgmt_cert_carry_*` in `mgmt_cert_carry.prom` — last run, success,
+  outcome (`ok`/`warn`/`failed`/`held`), certs carried, first run, last success. Only an `ok` run
+  advances the last-success stamp, so the ONE alert, `MgmtCertCarryStale`
+  ([`cert-carry.yaml`](../argocd/resources/mgmt-metrics/cert-carry.yaml)), fires after 50 h without
+  one, whatever the cause (failed, warned, held every night, the timer gone). By hand on the box:
+  `systemctl start mgmt-cert-carry`, `journalctl -u mgmt-cert-carry`; a plan without writes:
+  `MGMT_CERT_CARRY_DRY=1` (no metrics). Fixture: `mgmt/scripts/mgmt-cert-carry-test.sh`.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 The one answer to "what does the box do on its own, what is attended, and what is still a human at
@@ -1036,7 +1072,7 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Router config converge, CARP MASTER (`scripts/opnsense-router-node.sh converge <node>`) | manual: seat-run per node in a window | — (not a box capability) | the test VM + the weekly rebuild drill are its test surfaces (FU-297) | ADR-152 program step 3's rolling part (through `carp-maintenance` with the dead-man) — ROADMAP §Deploy paths; not ruled, not built |
 | Router security-boundary plays (WAN firewall + port forwards, WireGuard, ACME, ddclient, API users, CARP) | manual, by design | — | the `deny_paths` of the `opnsense` row refuse them (ADR-152 (4)) | nothing — stays human |
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | manual: seat API calls, test VM 9110 first (ruling 2026-09-29, [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (prod by hand 2026-09-29/30) | class 14 in `dependency-upgrades.md` | ADR-152 program step 4 (test VM → BACKUP → MASTER under one lease) — ROADMAP §Deploy paths; not built |
-| Router BACKUP certificate carry (`scripts/opnsense-cert-carry.sh`) | manual: a seat verb | — | FU-297 | FU-297 next (1): a nightly box timer |
+| Router BACKUP certificate carry (`mgmt-cert-carry`, nightly, as `automation` — §Router certificate carry) | unattended once deployed: the timer is built, not yet run | — (the last carry was the seat's, by hand with root's key, 2026-10-26) | FU-297; fixture `mgmt-cert-carry-test.sh` | the seat applies `page-system-certmanager` (`scripts/opnsense-api-users.sh`), the box rebuilds, the first nightly `ok` |
 | OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-08 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
 | ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **on** since 2026-11-14 (`mode: "on"`; shadow homelab#3366 → on after a clean shadow tick on be5f7fcf) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below; the box's live plan yields both as `seed` candidates (2026-11-14) | the first unattended success (both runners, then the argocd release alone) |
 | Proxmox host maintenance (`host-maintenance`, nx-02 / pve) | attended: `devbox run host-maint -- preflight\|down\|up <host>` | 2026-10-09 (attended, nx-02) | §Hypervisor below | box wiring not built, no tracking item (2026-11-12); FU-288 for the BMC power path |
@@ -1709,7 +1745,7 @@ still a human" is §The capability ledger.
 | PXE flags set and cleared inside one reconciler sync (the reinstall class) | the interim shape is live (`flags.local.tf`); the reconciler half is not built | FU-244 |
 | BMC credentials rotated into the wallet; a BMC path in `node-maintenance` | half landed | FU-288 |
 | Router MASTER converge and router firmware as box runs | not built — ADR-152 program step 3 (the rolling part) and step 4 | ROADMAP §Deploy paths |
-| The router BACKUP's certificate carry as a box timer | a seat verb today | FU-297 |
+| The router BACKUP's certificate carry as a box timer | built (`mgmt-cert-carry`, §Router certificate carry) — waits on the seat applying `page-system-certmanager` and the first nightly `ok` | FU-297 |
 | The router BACKUP converge is refusing on live drift (Kea, since 2026-10-31) | needs a human converge | no tracking item found 2026-11-12 |
 | ci-runner VM replace as a box-run verb | built, disabled — operator trial pending (§Non-Talos VMs) | no tracking item 2026-11-12 |
 | Proxmox host maintenance as a box-run verb | attended today (§Hypervisor), box wiring not designed | no tracking item 2026-11-12 |

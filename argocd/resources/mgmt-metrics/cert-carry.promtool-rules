@@ -1,0 +1,19 @@
+# The mgmt-cert-carry group, lifted VERBATIM out of cert-carry.yaml (annotations stripped — the
+# manifest is their one home) — the rules file cert-carry.promtool-test loads.
+# DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/cert-carry.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-cert-carry
+    rules:
+      - alert: MgmtCertCarryStale
+        expr: |
+          (time() - mgmt_cert_carry_last_success_timestamp_seconds) > 50 * 3600
+            or
+          ((time() - mgmt_cert_carry_first_run_timestamp_seconds) > 50 * 3600
+            unless on (instance) mgmt_cert_carry_last_success_timestamp_seconds)
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
