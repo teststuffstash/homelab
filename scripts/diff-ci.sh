@@ -86,7 +86,7 @@ MAP=(
   "xr-render:$XR_RENDER_PATHS"
   "argo-lint:^agents/coordinator/"
   # the users role's key plan (one pair on every router node) — its ci.yaml step lands operator-direct
-  "opnsense-users-self-test:^ansible/roles/opnsense-users/"
+  "opnsense-users-self-test:^(ansible/roles/opnsense-users/|scripts/opnsense-api-users)"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest

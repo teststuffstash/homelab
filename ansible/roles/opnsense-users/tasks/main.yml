@@ -183,10 +183,10 @@
     quiet: true
   when: not ansible_check_mode
 
-- name: Read this node's users (the install targets a uuid)
+- name: Read this node's users (the install targets a uuid; the end-state check reads each back)
   oxlorg.opnsense.raw: { module: auth, controller: user, command: search }
   register: opn_user_rows
-  when: (opn_key_lines | default([])) | length > 0
+  when: not ansible_check_mode
 
 # The `apikeys` setter REPLACES the user's key blob — safe only because the plan installs on a node
 # that holds no key for the user (holding a different one is refused above).
@@ -227,8 +227,40 @@
          | opn_user_keys_plan(opnsense_api_users | map(attribute='name') | list, ansible_play_hosts_all, None) }}
   when: not ansible_check_mode
 
+# The install writes the user through auth/user/set with only {name, apikeys}: every managed user is
+# read back on every node and must still hold exactly its declared privileges (those this router
+# knows — the same intersection the user task applies) and be enabled. Test VM 2026-11-17: an
+# install left priv/disabled/descr/password unchanged; this keeps it true on prod, per node.
+- name: Read each managed user back
+  oxlorg.opnsense.raw:
+    module: auth
+    controller: user
+    command: "get/{{ (opn_user_rows.response.rows | selectattr('name', 'equalto', item.name) | first).uuid }}"
+  loop: "{{ opnsense_api_users }}"
+  loop_control: { label: "{{ item.name }}" }
+  register: opn_user_back
+  when: not ansible_check_mode
+
+- name: Assert each user kept its declared privileges and is enabled
+  ansible.builtin.assert:
+    that:
+      - _have | sort == _want | sort
+      - item.response.user.disabled | string == '0'
+    fail_msg: >-
+      {{ item.item.name }} on {{ inventory_hostname }}: privileges {{ _have | sort }} (declared
+      {{ _want | sort }}), disabled={{ item.response.user.disabled }}
+    quiet: true
+  vars:
+    _have: "{{ item.response.user.priv | dict2items | selectattr('value.selected', 'in', [1, '1']) | map(attribute='key') | list }}"
+    _want: "{{ item.item.privileges | intersect(opn_user_template.response.user.priv.keys() | list) }}"
+  loop: "{{ opn_user_back.results | default([]) }}"
+  loop_control: { label: "{{ item.item.name }}" }
+  when: not ansible_check_mode
+
 # A pair minted this run is in hand once: prove its SECRET authenticates on every node (401 = the
-# node does not hold it; 403 = authenticated, the user just lacks that page).
+# node does not hold it; 403 = authenticated, the user just lacks that page). 200|403 on purpose: a
+# per-user endpoint its privileges cover is not derivable from the privilege list without an
+# enumerated table (ACL patterns are wildcards); the privilege assertion above is the strict half.
 - name: Prove each minted secret authenticates on this node
   ansible.builtin.uri:
     url: "https://{{ ansible_host }}/api/core/firmware/status"
