@@ -200,27 +200,14 @@
           run scripts/opnsense-cert-carry.sh <master> <this node> from the MASTER (FU-297)
       when: acme_unissued | length > 0 and acme_carp_backup | bool
 
-    - name: Sign unissued certs (POST certificates/sign/<uuid>)
-      oxlorg.opnsense.raw:
-        module: acmeclient
-        controller: certificates
-        command: "sign/{{ item.uuid }}"
-        action: post
+    # ONE AT A TIME (sign-one.yml: sign → poll that row to 200 → next). Signing a batch at once
+    # got "CA server is busy" from Let's Encrypt and left issued certs' rows at 400 (2026-11-17);
+    # serial, each reached 200 in ~10 s. A cert row CARRIED onto a rebuilt node has no acme.sh state
+    # there (the nightly cron logs "'<name>' is not an issued domain, skipping." and the row goes
+    # 400 when due); `sign` does a fresh issue for it. --check: no POST and no poll — each cert it
+    # would sign is reported changed.
+    - name: Sign unissued certs, one at a time
+      ansible.builtin.include_tasks: sign-one.yml
       loop: "{{ acme_unissued }}"
-      loop_control: { label: "{{ item.name }} ({{ item.uuid }})" }
-      when: acme_unissued | length > 0 and not acme_carp_backup | bool
-
-    - name: Poll until signed certs report statusCode 200 (LE issuance)
-      oxlorg.opnsense.raw:
-        module: acmeclient
-        controller: certificates
-        command: search
-      register: acme_poll
-      until: >-
-        acme_poll.response.rows
-        | selectattr('name', 'in', acme_unissued | map(attribute='name') | list)
-        | rejectattr('statusCode', 'eq', '200')
-        | list | length == 0
-      retries: 24
-      delay: 5
+      loop_control: { loop_var: acme_cert, label: "{{ acme_cert.name }} ({{ acme_cert.uuid }})" }
       when: acme_unissued | length > 0 and not acme_carp_backup | bool
