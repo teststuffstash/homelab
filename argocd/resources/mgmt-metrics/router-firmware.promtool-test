@@ -1,0 +1,121 @@
+# Behaviour fixture for the router firmware currency belt (class 14; mgmt-probe.sh check_firmware).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/router-firmware.promtool-test
+#
+# promtool's clock starts at 0; time() is the test clock. Series are what check_firmware publishes
+# on every belt tick (15 min; sampled here at ≤5m so no point goes stale between samples): read_ok,
+# update_available, last_check and offered_since timestamps (epoch seconds — NEGATIVE values put a
+# moment before the fixture's t=0).
+rule_files:
+  - router-firmware.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # THE EVENT (read 2026-11-17): opnsense-nx02 runs 26.7.5; its own firmware/check on 2026-10-11
+  # offered 26.7.6_3, and nothing fired for 37 days. The belt's first tick seeds offered_since from
+  # that check (-37 d) and its own daily check refreshes last_check (t=0): Behind fires once its 30m
+  # `for:` is served, and Unread stays silent because the node reads fine.
+  - interval: 1m
+    name: "today's MASTER — an update offered since 10-11 — fires Behind on the belt's first ticks"
+    input_series:
+      - series: 'mgmt_router_firmware_update_offered_since_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "-3196800x60"
+      - series: 'mgmt_router_firmware_update_available{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "1x60"
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "1x60"
+      - series: 'mgmt_router_firmware_last_check_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x60"
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x60"
+    alert_rule_test:
+      - { eval_time: 29m, alertname: MgmtRouterFirmwareBehind, exp_alerts: [] }
+      - eval_time: 31m
+        alertname: MgmtRouterFirmwareBehind
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-nx02, role: node }
+      - { eval_time: 59m, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+
+  # A fresh offer: silent for the week, fires after 7 d + the 30m `for:`. The test VM (role test)
+  # offered the same for the whole week and never alerts.
+  - interval: 5m
+    name: "an offer younger than 7 days is silent; the test VM never alerts"
+    input_series:
+      - series: 'mgmt_router_firmware_update_offered_since_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "0x2100"
+      - series: 'mgmt_router_firmware_update_offered_since_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-test",role="test"}'
+        values: "-3196800x2100"
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-test",role="test"}'
+        values: "0x2100"
+    alert_rule_test:
+      - { eval_time: 7d, alertname: MgmtRouterFirmwareBehind, exp_alerts: [] }
+      - eval_time: 7d35m
+        alertname: MgmtRouterFirmwareBehind
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-pve, role: node }
+      - { eval_time: 7d, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+
+  # Checked and current: no offered_since series at all → nothing fires, for over a week.
+  - interval: 5m
+    name: "a current node (available 0, fresh daily check) trips nothing"
+    input_series:
+      - series: 'mgmt_router_firmware_update_available{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x2100"
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "1x2100"
+      # the router's own check, refreshed once a day by the belt (0, 1 d, 2 d, … as epoch seconds)
+      - series: 'mgmt_router_firmware_last_check_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x287 86400x287 172800x287 259200x287 345600x287 432000x287 518400x287"
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x2100"
+    alert_rule_test:
+      - { eval_time: 7d, alertname: MgmtRouterFirmwareBehind, exp_alerts: [] }
+      - { eval_time: 7d, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+
+  # Unreadable (today's opnsense-pve with the automation pair: 403 → read_ok 0): fires after 6h.
+  # A one-hour blip that recovers does not.
+  - interval: 5m
+    name: "read_ok 0 for 6h fires Unread; a 1h blip does not"
+    input_series:
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "0x100"
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x12 1x88"
+      - series: 'mgmt_router_firmware_last_check_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "_x12 0x88"
+    alert_rule_test:
+      - { eval_time: 5h55m, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+      - eval_time: 6h5m
+        alertname: MgmtRouterFirmwareUnread
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-pve, role: node }
+
+  # Read fine, but the router's last check stopped moving (the daily check POST keeps failing):
+  # stale past 2 d, plus the 6h `for:`.
+  - interval: 5m
+    name: "a last_check older than 2 days fires Unread after its 6h"
+    input_series:
+      - series: 'mgmt_router_firmware_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "1x800"
+      - series: 'mgmt_router_firmware_last_check_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x800"
+    alert_rule_test:
+      - { eval_time: 2d5h55m, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+      - eval_time: 2d6h5m
+        alertname: MgmtRouterFirmwareUnread
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-nx02, role: node }
+
+  # The box is scraped but publishes no firmware series (the check skipped: no credential) → Unread on the instance.
+  - interval: 5m
+    name: "a scraped box with no firmware series fires Unread after 6h"
+    input_series:
+      - series: 'up{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "1x100"
+    alert_rule_test:
+      - { eval_time: 5h55m, alertname: MgmtRouterFirmwareUnread, exp_alerts: [] }
+      - eval_time: 6h5m
+        alertname: MgmtRouterFirmwareUnread
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
