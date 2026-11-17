@@ -68,7 +68,7 @@ PROBE_ROWS = [
     pytest.param("wire-codex, the fake answers 503", "a valid credential", "T0", "as the first row", "fetch-failed", "account",
                  id="an upstream error is counted and recorded as the failure"),
     pytest.param("`GATEWAY_WIRE` names a path that does not exist", "a valid credential", "T0", "none", "—", "—", id="a missing path, nothing read ⚖"),
-    pytest.param("wire-codex, a no-credential tick at T0", "refuses at T0, a valid credential at T0 + 60 s", "a second tick at T0 + 60 s", "none", "no-credential", "—",
+    pytest.param("wire-codex, a no-credential tick at T0", "refuses at T0, a valid credential at T0 + 60 s", "a second tick at T0 + 60 s", "none", "no-credential ×1 (the T0 attempt only; the second tick counts nothing)", "—",
                  id="no credential is not retried inside the interval ⚖"),
     pytest.param("wire-codex, a record at T0", "a valid credential", "restart at T0 + 3600 s", "none", "—", "account",
                  id="a restart inside the interval probes nothing at start"),
@@ -138,7 +138,11 @@ async def test_a_declared_probe_is_read(tmp_path, settings, secrets, store, cloc
     got_outcome = outcomes.get("codex-models", "—")
     series = {m.group(1): int(m.group(2)) for m in re.finditer(r'gateway_wire_probe_total\{source="codex-models",outcome="([a-z-]+)"\} (\d+)', metrics)}
     if expected_outcome != "—":
-        assert series.get(expected_outcome) == 1, series
+        name = expected_outcome.split(" ×")[0]
+        assert series.get(name) == 1, series
+        if " ×1 " in expected_outcome:  # the counter after the last tick: exactly one count, nothing from the second tick
+            assert {k: v for k, v in series.items() if v} == {name: 1}, series
+            got_outcome = expected_outcome if got_outcome == name else got_outcome
     attach_json("the record (no body)", {k: v for k, v in rec.items() if k != "body"})
     if expected_request != "none" and expected_outcome == "ok":
         assert json.loads(rec["body"]) == {"fixture": {"len": 26}, "items": [{"n": 1}]}  # an account answer: structure, no string
