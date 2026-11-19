@@ -8,6 +8,35 @@ from urllib.parse import quote
 
 from . import gh
 
+# The fields of the PR read (`gh pr view --json state,labels,reviews,commits`) that
+# major-handoff.schema.json requires (`/properties/pr_read`, SCAN-HANDOFF-GATE): a list stands for each
+# of its elements, a type for a leaf. An answer that lacks one is unreadable — never a default.
+PR_READ = {
+    "state": str,
+    "labels": [{"name": str}],
+    "reviews": [{"author": {"login": str}, "state": str, "submittedAt": str, "body": str}],
+    "commits": [{"messageHeadline": str, "committedDate": str}],
+}
+
+
+def lacking(value: object, shape: object, where: str = "") -> str | None:
+    """The first required field `value` lacks (or holds in the wrong type) as a path, or None."""
+    if isinstance(shape, dict):
+        if not isinstance(value, dict):
+            return where or "(the answer)"
+        for key, sub in shape.items():
+            if key not in value:
+                return f"{where}.{key}".lstrip(".")
+            found = lacking(value[key], sub, f"{where}.{key}")
+            if found:
+                return found.lstrip(".")
+        return None
+    if isinstance(shape, list):
+        if not isinstance(value, list):
+            return where
+        return next((f for i, item in enumerate(value) if (f := lacking(item, shape[0], f"{where}[{i}]"))), None)
+    return None if isinstance(value, shape) else where  # type: ignore[arg-type]
+
 
 def main(slug: str, pr: str) -> int:
     item = f"{slug}#{pr}"
@@ -24,27 +53,28 @@ def main(slug: str, pr: str) -> int:
         return report("UNREADABLE — ", f"gh pr view {item} failed: {tail} — nothing written", 4)
     try:
         data = json.loads(result.stdout)
-        if not isinstance(data, dict) or not isinstance(data.get("commits"), list) or not isinstance(data.get("reviews"), list):
-            raise ValueError
-    except (ValueError, TypeError):
+    except ValueError:
         return report("UNREADABLE — ", f"gh pr view {item} returned no parseable PR object — nothing written", 4)
+    missing_field = lacking(data, PR_READ)
+    if missing_field:
+        return report("UNREADABLE — ", f"gh pr view {item} answered without `{missing_field}` — nothing written", 4)
 
     def refuse(message: str) -> int:
         return report("REFUSED — ", message, 3)
 
-    if data.get("state") != "OPEN":
-        return refuse(f'{item} is {data.get("state") or "of unknown state"}, not OPEN')
-    if "major" not in [label.get("name") for label in data.get("labels", [])]:
+    if data["state"] != "OPEN":
+        return refuse(f'{item} is {data["state"]}, not OPEN')
+    if "major" not in [label["name"] for label in data["labels"]]:
         return refuse(f"{item} does not carry the `major` label — not the human-merge lane")
-    approvals = [r for r in data["reviews"] if re.sub(r"\[bot\]$", "", (r.get("author") or {}).get("login") or "") == bot and r.get("state") == "APPROVED"]
+    approvals = [r for r in data["reviews"] if re.sub(r"\[bot\]$", "", r["author"]["login"]) == bot and r["state"] == "APPROVED"]
     if not approvals:
         return refuse(f"no APPROVED review by {bot} on {item} — dispatch the reviewer (brief step 2)")
-    approval = max(approvals, key=lambda r: r.get("submittedAt") or "")
-    approved_at = approval.get("submittedAt") or ""
-    newest = max((c.get("committedDate") or "" for c in data["commits"] if not (c.get("messageHeadline") or "").startswith(("Merge branch ", "Merge remote-tracking branch ", "Merge pull request "))), default="")
+    approval = max(approvals, key=lambda r: r["submittedAt"])
+    approved_at = approval["submittedAt"]
+    newest = max((c["committedDate"] for c in data["commits"] if not c["messageHeadline"].startswith(("Merge branch ", "Merge remote-tracking branch ", "Merge pull request "))), default="")
     if approved_at <= newest:
         return refuse(f"the newest {bot} approval ({approved_at}) predates the newest content commit ({newest}) on {item} — the verdict is not at head; re-dispatch the reviewer (brief step 2)")
-    body = (approval.get("body") or "").replace("\r\n", "\n").replace("\r", "\n")
+    body = approval["body"].replace("\r\n", "\n").replace("\r", "\n")
     missing = [h for h in ("Upstream", "Known issues", "Platform compatibility", "Evidence") if not re.search(r"^[ \t]*(?:#{1,6}[ \t]+|\*\*)[ \t]*" + re.escape(h) + r"(?:[ \t]|:|\*\*|$)", body, re.I | re.M)]
     if missing:
         return refuse(f"the approval at head ({approved_at}) lacks the migration heading(s): {', '.join(missing)} — re-dispatch the reviewer (brief step 2)")
