@@ -63,6 +63,7 @@ every key — is [`roles.md`](roles.md); this is the map.
 | **researcher/planner** | fixer ns | a human-queued MISSION issue (not an ADR-102 Goal; operator-dispatched — FU-163) | first mode proven |
 | **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | live (both -iac repos; first rides merged) |
 | **retro** | cluster cron | ledger level-trigger | first end-to-end run 2026-08-11 (hand-fired, 5 latent bugs fixed); first unattended 2026-08-17 |
+| **island rules digest** | `agent-coordinator` | a schedule (Fridays) when the week changed an island rules file ([glossary](../glossary.md)) | built 2026-11-19 (FU-320) — one session, one report PR per week (`island-rules-digest-argo.yaml`; reports in [`retros/island-rules/`](retros/island-rules/)) |
 | **prober** | `<stack>-agents` | schedule (`probe-<stack>`; the post-deploy edge is unbuilt) | live on platform + oracle (FU-102) |
 
 **Lenses** (FU-101) are not roles: a lens is the reviewer's machinery with a different brief
