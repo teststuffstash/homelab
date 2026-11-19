@@ -174,6 +174,7 @@ mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer o
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
 | **the runner seed check** (`check_seeds`) | DECLARED (the snippet content `source_raw[0].data` each `proxmox_virtual_environment_vm.ci_runner*` references, read from the main root's STATE — not a plan, because after a human apply the state holds the new content while the VM booted the old) vs LIVE (the VM's own `ci_runner_seed_info{vm,sha256}`, the sha256 of `/var/lib/cloud/instance/user-data.txt` its cloud-init writes at boot to the `ci-runner-node` exporter) | that each runner booted the seed tofu now holds — the consumed-trigger case §Non-Talos VMs describes, which no plan shows. Reports, never fails (a read failure is `unparseable` and publishes no series). Publishes `mgmt_runner_seed_declared_info{vm,sha256}`, VM names from the state; `MgmtRunnerSeedDrift` (`argocd/resources/mgmt-metrics/`) owns the join and the `for:` |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
+| **the router firmware currency check** (`check_firmware`, 2026-11-17 — class 14, ADR-152 program step 1) | per CARP node (`ansible/router-nodes/inventory.yml`) and the test VM: is an update OFFERED, and since when? The router's own `firmware/check` is the authority ([`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path), and `GET core/firmware/status` is only that check's cached answer — a node nobody checked answers "requires to check for update first" (opnsense-pve, 2026-11-17) — so the belt **runs the check**: a `POST core/firmware/check` when the node's `last_check` is over 24 h old (config-neutral, ~3 s), at most once an hour per node, never while `firmware/running` says a job is busy, its poll bounded at 90 s per node and 180 s per tick (the unit's `TimeoutStartSec` is 30 min); it never calls `update`/`upgrade` (that is step 4). Identity: the dedicated `firmware` API user (`OPN_FIRMWARE_API_*`, held only by this box), never `automation` — OPNsense has ONE ACL for the whole firmware API (`page-system-firmware-manualupdate`, package installs included), so the identity every play runs as stays unable to install packages (operator, 2026-11-17; the ruling beside `opnsense_api_users`); no pair → the check skips `no-input` and `MgmtRouterFirmwareUnread` sees the missing series. The test VM reads with its own pair. Publishes `mgmt_router_firmware_read_ok{node,role}` for every router tried and, for a reading that counts, `…_info{version,offered}`, `…_update_available`, `…_update_needs_reboot`, `…_last_check_timestamp_seconds` and `…_update_offered_since_timestamp_seconds` (box-kept, seeded from the router's `last_check`). `MgmtRouterFirmwareBehind` (offered > 7 d — `MgmtSubstrateBehind`'s week) and `MgmtRouterFirmwareUnread` (no usable reading 6 h, or a check > 2 d old) judge `role="node"` only, in `argocd/resources/mgmt-metrics/router-firmware.yaml`. Reports, never fails the probe; an unread node publishes no currency series |
 | `ansible --check` on an OPNsense play + every `apply_ansible` group's plays (Matchbox, since 2026-10-26 — §Ansible applies) | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | **the prometheus-operator CRD owner check** (`check_kps_crds`, 2026-10-07 — ADR-151, gap G16) | every `monitoring.coreos.com` CRD's `operator.prometheus.io/version` equals the running `kube-prometheus-stack-operator` image tag. The pair moves in one Renovate group, but a failed CRD sync, a stack bump merged outside the group, or a lease revert of the stack pin alone (ADR-150 never downgrades CRDs) leave the operator on a schema it did not ship — kube-state-metrics exports no CRD annotations, so the read is this kubectl probe; reason `skew` names the drifted CRDs |
 | each credential it holds, read once | a rotation did not lock the box out |
@@ -227,7 +228,33 @@ not liveness. The transport is the hypervisors' pattern: the box runs node_expor
 textfile collector (`mgmt/nixos/hosts/mgmt/default.nix`, 9100 open to the LAN only),
 `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus scrapes it as the
 static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`** (github-exporter,
-from master's commit status). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
+from master's commit status). It reads EVERY `management-apply` status of the last master commits (the box posts
+several on one commit: each root, each ansible bracket, the stamp, the re-read) as one verdict stream,
+**per subject** — the description's `<subject>:` prefix, never a list — and this model says which
+verdict ends which standing refusal (the exporter's header holds the same table; its self-test walks
+every row):
+
+| Kind | Subject | Ends when |
+|---|---|---|
+| restated | a root (`main`), `stage 1` (incl. the security boundary, and its legacy `ansible <g>: security-boundary` text), `policy` (an ansible row the box cannot run as written) — every `refuse()`: it writes `refused-rev`, so the box restates it on each new master commit | a box status on a NEWER commit (the loop got past it); a newer commit left without a status for 30 min; a later span-scoped verdict on the SAME commit (the `baseline:` stamp) |
+| stamped | a root failure posted after an apply, then stamped (`<root>: … applied, POST-CHECK regressed` / `… applied, STOPPED on the verdict`) — never restated | a later success of the same root, or the `baseline:` stamp — never another root, never a group's event |
+| group | `ansible <group>` — live state or the box's means to read it (drift, check-failed, unreachable, pair, runner, toolchain, STOPPED) | a later success of the same group: the bracket's clean/confirmed branch, or the hourly re-read (§Ansible applies); nothing else. While it stands the box re-posts it every 7 days (`… refused since <epoch> …`, same run, same age) |
+
+"A newer commit left without a status for 30 min" is the OPTIMISTIC reading of a status-less commit: it
+also happens while a declared window defers the loop or the box is down. The refusal then blanks, and
+when the box restates it `since` returns but the alert's 1 h `for:` restarts — a held or dead loop is
+`MgmtApplyDeferredByWindow`'s, `MgmtApplyLoopStale`'s and `MgmtBoxDown`'s, not this alert's.
+
+A group refusal is not restated after a human stamp, so two things keep it visible: the exporter's
+retention never drops a standing run, and the box re-posts a still-dirty group refusal every
+`ANS_REPOST_DAYS` (7, `mgmt/scripts/mgmt-ansible.sh`) carrying the run's first epoch — inside the
+exporter's cold walk after a restart (≤500 master commits, about 19 days on 2026-11-17), with its
+original age. `github_mgmt_apply_since_floored` is 1 only when that walk was capped and nothing it read
+is older than the run's first retained failure (a refusal whose start, and any re-post, lie beyond it
+is not seen at all). A lost group-success post is retried: the re-read marker stays armed
+(`success-unposted`) until a success post lands. Reading only the newest commit missed the router's 2026-10-31 → 11-17 refusal: unrelated clean
+applies (11-11, 11-14) read as cleared, and every status-less head published nothing
+(`collect_mgmt_apply`, fixture shapes 4–7 in `argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
 status cannot show — a loop or box that stopped posting: `MgmtApplyLoopStale`,
 `MgmtApplyMetricsAbsent`, `MgmtBoxDown`. The operator's at-a-glance PROGRESS view is the Grafana
 dashboard **"Management box — now"** (`https://grafana.teststuff.net`,
@@ -572,7 +599,11 @@ The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` ref
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
 the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
-`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+`refused-rev` on success; a scoped one does not (finish with a full one). The stamp is the ONE human
+stamp site, and it is observable: it leaves `/var/lib/mgmt/apply/human-stamp`, and the apply loop's next
+tick posts `baseline: stamped by a human apply (mgmt-tf plan <id>) — the span is accounted for` on the
+stamped commit (`mgmt_post_human_stamp`, `mgmt/scripts/mgmt-lib.sh`) — what ends a standing root or
+`stage 1` refusal for `MgmtApplyResidueStanding` (§"A standing refusal is a third verdict shape"). Since the plan-id change
 that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
 rather than from the apply's own flags, which a plan-file apply no longer has. **Since 2026-09-28
 the loop ADMITS the provider-pin shape on a master span exactly as the sentinel does on a head**
@@ -888,7 +919,9 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
 1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
    §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
 2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
-   (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
+   (a hand converge, or a no-op change): nothing to apply, status success (`backup-only` runs as `on` here, so
+   the router row posts it too — that success is what ends the group's standing refusal for
+   `MgmtApplyResidueStanding`), the group's confirmed sha
    advances. The diff hunks go to the journal.
 3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
    (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read
@@ -925,6 +958,20 @@ refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a st
 (`ansible-stopped` names the dir under `/var/lib/mgmt/apply/ansible/`: `summary.txt`, one log per play
 and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
 upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
+
+**The standing-refusal re-read.** Every group refusal whose truthful end is the group reading clean —
+`ansible-live-drift`, `ansible-check-failed`, `ansible-unreachable`, `ansible-pair-unhealthy`, a runner or
+toolchain the box could not start, a STOP (read only once a human cleared the marker and lease) — arms
+`$ADIR/ansible-reread-<group>`. Never the security boundary (subject `stage 1`) or a policy fault (subject
+`policy`): both are span verdicts, ended by a newer evaluated commit or the human stamp. On an IDLE tick (master applied, or the loop waiting on THAT group's
+refusal at the current sha — `refused-desc` names the refusing subject), outside declared windows and off the shared lock, the loop re-runs ONE
+armed group's target `--check` at most every `reread_min` (row knob, default 60) through the bracket
+itself (`ans_reread` → `ans_bracket` with `ANS_REREAD=1` and an empty span): clean → step 2's clean
+branch (confirmed sha = master, `ansible <group>: live matches master …` posted — in every enforcing mode,
+`backup-only` included); still dirty → nothing posted, the group's metric refreshed. Skipped while
+`ansible-stopped` or the group's lease stands. In the waiting case a clean read also lifts `refused-rev`,
+so the next tick runs the span on. This is what ends a hand-converged refusal within the hour instead of
+at the next span that happens to touch the group.
 
 **The belt sees what the loop does not look at.** The loop only reads a group when a span touches its
 paths; a hand edit on the LXC between merges is the belt's: `check_ansible` (§MB2) runs every play of
@@ -974,7 +1021,9 @@ names made mechanical. What it adds to §Ansible applies:
   master, codeowner-gated — over a role-level list in the applier): the row's `deny_paths` name the
   WAN-firewall + port-forward surface (`opnsense/tuya-egress.py`: filter + `d_nat` rules), WireGuard,
   ACME + ddclient (the DNS credentials), the API users and CARP (pair mechanics, and a password the box
-  does not hold). A span touching one is refused to a human (`security-boundary`), whatever else it
+  does not hold). A span touching one is refused to a human (`stage 1: security-boundary (ansible <group>)`
+  — subject `stage 1`, because it is a verdict on the SPAN like the sentinel's `deny_paths`, so it ends with
+  the human apply's stamp, never with a read of the row's plays, which exclude the denied ones), whatever else it
   holds; those plays are not in the row's list either. A `group_vars/opnsense.yml` edit to one of those
   plays' values selects the row and converges nothing (the plays that read it are not run) — the human
   path stays `opnsense-router-node.sh converge`.
@@ -1737,7 +1786,7 @@ this section.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare token — the read-only
   `homelab-mgmt-read` since FU-238's cloudflare leg, the write key before — and the Matchbox-Proxmox token,
-  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
+  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare and the `firmware` pair for the firmware belt, the box's alone) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
   `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the

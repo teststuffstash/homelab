@@ -90,12 +90,13 @@ trap 'emit_metrics $?' EXIT
 last=""; [ -f "$ADIR/applied-rev" ] && last="$(cat "$ADIR/applied-rev")"
 refused=""; [ -f "$ADIR/refused-rev" ] && refused="$(cat "$ADIR/refused-rev")"
 
-stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev" "$ADIR/refused-addresses"; }
+stamp() { [ "${MGMT_SHADOW:-0}" = 1 ] && { log "[shadow] would stamp ${1:0:8}"; return; }; printf '%s' "$1" >"$ADIR/applied-rev"; rm -f "$ADIR/refused-rev" "$ADIR/refused-addresses" "$ADIR/refused-desc"; }
 refuse() {  # <sha> <desc> <comment-lines>
   log "REFUSED ${1:0:8}: $2"; [ -n "${3:-}" ] && printf '%s\n' "$3" | sed 's/^/    /'
   mgmt_post_status "$1" "$CTX" failure "$2"
   [ "${MGMT_SHADOW:-0}" = 1 ] && return
   printf '%s' "$1" >"$ADIR/refused-rev"
+  printf '%s\n' "$2" >"$ADIR/refused-desc"   # which subject refused (the re-read's waiting-mode match)
   # the address count, when the refusal has one ("N address(es) outside the apply allowlist")
   grep -o '^[^:]*: [0-9]* address' <<<"$2" | grep -o '[0-9]*' >"$ADIR/refused-addresses" || echo 0 >"$ADIR/refused-addresses"
 }
@@ -185,6 +186,22 @@ PROM
   chmod 0644 "$tmp" && mv -f "$tmp" "$TEXTDIR/mgmt_apply.prom"
 }
 
+mgmt_post_human_stamp   # a human stamp since the last tick → its `baseline:` success (mgmt-lib.sh)
+
+# The standing-refusal re-read (mgmt-ansible.sh ans_reread) on an IDLE tick — master applied, or the loop
+# waiting on a group's re-verifiable refusal at this sha. Never while a declared window holds the loop;
+# off the shared lock like the bracket.
+reread_idle() {  # [<refused-sha>]
+  compgen -G "$ADIR/ansible-reread-*" >/dev/null || return 0
+  mgmt_apply_window_gate >/dev/null 2>&1 || { log "re-read: a declared window holds the loop (or its registry is unreadable) — not now"; return 0; }
+  local pol; pol="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || { log "re-read: policy unreadable — not now"; return 0; }
+  flock -u 9 2>/dev/null || true
+  ans_reread "$pol" "$sha" "${1:-}"
+  rm -f "$pol"
+  # never go on into a span without the shared lock the sentinel and lease loops rely on
+  flock -w 600 9 2>/dev/null || { log "PROBE-FAIL: lock busy re-taking it after the re-read — next tick"; exit 1; }
+}
+
 if [ -z "$last" ]; then
   log "first run — baseline set at ${sha:0:8}, nothing applied"; stamp "$sha"; exit 0
 fi
@@ -200,9 +217,14 @@ if [ "$sha" = "$last" ]; then
     fi
     rm -f "$POL"
   fi
+  reread_idle
   log "master at ${sha:0:8} = applied — nothing to do"; exit 0
 fi
-[ "$sha" = "$refused" ] && { log "master at ${sha:0:8} was REFUSED — waiting for a new commit or a human apply"; exit 0; }
+if [ "$sha" = "$refused" ]; then
+  reread_idle "$refused"
+  [ -e "$ADIR/refused-rev" ] && { log "master at ${sha:0:8} was REFUSED — waiting for a new commit or a human apply"; exit 0; }
+  log "master at ${sha:0:8}: the refusing group re-read clean — running the span on"
+fi
 
 [ "${MGMT_SHADOW:-0}" = 1 ] || rm -f "$ADIR/apply-unexercised"   # a new master sha re-judges; the old verdict's attribution goes with it
 POL="$(mgmt_policy_load "$REPO" "${MGMT_POLICY_REF:-origin/master}")" || exit 1  # MGMT_POLICY_REF: a TEST knob only (a branch's policy before it lands) — production reads master

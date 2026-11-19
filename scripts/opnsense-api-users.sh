@@ -15,9 +15,22 @@
 # the stores and deletes the tmpdir — the values never reach argv of anything but keepassxc's stdin
 # and the infisical-secret call, and never a log.
 #
-# Idempotent: a user that already has a key gets none. To ROTATE one: delete its key on the router
-# (GET auth/user/search_api_key -> POST auth/user/del_api_key/<id>) and re-run; the new pair
-# overwrites the wallet entries (the router just proved the old ones dead).
+# One user = one key pair, identical on EVERY router node and in the wallet (the CARP pair has no
+# config sync): the play mints a missing key ONCE, on the first node in inventory order, and
+# installs that same pair on the other node; it refuses before any write when the nodes hold
+# different keys or a node holds a key the wallet lacks or contradicts — this script hands it the
+# wallet's PUBLIC halves for that check (roles/opnsense-users, filter_plugins/opn_user_keys.py).
+# `--check` mints nothing and prints the per-node plan ("<node>: firmware mint · automation ok").
+#
+# Idempotent: a user every node holds a key for gets none. To ROTATE one: delete its key on EVERY
+# node (GET auth/user/search_api_key -> POST auth/user/del_api_key/<id>) and re-run; the new pair
+# overwrites the wallet entries (the nodes just proved the old ones dead).
+#
+# A FAILED run still stores what it minted: the play's exit code is held, whatever reached the sink
+# goes to the wallet (+ Infisical), and only then does the script exit with the play's code. A key
+# minted on the first node is never lost to a later failure (the install on the other node, the
+# end-state checks); the re-run finds the wallet holding that node's pair and installs it on the rest.
+# Self-test: scripts/opnsense-api-users-test.sh (stubbed play + wallet).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,7 +55,24 @@ kp_put() { # kp_put <entry> <value-file>  (value via stdin, never argv)
 SINK="$(mktemp -d)"; chmod 700 "$SINK"
 trap 'find "$SINK" -type f -exec shred -u {} + 2>/dev/null; rm -rf "$SINK"' EXIT
 
-OPN_AS_ROOT=1 bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml -e "opnsense_users_key_sink=$SINK" "$@"
+# The wallet's public halves, for the play's "the wallet holds the pair a node holds" check. Read
+# from group_vars (the one list); a user with no wallet entry is simply absent from the map.
+WALLET_KEYS="$SINK/.wallet-keys.json"
+{
+  printf '{"opnsense_users_wallet_keys": {'; sep=''
+  for user in $(DEVBOX_QUIET=1 devbox run --quiet -- yq -r '.opnsense_api_users[].name' ansible/group_vars/opnsense.yml); do
+    k="$(kp_get "opnsense-$user-api-key" || true)"
+    [ -n "$k" ] || continue
+    printf '%s"%s": "%s"' "$sep" "$user" "$k"; sep=', '
+  done
+  printf '}}\n'
+} > "$WALLET_KEYS"
+chmod 600 "$WALLET_KEYS"
+
+rc=0
+OPN_AS_ROOT=1 bash scripts/opnsense-playbook.sh ansible/opnsense-users.yml \
+  -e "opnsense_users_key_sink=$SINK" -e "@$WALLET_KEYS" "$@" || rc=$?
+rm -f "$WALLET_KEYS"
 
 minted=0
 for keyf in "$SINK"/*.key; do
@@ -62,3 +92,7 @@ for keyf in "$SINK"/*.key; do
   minted=$((minted + 1))
 done
 echo "done: $minted key pair(s) minted and stored"
+if [ "$rc" -ne 0 ]; then
+  echo "the users play FAILED (rc=$rc); the $minted pair(s) it minted are stored above — fix the cause and re-run (the plan installs a stored pair on the nodes that lack it)" >&2
+  exit "$rc"
+fi

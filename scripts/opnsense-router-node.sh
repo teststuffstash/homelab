@@ -229,7 +229,8 @@ converge() {
   fi
   local p rest plays='opnsense-acme.yml opnsense-bgp.yml opnsense-unbound.yml opnsense-haproxy.yml'
   # opnsense-users.yml is NOT run: a node's users + keys are carried from prod (seed-shape
-  # --carry api-users); the play mints keys into the wallet for users that lack one.
+  # --carry api-users). A listed user prod lacks is not carried; scripts/opnsense-api-users.sh then
+  # installs the pair the other node holds, or mints one pair for every node (roles/opnsense-users).
   rest="$(cd ansible && ls opnsense-*.yml | grep -vxF -e opnsense-users.yml $(printf -- '-e %s ' $plays))"
   for p in $plays $rest; do
     log "play $p → $INV_HOST ($HOST), $( [ "$STANDBY" = true ] && echo standby || echo LIVE)"

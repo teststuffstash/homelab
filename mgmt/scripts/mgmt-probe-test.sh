@@ -14,7 +14,7 @@ export MGMT_TEXTFILE_DIR="$T/text" DRY_RUN=0 MODE=belt
 
 fails=0 n=0
 # shellcheck disable=SC2034  # read by the sourced probe (passed/failed/skipped, publish)
-reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; SEEDS=(); }
+reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; SEEDS=(); FIRMWARE=(); }
 check() {  # check <name> <expected "status reason"> — against the single RESULTS row
   n=$((n+1))
   local got="${RESULTS[0]#* }"
@@ -255,6 +255,138 @@ if grep -qF 'ci_runner_seed_info{vm="${name}",sha256="%s"} 1' "$TPL" \
    && grep -qF 'sha256sum /var/lib/cloud/instance/user-data.txt' "$TPL"; then
   echo "ok   the runner template publishes ci_runner_seed_info{vm,sha256}"; else
   echo "FAIL the runner template no longer writes ci_runner_seed_info — MgmtRunnerSeedDrift's live side"; fails=$((fails+1)); fi
+
+# 11. check_firmware — the router firmware currency belt (class 14, ADR-152 program step 1).
+#     Captured readings (2026-11-17, root's GET core/firmware/status; trimmed to the fields read):
+#     FW_NX = opnsense-nx02, its cached check from 2026-10-11 offering 26.7.5 → 26.7.6_3 (the event
+#     this belt exists for); FW_PVE = opnsense-pve, never checked (status none + "requires to check").
+FW_NX='{"status":"update","status_msg":"There are 40 updates available, total download size is 196.2MiB. This update requires a reboot.","last_check":"Sun Oct 11 20:41:27 EEST 2026","needs_reboot":"1","upgrade_needs_reboot":"0","upgrade_major_version":"","product_version":"26.7.5","connection":"ok","repository":"ok","upgrade_packages":[{"name":"opnsense","repository":"OPNsense","current_version":"26.7.5","new_version":"26.7.6_3"},{"name":"kernel","size":"33526828","repository":"OPNsense","current_version":"26.7.4","new_version":"26.7.6"}],"product":{"product_version":"26.7.5","product_latest":"26.7.8"}}'
+FW_PVE='{"status":"none","status_msg":"Firmware status requires to check for update first to provide more information.","product":{"product_version":"26.7.5","product_latest":"26.7.5","product_check":null}}'
+# a checked-and-current reading (a following check after an update: status none, a last_check, no packages)
+FW_CUR='{"status":"none","status_msg":"There are no updates available on the selected mirror.","last_check":"Tue Nov 17 20:00:00 EET 2026","needs_reboot":"0","product_version":"26.7.8","upgrade_packages":[],"product":{"product_version":"26.7.8"}}'
+# EEST = UTC+3 (Europe/Tallinn summer time): 20:41:27 EEST = 17:41:27Z; EET = UTC+2
+LC_NX="$(date -u -d '2026-10-11T17:41:27Z' +%s)"
+LC_CUR="$(date -u -d '2026-11-17T18:00:00Z' +%s)"
+FWC="$T/fwcache"; mkdir -p "$FWC"
+fwrow() {  # fwrow <name> <expected row> — against the single FIRMWARE row
+  n=$((n+1))
+  if [ "${#FIRMWARE[@]}" -eq 1 ] && [ "${FIRMWARE[0]}" = "$2" ]; then echo "ok   $1"; else
+    echo "FAIL $1: want '$2', got '${FIRMWARE[*]:-<none>}'"; fails=$((fails+1)); fi
+}
+reset; rm -f "$FWC"/*
+fw_row opnsense-nx02 node "$FW_NX" "$(fw_last_check "$FW_NX")" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "today's MASTER: update offered since its 10-11 check, reboot, 26.7.5 → 26.7.6_3" \
+  "opnsense-nx02 node 1 1 1 $LC_NX $LC_NX 26.7.5 26.7.6_3"
+# the box keeps the EARLIER first-seen across later checks (a fresh check moves last_check, not the offer)
+reset
+fw_row opnsense-nx02 node "$FW_NX" "$LC_CUR" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "a later check keeps the first-seen offer time" "opnsense-nx02 node 1 1 1 $LC_CUR $LC_NX 26.7.5 26.7.6_3"
+# checked and current: available 0, nothing offered, and the box forgets the offer
+reset
+fw_row opnsense-nx02 node "$FW_CUR" "$(fw_last_check "$FW_CUR")" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "checked and current → available 0" "opnsense-nx02 node 1 0 0 $LC_CUR - 26.7.8 -"
+n=$((n+1)); if [ ! -e "$FWC/firmware-offered.opnsense-nx02" ]; then echo "ok   a current reading clears the box-side offer"; else
+  echo "FAIL the offer file survived a current reading"; fails=$((fails+1)); fi
+# never checked / 403 / no answer / a check that ended in error → read_ok 0, no currency fields
+reset; fw_row opnsense-pve node "$FW_PVE" "$(fw_last_check "$FW_PVE")" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "a node never checked (status none, no last_check) → unread" "opnsense-pve node 0 - - - - - -"
+reset; fw_row opnsense-pve node '{"status":403,"message":"Forbidden"}' "" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "a 403 body → unread" "opnsense-pve node 0 - - - - - -"
+reset; fw_row opnsense-pve node "" "" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "no answer → unread" "opnsense-pve node 0 - - - - - -"
+reset; fw_row opnsense-pve node '{"status":"error","last_check":"Tue Nov 17 20:00:00 EET 2026","connection":"error"}' "$LC_CUR" "$FWC" "$LC_CUR" >/dev/null 2>&1
+fwrow "a check that ended in error → unread" "opnsense-pve node 0 - - - - - -"
+
+# fw_node: WHEN the belt runs the check. A stub router: per-host status bodies in files, every call logged.
+FWS="$T/fwstub"; mkdir -p "$FWS"; export FWS
+_fw_curl() {
+  local host="${3#https://}"; host="${host%%/*}"; local ep="${3##*/}"
+  echo "$2 $host $ep" >>"$FWS/calls"
+  case "$2 $ep" in
+    "GET status")        cat "$FWS/$host.status" 2>/dev/null || return 22 ;;
+    "GET running")       cat "$FWS/$host.running" 2>/dev/null || echo '{"status":"ready"}' ;;
+    "POST check")        cp "$FWS/$host.after" "$FWS/$host.status" 2>/dev/null; echo '{"status":"ok"}' ;;
+    "GET upgradestatus") if [ -e "$FWS/$host.stuck" ]; then echo '{"status":"running"}'; else echo '{"status":"done","log":"***DONE***"}'; fi ;;
+    *) return 22 ;;
+  esac
+}
+export FW_CHECK_POLL_SLEEP=0
+fwcalls() { grep -c "^POST $1 check$" "$FWS/calls" 2>/dev/null; }
+# stale (10-11, a month before LC_CUR) → POST check, re-read: the row carries the NEW check's answer
+reset; rm -f "$FWC"/* "$FWS"/*; printf '%s' "$FW_NX" >"$FWS/h1.status"; printf '%s' "$FW_CUR" >"$FWS/h1.after"
+FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+fwrow "a stale reading → POST check, the re-read wins" "opnsense-nx02 node 1 0 0 $LC_CUR - 26.7.8 -"
+n=$((n+1)); [ "$(fwcalls h1)" = 1 ] && echo "ok   exactly one check POST" || { echo "FAIL check POSTs: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+# …and the next tick within FW_CHECK_RETRY does not POST again even though the reading is still stale
+reset; : >"$FWS/calls"; printf '%s' "$FW_NX" >"$FWS/h1.status"; printf '%s' "$FW_NX" >"$FWS/h1.after"
+FW_NOW="$((LC_CUR + 900))" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   no second check inside FW_CHECK_RETRY" || { echo "FAIL retried within the hour: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+# a fresh reading (last_check 1 h old) → GET only
+reset; rm -f "$FWC"/*; : >"$FWS/calls"; printf '%s' "$FW_CUR" >"$FWS/h1.status"
+FW_NOW="$((LC_CUR + 3600))" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   a fresh reading → no check" || { echo "FAIL checked a fresh reading: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+# a firmware job running (an update in flight) → no check, the cached reading stands
+reset; rm -f "$FWC"/*; : >"$FWS/calls"; printf '%s' "$FW_NX" >"$FWS/h1.status"; echo '{"status":"busy"}' >"$FWS/h1.running"
+FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   busy firmware job → no check" || { echo "FAIL checked while busy: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+rm -f "$FWS/h1.running"
+# FW_CHECK=0 → read-only, whatever the age
+reset; rm -f "$FWC"/*; : >"$FWS/calls"
+FW_CHECK=0 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   FW_CHECK=0 → GETs only" || { echo "FAIL FW_CHECK=0 posted: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+
+# the poll is BOUNDED (mgmt-belt's TimeoutStartSec=30m): a check that never finishes stops polling
+# after FW_CHECK_NODE_SECS (2 s at 1 s sleeps → ≤ 3 polls, never the 30 the count alone allows) …
+reset; rm -f "$FWC"/*; : >"$FWS/calls"; printf '%s' "$FW_NX" >"$FWS/h1.status"; printf '%s' "$FW_NX" >"$FWS/h1.after"; : >"$FWS/h1.stuck"
+FW_CHECK_POLL_SLEEP=1 FW_CHECK_NODE_SECS=2 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+polls="$(grep -c '^GET h1 upgradestatus$' "$FWS/calls")"
+n=$((n+1)); [ "$polls" -ge 1 ] && [ "$polls" -le 3 ] && echo "ok   a stuck check stops polling at FW_CHECK_NODE_SECS ($polls polls)" || { echo "FAIL per-node poll bound: $polls polls"; fails=$((fails+1)); }
+rm -f "$FWS/h1.stuck"
+# … and a spent per-tick budget (FW_CHECK_TOTAL_SECS) starts no further check at all
+reset; rm -f "$FWC"/*; : >"$FWS/calls"
+FW_CHECK_T0="$SECONDS" FW_CHECK_TOTAL_SECS=0 FW_NOW="$LC_CUR" fw_node opnsense-nx02 node h1 cfg "$FWC" >/dev/null 2>&1
+n=$((n+1)); [ "$(fwcalls h1)" = 0 ] && echo "ok   a spent tick budget → no check POST" || { echo "FAIL posted past the tick budget: $(cat "$FWS/calls")"; fails=$((fails+1)); }
+
+# check_firmware end to end: the REAL inventory's nodes (yq over ansible/router-nodes/inventory.yml)
+# + the test VM, the env pair → one row per router, and publish() writes no currency series for the
+# unread node (the never-checked BACKUP, with its check POST refused).
+reset; rm -f "$FWC"/* "$FWS"/*
+# the post-check body a real router returns: the SAME offer, a FRESH last_check (LC_CUR) — the offer
+# must still date from the pre-check reading's 10-11 check (reviewer finding on #3525)
+FW_NX_FRESH="$(printf '%s' "$FW_NX" | jq -c '.last_check = "Tue Nov 17 20:00:00 EET 2026"')"
+printf '%s' "$FW_NX"  >"$FWS/192.168.2.70.status"; printf '%s' "$FW_NX_FRESH" >"$FWS/192.168.2.70.after"
+printf '%s' "$FW_PVE" >"$FWS/192.168.2.71.status"
+printf '%s' "$FW_CUR" >"$FWS/192.168.2.67.status"
+( export MGMT_CACHE_DIR="$FWC" OPN_FIRMWARE_API_KEY=k OPN_FIRMWARE_API_SECRET=s OPN_TESTVM_API_KEY=k OPN_TESTVM_API_SECRET=s FW_NOW="$((LC_CUR + 60))" HOME="$T/home"
+  unset OPN_API_KEY OPN_API_SECRET
+  check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
+n=$((n+1)); if [ "$(cat "$T/fw.res")" = "firmware pass ok" ]; then echo "ok   check_firmware reports (pass) with a node behind and one unread"; else
+  echo "FAIL check_firmware verdict: $(cat "$T/fw.res")"; fails=$((fails+1)); fi
+n=$((n+1))
+want="mgmt_router_firmware_read_ok{node=\"opnsense-nx02\",role=\"node\"} 1
+mgmt_router_firmware_read_ok{node=\"opnsense-pve\",role=\"node\"} 0
+mgmt_router_firmware_read_ok{node=\"opnsense-test\",role=\"test\"} 1
+mgmt_router_firmware_update_available{node=\"opnsense-nx02\",role=\"node\"} 1
+mgmt_router_firmware_update_available{node=\"opnsense-test\",role=\"test\"} 0
+mgmt_router_firmware_update_offered_since_timestamp_seconds{node=\"opnsense-nx02\",role=\"node\"} $LC_NX"
+got="$(grep -E '^mgmt_router_firmware_(read_ok|update_available|update_offered_since_timestamp_seconds)\{' "$prom" 2>/dev/null)"
+if [ "$got" = "$want" ]; then echo "ok   publish(): read_ok for all three, currency only for the read ones"; else
+  echo "FAIL firmware series: want
+$want
+got
+$got"; fails=$((fails+1)); fi
+# the prod pair is the dedicated `firmware` user's ONLY (operator ruling on #3525): with just the
+# `automation` pair present (the box before provision-secrets carries OPN_FIRMWARE_API_*) the check
+# skips no-input, reads nothing, and publishes no firmware series — MgmtRouterFirmwareUnread's
+# "no series at all" arm (router-firmware.promtool-test) is what sees that box.
+reset; rm -f "$FWC"/*; : >"$FWS/calls"
+( export MGMT_CACHE_DIR="$FWC" OPN_API_KEY=k OPN_API_SECRET=s HOME="$T/home"
+  unset OPN_FIRMWARE_API_KEY OPN_FIRMWARE_API_SECRET OPN_TESTVM_API_KEY OPN_TESTVM_API_SECRET
+  check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
+n=$((n+1)); if [ "$(cat "$T/fw.res")" = "firmware skip no-input" ] && [ ! -s "$FWS/calls" ] \
+   && ! grep -q '^mgmt_router_firmware_' "$prom"; then echo "ok   automation pair only → skip no-input, no router call, no firmware series"; else
+  echo "FAIL automation-only: $(cat "$T/fw.res") calls=$(cat "$FWS/calls") series=$(grep -c '^mgmt_router_firmware_' "$prom")"; fails=$((fails+1)); fi
+unset -f _fw_curl
 
 echo "mgmt-probe-test: $((n-fails))/$n passed"
 [ "$fails" -eq 0 ]

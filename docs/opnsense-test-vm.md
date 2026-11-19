@@ -305,8 +305,9 @@ splices identity into the seed:
 - `trust`: every `<cert>` + `<ca>` with its refids, plus the GUI's `ssl-certref`;
 - `acme`: `OPNsense/AcmeClient` whole — the registered account and the certificate rows bound to
   those refids;
-- `api-users`: the FU-013 users with their hashed keys, plus root's prod key line appended to the
-  seed's throwaway one;
+- `api-users`: the FU-013 users (`opnsense_api_users`, read from group_vars) with their hashed keys,
+  plus root's prod key line appended to the seed's throwaway one; a listed user prod does not have
+  yet is skipped and named in the `seed-shape:` line (the drill report carries it);
 - `wireguard`: `OPNsense/wireguard` whole — the server keypair and its peers, so the laptop and
   phone configs survive the move unchanged (operator, 2026-09-30: option (a) of
   [`router-move.md`](router-move.md) §The identity).
