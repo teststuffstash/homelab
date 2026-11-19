@@ -3085,3 +3085,23 @@ much the operator still holds an issue's wording. A wait is a claim about one fa
 re-tested it: 3 of 4 rulings a fresh read changed were re-reads of earlier waits.
 **Consequences:** the sitting's token closes and edits issues it previously only commented on. The
 daily cron reads the issue pile and its waits (FU-320). A wrong close is undone by reopening.
+
+### ADR-164 — Island intake asks the operator only for a closed list; everything else it decides and production corrects (2026-11-19)
+**Status:** Accepted (operator, 2026-11-19).
+**Decision:** an [island intake](glossary.md) sitting parks an item on the operator (`intake: seat`,
+`blocked-on: human`) only for an entry of a closed list — access or money the island does not hold,
+an attended or irreversible act, direction (a Goal over the ceiling, what the island is for),
+another owner's gate, a ruling the tracker records as pending on that question, and the ADR-163
+whose-issue limits. With no entry, intake pins the cheaper-to-reverse option ⚖ and queues; the
+island's alerts, the deep dig, the escape read and prober rides correct a wrong pin. "Ruling" means
+the operator's recorded answer, whatever session typed it under the operator's login. Mechanism:
+[`gateway/intake.md`](../gateway/intake.md) §The procedure step 3; each island's instances are its
+facts' `Operator-only` lines ([`intake/`](intake/)).
+**Considered:** the open-ended "a human fact is missing" trigger (rejected: a read of ten gateway
+waits found six decidable from what intake already reads); drafting the list and waiting for
+evidence before adopting it (rejected: the build needs the data that adopting it produces).
+**Why:** a wrong queue costs one ride and is caught by the feedback the island already runs; a
+wrong park costs operator time and nothing re-tests it.
+**Consequences:** fewer `seat` outcomes; more queued items, some of them wrong and undone by the
+loop. A re-read whose wait maps to no entry, or whose `blocked-on: issue=|pr=` target closed, is
+decided afresh. The literal `intake: seat` and every receipt key stay as they are.
