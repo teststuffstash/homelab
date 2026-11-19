@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""Record one GitHub world of the scan island whole (specs/worlds/README.md §Recorded worlds).
+
+    uv run --frozen python scripts/record_world.py <world> <pr> [<pr> …] [--rest-description <commit>]
+
+A world is the set of GitHub reads one surface makes. For each read the recorder runs the real
+`gh` (on PATH) and writes its stdout to one file under `specs/worlds/<world>/`, byte for byte — no
+field removed, no header kept, no token kept. `provenance.yaml` beside the files names the repo,
+the items, every read (its `gh` argv and its file), the recording time and the recorder's commit.
+
+The repo's visibility is read first: a repo GitHub reports as private is refused before any other
+read. A read the token may not make (HTTP 403) is recorded unauthenticated over the public REST API
+and marked `auth: none`.
+
+A world's writes are never performed. The recorder only declares them in `provenance.yaml` and
+extracts each one's response schemas from GitHub's published REST description (the
+github/rest-api-description repo, at a named commit) into `schemas/`. The answers in `writes/` are
+hand-written and are left untouched here; tests/test_world_writes.py validates them.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import re
+import shutil
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ISLAND = Path(__file__).resolve().parent.parent
+WORLDS = ISLAND / "specs" / "worlds"
+REPO = "teststuffstash/homelab"
+DESCRIPTION_REPO = "github/rest-api-description"
+# The OpenAPI 3.1 description for the REST API version gh talks when it names none (2022-11-28).
+DESCRIPTION_FILE = "descriptions-next/api.github.com/api.github.com.2022-11-28.json"
+
+# The `--json` field list the updater's `gh pr list` snapshot asks for (scan_island/updater.py).
+BOARD_LIST_FIELDS = (
+    "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,"
+    "latestReviews,baseRefName,reviews,author,headRefName"
+)
+
+
+@dataclass(frozen=True)
+class Write:
+    """One write the world's surface issues: answered by hand-written files, never performed."""
+
+    op: str
+    method: str  # an HTTP method, or "gh" for a gh command that prints no JSON
+    path: str  # REST path template (owner/repo filled), or the gh argv joined by spaces
+    operation_id: str = ""  # the REST description's operationId ("" for a gh command)
+    statuses: tuple[str, ...] = ()  # the answer statuses written by hand under writes/<op>.<status>.json
+    after: str = ""  # for a read answered differently after a write: that write's op
+    exit: int | None = None  # for a gh command: the exit status that is its answer
+
+
+@dataclass
+class Read:
+    argv: list[str]
+    file: str
+    auth: str = "token"
+    status: str = "ok"
+
+
+@dataclass
+class Plan:
+    reads: list[Read] = field(default_factory=list)
+    writes: list[Write] = field(default_factory=list)
+
+
+def file_for(argv: list[str]) -> str:
+    """The answer file a read is stored in — derived from the argv, one file per read."""
+    if argv[:2] == ["pr", "list"]:
+        return "pr-list.json"
+    if argv[:2] == ["pr", "view"]:
+        return f"pr-view-{argv[2]}.{argv[argv.index('--json') + 1]}.json"
+    if argv[0] == "api":
+        path = argv[1].removeprefix(f"repos/{REPO}/")
+        return "api." + path.replace("/", ".").replace("?", "@") + ".json"
+    raise ValueError(f"no file rule for read: gh {' '.join(argv)}")
+
+
+def _json(proc: subprocess.CompletedProcess[bytes], what: str) -> object:
+    if proc.returncode:
+        raise SystemExit(f"record_world: {what} failed: {proc.stderr.decode(errors='replace').strip()}")
+    return json.loads(proc.stdout)
+
+
+def gh(*argv: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(["gh", *argv], capture_output=True, check=False)
+
+
+def plan_pr_handoff(prs: list[str]) -> Plan:
+    """One pull request as the major handoff reads it: the PR view, the issue labels, the REST pull."""
+    if len(prs) != 1:
+        raise SystemExit("record_world: pr-handoff records exactly one pull request")
+    n = prs[0]
+    reads = [
+        ["pr", "view", n, "--repo", REPO, "--json", "state,labels,reviews,commits"],
+        ["api", f"repos/{REPO}/issues/{n}/labels"],
+        ["api", f"repos/{REPO}/pulls/{n}"],
+    ]
+    base = f"repos/{REPO}/issues/{{issue_number}}/labels"
+    writes = [
+        Write("add-labels", "POST", base, "issues/add-labels", ("200",)),
+        Write("remove-label", "DELETE", base + "/{name}", "issues/remove-label", ("200", "404")),
+        Write("pr-merge-auto", "gh", f"pr merge {{pull_number}} --repo {REPO} --auto --squash", exit=0),
+        Write("get-pull-after-arm", "GET", f"repos/{REPO}/pulls/{{pull_number}}", "pulls/get", ("200",), after="pr-merge-auto"),
+    ]
+    return Plan([Read(r, file_for(r)) for r in reads], writes)
+
+
+def plan_pr_board(prs: list[str]) -> Plan:
+    """The open-PR snapshot as the updater reads it, plus the per-PR reads for the named PRs."""
+    if not prs:
+        raise SystemExit("record_world: pr-board needs the pull requests whose per-PR reads to record")
+    snapshot = ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100", "--json", BOARD_LIST_FIELDS]
+    return Plan(
+        [Read(snapshot, file_for(snapshot))],
+        [
+            Write("update-branch", "PUT", f"repos/{REPO}/pulls/{{pull_number}}/update-branch", "pulls/update-branch", ("202", "422")),
+            Write("create-label", "POST", f"repos/{REPO}/labels", "issues/create-label", ("201", "422")),
+            Write("add-labels", "POST", f"repos/{REPO}/issues/{{issue_number}}/labels", "issues/add-labels", ("200",)),
+            Write("remove-label", "DELETE", f"repos/{REPO}/issues/{{issue_number}}/labels/{{name}}", "issues/remove-label", ("200", "404")),
+            Write("update-pull", "PATCH", f"repos/{REPO}/pulls/{{pull_number}}", "pulls/update", ("200",)),
+        ],
+    )
+
+
+def board_per_pr(n: str, oid: str) -> list[list[str]]:
+    return [
+        ["pr", "view", n, "--repo", REPO, "--json", "commits"],
+        ["pr", "view", n, "--repo", REPO, "--json", "commits,reviews"],
+        ["api", f"repos/{REPO}/commits/{oid}/check-runs?per_page=100"],
+        ["api", f"repos/{REPO}/commits/{oid}/status"],
+        ["api", f"repos/{REPO}/pulls/{n}"],
+    ]
+
+
+PLANS = {"pr-handoff": plan_pr_handoff, "pr-board": plan_pr_board}
+
+
+def refuse_private(repo: str) -> str:
+    """Read the repo's visibility first; a repo GitHub reports as private ends the recording."""
+    meta = _json(gh("api", f"repos/{repo}"), f"the visibility read of {repo}")
+    if not isinstance(meta, dict) or "private" not in meta:
+        raise SystemExit(f"record_world: the visibility read of {repo} carries no `private` field — refusing")
+    if meta["private"] is not False:
+        raise SystemExit(f"record_world: {repo} is private — a recorded world is recorded from public repos only")
+    return str(meta.get("visibility", "public"))
+
+
+def unauthenticated(path: str) -> bytes:
+    req = urllib.request.Request(f"https://api.github.com/{path}", headers={"Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 — a fixed https host
+        return resp.read()
+
+
+def perform(read: Read) -> bytes:
+    proc = gh(*read.argv)
+    if proc.returncode == 0:
+        return proc.stdout
+    err = proc.stderr.decode(errors="replace")
+    if read.argv[0] == "api" and "(HTTP 403)" in err:
+        read.auth = "none"
+        try:
+            return unauthenticated(read.argv[1])
+        except urllib.error.URLError as e:
+            raise SystemExit(f"record_world: gh {' '.join(read.argv)} answered 403 and the unauthenticated read failed: {e}") from e
+    raise SystemExit(f"record_world: gh {' '.join(read.argv)} failed: {err.strip()}")
+
+
+# --- the REST description: response schemas for the world's writes -------------------------------
+
+_REF = re.compile(r"^#/components/(schemas|responses)/(.+)$")
+
+
+def description_head() -> str:
+    proc = gh("api", f"repos/{DESCRIPTION_REPO}/commits/main", "--jq", ".sha")
+    sha = proc.stdout.decode().strip()
+    if proc.returncode or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise SystemExit(f"record_world: could not read {DESCRIPTION_REPO}'s head: {proc.stderr.decode(errors='replace').strip()}")
+    return sha
+
+
+def description(commit: str) -> dict:
+    url = f"https://raw.githubusercontent.com/{DESCRIPTION_REPO}/{commit}/{DESCRIPTION_FILE}"
+    with urllib.request.urlopen(url, timeout=120) as resp:  # noqa: S310 — a fixed https host
+        return json.load(resp)
+
+
+def _operation(desc: dict, operation_id: str) -> dict:
+    for item in desc["paths"].values():
+        for op in item.values():
+            if isinstance(op, dict) and op.get("operationId") == operation_id:
+                return op
+    raise SystemExit(f"record_world: operationId {operation_id} not in the REST description")
+
+
+def _response_schema(desc: dict, response: dict) -> dict:
+    ref = response.get("$ref")
+    if ref:
+        m = _REF.match(ref)
+        if not m or m.group(1) != "responses":
+            raise SystemExit(f"record_world: unexpected response ref {ref}")
+        response = desc["components"]["responses"][m.group(2)]
+    return response["content"]["application/json"]["schema"]
+
+
+def schema_for(desc: dict, operation_id: str, status: str) -> dict:
+    """The response schema of one operation and status, its component refs bundled under `$defs`."""
+    op = _operation(desc, operation_id)
+    if status not in op["responses"]:
+        raise SystemExit(f"record_world: {operation_id} documents no {status} response")
+    root = json.loads(json.dumps(_response_schema(desc, op["responses"][status])))
+    defs: dict[str, dict] = {}
+
+    def rewrite(node: object) -> None:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str):
+                m = _REF.match(ref)
+                if not m or m.group(1) != "schemas":
+                    raise SystemExit(f"record_world: unexpected schema ref {ref}")
+                name = m.group(2)
+                node["$ref"] = f"#/$defs/{name}"
+                if name not in defs:
+                    defs[name] = json.loads(json.dumps(desc["components"]["schemas"][name]))
+                    rewrite(defs[name])
+            for v in node.values():
+                rewrite(v)
+        elif isinstance(node, list):
+            for v in node:
+                rewrite(v)
+
+    rewrite(root)
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$comment": f"{operation_id} {status} — extracted from {DESCRIPTION_REPO}@{{commit}} {DESCRIPTION_FILE}",
+        **root,
+        **({"$defs": dict(sorted(defs.items()))} if defs else {}),
+    }
+
+
+# --- provenance.yaml: block YAML whose every value is a JSON scalar or flow list ------------------
+
+
+def _y(v: object) -> str:
+    return json.dumps(v, ensure_ascii=False)
+
+
+def provenance_text(meta: dict, reads: list[Read], writes: list[Write]) -> str:
+    out = [
+        "# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).",
+        *(f"{k}: {_y(v)}" for k, v in meta.items()),
+        "reads:",
+    ]
+    for r in reads:
+        out += [f"  - argv: {_y(r.argv)}", f"    file: {_y(r.file)}", f"    auth: {_y(r.auth)}"]
+    out.append("writes:")
+    for w in writes:
+        out += [f"  - op: {_y(w.op)}", f"    method: {_y(w.method)}", f"    path: {_y(w.path)}"]
+        if w.operation_id:
+            out.append(f"    operation_id: {_y(w.operation_id)}")
+        if w.statuses:
+            out.append(f"    statuses: {_y(list(w.statuses))}")
+        if w.after:
+            out.append(f"    after: {_y(w.after)}")
+        if w.exit is not None:
+            out.append(f"    exit: {_y(w.exit)}")
+    return "\n".join(out) + "\n"
+
+
+def recorder_commit() -> str:
+    me = Path(__file__).resolve()
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", str(me)], capture_output=True, text=True, cwd=ISLAND, check=False)
+    if dirty.returncode or dirty.stdout.strip():
+        raise SystemExit("record_world: the recorder has uncommitted changes — commit it first, provenance names its commit")
+    return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ISLAND, check=True).stdout.strip()
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("world", choices=sorted(PLANS))
+    ap.add_argument("prs", nargs="+")
+    ap.add_argument("--rest-description", default="", help="github/rest-api-description commit (default: main's head)")
+    ap.add_argument("--out", default=str(WORLDS), help=argparse.SUPPRESS)
+    args = ap.parse_args(argv)
+
+    visibility = refuse_private(REPO)  # before any other read
+    commit = recorder_commit()
+    plan = PLANS[args.world](args.prs)
+    if args.world == "pr-board":
+        snapshot = json.loads(perform(plan.reads[0]).decode())
+        oids = {str(pr["number"]): pr["headRefOid"] for pr in snapshot}
+        missing = [n for n in args.prs if n not in oids]
+        if missing:
+            raise SystemExit(f"record_world: PR(s) {', '.join(missing)} are not in the open-PR snapshot")
+        plan.reads += [Read(r, file_for(r)) for n in args.prs for r in board_per_pr(n, oids[n])]
+
+    world = Path(args.out) / args.world
+    staging = world.with_name(world.name + ".recording")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    for read in plan.reads:
+        (staging / read.file).write_bytes(perform(read))
+
+    desc_commit = args.rest_description or description_head()
+    desc = description(desc_commit)
+    (staging / "schemas").mkdir()
+    for w in plan.writes:
+        for status in w.statuses:
+            schema = schema_for(desc, w.operation_id, status)
+            schema["$comment"] = schema["$comment"].replace("{commit}", desc_commit)
+            (staging / "schemas" / f"{w.op}.{status}.json").write_text(json.dumps(schema, indent=2, ensure_ascii=False) + "\n")
+
+    meta = {
+        "world": args.world,
+        "repo": REPO,
+        "visibility": visibility,
+        "items": [int(n) for n in args.prs],
+        "recorded_at": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "recorder": "islands/scan/scripts/record_world.py",
+        "recorder_commit": commit,
+        "rest_description": {"repo": DESCRIPTION_REPO, "commit": desc_commit, "file": DESCRIPTION_FILE},
+    }
+    (staging / "provenance.yaml").write_text(provenance_text(meta, plan.reads, plan.writes))
+    if (world / "writes").is_dir():  # the hand-written answers survive a re-record
+        shutil.copytree(world / "writes", staging / "writes")
+    shutil.rmtree(world, ignore_errors=True)
+    staging.rename(world)
+    print(f"record_world: {args.world} — {len(plan.reads)} reads, {sum(len(w.statuses) for w in plan.writes)} schemas → {world}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
