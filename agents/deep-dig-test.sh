@@ -312,6 +312,94 @@ go
 jqok "…and a legacy finding on another subject explains nothing" '.counts.unexplained == 1'
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+# 3b RE-TEST (deep-dig-select.sh header): an issue / follow-up / meta-state explanation is
+# selected anyway when the alert fires now ∧ was present on each of the last DIG_RETEST_D (7)
+# daily reads ∧ no finding on (alert, subject) within DIG_RETEST_HOLD_D (14) days; marked
+# retest, carrying explained_by, grouped apart, ranked after every fresh group. Never a window,
+# never a prior finding. The two live shapes come from the REAL 2026-11-19 digest
+# (agents/deep-dig-fixtures/homelab/dig-2026-11-19/…/digest.json — its `explained` rows:
+# RouterRunModelUnverifiable ← issue #2555, ControlPlaneNodeMemoryLow ← follow-up FU-315, both
+# firing, 7/7 days, standing_h 12 / 11 — startsAt reset, so standing_h is not continuity), the
+# org search answer and the FU-315 item as they read that night; the alert labels are the rules'
+# own (argocd/resources/openrouter-proxy/prometheusrule.yaml, talos-substrate/prometheusrule.yaml).
+section "re-test — a stale issue / follow-up / meta-state explanation is dug once per hold"
+DFX="$REPO/agents/deep-dig-fixtures"
+RD="$DFX/homelab/dig-2026-11-19/dig-r1-20261119T033004Z/digest.json"
+real() { jq -c --arg n "$1" '.explained[] | select(.alertname == $n)' "$RD"; }   # the real explained row
+RR_L='{"rail":"opencode-go","stack":"platform","role":"worker","requested":"glm-5","severity":"warning","triage":"dig"}'
+CP_L='{"node":"wk-metal-02","instance":"192.168.2.183:9100","job":"node-exporter","severity":"warning","triage":"dig"}'
+rr_alert() { alert RouterRunModelUnverifiable $((NOW - $(real RouterRunModelUnverifiable | jq .standing_h) * 3600)) "$RR_L"; }
+cp_alert() { alert ControlPlaneNodeMemoryLow $((NOW - $(real ControlPlaneNodeMemoryLow | jq .standing_h) * 3600)) "$CP_L"; }
+all_days() { # <series-labels-json>… on every day 0..6, minus the days named in $SKIP
+  local k; for k in 0 1 2 3 4 5 6; do case " ${SKIP:-} " in *" $k "*) continue;; esac
+    promday "$k" "$(day "$@")"; done; }
+RR_S="$(jq -c '. + {alertname:"RouterRunModelUnverifiable", alertstate:"firing"}' <<< "$RR_L")"
+CP_S="$(jq -c '. + {alertname:"ControlPlaneNodeMemoryLow", alertstate:"firing"}' <<< "$CP_L")"
+fu315() { printf '# follow-ups\n## open\n' > "$REPO_SNAP/docs/follow-ups.md"; cat "$DFX/fu-315.txt" >> "$REPO_SNAP/docs/follow-ups.md"; }
+
+[ -s "$RD" ] && [ "$(real RouterRunModelUnverifiable | jq -r .explained_by)" = "issue teststuffstash/homelab#2555" ] \
+  && [ "$(real ControlPlaneNodeMemoryLow | jq -r .explained_by)" = "follow-up FU-315" ] \
+  && ok "the real 2026-11-19 digest is on disk with both standing explanations (a missing fixture is not a pass)" || bad "re-test fixture" "$RD"
+
+scenario retest-live-shapes
+am "[$(rr_alert), $(cp_alert)]"; all_days "$RR_S" "$CP_S"
+cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"; fu315
+go
+jqok "both live shapes are selected as re-tests (7/7 days, firing, no finding in 14 d)" \
+  '.counts.retests == 2 and .counts.explained == 0 and ([.groups[] | select(.retest)] | length) == 2'
+jqok "…each carries its explaining record verbatim (the session reads it, tests its claim)" \
+  "[.groups[].alerts[] | {alertname, subject, by: .retest.explained_by}] | sort_by(.alertname) == [
+     {alertname: \"ControlPlaneNodeMemoryLow\", subject: $(real ControlPlaneNodeMemoryLow | jq .subject), by: \"follow-up FU-315\"},
+     {alertname: \"RouterRunModelUnverifiable\", subject: $(real RouterRunModelUnverifiable | jq .subject), by: \"issue teststuffstash/homelab#2555\"}]"
+jqok "…in groups of their own (key retest|…)" '(.groups | length) == 2 and all(.groups[]; .key | startswith("retest|"))'
+want "…and the summary line says RE-TEST with the record" "RE-TEST ← issue teststuffstash/homelab#2555"
+
+scenario retest-meta-state
+am "[$(rr_alert)]"; all_days "$RR_S"
+printf -- '- `dig-explained: RouterRunModelUnverifiable` — latch self-clears in 7 d.\n' > "$REPO_SNAP/docs/agents/meta-state.md"
+go
+jqok "a dig-explained: line is the third re-testable kind" '.groups[0].retest and .groups[0].alerts[0].retest.explained_by == "meta-state: latch self-clears in 7 d."'
+rm -f "$REPO_SNAP/docs/agents/meta-state.md"
+
+scenario retest-hold
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+prior_from_run $((NOW - 10*86400)) explained    # 10 d: outside DIG_REDIG_DAYS (7), inside the 14-d hold
+go
+jqok "a finding on (alert, subject) 10 days ago holds the re-test: explained by the issue again, nothing selected" \
+  '.counts.selected == 0 and .explained[0].explained_by == "issue teststuffstash/homelab#2555"'
+scenario retest-hold-expired
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+prior_from_run $((NOW - 15*86400)) explained
+jq -e '.[0].members | length > 0' "$H/prior.json" >/dev/null 2>&1 || bad "re-test hold prior" "the harvested prior carries no members"
+go
+jqok "…past the 14-d hold it is re-tested again (once per hold)" '.counts.retests == 1'
+
+scenario retest-window
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+jq -n --arg u "$(iso $((NOW + 3600)))" '{data:{"w-1":({id:"w-rr", until:$u, reason:"r", alerts:["RouterRunModelUnverifiable"]} | tojson)}}' > "$H/window.json"
+go
+jqok "a declared window is never re-tested (present-tense, lease-bound)" '.counts.selected == 0 and (.explained[0].explained_by | startswith("window w-rr"))'
+
+scenario retest-not-continuous
+am "[$(rr_alert)]"; SKIP=3 all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+go
+jqok "6 of 7 days is not continuous: the issue still explains it" '.counts.selected == 0 and .explained[0].explained_by == "issue teststuffstash/homelab#2555"'
+am '[]'; all_days "$RR_S"
+go
+jqok "…nor is 7/7 days but quiet NOW" '.counts.selected == 0 and .counts.explained == 1'
+
+scenario retest-fresh-first
+am "[$(rr_alert), $(alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
+all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+DIG_ENV="DIG_MAX_GROUPS=1" go
+jqok "with one slot the FRESH group is selected and the re-test is deferred by name (fresh first)" \
+  '.groups[0].retest == false and .groups[0].alerts[0].alertname == "KubeDeploymentReplicasMismatch" and .deferred[0].retest == true'
+rm -f "$REPO_SNAP/docs/follow-ups.md"
+
+grep -q 'retest: true' "$YAML" && grep -q 'retest.explained_by' "$YAML" \
+  && ok "the dig brief carries the re-test rule (deep-dig-argo.yaml)" || bad "re-test brief" "no retest rule in $YAML"
+
 section "grouping — onset and host are the correlation keys; the cap defers, never drops"
 
 scenario group-same-onset-host

@@ -32,6 +32,7 @@
   event's timestamps (detection before fix — [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md)
   §Safety). A queue-ready body says which fixture rows.
 - **`seat`, always**: anything needing a live apply outside the box's bracket, a maintenance
-  window, a drain/cordon, a node reinstall or `talosctl upgrade` (never on a Proxmox nocloud VM —
+  window or drain/cordon on a surface the [capability ledger](../management-box.md#the-capability-ledger--what-the-box-has-been-tested-doing-on-its-own-fu-097) lists
+  `attended` or `manual` (an `unattended` row queues), a node reinstall or `talosctl upgrade` (never on a Proxmox nocloud VM —
   same §Safety), a Garage layout change, a Longhorn upgrade (CNPG restore points first,
   `pg-backup-now`), hardware, or the public edge's live checks (#1334's class).
