@@ -1044,8 +1044,9 @@ the block needs pruning, not more headings.
       take that. Its apiserver hit 1.8 cores the moment the VMs restarted (heap 2.78 GiB); restarted
       05:57Z, so it refills on the same ~weeks clock. FU-304 closed 10-14 "the CP role
       stays" on a soak predating the refill (10-24: heap 2.80 GiB, CPU ≤0.23). Refill restart #2: 2026-10-28 20:09Z
-      (`talosctl restart -k`, window `wk-metal-02-1793218117-1848`; WSS 3064→1467 MiB, cilium 13/13). **Next (operator):**
-      a windowed apiserver restart per refill, or the CP role → a 16 GB box. Relates FU-304.
+      (`talosctl restart -k`, window `wk-metal-02-1793218117-1848`; WSS 3064→1467 MiB, cilium 13/13). #3: 2026-11-19 19:30Z
+      (22 d later; thrashed 43 h at 3.4 cores as etcd leader before anyone looked — TICK-LOG 11-19). **Next (operator):**
+      a windowed apiserver restart per refill, or the CP role → a 16 GB box; no detector reads GC-at-the-limit. Relates FU-304.
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
       [Diagnosis, counters, placement, detectors, boot-disk move, the DIMM window](spikes/nx-02-numa-placement.md).

@@ -15529,3 +15529,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Test-VM verdict cost:** six ~20-min serial runs in one evening; content-keyed PASS carry built (#3539, open at
   wind-down) — it would have saved one of the six.
 - **Wind-down 11-19:** drill started on the box, unread; root API creds file shredded; scratch clones removed.
+
+## 2026-11-19 ~18:50–19:40Z — seat: alert/dig state read (0 fixes from 25 diagnoses in 7 d); FU-315 refill restart #3
+
+- **Alert + dig read (opus subagent, read-only):** 7 d = 9 responder sessions + 16 dig findings → 0 issues, 0 PRs,
+  0 `fix-proposed`. Standing `dig` set: GoCatalog* ×3 (#3533 `agent/blocked`, ruling owed), RetroReportOverdue (#3166,
+  ruling owed since 11-04), ControlPlaneNodeMemoryLow (FU-315), RouterRunModelUnverifiable (explained by #2555 "self-clears
+  in 7 d", continuous 7 d), AgentErrorFlagged oracle-fleet#965, TierEvidenceStale (under 6 h at the run). 6 of 9 responder
+  sessions = one class: a dead gateway ride pod holds its 20Gi scratch PVC against the platform claim's 40Gi quota
+  (KubePodNotReady, new subject per pod, report-only, nothing filed). Mechanism options put to the operator, undecided:
+  (1) responder `remediation_would` findings as a gateway-intake source (FU-320); (2) the dig re-tests a stale
+  explanation (FU-249).
+- **19:30Z FU-315 refill restart #3 (operator: "run the restart window now")** — operator relayed NodeCPUHighUsage on
+  .183 (98.7 %); subagent dig: kube-apiserver 3.44/4 cores, WSS 3203 MiB at the 3200 MiB GOMEMLIMIT, live heap flat
+  ~2.05 GiB, GC 3→55 cycles/min; ramp from 11-12, step 11-18 00:40Z on a request burst coinciding with the
+  plugin-barman-cloud v0.9.0 / external-secrets v2.15.0 merges; firing since 11-18 00:57Z; wk-metal-02 was etcd leader.
+  Window `wk-metal-02-1795116640-2096` (19:30:40Z, `--node wk-metal-02 --expect ControlPlaneComponentRestarted,PodSigkilled`):
+  `etcd forfeit-leadership` 19:30:45Z → leader cp-02, term 16→17; `talosctl restart -k …kube-apiserver:135632f1e395`
+  19:30:55Z → `b193c39f2e45` RUNNING, authenticated `/readyz` ok. Both expected alerts CLAIMED. check 19:31:54Z and
+  19:38:18Z clean (224 targets, cilium 13/13, nodes 13, no new alerts); closed 19:38:56Z. apiserver CPU 3.43→0.09 cores,
+  WSS 3198→1396 MiB, node MemAvailable 2047→3927 MiB, node CPU 98.8→12 %; NodeCPUHighUsage + ControlPlaneNodeMemoryLow
+  cleared. Refill clock this time: 22 days (10-28 → 11-19). No detector covers "apiserver GC-thrashing at its limit" —
+  the only signal was the stock CPU rule (`triage: none`), 18 h after the ramp was visible.
