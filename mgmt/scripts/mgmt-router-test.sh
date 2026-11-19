@@ -83,5 +83,89 @@ for c in 0:success 1:failure 2:error 143:error; do
   got="$(mgmt_router_state "${c%%:*}")"; [ "$got" = "${c#*:}" ] && ok "state:rc${c%%:*} → ${c#*:}" || no "state:rc${c%%:*}" "got $got"
 done
 
+# ── the content key + carry (mgmt_router_key / mgmt_router_carry_from / mgmt_router_record) ──
+# A synthetic repo replays the 2026-11-17 box journal: #3525 PASSed at 45f7826c, then the merge bot
+# merged master's #3524 (agents/coordinator/deep-dig-argo.yaml — no router path) into it as fe4d665d,
+# which re-ran for 20 min. Expected values come from the contract in mgmt-router-verdict.sh's header:
+# the key covers router blobs at base/merge-base/head, master's harness files, devbox.lock's harness
+# tools and the baseline identity — and nothing else.
+KT="$(mktemp -d "${TMPDIR:-/tmp}/mgmt-router-key.XXXXXX")"
+G() { git -C "$KT/r" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+wr() { mkdir -p "$(dirname "$KT/r/$1")"; printf '%s\n' "$2" >"$KT/r/$1"; }
+lock() { # <ansible ver> <jq ver> → a devbox.lock with the harness's tools + one it does not use
+  printf '{"packages":{"ansible@latest":{"resolved":"github:NixOS/nixpkgs/aaa#ansible","version":"%s"},"jq@latest":{"resolved":"x#jq","version":"1.7"},"k9s@latest":{"resolved":"x#k9s","version":"%s"}}}\n' "$1" "$2"
+}
+mkdir -p "$KT/r"; G init -q -b master
+wr ansible/opnsense-bgp.yml 'bgp: 1'; wr ansible/roles/opnsense-unbound/tasks/main.yml 'u: 1'
+wr scripts/opnsense-test-vm.sh 'harness v1'; wr ansible/test-vm/guard.yml 'guard'; wr ansible/inventory.yml 'inv'
+wr docs/a.md 'doc'; lock 2.21.5 0.1 >"$KT/r/devbox.lock"
+G add -A; G commit -qm B0; B0="$(G rev-parse HEAD)"
+G checkout -qb pr; wr ansible/opnsense-bgp.yml 'bgp: 2'; G commit -qam H0; H0="$(G rev-parse HEAD)"   # 45f7826c: the PR's router change
+G checkout -q master; wr agents/coordinator/deep-dig-argo.yaml 'dig'; G add -A; G commit -qm B1; B1="$(G rev-parse HEAD)"   # #3524: no router path
+G checkout -q pr; G merge -q --no-edit master; H1="$(G rev-parse HEAD)"                      # fe4d665d: the bot's update
+G checkout -q master; wr ansible/roles/opnsense-unbound/tasks/main.yml 'u: 2'; G commit -qam B2; B2="$(G rev-parse HEAD)"   # master gains a router change
+G checkout -q pr; G merge -q --no-edit master; H2="$(G rev-parse HEAD)"
+G checkout -q pr; wr ansible/opnsense-bgp.yml 'bgp: 3'; G commit -qam H3; H3="$(G rev-parse HEAD)"  # the PR changes its router file again
+G checkout -q master; wr scripts/opnsense-test-vm.sh 'harness v2'; G commit -qam B3; B3="$(G rev-parse HEAD)"  # master's harness moves
+G checkout -q -B pr4 "$H1"; G merge -q --no-edit master; H4="$(G rev-parse HEAD)"
+G checkout -q master; lock 2.21.5 0.2 >"$KT/r/devbox.lock"; G commit -qam B4; B4="$(G rev-parse HEAD)"  # a tool the harness does not use
+G checkout -q -B pr5 "$H4"; G merge -q --no-edit master; H5="$(G rev-parse HEAD)"
+G checkout -q master; lock 2.22.0 0.2 >"$KT/r/devbox.lock"; G commit -qam B5; B5="$(G rev-parse HEAD)"  # ansible moves
+G checkout -q -B pr6 "$H5"; G merge -q --no-edit master; H6="$(G rev-parse HEAD)"
+BLX=9110/baseline@1793047198; BLY=9110/baseline@1799999999
+key() { mgmt_router_key "$KT/r" "$1" "$2" "$POL" "${3-$BLX}"; }   # ${3-…}: an explicit "" stays empty
+K0="$(key "$B0" "$H0")"; K1="$(key "$B1" "$H1")"
+[[ "$K0" =~ ^[0-9a-f]{64}$ ]] && ok "key:shape" || no "key:shape" "got '$K0'"
+key_case() { # <name> <want: same|diff> <key> [reference key, default K0 = the 45f7826c-shaped PASS]
+  local ref="${4:-$K0}"
+  if { [ "$2" = same ] && [ "$3" = "$ref" ]; } || { [ "$2" = diff ] && [ -n "$3" ] && [ "$3" != "$ref" ]; }; then ok "key:$1 → $2"
+  else no "key:$1" "want $2 as the reference key, got '${3}'"; fi
+}
+key_case a-bot-merged-non-router-master      same "$K1"                 # the fe4d665d case carries
+key_case b-base-gained-router-change         diff "$(key "$B2" "$H2")"  # a new head+base combination
+key_case c-head-router-file-changed          diff "$(key "$B1" "$H3")"
+key_case d-master-harness-changed            diff "$(key "$B3" "$H4")"  # the head's router tree = H1's; only the harness moved
+key_case e-baseline-moved                    diff "$(key "$B1" "$H1" "$BLY")"
+K4="$(key "$B3" "$H4")"                                                  # the reference from here: harness v2
+key_case unused-tool-pin-bumped              same "$(key "$B4" "$H5")" "$K4"  # k9s is not a harness tool
+key_case ansible-pin-bumped                  diff "$(key "$B5" "$H6")" "$K4"
+key "$B1" "$H1" "" >/dev/null 2>&1 && no "key:no-baseline-no-key" "a key without a baseline identity" || ok "key:no-baseline-no-key"
+key "$B1" 0000000000000000000000000000000000000000 >/dev/null 2>&1 && no "key:unknown-head-no-key" "a key for a missing commit" || ok "key:unknown-head-no-key"
+
+# carry: only a recorded PASS with the same key, from a file this uid owns and only it can write
+REC="$KT/keys/passes"; mkdir -p "$KT/keys"
+carry_case() { # <name> <key> <want sha or "none">
+  local got; got="$(mgmt_router_carry_from "$REC" "$2" 2>/dev/null)" || got=none
+  [ "$got" = "$3" ] && ok "carry:$1 → ${3:0:8}" || no "carry:$1" "want $3, got $got"
+}
+carry_case g-record-missing                    "$K1" none
+mgmt_router_record "$REC" "$K0" "$H0" failure
+carry_case f-earlier-fail-reruns               "$K1" none                # a FAIL is never recorded
+mgmt_router_record "$REC" "$K0" "$H0" error
+carry_case error-never-carried                 "$K1" none
+mgmt_router_record "$REC" "$K0" "$H0" success
+carry_case a-pass-carries                      "$K1" "$H0"
+carry_case other-key-runs                      "$(key "$B2" "$H2")" none
+carry_case empty-key-runs                      "" none
+chmod 0666 "$REC"
+carry_case g-writable-by-others-refused        "$K1" none
+chmod 0600 "$REC"; cp "$REC" "$KT/good"
+printf 'garbage\n%s %s %s\n%s %s\n' "$(date +%s)" "$K1" "not-a-sha" "$(date +%s)" "$K1" >"$REC"
+carry_case g-corrupt-record-runs               "$K1" none
+printf '\0\377\376junk' >"$REC"
+carry_case g-binary-record-runs                "$K1" none
+# bounded: max lines and max age prune; the newest PASS for a key wins
+cp "$KT/good" "$REC"
+echo "1 $K0 $H1" >>"$REC"                                               # an ancient PASS line, pruned by age
+for i in 1 2 3; do mgmt_router_record "$REC" "$(printf '%064d' "$i")" "$H3" success 3; done
+[ "$(wc -l <"$REC")" = 3 ] && ok "record:bounded-by-count" || no "record:bounded-by-count" "$(wc -l <"$REC") lines"
+carry_case pruned-out-by-count                 "$K1" none
+echo "1 $K0 $H1" >"$REC"; mgmt_router_record "$REC" "$(printf '%064d' 9)" "$H3" success   # epoch 1: 30-day age bound
+carry_case pruned-out-by-age                   "$K1" none
+mgmt_router_record "$REC" "$K0" "$H0" success; mgmt_router_record "$REC" "$K0" "$H1" success
+carry_case newest-wins                         "$K1" "$H1"
+mgmt_router_record "$REC" "$K0" not-a-sha success 2>/dev/null && no "record:refuses-bad-sha" "rc 0" || ok "record:refuses-bad-sha"
+rm -rf "$KT"
+
 echo "mgmt-router-test: PASS $pass/$((pass+fail))"
 [ $fail = 0 ]

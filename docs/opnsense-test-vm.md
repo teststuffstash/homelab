@@ -105,7 +105,9 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 (a plugin install refuses an out-of-date base, so the update is not optional), installs what is
 missing, replaces the snapshot. ⚠ It moves the VM PAST prod whenever the mirror's head did — the old
 baseline is gone, the mirror serves no older point (2026-10-26: 26.7.5 → 26.7.7). A new SERIES is
-also a `SERIES` bump in the script.
+also a `SERIES` bump in the script. Replacing the snapshot moves its `snaptime`, which is in the box's
+verdict content key — so no PASS earned on the old baseline carries to a later head
+([`management-box.md`](management-box.md) §MB3 "The router surface").
 
 ## The official update path — observed on this VM (2026-09-29)
 

@@ -482,10 +482,33 @@ check that can be absent deadlocks the merge).
 - **One VM, newest head.** Its own flock (never the sentinel/apply lock — a 15-min run must not stall
   an apply), its own clone under `/var/lib/mgmt-router` (0711; `/var/lib/mgmt` stays 0700). A run whose
   PR head moves is killed by the watchdog; the new head is judged next tick. Memo per head sha.
+- **A PASS carries to unchanged content.** Master requires up-to-date branches, so every master merge
+  makes the merge bot update every open PR — a new head sha with no verdict, ~20 min of the one VM
+  each (2026-11-17: `fe4d665d` merged a non-router master commit into #3525 and re-ran for 20 min
+  after a PASS). Before a run the loop computes the head's **content key** (`mgmt_router_key`, a
+  sha256 over git object ids only — nothing of the head executes): the router-path blobs at head,
+  base and their merge-base (the plays under test come from that diff) plus the glob list; master's
+  harness (`scripts/opnsense-test-vm.sh`, `ansible/test-vm/**`, `ansible/inventory.yml`, the verdict
+  script); `devbox.lock`'s entries for the tools the harness runs (ansible, python3, yq-go, jq, curl,
+  openssl); and the test VM's baseline identity (`9110/baseline@<snaptime>` from `qm config
+  --snapshot`, which a rebaseline or a VM rebuild replaces —
+  [`opnsense-test-vm.md`](opnsense-test-vm.md) §Recipes). A key equal to a recorded **PASS** posts
+  `success` "PASS carried from `<sha8>` — router content unchanged" at once: no VM, no PR comment (the
+  status description is the record; the earlier run's comment stays). A FAIL is never carried (a step
+  assertion can be a flake or VM state — the next run arbitrates; the per-sha memo still stops a FAIL
+  head re-running itself), nor an `error`. A key is checked right before each head's slot, so a PASS
+  earlier in the same pass carries to a later head with identical router content. The record is
+  box-local `/var/lib/mgmt-router/keys/passes` (0700 — the sandbox user can traverse
+  `/var/lib/mgmt-router`, never this dir; a file not owned by the loop or group/world-writable is
+  ignored), one line per PASS, pruned to 500 lines / 30 days; a lost or corrupt record costs a run,
+  never a false success. Unbuilt: ordering pending heads by key.
 - **Credentials:** the test VM's own pair (`OPN_TESTVM_API_*` ← wallet `opnsense-test-api-*`) and the
   pve seed key — nothing that opens the router.
 - **Belts:** `mgmt_router_verdict_*` (textfile) → `MgmtRouterVerdictStale` / `-Errored` /
   `-MetricsAbsent` ([`router-verdict.yaml`](../argocd/resources/mgmt-metrics/router-verdict.yaml)).
+  Carries count in `mgmt_router_verdict_carried_total` (+ `_last_carry_timestamp_seconds`) and never
+  touch `_last_result` / `_last_verdict_timestamp_seconds` (the last REAL run: `-Errored` keeps reading
+  the VM's health); `-Stale` reads the pass's end, which a carry-only pass writes too.
 - **Retry a head left red after three errors:** on the box, `rm /var/lib/mgmt-router/done/<sha>.errors`.
 - A head changing the harness itself (`scripts/opnsense-*.sh`, `ansible/test-vm/**`) is NOT a router
   path: the box runs master's copy, so it is judged after it lands (the seat's run + the weekly drill).
