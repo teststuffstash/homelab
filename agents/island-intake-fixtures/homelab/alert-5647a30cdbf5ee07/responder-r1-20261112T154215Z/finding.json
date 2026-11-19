@@ -1,0 +1,17 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-12T15:42:26Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "5647a30cdbf5ee07",
+  "subject": "workload:arc-runners/runner-image-prepull-pve",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": true,
+  "observation_window": "arc-runners",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-bx54t-respond-3865335649",
+  "remediation_would": []
+}

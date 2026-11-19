@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-16T23:16:19Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "7a7e458ae900e5e1",
+  "subject": "workload:homelab/agent-homelab-issue-3420-r2",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-m4m6c-respond-3478349967",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3308-r2",
+      "reason": "pod is in Error for 66m and its docker-lib PVC still holds 20Gi of the 40Gi scratch quota, blocking 3420-r2 and 3303-r2.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3308-r2 — pod is in Error for 66m and its docker-lib PVC still holds 20Gi of the 40Gi scratch quota, blocking 3420-r2 and 3303-r2."
+    }
+  ]
+}
