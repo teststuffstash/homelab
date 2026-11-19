@@ -60,13 +60,13 @@ The `expect?` literals of both tables on this page:
 | armed | arm auto-merge (squash); remove `agent/in-progress`; then the pull re-read | 0 | — |
 | refused-headings | none | 3 | `heading` |
 | refused-stale | none | 3 | `predates` |
-| refused-not-major | none | 3 | `major` |
+| refused-not-major | none | 3 | `human-merge lane` |
 | refused-no-approval | none | 3 | `no APPROVED review` |
 | unreadable | none | 4 | — |
 | not-proven | add `major/awaiting-human`; remove `agent/in-progress`; then the label re-read | 5 | — |
 
 ⚖ The four `refused-*` literals differ only in the words the refusal prints, checked as
-containment. The alternative is one `refused` literal, which loses the distinction the four rows
+containment; each literal's words are printed by its own refusal alone. The alternative is one `refused` literal, which loses the distinction the four rows
 are named for.
 
 #### Does the handoff write the label?

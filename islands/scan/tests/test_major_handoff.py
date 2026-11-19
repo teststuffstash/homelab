@@ -241,7 +241,9 @@ def fault(cell: str) -> Override:
     if m := re.fullmatch(r"the label re-read after the writes still lists `([^`]+)`", cell):
         return lambda w: w.add(LABEL_READ, (), copy_of=0, changes={("name",): m[1]})
     if m := re.fullmatch(r"the DELETE of `([^`]+)` answers (\d{3})", cell):
-        # the world holds one remove-label op; the legend's `remove` step checks the DELETE names this label
+        # the fault targets the world's one remove-label op, so the cell must name the label the legend removes
+        assert [w["op"] for w in _PROBE.provenance["writes"]].count("remove-label") == 1, "the world holds several remove-label ops"
+        assert m[1] in {s[2] for s in expected_calls("handoff") if s[1] == "remove-label"}, f"{cell!r}: not the label the gate removes"
         return lambda w: w.fault("remove-label", "status", status=int(m[2]))
     raise ValueError(f"fault cell {cell!r}: no decoder")
 
@@ -333,6 +335,12 @@ def gate_world(world_cell: str, labels_cell: str, commit_cell: str, review_cell:
 # ── the cases ─────────────────────────────────────────────────────────────────────────────────────
 
 GATE_ARGS, GATE_ROWS = params("Does the handoff write the label?")
+# "Both rows start from the GATE table's `handoff` state": that row's cells, world first
+[HANDOFF] = [r[1:6] for r in table("Does the handoff write the label?")[1] if r[0] == "handoff"]
+
+
+def _handoff_world(world_cell: str = WORLD) -> World:
+    return gate_world(world_cell, *HANDOFF[1:])
 ARM_ARGS, ARM_ROWS = params("Does a chart major arm or park?")
 
 
@@ -347,10 +355,8 @@ def test_gate(world, labels, newest_commit, bot_review, fault, expected_expect):
 @rule("SCAN-HANDOFF-ARM")
 @pytest.mark.parametrize(ARM_ARGS, ARM_ROWS)
 def test_arm(world, first_line_of_the_review_s_upstream_section, expected_expect):
-    _header, rows = table("Does the handoff write the label?")
-    [handoff] = [r for r in rows if r[0] == "handoff"]  # "Both rows start from the GATE table's `handoff` state"
     with allure.step(f"Given the GATE `handoff` state on {world}, the Upstream section opening {first_line_of_the_review_s_upstream_section}"):
-        w = gate_world(world, *handoff[2:6])
+        w = _handoff_world(world)
         upstream_line(first_line_of_the_review_s_upstream_section)(w)
     check(w, expected_expect)
 
@@ -383,10 +389,15 @@ def test_the_recording_satisfies_the_pr_read_schema():
 def test_each_required_field_absent_is_unreadable(path):
     """Pin 5 over the WHOLE `pr_read` list: from the `handoff` state, the PR read answering without any one
     required field is exit 4 with nothing written."""
-    _header, rows = table("Does the handoff write the label?")
-    [handoff] = [r for r in rows if r[0] == "handoff"]
-    w = gate_world(*handoff[1:6]).fault(PR_READ, "absent", field=path)
+    w = _handoff_world().fault(PR_READ, "absent", field=path)
     check(w, "unreadable")
+
+
+def test_a_null_required_field_is_unreadable_and_named_as_mistyped():
+    w = _handoff_world().set(PR_READ, ("reviews", APPROVAL, "body"), None)
+    check(w, "unreadable")
+    run = w.run([*COMPONENT, REPO, str(PR)])
+    assert f"with `reviews[{APPROVAL}].body` not a str" in run.stdout, run.stdout
 
 
 def test_component_requires_exactly_the_schema_list():
@@ -402,11 +413,23 @@ def test_component_requires_exactly_the_schema_list():
     assert sorted(map(str, paths(SHAPE))) == sorted(map(str, REQUIRED))
 
 
+def test_refusal_words_are_mutually_exclusive():
+    """Each `refused-*` literal's words appear in its own row's output and in no other refusal's, nor in
+    the line prefix every refusal shares — else a row could pass on the wrong refusal (all exit 3)."""
+    refusals = {lit: words for lit, (_calls, _rc, words) in LEGEND.items() if lit.startswith("refused-")}
+    rows = {r[6]: r[1:6] for r in table("Does the handoff write the label?")[1] if r[6] in refusals}
+    assert set(rows) == set(refusals), f"a refused-* literal no GATE row uses: {set(refusals) - set(rows)}"
+    outputs = {lit: gate_world(*cells).run([*COMPONENT, REPO, str(PR)]).stdout for lit, cells in rows.items()}
+    texts = list(outputs.values())
+    prefix = next((texts[0][:i] for i in range(len(texts[0])) if len({t[: i + 1] for t in texts}) > 1), texts[0])
+    assert prefix, outputs
+    for lit, words in refusals.items():
+        for word in _ticks(words):
+            assert word not in prefix, f"{lit}: `{word}` is in the prefix every refusal prints: {prefix!r}"
+            assert [o for o, out in outputs.items() if word in out] == [lit], f"`{word}` is printed by {outputs}"
+
+
 # Behaviours of the component no page row states: they move from the in-process hook onto the world.
-def _handoff_world() -> World:
-    _header, rows = table("Does the handoff write the label?")
-    [handoff] = [r for r in rows if r[0] == "handoff"]
-    return gate_world(*handoff[1:6])
 
 
 def test_absent_claim_on_the_arm_path_is_success():

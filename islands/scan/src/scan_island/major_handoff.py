@@ -20,22 +20,23 @@ PR_READ = {
 
 
 def lacking(value: object, shape: object, where: str = "") -> str | None:
-    """The first required field `value` lacks (or holds in the wrong type) as a path, or None."""
+    """The first required field `value` lacks — `without `<path>`` — or holds as null or the wrong type —
+    `with `<path>` not a <type>`; None when every required field is there."""
     if isinstance(shape, dict):
         if not isinstance(value, dict):
-            return where or "(the answer)"
+            return f"with `{where.lstrip('.') or '(the answer)'}` not an object"
         for key, sub in shape.items():
             if key not in value:
-                return f"{where}.{key}".lstrip(".")
+                return f"without `{f'{where}.{key}'.lstrip('.')}`"
             found = lacking(value[key], sub, f"{where}.{key}")
             if found:
-                return found.lstrip(".")
+                return found
         return None
     if isinstance(shape, list):
         if not isinstance(value, list):
-            return where
+            return f"with `{where.lstrip('.')}` not a list"
         return next((f for i, item in enumerate(value) if (f := lacking(item, shape[0], f"{where}[{i}]"))), None)
-    return None if isinstance(value, shape) else where  # type: ignore[arg-type]
+    return None if isinstance(value, shape) else f"with `{where.lstrip('.')}` not a {shape.__name__}"  # type: ignore[union-attr]
 
 
 def main(slug: str, pr: str) -> int:
@@ -57,7 +58,7 @@ def main(slug: str, pr: str) -> int:
         return report("UNREADABLE — ", f"gh pr view {item} returned no parseable PR object — nothing written", 4)
     missing_field = lacking(data, PR_READ)
     if missing_field:
-        return report("UNREADABLE — ", f"gh pr view {item} answered without `{missing_field}` — nothing written", 4)
+        return report("UNREADABLE — ", f"gh pr view {item} answered {missing_field} — nothing written", 4)
 
     def refuse(message: str) -> int:
         return report("REFUSED — ", message, 3)
