@@ -111,8 +111,10 @@ def _keeps_fields(old: object, new: object, where: str) -> None:
             raise OverrideRefused(f"{where}: the override removes field(s) {gone} — an override never removes a field")
         for k in old:
             _keeps_fields(old[k], new[k], f"{where}.{k}")
-    elif isinstance(old, list) and old and isinstance(new, list):
-        for i, item in enumerate(new):
+    elif isinstance(old, list):
+        if not isinstance(new, list):
+            raise OverrideRefused(f"{where}: a list replaced by a {type(new).__name__} removes its fields")
+        for i, item in enumerate(new if old else []):
             _keeps_fields(old[0], item, f"{where}[{i}]")
 
 

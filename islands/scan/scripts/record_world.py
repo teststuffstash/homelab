@@ -298,11 +298,11 @@ def provenance_text(meta: dict, reads: list[Read], writes: list[Write]) -> str:
 
 
 def recorder_commit() -> str:
+    """HEAD of the recorder's checkout; `-dirty` when the recorder itself has uncommitted changes."""
     me = Path(__file__).resolve()
-    dirty = subprocess.run(["git", "status", "--porcelain", "--", str(me)], capture_output=True, text=True, cwd=ISLAND, check=False)
-    if dirty.returncode or dirty.stdout.strip():
-        raise SystemExit("record_world: the recorder has uncommitted changes — commit it first, provenance names its commit")
-    return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ISLAND, check=True).stdout.strip()
+    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ISLAND, check=True).stdout.strip()
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", str(me)], capture_output=True, text=True, cwd=ISLAND, check=True)
+    return head + ("-dirty" if dirty.stdout.strip() else "")
 
 
 def main(argv: list[str]) -> int:
