@@ -155,10 +155,17 @@ class World:
             self.set(file, (*list_path, len(items) - 1, *sub), value)
         return self
 
-    def fault(self, target: str, kind: str, *, occurrence: int = 1, field: Path_ = (), status: int | None = None) -> World:
-        """Replace the answer of one call: `target` is a read's file or a write's op, `occurrence` its n-th call."""
+    def fault(
+        self, target: str, kind: str, *, occurrence: int | None = 1, field: Path_ = (), status: int | None = None, stderr: str | None = None
+    ) -> World:
+        """Replace the answer of one call: `target` is a read's file or a write's op, `occurrence` its n-th call
+        (None: every call). A `fail` fault may name the stderr text gh prints instead of the default."""
         if kind not in FAULT_KINDS:
             raise ValueError(f"fault kind {kind!r}: want one of {FAULT_KINDS}")
+        if stderr is not None and kind != "fail":
+            raise ValueError(f"fault kind {kind!r} prints no stderr of its own; only a `fail` fault takes `stderr`")
+        if occurrence is not None and occurrence < 1:
+            raise ValueError(f"occurrence {occurrence}: calls count from 1 (None for every call)")
         ops = {w["op"]: w for w in self.provenance.get("writes", [])}
         files = {r["file"] for r in self.provenance.get("reads", [])}
         if target not in ops and target not in files and not target.startswith("writes/"):
@@ -170,7 +177,7 @@ class World:
         if kind == "status":
             if target not in ops or str(status) not in ops[target].get("statuses", []) or not (self.dir / "writes" / f"{target}.{status}.json").is_file():
                 raise ValueError(f"{self.name}: {target} has no hand-written {status} answer")
-        self._faults.append({"target": target, "kind": kind, "occurrence": occurrence, "field": list(field), "status": status})
+        self._faults.append({"target": target, "kind": kind, "occurrence": occurrence, "field": list(field), "status": status, "stderr": stderr})
         return self
 
     def run(self, argv: Sequence[str], env: dict[str, str] | None = None, cwd: Path | None = None) -> Run:
