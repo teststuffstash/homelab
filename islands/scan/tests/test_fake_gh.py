@@ -164,3 +164,28 @@ def test_pr_handoff_serves_the_major_handoff_gate_and_arm_paths():
     run = arm.run([sys.executable, "-m", "scan_island.major_handoff", REPO, "3344"])
     assert run.rc == 0, run.stdout + run.stderr
     assert [c.get("op", c.get("file")) for c in run.calls] == [HANDOFF_VIEW, "pr-merge-auto", "remove-label", "writes/get-pull-after-arm.200.json"]
+
+
+def test_pr_board_serves_the_updater_pick_and_unstrand_reads():
+    w = World("pr-board")
+    board = json.loads((WORLDS / "pr-board" / "pr-list.json").read_text())
+    mine, other = (next(i for i, pr in enumerate(board) if pr["number"] == n) for n in (3557, 3147))
+    armed = {"authorEmail": None, "commitBody": None, "commitHeadline": None, "enabledAt": "2026-11-19T23:00:00Z",
+             "enabledBy": {"login": "RasmusSoot"}, "mergeMethod": "SQUASH"}
+    for i, decision in ((mine, "APPROVED"), (other, "CHANGES_REQUESTED")):
+        w.set("pr-list.json", (i, "autoMergeRequest"), armed)
+        w.set("pr-list.json", (i, "mergeStateStatus"), "BEHIND")
+        w.set("pr-list.json", (i, "reviewDecision"), decision)
+    w.set("pr-list.json", (mine, "author", "login"), "app/homelab-renovate-1234")  # the Renovate probe: commits + check-runs + status
+    run = w.run([sys.executable, "-m", "scan_island.updater", REPO])
+    assert run.rc == 0, run.stdout + run.stderr
+    oid = board[mine]["headRefOid"]
+    assert [c.get("op", c.get("file")) for c in run.calls] == [
+        "pr-list.json",
+        "pr-view-3557.commits.json",
+        f"api.commits.{oid}.check-runs@per_page=100.json",
+        f"api.commits.{oid}.status.json",
+        "update-branch",
+        "pr-view-3147.commits,reviews.json",  # leg 2: no bot verdict recorded on #3147 → no update
+    ]
+    assert "updating #3557 (oldest armed+BEHIND, FIFO)" in run.stdout

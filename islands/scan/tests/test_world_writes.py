@@ -46,7 +46,7 @@ def drop_a_required_field(schema: dict, answer: object) -> tuple[object, str]:
         holder = target
     required = [k for k in node.get("required", []) if k in holder]
     if not required:
-        pytest.skip(f"the description's schema requires no field ({node.get('title', '?')}) — any object validates, no control possible")
+        pytest.skip(f"the description's schema requires no field ({node.get('title') or schema.get('$comment', '').split(' — ')[0]}) — any object validates, no control possible")
     del holder[required[0]]
     return target, where + required[0]
 
