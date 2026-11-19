@@ -173,15 +173,15 @@ six OVERSIZE items pointer-ized into
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
-      VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
-      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
-      (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
-      `MgmtOpnsenseDrillScoreRegressed`). Cert renewal on the pair fixed 2026-10-26 (#2927, #2934, #2939, #2940).
-      **The box's BACKUP converge has REFUSED since 2026-10-31** (`management-apply` failure on f50222b1 and 5f5f8916:
-      `ansible-live-drift … opnsense/kea-dhcp.py:192.168.2.71=2`; read 2026-11-12) — router merges are not reaching the BACKUP.
-      **Next:** (0) read the Kea drift on `opnsense-pve` and converge it by hand so the box resumes, then ask why no alert fired; (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
-      nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
-      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
+      VM 9110, box-posted `opnsense-test-vm` on every head (ADR-152 step 1); a weekly from-nothing rebuild drill scores prod's
+      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score); pair history: [`router-move.md`](router-move.md) §Status.
+      Done 2026-11-17 (TICK-LOG): both nodes converged from master, the box's BACKUP converge resumed, refusals tracked per
+      subject (#3528), nightly cert carry on the box as `automation` (#3526), firmware belt + `firmware` API user (#3525, #3529).
+      **Next:** (1) OPERATOR RULING — the BACKUP has no route to the firmware mirror (only the CARP master has WAN), so
+      ROADMAP step 4's "update the BACKUP first" cannot fetch: each node updates while MASTER / a low-priority gateway via the
+      peer's LAN address (seat's pick) / offline package copy; (2) then the attended window 26.7.5 → 26.7.9_3 (reboot), which
+      should clear 17 of the drill's 22 rows; (3) wire `opnsense-users-self-test` into `ci.yaml` (operator-direct) and rule
+      on CI for `scripts/opnsense-drill.sh` (#2493); (4) #3539's first live PASS carry. Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
