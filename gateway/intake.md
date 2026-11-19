@@ -49,6 +49,11 @@ The dispatch prompt names them:
   the island's alerts (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
+  **`responder`** rides the same run: ONE input per recurring class of report-only responder
+  triages — same alert, same namespace, on the island's subjects, at least `INTAKE_RESPONDER_MIN`
+  in the dig's lookback — listing every member finding (`--source dig`, the selector's header).
+  Each member's `remediation_would` is an untested proposal for one instance: rule the class on
+  its cause, never by applying an instance's act (ADR-148).
 - `reread:` `<owner/repo>#<n>` … — island issues that an earlier ruling left waiting on a human
   (`agent/blocked`, or a standing `intake: seat`) for `INTAKE_REREAD_AGE_D` days or more
   (`scripts/intake-select.sh --source pile`). A row with `wait: pr-hold` is an issue the loop still

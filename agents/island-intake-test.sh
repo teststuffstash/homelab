@@ -95,6 +95,11 @@ case "$1" in
   ls) case "$rel" in
         homelab/) [ -d "$TS/homelab" ] || { echo "ERROR \"ls $url\": no object found" >&2; exit 1; }
                   echo "                                  DIR  dig-x/"; exit 0;;
+        # a wildcard listing (the responder findings): keys relative to the prefix before the first `*`
+        'homelab/alert-*/responder-*/finding.json')
+               f="$(cd "$TS/homelab" 2>/dev/null && find . -path './alert-*/responder-*/finding.json' | sed 's#^\./##')"
+               [ -n "$f" ] || { echo "ERROR \"ls $url\": no object found" >&2; exit 1; }
+               printf '%s\n' "$f" | while read -r k; do echo "2026/11/18 00:31:51      456  $k"; done; exit 0;;
         *'/*') d="$TS/${rel%/\*}"
                [ -d "$d" ] || { echo "ERROR \"ls $url\": no object found" >&2; exit 1; }
                (cd "$d" && find . -type f | sed 's#^\./##' | while read -r f; do echo "2026/10/25 03:31:51      123  $f"; done); exit 0;;
@@ -244,6 +249,101 @@ case " $got " in *"dig-2026-11-03/finding-1"*|*"dig-2026-11-04/finding-1"*) bad 
 got="$(realsel agent-loop)"
 [ "$got" = "dig-2026-11-03/finding-1 dig-2026-11-04/finding-1" ] \
   && ok "…they stay selectable — by the loop's own island (text fallback), once" || bad "real leaks' owner" "got: $got"
+
+# ── --source dig: recurring report-only RESPONDER findings (FU-320) ─────────────────────────────
+# agents/island-intake-fixtures/homelab/alert-*/ holds the responder's REAL finding.json objects of
+# 2026-11-12..17 (full wire); ride-issues.json the `gh issue view --json number,title,body` answers
+# for the issues their ride subjects served (#3302 #3303 #3307 #3308 #3420 — all titled `gateway: …`).
+# Expected values from the selector header's responder contract: finding = responder-finding/v1 ∧
+# issue "" ∧ remediation_would non-empty ∧ run date inside the lookback; owner = the alert-rule island,
+# else the island of the ride subject's issue (island_of_issue: title `gateway:` → gateway); class =
+# alertname + namespace with ≥ INTAKE_RESPONDER_MIN (3) of the island's findings; id
+# responder/<alertname>/<namespace>; ruled = the dig's receipt ledger. Of the nine real records:
+#   six KubePodNotReady on workload:homelab/agent-homelab-issue-<gateway issue>-r<k>, each with a
+#     remediation_would (the scratch-quota class: 1414…, 3c86…, 4123…×2, 7a7e…, cc93…) → ONE gateway input;
+#   529d… KubePodNotReady on arc-runners with a remediation_would — a ONE-OFF in its class → nothing;
+#   5647… (arc-runners) and a564… (AgentReviewLoop, repo:homelab) carry an EMPTY remediation_would → never.
+section "selector --source dig — recurring responder findings"
+RNOW=1795064400   # 2026-11-19T05:00:00Z; lookback 7 d reaches 2026-11-12, every real record
+RISS="$FX/ride-issues.json"
+[ "$(find "$FX/homelab" -path '*/alert-*/responder-*/finding.json' | wc -l)" = 9 ] \
+  && ok "nine real responder findings on disk (a missing fixture is not a pass)" || bad "responder fixtures" "expected 9 under $FX/homelab/alert-*"
+rsel() { # <ts-dir> <island> [env…] → $TMP/rsel.json, rc in $rc
+  local d="$1" i="$2"; shift 2
+  env INTAKE_TS_DIR="$d" INTAKE_ISSUES_JSON="${RISS_OVR:-$RISS}" INTAKE_NOW="$RNOW" "$@" \
+    bash "$SEL" --source dig --island "$i" --out "$TMP/rsel.json" 2>"$TMP/rsel.err"; rc=$?
+}
+rids() { jq -r '[.inputs[] | select(.kind == "responder") | .id] | sort | join(" ")' "$TMP/rsel.json"; }
+rsel "$FX" gateway
+{ [ "$rc" = 0 ] && [ "$(rids)" = "responder/KubePodNotReady/homelab" ]; } \
+  && ok "the scratch-quota class reaches the gateway sitting as ONE input (exit 0)" || bad "responder positive" "rc=$rc ids=$(rids) $(head -c 300 "$TMP/rsel.err")"
+got="$(jq -r '[.inputs[] | select(.kind == "responder") | .members[].fingerprint] | sort | join(" ")' "$TMP/rsel.json")"
+[ "$got" = "14149667f0ddd142 3c86aab4bb369c2d 41235cba59738cef 41235cba59738cef 7a7e458ae900e5e1 cc9346bfede93514" ] \
+  && ok "…listing its six member findings (one fingerprint triaged twice counts twice)" || bad "responder members" "got: $got"
+jq -e '.inputs[] | select(.kind == "responder") | .count == 6 and .namespace == "homelab"
+       and all(.members[]; (.remediation_would | length) > 0 and (.finding | startswith("alert-")))' "$TMP/rsel.json" >/dev/null \
+  && ok "…each member carries its remediation_would and its bucket path" || bad "responder member shape" "$(jq -c '.inputs[0]' "$TMP/rsel.json")"
+case "$(jq -r '[.inputs[] | select(.kind == "responder") | .members[].subject] | join(" ")' "$TMP/rsel.json")" in
+  *arc-runners*) bad "responder one-off" "an arc-runners finding joined the class";;
+  *) ok "the arc-runners one-off and the empty-remediation records stay out";; esac
+for i in agent-loop substrate; do
+  rsel "$FX" "$i"; [ "$(rids)" = "" ] && ok "…and no other island is presented the class or the one-off ($i)" || bad "responder leak $i" "got: $(rids)"
+done
+rsel "$FX" gateway INTAKE_RESPONDER_MIN=7
+{ [ "$rc" = 1 ] && [ "$(rids)" = "" ]; } && ok "INTAKE_RESPONDER_MIN is the floor: 6 < 7 presents nothing (hold)" || bad "responder floor" "rc=$rc ids=$(rids)"
+
+# the ledger — the dig's, unchanged (a copy of the real tree, so receipts never land in the fixture dir)
+TSR="$TMP/tsr"; mkdir -p "$TSR"; cp -r "$FX/homelab" "$TSR/"
+rreceipt() { # <day> <run> <mode> <outcome>
+  mkdir -p "$TSR/homelab/intake-gateway-$1/$2"
+  jq -n --arg m "$3" --arg o "$4" --arg ts "$1T05:00:00Z" \
+    '{schema:"island-intake-receipt/v1", island:"gateway", mode:$m, ts:$ts, session_ran:true, inputs:[],
+      ruled:[{input:"responder/KubePodNotReady/homelab", outcome:$o, refs:[]}]}' > "$TSR/homelab/intake-gateway-$1/$2/receipt.json"
+}
+rreceipt 2026-11-17 intake-r1-dry dry-run standing
+rsel "$TSR" gateway; [ "$(rids)" = "responder/KubePodNotReady/homelab" ] && ok "a DRY-RUN receipt rules no class" || bad "responder dry-run" "got: $(rids)"
+rreceipt 2026-11-17 intake-r1-def apply deferred
+rsel "$TSR" gateway; [ "$(rids)" = "responder/KubePodNotReady/homelab" ] && ok "a \`deferred\` class re-presents" || bad "responder deferred" "got: $(rids)"
+rreceipt 2026-11-18 intake-r1-std apply standing
+rsel "$TSR" gateway
+{ [ "$rc" = 1 ] && [ "$(rids)" = "" ] && [ "$(jq '.counts.responder.ruled' "$TMP/rsel.json")" = 1 ]; } \
+  && ok "an APPLY ruling keeps the class off the next day's sitting (counted as ruled)" || bad "responder ledger" "rc=$rc ids=$(rids) $(jq -c .counts "$TMP/rsel.json")"
+rm -rf "$TSR/homelab/intake-gateway-"*
+
+# negatives built from a REAL record (its full wire, only subject/fingerprint/issue/run changed)
+REAL1="$FX/homelab/alert-3c86aab4bb369c2d/responder-r1-20261113T021803Z/finding.json"
+rderive() { # <fp> <run-ts> <subject> [issue]
+  mkdir -p "$TSR/homelab/alert-$1/responder-r1-$2"
+  jq --arg fp "$1" --arg s "$3" --arg iss "${4:-}" '.fingerprint = $fp | .subject = $s | .issue = $iss' "$REAL1" \
+    > "$TSR/homelab/alert-$1/responder-r1-$2/finding.json"
+}
+# (a) a recurring class whose rides serve an agent-loop issue (#9001 `coordinator: …`) is the loop's, not the gateway's
+jq '. + [{number: 9001, title: "coordinator: a ride class the loop owns", body: "Touches: agents/coordinator-scan.sh\n"}]' "$RISS" > "$TMP/riss2.json"
+for k in 1 2 3; do rderive "aa0000000000000$k" "2026111$((k + 3))T010000Z" "workload:homelab/agent-homelab-issue-9001-r$k"; done
+# (b) a recurring class on non-ride subjects (arc-runners runner pods) — no island owns the subject
+for k in 1 2 3; do rderive "bb0000000000000$k" "2026111$((k + 3))T020000Z" "workload:arc-runners/homelab-ephemeral-large-runner"; done
+# (c) out of window / issue already filed / future-dated: never members (the gateway class stays at 6)
+rderive cc00000000000001 20261101T010000Z "workload:homelab/agent-homelab-issue-3302-r9"
+rderive cc00000000000002 20261115T010000Z "workload:homelab/agent-homelab-issue-3302-r8" "teststuffstash/homelab#1"
+rderive cc00000000000003 20261120T010000Z "workload:homelab/agent-homelab-issue-3302-r7"
+RISS_OVR="$TMP/riss2.json" rsel "$TSR" gateway
+got="$(jq -r '[.inputs[] | select(.kind == "responder") | "\(.id)×\(.count)"] | join(" ")' "$TMP/rsel.json")"
+[ "$got" = "responder/KubePodNotReady/homelab×6" ] \
+  && ok "gateway: not the loop's class, not the runner class; stale, filed and future records are not members" || bad "responder negatives" "got: $got"
+RISS_OVR="$TMP/riss2.json" rsel "$TSR" agent-loop
+[ "$(jq -r '[.inputs[] | select(.kind == "responder") | "\(.id)×\(.count)"] | join(" ")' "$TMP/rsel.json")" = "responder/KubePodNotReady/homelab×3" ] \
+  && ok "…the loop's ride class goes to the agent-loop sitting (the issue's island, by island_of_issue)" || bad "responder other island" "got: $(rids)"
+echo '[]' > "$TMP/riss-empty.json"
+RISS_OVR="$TMP/riss-empty.json" rsel "$TSR" gateway
+[ "$rc" = 2 ] && ok "a ride issue that cannot be read is a probe failure (exit 2), never \"nobody's\"" || bad "responder issue probe" "rc=$rc"
+RISS_OVR="$TMP/riss-empty.json" rsel "$TSR" gateway INTAKE_RESPONDER_MIN=99
+[ "$rc" = 1 ] && ok "…and below the floor no issue is read at all" || bad "responder lazy read" "rc=$rc $(head -c 200 "$TMP/rsel.err")"
+# the S3 branch: one wildcard listing for every fingerprint (the stub answers Garage's row shape)
+( unset INTAKE_TS_DIR; TS="$TSR" PATH="$S5BIN:$PATH" AGENT_TS_READER_ID=r AGENT_TS_READER_SECRET=s INTAKE_NOW="$RNOW" \
+    INTAKE_ISSUES_JSON="$TMP/riss2.json" bash "$SEL" --source dig --island gateway --out "$TMP/rsel.json" 2>"$TMP/rsel.err" ); rc=$?
+{ [ "$rc" = 0 ] && [ "$(rids)" = "responder/KubePodNotReady/homelab" ] \
+  && [ "$(jq '[.inputs[] | select(.kind == "responder") | .count] | add' "$TMP/rsel.json")" = 6 ]; } \
+  && ok "the S3 branch lists alert-*/responder-*/finding.json once and reads the same class" || bad "responder S3" "rc=$rc ids=$(rids) $(head -c 300 "$TMP/rsel.err")"
 
 # ── --source pile: the issue pile as ONE selection, waits included ──────────────────────────────
 # Expected values from the selector's header contract. member = unruled ∧ unlabelled (the default
@@ -467,6 +567,22 @@ receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
   "[{\"input\":\"dig-2026-10-25/$R1/finding-2\",\"outcome\":\"close\",\"refs\":[]},{\"input\":\"dig-2026-10-26/$R2/finding-2\",\"outcome\":\"fold\",\"refs\":[]}]"
 run_script apply
 [ ! -s "$TMP/claude.calls" ] && grep -q "hold" "$TMP/run.log" && ok "hold: no session, exit 0" || bad "hold" "$(tail -3 "$TMP/run.log")"
+
+# a recurring responder class rides the dig source into the SAME sitting (selector header: an alert
+# the island's rule file defines owns the finding — no ride issue is read); three real-wire records
+# re-stamped onto GoCatalogStale (defined in argocd/resources/agent-gateway/prometheusrule.yaml)
+for k in 4 5 6; do
+  d="$TS/homelab/alert-dd0000000000000$k/responder-r1-2026102${k}T010000Z"; mkdir -p "$d"
+  jq --arg fp "dd0000000000000$k" '.alertname = "GoCatalogStale" | .fingerprint = $fp | .subject = "workload:agent-egress/agent-gateway"' \
+    "$REPO/agents/island-intake-fixtures/homelab/alert-3c86aab4bb369c2d/responder-r1-20261113T021803Z/finding.json" > "$d/finding.json"
+done
+printf 'INTAKE-RULED: responder/GoCatalogStale/agent-egress standing -\n' > "$TMP/claude.out"
+run_script apply; rc=$?
+{ [ "$rc" = 0 ] && grep -q '^text: (source: responder)$' "$TMP/up/brief.md" && grep -qF '"id": "responder/GoCatalogStale/agent-egress"' "$TMP/up/brief.md"; } \
+  && ok "the brief lists the class under \`text: (source: responder)\`" || bad "responder brief" "rc=$rc $(tail -3 "$TMP/run.log")"
+[ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["responder/GoCatalogStale/agent-egress","standing"]]' ] \
+  && ok "…and its ruling lands in the receipt under the class id (the ledger the selector reads)" || bad "responder receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
+rm -rf "$TS/homelab/alert-dd"*
 
 # ── the pile source in the same sitting ─────────────────────────────────────────────────────────
 # State here: the dig HOLDS (receipt intake-r1-e ruled both findings); the pile fixture above serves
