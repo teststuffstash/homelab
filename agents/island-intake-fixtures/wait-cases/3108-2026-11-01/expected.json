@@ -1,0 +1,7 @@
+{
+ "outcome": "requeue",
+ "blocked_on": null,
+ "class": "R",
+ "split": "train",
+ "basis": "a ride's stop: a sibling ride of the same Goal passed the same gate through the mirror — the blocker was the ride's own"
+}

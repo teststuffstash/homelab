@@ -1,0 +1,7 @@
+{
+ "outcome": "seat",
+ "blocked_on": "pr=3270",
+ "class": "R",
+ "split": "train",
+ "basis": "the wait is the assembly PR's merge — a marker the scan releases itself; nothing human remains"
+}

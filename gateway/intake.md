@@ -69,6 +69,11 @@ The dispatch prompt names them:
   CHANGES_REQUESTED. Not decided through the outcome table: read through step E (§The procedure),
   their product is records, and a `file` when a class repeats. `escape-prior:` lines, when the
   prompt carries them, are earlier sittings' records (from their receipts) — read, never re-classified.
+- `wait:` `<owner/repo>#<n>@<parked_at>/<released|standing>` … — one parking comment each (a
+  `blocked-on: human`, or a `seat` with no marker) on an island item: released since, or standing
+  after a re-read left it `unchanged` (`scripts/intake-select.sh --source wait`). Not ruled through
+  the outcome table: read through step W, their product is records. The same source adds `reread:`
+  rows carrying `stale` — a wait whose named target closed or merged — which step R re-reads at once.
 - `mode: dry-run | apply`. Dry-run writes NOTHING to GitHub; the report carries every body and
   label you WOULD write, verbatim, so a reader can grade the outcome before it is live.
 
@@ -88,6 +93,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
 | The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` outcome's own trigger |
 | For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
+| For a `wait:` input: the item's comments (its events when they show the release), and the lines the wait cites at the default-branch commit before its parking comment | step W — whether the rules made the wait necessary |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
 Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
@@ -217,6 +223,11 @@ island's facts file; `Touches` = that file, `Origin` = the PRs, both records quo
 decided here (the sitting of the island that owns that file decides it). Only A, B and
 C are intake's; D and E records stay report-only. A class already filed whose target file has not
 changed since writes nothing — the open issue is the record.
+
+**W. A `wait:` input — what intake held back.** Follow [`intake-wait.md`](intake-wait.md): classify
+the wait (H the operator's fact / R decidable from the read set / O decidable outside it / U not
+judgeable yet), one record per input under the report's `## Wait records`, and a proposed edit
+only for a rule line the ledger puts at the bar. No GitHub write.
 
 Cap: **at most 3 `queue` outcomes (`requeue` included) per sitting; one Goal's children count as
 one.** The cap limits `queue`, not
@@ -383,7 +394,7 @@ Follow the consumer card's three acts exactly, with these pins:
 ```
 then, verbatim, **every body you posted or would post**, then `## Review units` (§Review and
 repair; the repair pass adds each finding id with its `changed:` / `declined:` answer), then
-`## Escape records` (step E), then **Facts I lacked:** one line each —
+`## Escape records` (step E), then `## Wait records` and `## Wait proposals` (step W), then **Facts I lacked:** one line each —
 the fact, where you looked. That list is the spike's evidence (which reads the brief is missing);
 never pad it, never leave it out.
 

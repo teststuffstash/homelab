@@ -1,0 +1,40 @@
+{
+ "data": {
+  "repository": {
+   "issue": {
+    "userContentEdits": {
+     "totalCount": 3,
+     "nodes": [
+      {
+       "createdAt": "2026-11-12T18:27:07Z",
+       "editedAt": "2026-11-12T18:27:07Z",
+       "deletedAt": null,
+       "diff": "---\nTouches: gateway/scripts/benchmarks-snapshot.sh, gateway/specs/endpoints/catalog.md\nOrigin: dig-2026-11-09/dig-r1-20261109T033006Z/finding-2\nClass: build\n\n---\n## Deliverable\n\nNothing re-cuts the tier evidence by hand: the \"⚑ gap: the snapshot is hand-refreshed\" row of GW-MODEL-TIERS (`gateway/specs/endpoints/catalog.md` §Named gaps) is deleted because its cause is gone.\n\nThis issue no longer asks for a schedule. The operator ruled on 2026-11-12 that the gateway derives its tier lists at runtime from its own store (\"I am also leaning towards runtime. But with some monitoring, S3, grafana, etc. Can all be added later when it works already.\"), which leaves no snapshot to re-cut and no PR to schedule. The work is Goal #3305; its last child, #3309, deletes the gap row. This issue stays open as the alert's one address until then and closes with the Goal.\n\nRewritten by island intake on 2026-11-12; the earlier bodies (the one-off re-cut of 2026-11-09, the scheduled re-cut of 2026-11-11) are in the edit history.\n\n## The condition, as observed\n\n- `snapshot_at` 2026-11-11T20:43:00Z (the hand re-cut, PR #3265); `gateway_tier_evidence_age_seconds` 76 004 on 2026-11-12; `TierEvidenceStale` not firing. It fires again about 2026-11-18T21:43Z (7 d + the rule's 1 h) unless the snapshot is re-cut or the Goal's production leg has landed.\n- Until then a re-cut is still the jail verb and a PR (`gateway/scripts/benchmarks-snapshot.sh`, `devbox run tiers -- apply`, `-- check`).\n\n## Out of scope\n\n- Everything the Goal owns: #3306 (the benchmark rows on the gateway's own view), #3307 (the derivation), #3308 (the admission), #3309 (the snapshot machinery retired).\n- The hand-passed codex candidates (#3145, #3296) and the standing residue in #2977.\n- Widening the 7 d threshold.\n",
+       "editor": {
+        "login": "RasmusSoot"
+       }
+      },
+      {
+       "createdAt": "2026-11-11T19:40:26Z",
+       "editedAt": "2026-11-11T19:40:26Z",
+       "deletedAt": null,
+       "diff": "---\nTouches: gateway/scripts/benchmarks-snapshot.sh, gateway/specs/endpoints/catalog.md\nOrigin: dig-2026-11-09/dig-r1-20261109T033006Z/finding-2\nClass: build\n\n---\n## Deliverable\n\nA schedule re-cuts the tier-evidence snapshot (`argocd/resources/agent-gateway/benchmarks.json`), so `TierEvidenceStale` stops being the trigger for a hand run.\n\nThe class fix behind GW-MODEL-TIERS' \"⚑ gap: the snapshot is hand-refreshed\" row (`gateway/specs/endpoints/catalog.md`): no schedule runs `gateway/scripts/benchmarks-snapshot.sh`; the re-cut is a jail verb and a PR, the alert is the belt and the operator the hands. Filed from deep-dig finding `dig-2026-11-09/dig-r1-20261109T033006Z/finding-2` (cause-found) as the one-off re-cut; rewritten by island intake on 2026-11-11 after the operator's note that the seat re-cuts by hand that day and the missing schedule is what stays open (the original body is in the edit history).\n\n## The condition, as observed\n\n- `snapshot_at` 2026-11-01T09:49:26Z; `gateway_tier_evidence_age_seconds` 899024 on 2026-11-11 against the 604800 s (7 d) threshold; `TierEvidenceStale` active since 2026-11-08T10:49:48Z.\n- Earlier re-cuts, each by hand: #2903, #3023 (10-29), the snapshot of 11-01; nothing since.\n\n## What a re-cut needs (why it is not one worker ride)\n\n1. `kubectl exec` into `deploy/openrouter-proxy` (the AA capability rows) and two GETs on the gateway's own views (`/catalog/opencode`, `/catalog/openrouter`).\n2. `devbox run tiers -- apply`, then `-- check`: the derived lists are written into the deployed `policy.json`, which rolls the pod.\n3. A PR carrying `benchmarks.json` + `policy.json` together.\n\n## Acceptance (draft — the pending pick shapes it)\n\n1. A scheduled run produces the re-cut PR at a cadence under the alert's 7 d (the source is a weekly AA pull), with no jail session.\n2. A run whose derivation changes no list still lands the new `snapshot_at`; a run whose `check` names an undecided tier says so in the PR body.\n3. The \"⚑ gap: the snapshot is hand-refreshed\" row is deleted by the PR that makes 1 true; `TierEvidenceStale` stays as the belt on the schedule itself.\n\n## Out of scope\n\n- The one-off re-cut of 2026-11-11 (the seat's, with the manual benchmark entries on `fix/gateway-manual-benchmark`).\n- The hand-passed codex candidates (#3145) and the standing residue in #2977.\n- Widening the 7 d threshold.\n",
+       "editor": {
+        "login": "RasmusSoot"
+       }
+      },
+      {
+       "createdAt": "2026-11-11T19:40:26Z",
+       "editedAt": "2026-11-09T05:00:36Z",
+       "deletedAt": null,
+       "diff": "---\nTouches: gateway/scripts/benchmarks-snapshot.sh,argocd/resources/agent-gateway/benchmarks.json\nOrigin: dig-2026-11-09/dig-r1-20261109T033006Z/finding-2\nClass: fix\n\n---\n## Deliverable\nThe tier-evidence snapshot (`argocd/resources/agent-gateway/benchmarks.json`) is re-cut and the `TierEvidenceStale` alert clears.\n\nOrigin: deep-dig finding `dig-2026-11-09/dig-r1-20261109T033006Z/finding-2` (cause-found). The snapshot_at is 2026-11-01T09:49:26Z; `gateway_tier_evidence_age_seconds` is ~668k s against a 604800 s (7 d) threshold, and the alert has fired since 2026-11-08T10:49:48Z (still active at intake). Nothing schedules the re-cut (`gateway/specs/endpoints/catalog.md` ⚑ gap; FU-270 names the cadence knob). No open re-cut PR or issue exists; last re-cut was #3023 (10-29).\n\n## Acceptance\n1. `bash gateway/scripts/benchmarks-snapshot.sh` is run from the jail, then `devbox run tiers -- apply` and check, then a PR lands the new snapshot.\n2. `TierEvidenceStale` clears within the hour of the roll; if it does not, the derivation is failing and the cause is no longer staleness alone.\n3. Ruling for the operator: schedule the re-cut (FU-270 cadence knob) or accept the manual cadence and widen the 7 d threshold, which leaves no slack against a weekly source.\n\n## Out of scope\nThe hand-passed codex candidates (#3145) and the standing residue in #2977.\n",
+       "editor": {
+        "login": "homelab-agents-1234"
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

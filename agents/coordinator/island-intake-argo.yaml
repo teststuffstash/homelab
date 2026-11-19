@@ -24,8 +24,12 @@
 #                INTAKE_REREAD_EVERY_D days); `--source gaps` = the `⚑ gap` / `🚧 WIP` rows of the
 #                island's own specs index no receipt ruled and no open issue names (≤ INTAKE_GAP_MAX);
 #                `--source escape` = the PRs of issues this island queued that drew CHANGES_REQUESTED,
-#                not yet read by a receipt (the island's improvement loop, gateway/intake-escape.md).
-#                Any one firing starts the ONE sitting over all four sets.
+#                not yet read by a receipt (the island's improvement loop, gateway/intake-escape.md);
+#                `--source wait` = the island's parking comments released inside the lookback or standing
+#                after an `unchanged` re-read, not yet read by a receipt, ≤ INTAKE_WAIT_MAX (the other half of
+#                that loop, gateway/intake-wait.md), plus its STALE waits (a named target closed or merged)
+#                as `reread:` rows merged into the pile's by id. Any one firing starts the ONE sitting over
+#                all five sets.
 #   edge       = this CronWorkflow, daily 05:00Z (after the 03:30Z dig). No Sensor: nothing here is
 #                urgent, and one sitting over the day's batch is the cost shape (≈150k tokens).
 #   key        = the receipts — homelab/intake-<island>-<date>/<run>/receipt.json, read back with the
@@ -42,7 +46,13 @@
 #                brief's outcomes) + the receipt, inputs, brief, transcript and an A1 manifest in the
 #                bucket; then ONE /coordinate ring for the platform stack when anything was queued.
 #   belts      = island_intake_* gauges (job island_intake; island_intake_source_inputs{source} =
-#                the dig / member / reread split) + IslandIntakeStale
+#                the dig / member / reread / gap / escape / wait / stale split — DISJOINT, summing to
+#                island_intake_inputs: `reread` = re-reads with no `stale`, `stale` = every re-read carrying
+#                one (the wait source's own rows and pile rows it or the pile's ledger marked); the wait read's
+#                island_intake_wait_records{class} (intake-written records of this run, by class H|R|O|U),
+#                island_intake_false_waits (this run's R + O — the loop's KPI) and
+#                island_intake_false_wait_items (distinct items behind R/O records over the ledger's window))
+#                + IslandIntakeStale
 #                (argocd/resources/pushgateway/prometheusrule.yaml).
 #   live reads = the brief's read set, every one a GET, addressed in the prompt: Alertmanager and
 #                Prometheus (ns monitoring), the ride records in the transcripts bucket (READER key),
@@ -64,7 +74,12 @@
 #                started only when it fits the deadline; nothing loops; a lens that fails or defers never
 #                holds the queue.
 #                Receipt: `review` (units, lenses, repair) + `findings` (id, lens, posture, fate) +
-#                `escapes` (INTAKE-ESCAPE lines) + `escape_records` (the report's section verbatim).
+#                `escapes` (INTAKE-ESCAPE lines) + `escape_records` (the report's section verbatim) +
+#                `waits` (INTAKE-WAIT lines joined to their selection rows) + `wait_records` (the section
+#                verbatim) + `wait_ledger` (gateway/scripts/intake-wait-ledger.py over the receipts' prior
+#                records + this run's: classes, the false-wait count, the keys at the bar) + `wait_proposals`
+#                (INTAKE-WAIT-PROPOSAL lines the ledger kept: diff, the items behind it, widens_authority —
+#                a record, never a pushed branch).
 #   islands    = any island of the selector's table (`-p island=scan|launch|retro|…`); the schedule runs
 #                the gateway only — the others are hand-submitted:
 #                `argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan`.
@@ -155,6 +170,9 @@ spec:
             # The pile's waits: re-read once the wait is this old, and the same wait at most this often.
             - { name: INTAKE_REREAD_AGE_D, value: "3" }
             - { name: INTAKE_REREAD_EVERY_D, value: "7" }
+            # The wait read: parking comments read per sitting (released first), and its lookback in days.
+            - { name: INTAKE_WAIT_MAX, value: "6" }
+            - { name: INTAKE_WAIT_LOOKBACK_D, value: "30" }
             # FU-270: the agent-gateway admits this sitting (the deep dig's wiring, deep-dig-argo.yaml).
             - { name: AGENT_GATEWAY, value: "sessions" }
             - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
@@ -197,6 +215,8 @@ spec:
               case "$REVIEW" in off|review-repair) ;; *) echo "island-intake: review must be off|review-repair (got $REVIEW)"; exit 1;; esac
               PGW="${PUSHGATEWAY:-}"
               ND=0; NM=0; NRR=0; NG=0; NE=0   # this run's inputs per source: dig findings, pile members, pile re-reads, gap rows, escape PRs
+              NW=0; NST=0                     # …wait inputs (parking comments) and stale waits (re-read at once)
+              WC_H=0; WC_R=0; WC_O=0; WC_U=0; NFW=0; NFWI=0   # the wait read: intake-written records by class, R+O, ledger items
               REVIEW_RAN=0
               _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
                 [ -n "$PGW" ] || return 0
@@ -207,10 +227,16 @@ spec:
                   "# TYPE island_intake_source_inputs gauge" "island_intake_source_inputs{source=\"dig\"} $ND" \
                   "island_intake_source_inputs{source=\"member\"} $NM" "island_intake_source_inputs{source=\"reread\"} $NRR" \
                   "island_intake_source_inputs{source=\"gap\"} $NG" "island_intake_source_inputs{source=\"escape\"} $NE" \
+                  "island_intake_source_inputs{source=\"wait\"} $NW" "island_intake_source_inputs{source=\"stale\"} $NST" \
                   "# TYPE island_intake_session_ran gauge" "island_intake_session_ran $3" \
                   "# TYPE island_intake_ruled gauge" "island_intake_ruled $4" \
                   "# TYPE island_intake_queued gauge" "island_intake_queued $5" \
                   "# TYPE island_intake_review_ran gauge" "island_intake_review_ran $REVIEW_RAN" \
+                  "# TYPE island_intake_wait_records gauge" "island_intake_wait_records{class=\"H\"} $WC_H" \
+                  "island_intake_wait_records{class=\"R\"} $WC_R" "island_intake_wait_records{class=\"O\"} $WC_O" \
+                  "island_intake_wait_records{class=\"U\"} $WC_U" \
+                  "# TYPE island_intake_false_waits gauge" "island_intake_false_waits $NFW" \
+                  "# TYPE island_intake_false_wait_items gauge" "island_intake_false_wait_items $NFWI" \
                   | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/island/$ISLAND" >/dev/null 2>&1 \
                   || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
               }
@@ -246,23 +272,36 @@ spec:
               rc_pile=0; _select pile || rc_pile=$?
               rc_gaps=0; _select gaps || rc_gaps=$?
               rc_esc=0; _select escape || rc_esc=$?
-              if [ "$rc_dig" -eq 2 ] || [ "$rc_pile" -eq 2 ] || [ "$rc_gaps" -eq 2 ] || [ "$rc_esc" -eq 2 ]; then
+              rc_wait=0; _select wait || rc_wait=$?
+              if [ "$rc_dig" -eq 2 ] || [ "$rc_pile" -eq 2 ] || [ "$rc_gaps" -eq 2 ] || [ "$rc_esc" -eq 2 ] || [ "$rc_wait" -eq 2 ]; then
                 _push 0 0 0 0 0; echo "island-intake: selection failed — exit 1, Argo retries"; exit 1
               fi
               # ONE input set for ONE sitting: the dig's text inputs, the pile's issues and waits, the gap rows,
-              # the escape PRs.
+              # the escape PRs, the wait inputs. A stale wait (the wait source's `reread` row) merges into the
+              # pile's row of the same id — the PILE row wins (its `wait`: seat | agent/blocked | pr-hold), only
+              # `stale` is added (the pile's own `stale` kept when it has one) — or joins as a re-read of its own.
               jq -n --slurpfile d /tmp/sel-dig.json --slurpfile p /tmp/sel-pile.json --slurpfile g /tmp/sel-gaps.json --slurpfile e /tmp/sel-escape.json \
-                '{schema: "island-intake-select/v1", island: $d[0].island, source: "dig+pile+gaps+escape", ts: $p[0].ts,
+                    --slurpfile w /tmp/sel-wait.json \
+                'def by_id: reduce .[] as $x ({}; if .[$x.id] == null then .[$x.id] = $x
+                                                 else .[$x.id].stale = (.[$x.id].stale // $x.stale) end) | [.[]];
+                 ($p[0].inputs + [$w[0].inputs[] | select(.kind == "reread")] | by_id) as $pile
+                 | [$w[0].inputs[] | select(.kind == "wait")] as $waits
+                 | {schema: "island-intake-select/v1", island: $d[0].island, source: "dig+pile+gaps+escape+wait", ts: $p[0].ts,
                   specs_root: $g[0].specs_root,
-                  counts: {dig: $d[0].counts.inputs, members: $p[0].counts.members, rereads: $p[0].counts.rereads,
+                  counts: {dig: $d[0].counts.inputs, members: $p[0].counts.members,
+                           rereads: ([$pile[] | select(.kind == "reread" and .stale == null)] | length),
                            gaps: $g[0].counts.inputs, escapes: $e[0].counts.inputs,
-                           inputs: ($d[0].counts.inputs + $p[0].counts.inputs + $g[0].counts.inputs + $e[0].counts.inputs)},
-                  inputs: ($d[0].inputs + $p[0].inputs + $g[0].inputs + $e[0].inputs), escape_prior: ($e[0].prior // [])}' > /tmp/sel.json \
+                           waits: ($waits | length), stale: ([$pile[] | select(.stale != null)] | length),
+                           inputs: ($d[0].counts.inputs + ($pile | length) + $g[0].counts.inputs + $e[0].counts.inputs + ($waits | length))},
+                  inputs: ($d[0].inputs + $pile + $g[0].inputs + $e[0].inputs + $waits), escape_prior: ($e[0].prior // [])}' > /tmp/sel.json \
                 || { _push 0 0 0 0 0; echo "island-intake: selection failed (the merge) — exit 1, Argo retries"; exit 1; }
+              # the earlier sittings' wait records — the ledger's input (gateway/scripts/intake-wait-ledger.py)
+              mkdir -p /tmp/wait; jq '.prior // []' /tmp/sel-wait.json > /tmp/wait/prior.json 2>/dev/null || echo '[]' > /tmp/wait/prior.json
               NIN="$(jq -r '.counts.inputs' /tmp/sel.json)"; ND="$(jq -r '.counts.dig' /tmp/sel.json)"
               NM="$(jq -r '.counts.members' /tmp/sel.json)"; NRR="$(jq -r '.counts.rereads' /tmp/sel.json)"
               NG="$(jq -r '.counts.gaps' /tmp/sel.json)"; NE="$(jq -r '.counts.escapes' /tmp/sel.json)"
-              if [ "$rc_dig" -ne 0 ] && [ "$rc_pile" -ne 0 ] && [ "$rc_gaps" -ne 0 ] && [ "$rc_esc" -ne 0 ]; then
+              NW="$(jq -r '.counts.waits' /tmp/sel.json)"; NST="$(jq -r '.counts.stale' /tmp/sel.json)"
+              if [ "$rc_dig" -ne 0 ] && [ "$rc_pile" -ne 0 ] && [ "$rc_gaps" -ne 0 ] && [ "$rc_esc" -ne 0 ] && [ "$rc_wait" -ne 0 ]; then
                 _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0
               fi
 
@@ -337,8 +376,9 @@ spec:
               \`reread:\` — the island's waits: issues an earlier ruling parked on a human, with the
               label or ruling that parks them (\`wait\`), since when (\`since\`) and the parking line
               (\`parked_by\`). A \`wait: pr-hold\` row is parked by \`blocked-on: human\` on its open PR
-              (\`pr\`), not by a label. Procedure step R: test the ONE fact, then change the ruling or
-              write nothing.
+              (\`pr\`), not by a label. A row carrying \`stale\` names a target (\`issue=\`/\`pr=\` marker, or a
+              \`#<n>\` its parking comment named) that closed or merged since: re-read it now, whatever its age.
+              Procedure step R: test the ONE fact, then change the ruling or write nothing.
 
               \`gap:\` — \`⚑ gap\` / \`🚧 WIP\` rows of the island's own specs index that no open issue names,
               id \`<specs page>#<REQ>\` (the index row verbatim in \`row\`). Rule each one (intake.md §Inputs).
@@ -346,6 +386,10 @@ spec:
               \`escape:\` — PRs of issues this island queued that drew CHANGES_REQUESTED: step E
               (gateway/intake-escape.md), one record per blocking finding under \`## Escape records\`.
               \`escape-prior:\` — earlier sittings' records, from their receipts: read, never re-classified.
+
+              \`wait:\` — parking comments on the island's items, released since or standing: step W
+              (gateway/intake-wait.md), one record per input under \`## Wait records\`; the ledger's earlier
+              records are in /tmp/wait/prior.json.
 
               LIVE READS (the brief's read set; every one is a GET, from this pod):
               - Alertmanager: curl -s http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts
@@ -360,18 +404,20 @@ spec:
               RECEIPT PROTOCOL (the shell parses this; the receipt is the ONLY record that an input was
               ruled — an input without a line re-presents tomorrow). For EVERY input id below (a dig
               finding id, a \`responder/<alert>/<namespace>\` class id, \`<owner/repo>#<n>\` for an issue or an escape PR, \`<specs page>#<REQ>\` for a
-              gap row) print exactly one line, at the end, outside any code fence:
+              gap row, \`<owner/repo>#<n>@<parked_at>/<state>\` for a wait) print exactly one line, at the end, outside any code fence:
                 INTAKE-RULED: <input id> <outcome> <refs>
               <outcome> is one of queue|goal|seat|fold|close|requeue|standing|split|file|forward|unchanged|deferred|read
               (the brief's outcomes; \`forward\` = another island's, retitled and passed on — its <refs> is
               \`island:<name>\`; \`unchanged\` = a \`reread:\` input whose wait still holds — you wrote
               nothing; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap; \`read\` = an
-              \`escape:\` PR you read); <refs> is a comma-separated list of the issue/PR refs you wrote or
+              \`escape:\` PR or a \`wait:\` you read); <refs> is a comma-separated list of the issue/PR refs you wrote or
               relied on (owner/repo#n), or \`-\`. An issue you FILED this sitting (a \`file\`, a parity issue, a
               split part) is listed in the \`<refs>\` of the input it came from AND gets its own line with its own
               ruling — \`INTAKE-RULED: <owner/repo>#<n> queue|goal|seat|standing|close <refs>\` (dry-run: \`#new-<k>\`);
               a filed queue/goal issue is reviewed and labelled like any other. For every \`## Escape records\` record also print
                 INTAKE-ESCAPE: <pr id> <finding id> <class A|B|C|D|E|X> <the intake check it names, one line>
+              For every \`## Wait records\` record its INTAKE-WAIT line, and for a key the ledger puts at the bar its
+              INTAKE-WAIT-PROPOSAL line — both one JSON object on one line (gateway/intake-wait.md).
               In dry-run mode print the lines you WOULD print.
               BRIEF
               if [ "$REVIEW" = review-repair ]; then
@@ -398,6 +444,7 @@ spec:
               printf '\ngap:\n'; jq '[.inputs[] | select(.kind == "gap")]' /tmp/sel.json
               printf '\nescape:\n'; jq '[.inputs[] | select(.kind == "escape")]' /tmp/sel.json
               printf '\nescape-prior:\n'; jq '.escape_prior // []' /tmp/sel.json
+              printf '\nwait:\n'; jq '[.inputs[] | select(.kind == "wait")]' /tmp/sel.json
               } > /tmp/brief.md
               _ts_put /tmp/brief.md brief.md || true
               _ts_put /tmp/sel.json inputs.json || true
@@ -440,6 +487,40 @@ spec:
                     ([$sel[0].inputs[] | select(.kind == "escape") | .id]) as $ids
                     | [ split("\n")[] | select(length > 0) | capture("^(?<pr>[^ ]+) (?<finding>[^ ]+) (?<class>[A-EX]) ?(?<check>.*)$")
                         | select(.pr as $p | $ids | index($p)) ] | unique_by([.pr, .finding])' > /tmp/escapes.json 2>/dev/null || echo '[]' > /tmp/escapes.json
+              # the wait read's records: one per wait input of THIS run, the model's class + rule keys joined to the
+              # selector's row (item, writer, parking and release facts are the selector's, never the model's)
+              # A line that is not a JSON object, or names no wait of this run, or carries an unknown class or a bad
+              # rule entry, is model output gone wrong: skipped and counted (`wait_lines_dropped`, with samples),
+              # never a reason to lose the valid lines beside it.
+              { grep -E '^ *INTAKE-WAIT: ' /tmp/intake.log || true; } | sed 's/^ *INTAKE-WAIT: //' \
+                | jq -R -s --slurpfile sel /tmp/sel.json --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" '
+                    ([$sel[0].inputs[] | select(.kind == "wait") | {key: .id, value: .}] | from_entries) as $rows
+                    | def ok: (.wait | type) == "string" and $rows[.wait] != null and (.class | IN("H","R","O","U"))
+                        and ((.rules // []) | type == "array" and all(.[]; type == "object" and (.mark | IN("caused","missing")) and ((.file // "") | type == "string" and . != "")));
+                      [ split("\n")[] | select(length > 0) | . as $line | (try fromjson catch null) as $o
+                        | if ($o | type) != "object" then {drop: "unparseable", sample: $line[0:120]}
+                          elif ($o | try ok catch false) | not then {drop: "invalid", sample: $line[0:120]}
+                          else ($o | $rows[.wait] as $w
+                            | {keep: {wait, class, rules: (.rules // []), direction: ((.direction // "") | tostring), widens: (.widens == true),
+                                      fact: ((.fact // "") | tostring), item: ($w.id | sub("@.*$"; "")), number: $w.number, state: $w.wait,
+                                      parked_at: $w.parked_at, parked_by: $w.parked_by, writer: $w.writer,
+                                      released_at: ($w.released_at // null), release: ($w.release // null), run: $run}}) end ]
+                    | {kept: ([.[] | .keep // empty] | unique_by(.wait)),
+                       dropped: {count: ([.[] | select(.drop)] | length), samples: ([.[] | select(.drop) | {reason: .drop, sample}] | .[0:5])}}' \
+                > /tmp/wait-lines.json 2>/dev/null || echo '{"kept": [], "dropped": {"count": -1, "samples": [{"reason": "the harvest itself failed"}]}}' > /tmp/wait-lines.json
+              jq '.kept' /tmp/wait-lines.json > /tmp/waits.json; jq '.dropped' /tmp/wait-lines.json > /tmp/waits-dropped.json
+              # every proposal line goes to the ledger as written: it skips and counts a malformed one, keeps the rest
+              { grep -E '^ *INTAKE-WAIT-PROPOSAL: ' /tmp/intake.log || true; } | sed 's/^ *INTAKE-WAIT-PROPOSAL: //' > /tmp/wait/proposals.jsonl
+              # the ledger over the receipts' prior records + this run's: keeps a proposal only for a key at the bar
+              python3 gateway/scripts/intake-wait-ledger.py --records /tmp/wait/prior.json --records /tmp/waits.json \
+                  --proposals /tmp/wait/proposals.jsonl --json > /tmp/wait-ledger.json 2>/tmp/wait-ledger.err \
+                || { echo "⚠ island-intake: the wait ledger failed — $(head -c 300 /tmp/wait-ledger.err)"; echo '{}' > /tmp/wait-ledger.json; }
+              jq -e 'type == "object"' /tmp/wait-ledger.json >/dev/null 2>&1 || echo '{}' > /tmp/wait-ledger.json
+              eval "$(jq -r '[.[] | select(.writer == "intake")] as $m
+                  | "WC_H=\([$m[] | select(.class == "H")] | length); WC_R=\([$m[] | select(.class == "R")] | length); "
+                  + "WC_O=\([$m[] | select(.class == "O")] | length); WC_U=\([$m[] | select(.class == "U")] | length); "
+                  + "NFW=\([$m[] | select(.class == "R" or .class == "O")] | length)"' /tmp/waits.json 2>/dev/null)" || true
+              NFWI="$(jq -r '.false_waits.items // 0' /tmp/wait-ledger.json 2>/dev/null)" || NFWI=0
 
               # ── 4. REVIEW AND REPAIR (REVIEW=review-repair; gateway/intake.md §Review and repair) ─────────
               # The author's `## Review units` lines (`unit: <owner/repo>#<n> [#<child> …] base=<sha>`,
@@ -732,12 +813,15 @@ spec:
               [ "$REVIEW" = review-repair ] && [ "$UNHELD" != "[]" ] && echo "⚠ island-intake: queue/goal ruling(s) with no INTAKE-HOLD line — the launcher cannot label them: $UNHELD"
               # the report's `## Escape records` section, verbatim (the receipt carries it beside the parsed lines)
               awk '/^## Escape records/{on=1} on && /^## / && !/^## Escape records/{exit} on' /tmp/intake.log > /tmp/escape-records.md 2>/dev/null || :
+              awk '/^## Wait records/{on=1} on && /^## / && !/^## Wait (records|proposals)/{exit} on' /tmp/intake.log > /tmp/wait-records.md 2>/dev/null || :
 
               # ── 6. RECEIPT ────────────────────────────────────────────────────────────────────────────────
               jq -n --arg island "$ISLAND" --arg mode "$MODE" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                     --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" \
                     --arg review "$REVIEW" --arg ps "$P_STATUS" --arg pr "$P_RAIL" --arg pm "$P_MODEL" \
                     --argjson labelled "$NL" --argjson unheld "$UNHELD" --rawfile escmd /tmp/escape-records.md \
+                    --rawfile waitmd /tmp/wait-records.md --slurpfile waits /tmp/waits.json --slurpfile wl /tmp/wait-ledger.json \
+                    --slurpfile wdrop /tmp/waits-dropped.json \
                     --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json --slurpfile filed /tmp/ruled-filed.json --slurpfile holds /tmp/holds.json \
                     --slurpfile units /tmp/units.json --slurpfile lenses /tmp/lenses.json \
                     --slurpfile findings /tmp/findings.json --slurpfile escapes /tmp/escapes.json \
@@ -749,7 +833,10 @@ spec:
                                ran: ([$lenses[0][] | select(.status == "ran")] | length > 0),
                                repair: {status: $ps, rail: $pr, model: $pm}},
                       findings: [$findings[0][] | {id, lens, posture, finding, fate, reason}],
-                      escapes: $escapes[0], escape_records: $escmd}' > /tmp/receipt.json
+                      escapes: $escapes[0], escape_records: $escmd,
+                      waits: $waits[0], wait_records: $waitmd, wait_lines_dropped: $wdrop[0],
+                      wait_ledger: ($wl[0] | {bar, records, classes, false_waits, other_writers, at_bar, invalid, unparseable}),
+                      wait_proposals: ($wl[0].proposals // []), wait_proposals_dropped: ($wl[0].dropped // [])}' > /tmp/receipt.json
               echo "island-intake: $NR of $NIN input(s) ruled ($NQ queued) — review: $(jq -r '[.review.lenses[] | "\(.lens)#\(.unit) \(.status)"] | join(" · ") | if . == "" then "no lens" else . end' /tmp/receipt.json) · repair $P_STATUS — receipt:"
               jq -c '.ruled[]' /tmp/receipt.json; jq -c '.findings[]' /tmp/receipt.json
               _ts_put /tmp/receipt.json receipt.json \
@@ -758,11 +845,12 @@ spec:
                     --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
                     '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
                       session_key:"coordinator-claude", pod:$pod, timestamp:$ts,
-                      files:["inputs.json","brief.md","intake.log","receipt.json","review-<lens>-<unit>.md","review-repair.log"],
+                      files:["inputs.json","brief.md","intake.log","receipt.json","review-<lens>-<unit>.md","review-repair.log","wait-ledger.json"],
                       grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
               _ts_put /tmp/intake.log intake.log || true
               for f in /tmp/review/out/*.md; do [ -f "$f" ] && { _ts_put "$f" "review-$(basename "$f")" || true; }; done
               _ts_put /tmp/review/repair.log review-repair.log || true
+              _ts_put /tmp/wait-ledger.json wait-ledger.json || true
               _ts_put /tmp/ts-manifest.json manifest.json || true
               { find "$HOME/.claude/projects" /tmp/review -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")" || true; done
 

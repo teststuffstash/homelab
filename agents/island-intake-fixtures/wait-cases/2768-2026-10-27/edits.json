@@ -1,0 +1,31 @@
+{
+ "data": {
+  "repository": {
+   "issue": {
+    "userContentEdits": {
+     "totalCount": 2,
+     "nodes": [
+      {
+       "createdAt": "2026-10-20T20:02:14Z",
+       "editedAt": "2026-10-20T20:02:14Z",
+       "deletedAt": null,
+       "diff": "⚑ gap from PR #2766 (FU-270, GW-CATALOG-GO — `gateway/specs/endpoints/catalog.md` §Named gaps, \"⚑ gap: a rail-served id the catalog does not list\").\n\n*Listed* is the vendor's client view — models.dev's `opencode-go` rows minus `status: deprecated`, under the workspace's console overrides — never the rail's own model list. On 2026-10-20 the Go rail's `/zen/go/v1/models` answered 37 ids against 29 listed; the eight extra are servable but carry no price and no monthly limit the leg can read — **classified in the first comment below (2026-10-21): one deprecated models.dev row still served (`minimax-m2.7`), four pay-as-you-go carry-overs the console's `opencode` overlay disables, one PAYG-live id never on Go (`qwen3.6-plus`), two with no vendor row anywhere (`qwen3.7-max`, `omen-alpha`); the other three deprecated rows are NOT served**, so an admission naming one defers `not-in-catalog` (ruling 4: never a fallback price). The rail's `/models` answer is unread by design today.\n\nClosing it = a ruling on what a rail-served-but-unlisted id is (a deprecated row the vendor still serves? a launch models.dev has not caught up with?) and a row on GW-CATALOG-GO with an evidence case — e.g. the leg reading `/zen/go/v1/models` as a third, price-less read and the view marking `served: true/false` per id; the dated `⚑ gap` clause in the page's index row trimmed.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n",
+       "editor": {
+        "login": "RasmusSoot"
+       }
+      },
+      {
+       "createdAt": "2026-10-20T20:02:14Z",
+       "editedAt": "2026-10-20T18:48:55Z",
+       "deletedAt": null,
+       "diff": "⚑ gap from PR #2766 (FU-270, GW-CATALOG-GO — `gateway/specs/endpoints/catalog.md` §Named gaps, \"⚑ gap: a rail-served id the catalog does not list\").\n\n*Listed* is the vendor's client view — models.dev's `opencode-go` rows minus `status: deprecated`, under the workspace's console overrides — never the rail's own model list. On 2026-10-20 the Go rail's `/zen/go/v1/models` answered 37 ids against 29 listed; the eight extra (the deprecated four among them) are servable but carry no price and no monthly limit the leg can read, so an admission naming one defers `not-in-catalog` (ruling 4: never a fallback price). The rail's `/models` answer is unread by design today.\n\nClosing it = a ruling on what a rail-served-but-unlisted id is (a deprecated row the vendor still serves? a launch models.dev has not caught up with?) and a row on GW-CATALOG-GO with an evidence case — e.g. the leg reading `/zen/go/v1/models` as a third, price-less read and the view marking `served: true/false` per id; the dated `⚑ gap` clause in the page's index row trimmed.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+       "editor": {
+        "login": "RasmusSoot"
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

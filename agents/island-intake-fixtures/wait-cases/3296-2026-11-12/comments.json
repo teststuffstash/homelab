@@ -1,0 +1,49 @@
+[
+ {
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6831179555",
+  "html_url": "https://github.com/teststuffstash/homelab/issues/3296#issuecomment-6831179555",
+  "issue_url": "https://api.github.com/repos/teststuffstash/homelab/issues/3296",
+  "id": 6831179555,
+  "node_id": "IC_kwDODboMws8AAAABlyuHIw",
+  "user": {
+   "login": "RasmusSoot",
+   "id": 1532090,
+   "node_id": "MDQ6VXNlcjE1MzIwOTA=",
+   "avatar_url": "https://avatars.githubusercontent.com/u/1532090?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/RasmusSoot",
+   "html_url": "https://github.com/RasmusSoot",
+   "followers_url": "https://api.github.com/users/RasmusSoot/followers",
+   "following_url": "https://api.github.com/users/RasmusSoot/following{/other_user}",
+   "gists_url": "https://api.github.com/users/RasmusSoot/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/RasmusSoot/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/RasmusSoot/subscriptions",
+   "organizations_url": "https://api.github.com/users/RasmusSoot/orgs",
+   "repos_url": "https://api.github.com/users/RasmusSoot/repos",
+   "events_url": "https://api.github.com/users/RasmusSoot/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/RasmusSoot/received_events",
+   "type": "User",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "created_at": "2026-11-12T17:38:03Z",
+  "updated_at": "2026-11-12T17:38:03Z",
+  "body": "intake: seat — needs one recorded answer of the account's `GET {CODEX_UPSTREAM}/models?client_version=<≥ 0.155.0>` committed under `gateway/tests/fixtures/codex-catalog/` (full wire shape, identity fields dummied as in `codex-usage-observed.json`): only the gateway pod's own credential lifecycle can read it, and the rows cannot be written from a guessed shape. With the fixture in place this is one ride (`gateway/**` is machine-merge); the candidate rule stays with #3145.\nblocked-on: human\n",
+  "author_association": "MEMBER",
+  "pin": null,
+  "reactions": {
+   "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6831179555/reactions",
+   "total_count": 0,
+   "+1": 0,
+   "-1": 0,
+   "laugh": 0,
+   "hooray": 0,
+   "confused": 0,
+   "heart": 0,
+   "rocket": 0,
+   "eyes": 0
+  },
+  "performed_via_github_app": null,
+  "minimized": null
+ }
+]
