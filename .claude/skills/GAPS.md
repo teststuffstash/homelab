@@ -166,7 +166,9 @@ bounded build); handoff-G4 waits on claude-jail#11.
       `UpgradeLeaseInFlight` (07:04Z) was read after `close` and got its outcome late (benign,
       info/triage none). Sighted 2026-10-28 (merge window #2916/#2915/#2911). Fix shape: the skill
       says to arm the watch as a line-streaming monitor (each line = a notification), not a
-      background task read only at exit.
+      background task read only at exit. Resight 2026-11-19 (FU-315 restart window): armed that way
+      (`maint watch … | grep --line-buffered`), the two EXPECTED lines arrived mid-window and were
+      claimed before `close` — the fix shape works; second date → promote into the skill text.
 
 ## opnsense-as-code
 

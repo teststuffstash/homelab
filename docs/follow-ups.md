@@ -658,7 +658,7 @@ the block needs pruning, not more headings.
       fingerprint faces (PR#1352), cap split (PR#1375/#1376), arbitrate rule-2 capacity re-arm (#2546, r8 F5 —
       the deferral is still coordinator prose, not a launcher marker). Open: the RULED-BUT-NEVER-DISPATCHED
       arbitrate face (09-08, PR#1513/#1515 — no re-arm for a ruling with no round behind it, or dispatch BEFORE
-      the comment). **Next:** honest strike-held rows + hold-chain propagation; that re-arm. No-strike C4/C5
+      the comment); the checkpoint-(b) marker surviving a DEFERRED launch (#3553, 11-19). **Next:** honest strike-held rows + hold-chain propagation; that re-arm. No-strike C4/C5
       limbo is FU-204's. Relates FU-187, FU-143, FU-147.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule: reader BUILT, re-key open.** "Same `error_class=` on ≥2 issues
@@ -673,7 +673,8 @@ the block needs pruning, not more headings.
       CronWorkflow 05:00Z, receipts = the ruled-input ledger); issue pile + re-reads 2026-11-11 (#3259, ADR-163; `prefer: strongest`).
       **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),
       `gap` + `escape` sources; islands scan/launch/retro are intake islands (`docs/intake/`, Goals #3389 #3390 #3384).
-      **Next:** the open operator items in `docs/agents/meta-state.md` (11-15 pickup); spike §Open questions 2, 4, 5.
+      **Learning loop 2026-11-19** (ADR-164): step 3 = a closed list (#3547/#3549), responder classes as a dig-source input (#3544), the WAIT read (#3555), weekly rules digest (#3552).
+      **Next:** the replay runner + the edit-PR leg (wait cases recorded); cron sittings for the other islands; meta-state pickup.
       oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
       ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
@@ -1117,7 +1118,7 @@ the block needs pruning, not more headings.
       run 2026-10-14 set a `dig-explained:` marker (#2555); its lane anomalies are the next input (dig 10-10 "5
       findings, wrote 2"; no responder triage 10-11/10-14; dig TOOL_GAPs — TICK-LOG 2026-10-14). (d) `now`-lane grouping LANDED
       #2761 (10-20). (e) the lane's own dependency cone. (f) dig→worker: island findings → island intake (FU-320, 10-28;
-      replay 10-05→10-28 = 1 dispatchable cause). oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
+      replay 10-05→10-28 = 1 dispatchable cause). (g) re-test of a stale explanation LANDED #3546 (11-19) — proof owed: a re-test finding. oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat unread in Loki
       for six days (2026-09-10). **Detector LANDED + PROVEN LIVE 2026-09-23** (#1948): an Alloy
       `stage.metrics` counter on the kmsg stream → `KernelOopsCaptured` per node, a sender-side metric

@@ -15551,3 +15551,33 @@ updates or reverts as much as possible — mechanical revert or a responder."
   WSS 3198→1396 MiB, node MemAvailable 2047→3927 MiB, node CPU 98.8→12 %; NodeCPUHighUsage + ControlPlaneNodeMemoryLow
   cleared. Refill clock this time: 22 days (10-28 → 11-19). No detector covers "apiserver GC-thrashing at its limit" —
   the only signal was the stock CPU rule (`triage: none`), 18 h after the ramp was visible.
+
+## 2026-11-19 ~19:45–22:30Z — seat: "why does #3533 need me?" → the island rules learning loop, first cut (no corpus; gateway island slice)
+
+- **Operator direction** (memory `island-rules-learning-loop`, `ruling-means-short-closed-list`): intake asking for a
+  decision it could take is the loop failing; hand-editing intake rules per stall is not the fix; review = a WEEKLY
+  summary of rule-file changes, not each edit; seat runs v1, platform-shaped from the start; no seat-vs-operator
+  distinction; "ruling" is not every two-option detail; the box does windows (some stay the operator's).
+- **#3533 read:** intake had found the answer (public `/models` carries per-model limits — re-verified, 200, 31 models,
+  27 with `go.monthly_usage`) and parked it on the letter of the #2768 ruling as carried into the spec's prose.
+- **First wait read (opus subagent, by hand, read-only), 10 waits:** 3 genuinely the operator's (#3538, #2768, #3231),
+  6 decidable from the read set (#3533, #3505, #3269, #3145, #3296, #3108), 1 not judgeable (#3166 — not the gateway's;
+  misrouted by the old text match). Two step-3 lines at the two-item bar. #3269 sat 7 d on PR #3270, merged 11-12.
+  The loop would have proposed the operator's own 11-12 hand edit (#3145 + #3296 → `e4d0220f`, 51 min after the second).
+- **Landed (all PR lane, bot-approved):** #3544 recurring report-only responder findings → one dig-source input per
+  class (replay: gateway gets `responder/KubePodNotReady/homelab` ×6 on 11-20, ×3 on 11-21); #3546 the dig re-tests a
+  stale issue/FU/meta-state explanation (7 daily reads present, no finding in 14 d; fresh groups first); #3547 step-3
+  edits A+B; #3549 step 3 as a CLOSED LIST + "ruling" = the operator's answer only + external-read rule + window entry
+  scoped to the box's capability ledger (ADR-164); #3552 `agents/island_rules.py` + `island-rules-digest` CronWorkflow
+  (Fri 06:00Z) + the first digest by hand (12 commits on 9 rule files in 6 islands, 4 widen authority, one by a worker
+  ride with no stated reason — #3509; `gateway/intake.md` +41 % in the week); #3555 the wait read wired
+  (`--source wait`, stale waits re-read at once, false-wait gauges, ledger with the two-item bar, 10 recorded wait
+  cases 7 train / 3 held out), merged 22:02Z — before the 11-20 05:00Z sitting, so that sitting runs the first scheduled wait read.
+- **Review findings fixed in-PR:** #3552 (diff-ci row did not select the rule files the digest's live pins depend on);
+  #3555 (stale merge dropped the pile row's `wait`; one malformed proposal line wiped the ledger — 3 parse sites, 3 guarded).
+- **Silence:** `IslandRulesDigestOverdue` until 2026-11-20T07:00Z (`9fbb37cc`) — the never-landed arm before the first run.
+- **Scratch-quota class, where it stops:** the gateway sitting gets it, but both fixes (the claim's `scratch`, the
+  janitor) are agent-loop paths → a `forward`, and only the gateway has a cron sitting.
+- **Anthropic guidance looked up** (skills best practices, skill-creator, writing tools for agents): evaluation-first,
+  writer/user split, held-out selection; nothing on an agent widening its own authority.
+- **Wind-down 22:05Z:** six PRs merged (#3544 #3546 #3547 #3549 #3552 #3555); nothing of the session's open; first live results are 11-20's (meta-state pickup); FU-199 gained #3553; worktrees removed.
