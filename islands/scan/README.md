@@ -22,6 +22,8 @@ agent-loop cut measured on the PR #3147 branch (C8 of its `context-and-autonomy.
 83 commits in October, 47 % cross-component, top partner review). Terms: [specs/glossary.md](specs/glossary.md) (island-coined) and
 [docs/glossary.md](../../docs/glossary.md) (platform-wide).
 
+The [checkpoint specification pilot](world-model-pilot.md) tests how to mine a sequence of wakes and generate several readable views from one decision model.
+
 ## What this replaces — still live
 
 The old members — the running scan family. A build reads them to explain a difference, never as its source
