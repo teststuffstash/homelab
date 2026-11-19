@@ -120,3 +120,43 @@ def test_every_list_a_first_leg_row_varies_holds_a_recorded_element():
 )
 def test_pr_board_snapshot_holds_a_latest_review_element():
     assert any(pr["latestReviews"] for pr in _answer("pr-board", "pr-list.json"))
+
+
+def _recorder_module():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("record_world", RECORDER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_recorder_fetches_the_board_snapshot_once_and_records_that_fetch(tmp_path):
+    rw = _recorder_module()
+    oid = "a" * 40
+    plan = rw.plan_pr_board(["7"])
+    snapshot_argv = plan.reads[0].argv
+    w = tmp_path / "board-src"
+    w.mkdir()
+    reads = [(["api", f"repos/{REPO}"], {"private": False, "visibility": "public"}),
+             (snapshot_argv, [{"number": 7, "headRefOid": oid}, {"number": 8, "headRefOid": "b" * 40}])]
+    reads += [(argv, {"commits": [], "check_runs": [], "statuses": []}) for argv in rw.board_per_pr("7", oid)]
+    lines = ["reads:"]
+    for i, (argv, body) in enumerate(reads):
+        (w / f"r{i}.json").write_text(json.dumps(body))
+        lines += [f"  - argv: {json.dumps(argv)}", f'    file: "r{i}.json"']
+    (w / "provenance.yaml").write_text("\n".join([*lines, "writes:"]) + "\n")
+    # a hand-written description holding only the board's write operations (no download in the suite)
+    ok = {"content": {"application/json": {"schema": {"type": "object"}}}}
+    desc = {"paths": {f"/{x.op}": {"post": {"operationId": x.operation_id, "responses": dict.fromkeys(x.statuses, ok)}} for x in plan.writes},
+            "components": {"schemas": {}, "responses": {}}}
+    (tmp_path / "desc.json").write_text(json.dumps(desc))
+
+    out = tmp_path / "out"
+    run = World("board-src", root=tmp_path).run([sys.executable, str(RECORDER), "pr-board", "7", "--out", str(out),
+                                                "--rest-description", "c" * 40, "--description-file", str(tmp_path / "desc.json")])
+    assert run.rc == 0, run.stderr
+    assert sum(1 for a in run.argvs if a[:2] == ["pr", "list"]) == 1  # one snapshot fetch per recording
+    assert (out / "pr-board" / "pr-list.json").read_bytes() == (w / "r1.json").read_bytes()
+    assert (out / "pr-board" / f"api.commits.{oid}.status.json").is_file()  # per-PR reads follow that snapshot's head
+    assert len(run.argvs) == len(reads)  # every read once, nothing else

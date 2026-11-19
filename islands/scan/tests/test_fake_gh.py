@@ -189,3 +189,19 @@ def test_pr_board_serves_the_updater_pick_and_unstrand_reads():
         "pr-view-3147.commits,reviews.json",  # leg 2: no bot verdict recorded on #3147 → no update
     ]
     assert "updating #3557 (oldest armed+BEHIND, FIFO)" in run.stdout
+
+
+@pytest.mark.parametrize("kind, extra", [("non-json", {}), ("absent", {"field": (0,)})])
+def test_a_write_refuses_a_fault_it_cannot_answer(kind, extra):
+    # a write is answered by a hand-written file or an exit status: only `fail` and `status` replace that
+    with pytest.raises(ValueError, match="takes only a `fail` or `status` fault"):
+        World("pr-board").fault("update-branch", kind, **extra)
+    with pytest.raises(ValueError, match="takes only a `fail` or `status` fault"):
+        World("pr-handoff").fault("pr-merge-auto", kind, **extra)
+
+
+def test_fault_failing_write():
+    argv = ["api", "-X", "PUT", f"repos/{REPO}/pulls/3147/update-branch", "-f", "expected_head_sha=0"]
+    run = World("pr-board").fault("update-branch", "fail").run(["gh", *argv])
+    assert (run.rc, run.stdout) == (1, "") and "(HTTP 502)" in run.stderr
+    assert run.calls == [{"argv": argv, "kind": "write", "op": "update-branch", "fault": "fail", "rc": 1}]

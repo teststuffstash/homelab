@@ -163,6 +163,8 @@ class World:
         files = {r["file"] for r in self.provenance.get("reads", [])}
         if target not in ops and target not in files and not target.startswith("writes/"):
             raise ValueError(f"{self.name}: no read file or write op {target!r}")
+        if target in ops and kind not in ("fail", "status"):
+            raise ValueError(f"{self.name}: a write ({target}) takes only a `fail` or `status` fault, not {kind!r}")
         if kind == "absent":
             _walk(self._answer(target), field, target)
         if kind == "status":

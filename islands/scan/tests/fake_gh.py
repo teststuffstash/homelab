@@ -157,6 +157,10 @@ def main(argv: list[str]) -> int:
         if fault and fault["kind"] == "fail":
             print("gh: Bad Gateway (HTTP 502)", file=sys.stderr)
             return finish(1)
+        if fault:  # the helper refuses this; a plan written by hand gets the same answer, never a silent no-op
+            print(f"fake gh: a write takes only a fail or status fault, not {fault['kind']}", file=sys.stderr)
+            entry["unrecorded"] = True
+            return finish(UNRECORDED)
         if w["method"] == "gh":
             return finish(int(w["exit"]))
         return finish(emit((world / "writes" / f"{w['op']}.{w['statuses'][0]}.json").read_bytes(), jq))

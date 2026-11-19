@@ -310,14 +310,18 @@ def main(argv: list[str]) -> int:
     ap.add_argument("world", choices=sorted(PLANS))
     ap.add_argument("prs", nargs="+")
     ap.add_argument("--rest-description", default="", help="github/rest-api-description commit (default: main's head)")
+    ap.add_argument("--description-file", default="", help="a local copy of the description at that commit (no download)")
     ap.add_argument("--out", default=str(WORLDS), help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
     visibility = refuse_private(REPO)  # before any other read
     commit = recorder_commit()
     plan = PLANS[args.world](args.prs)
+    answers: dict[str, bytes] = {}  # each read is performed ONCE; its bytes are the file
     if args.world == "pr-board":
-        snapshot = json.loads(perform(plan.reads[0]).decode())
+        # the snapshot that names the heads is the snapshot recorded: per-PR reads follow ITS headRefOid
+        answers[plan.reads[0].file] = perform(plan.reads[0])
+        snapshot = json.loads(answers[plan.reads[0].file].decode())
         oids = {str(pr["number"]): pr["headRefOid"] for pr in snapshot}
         missing = [n for n in args.prs if n not in oids]
         if missing:
@@ -329,10 +333,17 @@ def main(argv: list[str]) -> int:
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
     for read in plan.reads:
-        (staging / read.file).write_bytes(perform(read))
+        if read.file not in answers:
+            answers[read.file] = perform(read)
+        (staging / read.file).write_bytes(answers[read.file])
 
     desc_commit = args.rest_description or description_head()
-    desc = description(desc_commit)
+    if args.description_file:
+        if not args.rest_description:
+            raise SystemExit("record_world: --description-file needs --rest-description, the commit it is a copy of")
+        desc = json.loads(Path(args.description_file).read_text("utf-8"))
+    else:
+        desc = description(desc_commit)
     (staging / "schemas").mkdir()
     for w in plan.writes:
         for status in w.statuses:
