@@ -441,7 +441,11 @@ never harder posture on quiet ones.
   2026-10-12), or a dig finding
   for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
   finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
-  reason, so the session reads the record instead of re-deriving it. The subject is the responder's
+  reason, so the session reads the record instead of re-deriving it. An issue, follow-up or
+  meta-state explanation is not permanent: when the alert has stood through the whole lookback
+  and no dig has looked at it for a hold period, it is selected as a **re-test** group carrying
+  the record, which the session tests against live evidence (rule and constants: the selector's
+  header, step 3b; FU-249). Fresh groups rank ahead of re-tests under the group cap. The subject is the responder's
   own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
   fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03
   audit named ([`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
