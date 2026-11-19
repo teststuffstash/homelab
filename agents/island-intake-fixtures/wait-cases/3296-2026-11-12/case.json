@@ -1,0 +1,15 @@
+{
+ "schema": "intake-wait-case/v1",
+ "item": "teststuffstash/homelab#3296",
+ "parked_at": "2026-11-12T17:38:03Z",
+ "parking_comment_id": 6831179555,
+ "parked_by": "RasmusSoot",
+ "writer": "intake",
+ "as_of": "2026-11-12T17:38:03Z",
+ "rules": {
+  "path": "gateway/intake.md",
+  "commit": "477495f157532c4700a26d53f2c13753aac2f24d"
+ },
+ "island": "gateway",
+ "recorded_at": "2026-11-19T20:53:22Z"
+}

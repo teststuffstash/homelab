@@ -1,0 +1,7 @@
+{
+ "outcome": "seat",
+ "blocked_on": "human",
+ "class": "U",
+ "split": "train",
+ "basis": "still parked; nothing on the page shows the retire-or-run call was decidable (not scored until settled)"
+}
