@@ -116,7 +116,7 @@ MAP=(
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
   # + the island intake selector: intake is the dig's consumer and its harness runs in this gate (FU-320)
-  "deep-dig-test:^(agents/|gateway/scripts/intake-select)"
+  "deep-dig-test:^(agents/|gateway/scripts/intake-select|gateway/[^/]+\.md$|docs/intake/|docs/agents/retros/ISLAND-RULES-BRIEF\.md$)"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
   "state-fp-replay:^agents/"

@@ -1,0 +1,23 @@
+# IslandRulesDigestOverdue, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is
+# its one home) — the rules file that island-rules-digest.promtool-test loads. Not a manifest and not
+# applied to anything: `promtool test rules` needs upstream-format rules (top-level `groups:`).
+# Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY *.yaml under
+# argocd/resources.
+#
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandRulesDigestOverdue")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-runs
+    rules:
+      - alert: IslandRulesDigestOverdue
+        expr: (time() - (max(max_over_time(island_rules_digest_last_success_timestamp_seconds[8d])) or vector(0))) > 7 * 86400 + 6 * 3600
+        for: 30m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: The weekly island rules digest has not landed in over 7 days — rule-file changes are going unreviewed
+          description: 'The Friday 06:00Z island-rules-digest CronWorkflow (ns agent-coordinator) has not delivered a report PR or a no-change record in over 7 days. Changes to the island rules files (the briefs and rules launchers hand sessions) are not reaching the operator''s weekly read. Check: argo -n agent-coordinator cron get island-rules-digest and the newest island-rules-digest-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-rules-digest. Brief: docs/agents/retros/ISLAND-RULES-BRIEF.md; change record: agents/island_rules.py changes.'

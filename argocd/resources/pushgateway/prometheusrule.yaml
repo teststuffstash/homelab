@@ -103,6 +103,24 @@ spec:
           annotations:
             summary: "Island intake has not run in >2 days — the dig's island findings are not being admitted"
             description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig."
+        # ── the island rules digest's own belt (FU-320) ─────────────────────────────────────────
+        # agents/coordinator/island-rules-digest-argo.yaml pushes
+        # island_rules_digest_last_success_timestamp_seconds only when the week's outcome LANDED (the
+        # report PR, or the no-change record) — RetroReportOverdue's threshold for a weekly lane (8d
+        # bridge, 7 d + 6 h) with DeepDigStale's single-series `or vector(0)`: never-landed fires, so a
+        # lane that never runs is as visible as one that stopped. triage: none + platform_machinery —
+        # the remedy is reading the cron in Argo, which a session could only restate. Fixture:
+        # island-rules-digest.promtool-test.
+        - alert: IslandRulesDigestOverdue
+          expr: (time() - (max(max_over_time(island_rules_digest_last_success_timestamp_seconds[8d])) or vector(0))) > 7 * 86400 + 6 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "The weekly island rules digest has not landed in over 7 days — rule-file changes are going unreviewed"
+            description: "The Friday 06:00Z island-rules-digest CronWorkflow (ns agent-coordinator) has not delivered a report PR or a no-change record in over 7 days. Changes to the island rules files (the briefs and rules launchers hand sessions) are not reaching the operator's weekly read. Check: argo -n agent-coordinator cron get island-rules-digest and the newest island-rules-digest-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-rules-digest. Brief: docs/agents/retros/ISLAND-RULES-BRIEF.md; change record: agents/island_rules.py changes."
         # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
         # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
         # new path that subtracts against a failed read).

@@ -646,5 +646,11 @@ printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 # this gate — diff-ci's deep-dig-test row also selects on the selector's path for that reason.
 printf '\n\033[1m── island intake (the dig'"'"'s consumer) ──\033[0m\n'
 bash "$REPO/agents/island-intake-test.sh"; INTAKE_RC=$?
+# The island rules digest (FU-320) reads the selector's island table and rides the same CronWorkflow
+# shape, so its harness rides this gate too; its self-test pins the LIVE set, so diff-ci's deep-dig-test
+# row also selects the rule files that set is derived from (gateway/*.md, docs/intake/, the digest brief).
+printf '\n\033[1m── island rules digest ──\033[0m\n'
+bash "$REPO/agents/island-rules-digest-test.sh"; DIGEST_RC=$?
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
 [ "$INTAKE_RC" -eq 0 ] || { echo "island-intake-test FAILED (rc=$INTAKE_RC)"; exit 1; }
+[ "$DIGEST_RC" -eq 0 ] || { echo "island-rules-digest-test FAILED (rc=$DIGEST_RC)"; exit 1; }
