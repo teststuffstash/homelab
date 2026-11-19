@@ -170,8 +170,10 @@ def test_pr_board_serves_the_updater_pick_and_unstrand_reads():
     w = World("pr-board")
     board = json.loads((WORLDS / "pr-board" / "pr-list.json").read_text())
     mine, other = (next(i for i, pr in enumerate(board) if pr["number"] == n) for n in (3557, 3147))
-    armed = {"authorEmail": None, "commitBody": None, "commitHeadline": None, "enabledAt": "2026-11-19T23:00:00Z",
-             "enabledBy": {"login": "RasmusSoot"}, "mergeMethod": "SQUASH"}
+    # a recorded arming where the snapshot holds one (an override never drops its fields), else a minimal one over null
+    armed = next((pr["autoMergeRequest"] for pr in board if pr["autoMergeRequest"]), None) or {
+        "authorEmail": None, "commitBody": None, "commitHeadline": None, "enabledAt": "2026-11-19T23:00:00Z",
+        "enabledBy": {"login": "RasmusSoot"}, "mergeMethod": "SQUASH"}
     for i, decision in ((mine, "APPROVED"), (other, "CHANGES_REQUESTED")):
         w.set("pr-list.json", (i, "autoMergeRequest"), armed)
         w.set("pr-list.json", (i, "mergeStateStatus"), "BEHIND")
