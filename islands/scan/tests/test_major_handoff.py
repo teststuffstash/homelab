@@ -98,3 +98,29 @@ def test_crlf_body_is_handed_off(monkeypatch, extra):
 
     _fake_gh(monkeypatch, (HEADINGS + extra).replace("\n", "\r\n"))
     assert major_handoff.main("o/r", "1") == 0
+
+
+@pytest.mark.parametrize(("fields", "expected"), [
+    ({"reviews": []}, 3),
+    ({}, 4),
+    ({"reviews": None}, 4),
+    ({"reviews": [{}]}, 4),
+    ({"reviews": [], "labels": None}, 4),
+    ({"reviews": [], "commits": [{"messageHeadline": "bump"}]}, 4),
+])
+def test_handoff_read_boundary(monkeypatch, fields, expected):
+    import json
+    import subprocess
+
+    from scan_island import gh, major_handoff
+
+    payload = {"state": "OPEN", "labels": [{"name": "major"}], "commits": [], **fields}
+    calls = []
+
+    def run(*args):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(gh, "run", run)
+    assert major_handoff.main("o/r", "1") == expected
+    assert calls == [("pr", "view", "1", "--repo", "o/r", "--json", "state,labels,reviews,commits")]
