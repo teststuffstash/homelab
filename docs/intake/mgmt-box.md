@@ -27,6 +27,6 @@
   loop); `argocd/resources/**` by ArgoCD. Belts ride `argocd/resources/mgmt-metrics/` and need a
   promtool fixture ([`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Safety).
 - **`seat`, always**: anything the box must APPLY to be proven (a new apply class, a capability
-  ledger row), a [declared window](../glossary.md) or a drain, the box's credentials/state (ADR-129, §Credentials),
+  ledger row), a [declared window](../glossary.md) or a drain on a surface the [capability ledger](../management-box.md#the-capability-ledger--what-the-box-has-been-tested-doing-on-its-own-fu-097) lists `attended` or `manual` (an `unattended` row is the box's own window and queues), the box's credentials/state (ADR-129, §Credentials),
   hardware (the pilot's replacement), and any sentinel policy widening (`policy/mgmt/**`,
   `codeowner-merge` — ADR-131's input allowlist is a security boundary).

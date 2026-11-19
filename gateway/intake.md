@@ -144,8 +144,9 @@ never a guess and never a wider read:** it goes under `Unverified` and into **Fa
    `Operator-only` / "`seat`, always" lines are its instances):
    - **(a) access or money** — a credential or login the island does not hold (a key mint, a
      subscription login), or spend beyond what is granted (a paid tier, hardware);
-   - **(b) attended or irreversible** — the act needs a declared window, a drain, a failover or
-     hands on a box, or no revert PR undoes it (a destructive migration, a one-way state change);
+   - **(b) attended or irreversible** — the surface is `attended` or `manual` in the box's
+     [capability ledger](../docs/management-box.md) (an `unattended` one is the box's window and
+     queues), the act needs hands on a box, or no revert PR undoes it;
    - **(c) direction** — admitting a Goal above the ceiling (step 4), or what the island is for:
      its location, who consumes it, a switch-over or retirement, machinery its facts reserve;
    - **(d) another owner's gate** — a path `classify_touches` calls `codeowner-author`, a lane
@@ -416,5 +417,5 @@ never pad it, never leave it out.
   approvals; the Goal's verdict is the operator's point.
 - An entry canary is the loop's to launch, on every rail, capped at ONE ride per rail per catalog
   refresh: the trigger that launches it is island work like any other, never a `seat`.
-- Operator-only: (a) the Go key mint (FU-313), the codex login (seed); (b) a maintenance window;
+- Operator-only: (a) the Go key mint (FU-313), the codex login (seed); (b) a window on an `attended` or `manual` surface;
   (e) any ruling the tracker marks "ruling pending" (FU-270 names them).

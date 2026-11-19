@@ -24,7 +24,7 @@
   the box converges the **CARP BACKUP only** (`backup-only` mode, ADR-152); the MASTER is converged
   by the seat (`opnsense-router-node.sh converge <node>`).
 - **`seat`, always**: any change that needs the MASTER converged, a CARP failover, a window
-  (ADR-145's shape), firmware/plugin upgrades (official path, test VM first), the WAN leg, the
+  (ADR-145's shape) on a surface the [capability ledger](../management-box.md#the-capability-ledger--what-the-box-has-been-tested-doing-on-its-own-fu-097) lists `attended` or `manual`, firmware/plugin upgrades (official path, test VM first), the WAN leg, the
   cert carry's identity/privileges (the nightly run itself is the box's, FU-297), the root password or API users (wallet), and anything the
   router-move §Status lists as next. Queue only what the test VM + BACKUP converge prove on their
   own (a play's check-mode fix, a lint, the drill harness, docs).
