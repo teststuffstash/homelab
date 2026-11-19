@@ -30,10 +30,20 @@
 #      `dig-explained: <Alert> — <reason>` line in the seat's meta-state (a bare mention does NOT
 #      count — see explain_meta), or a dig finding for the same (alert, subject) within DIG_REDIG_DAYS.
 #      "Not explained by an FU/issue/meta-state" is the ADR's own wording.
+#   3b. RE-TEST — an explanation is a claim about one condition, and the issue / follow-up /
+#      meta-state kinds hold forever (a window is lease-bound and a prior finding expires on its
+#      own). So an alert those three explain is SELECTED anyway, marked `retest` with the
+#      explaining record, when it is firing now AND was present on each of the last DIG_RETEST_D
+#      daily reads (default DIG_LOOKBACK_D, so ≤ it — `standing_h` cannot say "continuous": an
+#      Alertmanager restart resets startsAt) AND no dig finding for the same (alert, subject)
+#      exists within DIG_RETEST_HOLD_D days (default 14) — once per hold, since the re-test's own
+#      finding then holds it. The session reads the record and tests ITS claim (ADR-148).
 #   4. GROUPED by ONSET and HOST — the two correlation keys the audit named: alerts that started in
 #      the same DIG_ONSET_BUCKET_MIN window on the same node/instance are one story. A recurring,
-#      currently-quiet alert groups under onset "recurring". At most DIG_MAX_GROUPS groups go to the
-#      session (largest, then longest-standing, first); the rest are listed as deferred.
+#      currently-quiet alert groups under onset "recurring". Re-test alerts group only with each
+#      other (key `retest|<onset>|<host>`, `retest: true`). At most DIG_MAX_GROUPS groups go to the
+#      session — FRESH groups first (a re-test must never starve a new condition), then largest,
+#      then longest-standing; the rest are listed as deferred.
 #
 # OUTPUT: one JSON digest (`deep-dig-digest/v1`) on --out (default stdout), plus a human summary
 # on stderr. Rule #6 throughout — an unreadable Alertmanager is a loud exit 1, never an empty
@@ -58,6 +68,8 @@ DIG_LOOKBACK_D="${DIG_LOOKBACK_D:-7}"
 DIG_ONSET_BUCKET_MIN="${DIG_ONSET_BUCKET_MIN:-60}"
 DIG_MAX_GROUPS="${DIG_MAX_GROUPS:-4}"
 DIG_REDIG_DAYS="${DIG_REDIG_DAYS:-7}"
+DIG_RETEST_D="${DIG_RETEST_D:-$DIG_LOOKBACK_D}"   # 3b: present on each of the last N daily reads (≤ DIG_LOOKBACK_D)
+DIG_RETEST_HOLD_D="${DIG_RETEST_HOLD_D:-14}"      # 3b: …and no dig finding for (alert, subject) within M days
 DIG_NOW="${DIG_NOW:-$(date -u +%s)}"   # pinned by the test so onset buckets and ages are stable
 RESPONDER_YAML="${RESPONDER_YAML:-$DIG_REPO/agents/coordinator/responder-argo.yaml}"
 TRIAGE_MAP="${TRIAGE_MAP:-$DIG_REPO/argocd/platform/values/kube-prometheus-stack-triage.yaml}"
@@ -117,8 +129,9 @@ dig_window_json() {
 dig_prior_findings() { # a JSON array of earlier harvested dig findings (members, ts, verdict) — empty when unreadable
   if [ -n "${DIG_PRIOR_FILE:-}" ]; then cat "$DIG_PRIOR_FILE" 2>/dev/null; return; fi
   [ -n "${AGENT_TS_READER_ID:-}" ] && command -v s5cmd >/dev/null 2>&1 || return 0
-  local d k tmp; tmp="$(mktemp -d)"
-  for k in $(seq 0 "$DIG_REDIG_DAYS"); do
+  local d k tmp days="$DIG_REDIG_DAYS"; tmp="$(mktemp -d)"
+  [ "$DIG_RETEST_HOLD_D" -gt "$days" ] && days="$DIG_RETEST_HOLD_D"   # the re-test hold reads further back
+  for k in $(seq 0 "$days"); do
     d="$(date -u -d "@$(( DIG_NOW - k * 86400 ))" +%Y-%m-%d)"
     AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET" AWS_REGION=garage \
       s5cmd --endpoint-url "${AGENT_TS_ENDPOINT:-http://garage.garage.svc.cluster.local:3900}" \
@@ -195,6 +208,24 @@ explain_prior() { # <alertname> <subject> [<startsAt of the firing episode>]
       | select(($st == "") or ((.verdict // "") | IN("cause-found", "fix-proposed") | not)
                or (($st | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601? // 0) <= ((.ts // "") | fromdateiso8601? // 0))) ]
     | first | if . == null then "" else "dug \(.ts) (\(.verdict // "?"))" end' 2>/dev/null
+}
+
+dug_within() { # <alertname> <subject> <days> → "dug <ts> (<verdict>)" for a finding of ANY verdict on the
+  # same (alert, subject) newer than <days>, else nothing — the re-test hold (3b). Same key as explain_prior.
+  printf '%s' "$PRIOR" | jq -r --arg n "$1" --arg s "$2" --argjson cut "$(( DIG_NOW - $3 * 86400 ))" '
+    def keys_of: if (.members | type) == "array" and (.members | length) > 0 then .members
+      else [ (.alerts // [])[]? | strings | capture("^(?<alertname>[^ (]+) \\((?<subject>.*)\\)$")? ] end;
+    [ .[]? | select(type == "object") | select(keys_of | any(.alertname == $n and .subject == $s))
+      | select(((.ts // "") | if . == "" then 0 else (fromdateiso8601? // 0) end) > $cut) ]
+    | first | if . == null then "" else "dug \(.ts) (\(.verdict // "?"))" end' 2>/dev/null
+}
+# stale_explanation <candidate-json> <why> → success when the explanation is re-tested (3b): an
+# issue / follow-up / meta-state kind, the alert firing now and present on each of the last
+# DIG_RETEST_D daily reads, and no finding on (alert, subject) within DIG_RETEST_HOLD_D days.
+stale_explanation() {
+  case "$2" in "issue "*|"follow-up "*|"meta-state: "*) ;; *) return 1;; esac
+  printf '%s' "$1" | jq -e --argjson d "$DIG_RETEST_D" '.firing == true and (.days_present // 0) >= $d' >/dev/null 2>&1 || return 1
+  [ -z "$(dug_within "$(printf '%s' "$1" | jq -r .alertname)" "$(printf '%s' "$1" | jq -r .subject)" "$DIG_RETEST_HOLD_D")" ]
 }
 
 # ── select ───────────────────────────────────────────────────────────────────────────────────────
@@ -277,7 +308,10 @@ cmd_select() {
     [ -n "$why" ] || why="$(explain_issue "$name" "$subj")"
     [ -n "$why" ] || why="$(explain_fu "$name")"
     [ -n "$why" ] || why="$(explain_meta "$name")"
-    if [ -n "$why" ]; then printf '%s' "$c" | jq -c --arg why "$why" '{alertname, subject, firing, standing_h, days_present, explained_by: $why}' >> "$tmp/expl.jsonl"
+    if [ -n "$why" ] && stale_explanation "$c" "$why"; then
+      # 3b: selected anyway, carrying the record the session must test
+      printf '%s' "$c" | jq -c --arg why "$why" '. + {retest: {explained_by: $why}}' >> "$tmp/keep.jsonl"
+    elif [ -n "$why" ]; then printf '%s' "$c" | jq -c --arg why "$why" '{alertname, subject, firing, standing_h, days_present, explained_by: $why}' >> "$tmp/expl.jsonl"
     else printf '%s\n' "$c" >> "$tmp/keep.jsonl"; fi
   done < "$tmp/cand.jsonl"
 
@@ -286,22 +320,26 @@ cmd_select() {
   jq -sc --argjson b "$bucket" --argjson max "$DIG_MAX_GROUPS" --argjson now "$DIG_NOW" --argjson wh "$WIN_HISTORY" \
      --arg ts "$(date -u -d "@$DIG_NOW" +%Y-%m-%dT%H:%M:%SZ)" --slurpfile expl "$tmp/expl.jsonl" \
      --argjson p "$(jq -n --argjson sh "$DIG_STANDING_H" --argjson rd "$DIG_RECUR_DAYS" --argjson lb "$DIG_LOOKBACK_D" --argjson ob "$DIG_ONSET_BUCKET_MIN" --argjson mg "$DIG_MAX_GROUPS" --argjson rg "$DIG_REDIG_DAYS" \
-        '{standing_h: $sh, recur_days: $rd, lookback_d: $lb, onset_bucket_min: $ob, max_groups: $mg, redig_days: $rg}')" '
+        --argjson rt "$DIG_RETEST_D" --argjson rh "$DIG_RETEST_HOLD_D" \
+        '{standing_h: $sh, recur_days: $rd, lookback_d: $lb, onset_bucket_min: $ob, max_groups: $mg, redig_days: $rg,
+          retest_d: $rt, retest_hold_d: $rh}')" '
     def onset: if .firing and .startsAt != "" then
         ((.startsAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601? // $now) as $t | (($t / $b) | floor) * $b | todate)
       else "recurring" end;
-    map(. + {onset: onset})
-    | group_by(.onset + "|" + .host)
-    | map({key: (.[0].onset + "|" + .[0].host), onset: .[0].onset, host: .[0].host,
-           alerts: (sort_by(-.standing_h, .alertname)),
+    map(. + {onset: onset, rt: (if .retest then "retest|" else "" end)})
+    | group_by(.rt + .onset + "|" + .host)
+    | map({key: (.[0].rt + .[0].onset + "|" + .[0].host), onset: .[0].onset, host: .[0].host,
+           retest: (.[0].rt != ""),
+           alerts: (map(del(.rt)) | sort_by(-.standing_h, .alertname)),
            max_standing_h: (map(.standing_h) | max)})
-    | sort_by(-(.alerts | length), -.max_standing_h, .key)
+    | sort_by((if .retest then 1 else 0 end), -(.alerts | length), -.max_standing_h, .key)
     | {schema: "deep-dig-digest/v1", ts: $ts, params: $p,
-       groups: .[:$max], deferred: (.[$max:] | map({key, alerts: (.alerts | map("\(.alertname) (\(.subject))"))})),
+       groups: .[:$max], deferred: (.[$max:] | map({key, retest, alerts: (.alerts | map("\(.alertname) (\(.subject))"))})),
        explained: $expl, windows: $wh,
        counts: {candidates: (((map(.alerts | length) | add) // 0) + ($expl | length)),
                 unexplained: ((map(.alerts | length) | add) // 0), explained: ($expl | length),
-                groups: length, selected: (.[:$max] | length)}}' "$tmp/keep.jsonl" > "$tmp/digest.json" \
+                groups: length, selected: (.[:$max] | length),
+                retests: ([ .[:$max][] | select(.retest) | .alerts | length ] | add // 0)}}' "$tmp/keep.jsonl" > "$tmp/digest.json" \
   || { echo "deep-dig-select: building the digest FAILED (jq) — no digest written" >&2; rm -rf "$tmp"; exit 1; }
   # Never an empty digest on exit 0: the pod and the harness both read this file, and an empty
   # one read as "nothing to dig" is the silent failure the reviewer caught on PR#2212 (the jq
@@ -312,7 +350,7 @@ cmd_select() {
 
   if [ -n "$OUT" ]; then cp "$tmp/digest.json" "$OUT"; else cat "$tmp/digest.json"; fi
   jq -r '"deep-dig: \(.counts.candidates) candidate(s) — \(.counts.unexplained) unexplained in \(.counts.groups) group(s) (\(.counts.selected) selected), \(.counts.explained) explained"
-         , (.groups[] | "  group \(.key): " + (.alerts | map("\(.alertname) [\(.subject)] standing \(.standing_h)h, \(.days_present)/7d") | join("; ")))
+         , (.groups[] | "  group \(.key)\(if .retest then " (RE-TEST ← " + ([.alerts[].retest.explained_by] | unique | join(", ")) + ")" else "" end): " + (.alerts | map("\(.alertname) [\(.subject)] standing \(.standing_h)h, \(.days_present)/7d") | join("; ")))
          , (.explained[] | "  explained \(.alertname) [\(.subject)] ← \(.explained_by)")
          , (.deferred[] | "  deferred \(.key): " + (.alerts | join("; ")))' "$tmp/digest.json" >&2
   rm -rf "$tmp"
