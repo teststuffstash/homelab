@@ -133,6 +133,10 @@ class World:
             self._answers[file] = json.loads((self.dir / file).read_text("utf-8"))
         return self._answers[file]
 
+    def get(self, file: str, path: Path_) -> object:
+        """A copy of the value at `path` in `file`'s answer as this case has overridden it so far."""
+        return copy.deepcopy(_walk(self._answer(file), path, file))
+
     def set(self, file: str, path: Path_, value: object) -> World:
         """Change the value of a field that exists in `file`'s answer."""
         if not path:
