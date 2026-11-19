@@ -42,7 +42,9 @@ Exit 0 = handed off; **3** = refused, nothing written (dispatch the reviewer aga
 human looks).
 
 ⚖ An answer to the PR read that lacks a field the schema's `pr_read` requires is unreadable: exit 4,
-nothing written, no default substituted (the old member reads an absent field as null). ⚖ Removing
+nothing written, no default substituted (the old member reads an absent field as null). ⚖ A
+required field that is null or of another type than the schema's reads the same as an absent one:
+unreadable, exit 4. ⚖ Removing
 a claim label that is already absent (the DELETE answers 404) is success; the label re-read still
 decides the end state. ⚖ A heading line may end CRLF.
 
