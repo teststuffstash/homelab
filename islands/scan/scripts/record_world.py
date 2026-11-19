@@ -212,6 +212,25 @@ def _response_schema(desc: dict, response: dict) -> dict:
     return response["content"]["application/json"]["schema"]
 
 
+def _nullable_ref(node: object) -> int:
+    """NULLABLE_REF: the 3.1 description renders a nullable `$ref` (OpenAPI 3.0 `nullable` + `allOf`) as
+    `{"allOf": [<ref>], "type": ["null"]}`, which no value satisfies — not even the `null` GitHub sends
+    (a label's `archived_by`). Each such node is read as its own description says: the ref, or null.
+    The one correction the extraction makes; every node it touches is counted in the schema's `$comment`."""
+    count = 0
+    if isinstance(node, dict):
+        if node.get("type") == ["null"] and isinstance(node.get("allOf"), list):
+            node["anyOf"] = [*node.pop("allOf"), {"type": "null"}]
+            del node["type"]
+            count += 1
+        for v in node.values():
+            count += _nullable_ref(v)
+    elif isinstance(node, list):
+        for v in node:
+            count += _nullable_ref(v)
+    return count
+
+
 def schema_for(desc: dict, operation_id: str, status: str) -> dict:
     """The response schema of one operation and status, its component refs bundled under `$defs`."""
     op = _operation(desc, operation_id)
@@ -239,9 +258,11 @@ def schema_for(desc: dict, operation_id: str, status: str) -> dict:
                 rewrite(v)
 
     rewrite(root)
+    fixed = sum(_nullable_ref(n) for n in (root, *defs.values()))
+    note = f"; {fixed} `allOf` + `type: [null]` node(s) read as `anyOf [<ref>, null]` (NULLABLE_REF)" if fixed else ""
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$comment": f"{operation_id} {status} — extracted from {DESCRIPTION_REPO}@{{commit}} {DESCRIPTION_FILE}",
+        "$comment": f"{operation_id} {status} — extracted from {DESCRIPTION_REPO}@{{commit}} {DESCRIPTION_FILE}{note}",
         **root,
         **({"$defs": dict(sorted(defs.items()))} if defs else {}),
     }
