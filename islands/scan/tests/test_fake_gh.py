@@ -99,6 +99,22 @@ def test_fault_failing_read_hits_only_the_named_occurrence():
     assert [c.get("fault") for c in run.calls] == [None, "fail", None]
 
 
+def test_fault_with_no_occurrence_fails_every_call_with_the_named_stderr():
+    """The comparison's per-call injection (tests/compare.py): every call of the target, the stub's own text."""
+    w = World("pr-handoff").fault(HANDOFF_VIEW, "fail", occurrence=None, stderr="gh: Not Found (HTTP 404)\n")
+    run = w.run(["sh", "-c", 'for i in 1 2; do gh "$@"; echo "rc=$?"; done', "sh", *HANDOFF_VIEW_ARGV[1:]])
+    assert (run.stdout, run.stderr) == ("rc=1\nrc=1\n", "gh: Not Found (HTTP 404)\n" * 2)
+    assert [c.get("fault") for c in run.calls] == ["fail", "fail"]
+    default = World("pr-handoff").fault(HANDOFF_VIEW, "fail").run(["sh", "-c", 'gh "$@"; true', "sh", *HANDOFF_VIEW_ARGV[1:]])
+    assert default.stderr == "gh: Bad Gateway (HTTP 502)\n"
+
+
+@pytest.mark.parametrize(("kind", "kw"), [("non-json", {"stderr": "x"}), ("fail", {"occurrence": 0})], ids=["stderr", "occurrence"])
+def test_fault_refuses_a_keyword_it_would_ignore(kind, kw):
+    with pytest.raises(ValueError):
+        World("pr-handoff").fault(HANDOFF_VIEW, kind, **kw)
+
+
 def test_fault_non_json_body():
     run = World("pr-handoff").fault(HANDOFF_VIEW, "non-json").run(HANDOFF_VIEW_ARGV)
     assert run.rc == 0

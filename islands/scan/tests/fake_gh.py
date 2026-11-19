@@ -9,8 +9,9 @@ JSON line per call to `$FAKE_GH_LOG`.
 - A write is never performed: it is answered by the world's hand-written answer for its operation
   (`writes/<op>.<status>.json`, printed as gh prints a response body), or by an exit status for a
   gh command that prints no JSON. A write the world declares no operation for exits 2, as a read.
-- A fault the case injected on one call replaces that call's answer: a failing call, a non-JSON
-  body, the answer with one named field absent, or a write answering a hand-written error.
+- A fault the case injected on one call replaces that call's answer: a failing call (with gh's stderr
+  text, or the text the fault names), a non-JSON body, the answer with one named field absent, or a
+  write answering a hand-written error. A fault with no occurrence replaces every call of its target.
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ import sys
 from pathlib import Path
 
 UNRECORDED = 2
+NON_JSON_BODY = "upstream connect error or disconnect/reset before headers\n"  # a `non-json` fault's body
+FAIL_STDERR = "gh: Bad Gateway (HTTP 502)\n"  # a failing call's stderr unless the fault names its own
 
 
 def strip_jq(argv: list[str]) -> tuple[list[str], str | None]:
@@ -144,7 +147,8 @@ def main(argv: list[str]) -> int:
         target = served
 
     occurrence = 1 + sum(1 for e in prior if e.get("op", e.get("file")) == target)
-    fault = next((f for f in plan["faults"] if f["target"] == target and f["occurrence"] == occurrence), None)
+    # occurrence None: every call of the target (a replay family's per-call injection fails each time it is made)
+    fault = next((f for f in plan["faults"] if f["target"] == target and f["occurrence"] in (None, occurrence)), None)
     if fault:
         entry["fault"] = fault["kind"]
 
@@ -155,7 +159,7 @@ def main(argv: list[str]) -> int:
             print(f"gh: {json.loads(body).get('message', '')} (HTTP {fault['status']})", file=sys.stderr)
             return finish(1)
         if fault and fault["kind"] == "fail":
-            print("gh: Bad Gateway (HTTP 502)", file=sys.stderr)
+            sys.stderr.write(fault.get("stderr") or FAIL_STDERR)
             return finish(1)
         if fault:  # the helper refuses this; a plan written by hand gets the same answer, never a silent no-op
             print(f"fake gh: a write takes only a fail or status fault, not {fault['kind']}", file=sys.stderr)
@@ -168,10 +172,10 @@ def main(argv: list[str]) -> int:
     body = (world / served).read_bytes()
     if fault:
         if fault["kind"] == "fail":
-            print("gh: Bad Gateway (HTTP 502)", file=sys.stderr)
+            sys.stderr.write(fault.get("stderr") or FAIL_STDERR)
             return finish(1)
         if fault["kind"] == "non-json":
-            sys.stdout.write("upstream connect error or disconnect/reset before headers\n")
+            sys.stdout.write(NON_JSON_BODY)
             return finish(0)
         if fault["kind"] == "absent":
             body = json.dumps(drop(json.loads(body), fault["field"]), ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
