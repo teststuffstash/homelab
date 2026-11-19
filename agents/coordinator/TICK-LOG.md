@@ -15504,3 +15504,28 @@ updates or reverts as much as possible — mechanical revert or a responder."
   minted none in 7 d; no ruling records the drop) — the prompt for a gateway session: "should the gateway mint a
   per-session upstream credential instead of resolving the stack's standing key; was the drop ruled (ADR-096/107, FU-270,
   GW-CRED-RESOLVE); what bounds one OpenRouter session's spend today; can the OpenCode credential API mint scoped keys".
+
+## 2026-11-17 → 19 — seat: FU-297 and the router's alerts; recurring router work moved to the box
+
+- **Start:** "is the dig doing anything" with `LanCertExpiringSoon` (registry cert, 13 d) as the example. The dig's
+  zero-group exit never fired: the script's `GROUPS` is bash's own array (`deep_dig_groups` read 1000) → #3524.
+- **Certs:** carried rows have no acme.sh state on a rebuilt node, so the nightly cron skipped them ("not an issued
+  domain"). Signed all 18 on the MASTER one at a time (bulk signing races the CA), carried to the BACKUP; alert cleared.
+  The role now signs serially (#3527).
+- **Converge:** both nodes converged from master inside windows (dnsmasq/Kea 0 differences); the box's
+  `ansible-confirmed-opnsense` seeded by hand to 7126007a, which ended the 10-31 drift refusal.
+- **Operator direction:** recurring router maintenance runs on the box as `automation`; root only for one-time acts.
+  Shipped: nightly cert carry on the box (#3526); firmware currency belt read by a dedicated box-held `firmware` API user
+  (#3525 — ruling: NOT the firmware ACL on `automation`; the subagent had granted it against the in-file ruling and the
+  bot reviewer passed it, caught by the seat in a conflict resolve); one key pair per API user across the pair (#3529 —
+  the users play would have minted a different `firmware` key per node; the hand-apply subagent stopped on it).
+- **Refusals:** the exporter tracks `management-apply` refusals per subject, each ending only on its own verdict; the box
+  posts a success when a human `mgmt-tf` apply stamps the baseline and re-reads refused groups hourly (#3528; rulings
+  "a" then "a and b"). Stamp path proven live 11-17 23:22Z → all subjects 0 by 23:24Z. Seat error corrected to the
+  operator: a `group_vars/opnsense.yml` edit is NOT refused — only role/play files in `deny_paths` are.
+- **Hypervisor ssh:** the jail's empty `known_hosts` made `pve()` fail and the kill-switch guard fail OPEN; pinned
+  `machines/hypervisor_known_hosts`, guards fail closed (#3527).
+- **Found:** the BACKUP cannot fetch firmware (no WAN while BACKUP) — the documented update order cannot run; ruling owed.
+- **Test-VM verdict cost:** six ~20-min serial runs in one evening; content-keyed PASS carry built (#3539, open at
+  wind-down) — it would have saved one of the six.
+- **Wind-down 11-19:** drill started on the box, unread; root API creds file shredded; scratch clones removed.

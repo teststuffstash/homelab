@@ -18,6 +18,21 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
+  window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
+  on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.
+  Then the attended window: test VM → BACKUP (snapshot) → MASTER, 26.7.5 → 26.7.9_3, 73 packages, reboot; ask before the
+  failover leg; try `carp-maintenance enter|leave` as `automation` on the test VM first (still root today).
+  FIRING BY DESIGN until then: `MgmtRouterFirmwareBehind` (nx02) and `MgmtRouterFirmwareUnread` (pve — the same missing
+  route; it needs a rule for "the BACKUP has no WAN" or the egress fix). `MgmtOpnsenseDrillScoreRegressed`: a drill run was
+  started on the box 11-19 at wind-down and NOT read — expect ~17 (the dnsmasq rows gone, the rest wait on the firmware).
+  OPEN PR: #3539 (content-keyed test-VM verdict, armed) — after merge, the first bot update of an open router PR should
+  post "PASS carried from"; unproven live. Also unproven live from #3528: the hourly re-read of a drifted group and the
+  7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. Same host-key class
+  as #3527 still in `opnsense-test-vm.sh`, `opnsense-drill.sh`, `host-maintenance.sh`, `node-maintenance.sh`,
+  `mgmt-tf.sh`, `mgmt-bmc.sh`, `mgmt-human-plan.sh` (default `known_hosts`, not the pinned file). JAIL: the running
+  image has no `ssh` (the Dockerfile lists openssh-client — rebuild the container); `~/.ssh/known_hosts` starts empty.
+
 - **⚑ PICKUP (2026-11-16 — the gateway becomes self-sufficient before any new island leg; TICK-LOG 11-16; FU-320).**
   OPERATOR GATE: retro #3482, launch #3480, scan #3490 are written and their goal branches UNCUT on purpose. Order when it
   lifts: gateway first, then retro — with retro's own intake doing the work on the schedule. The bar: the island defines and
@@ -164,7 +179,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdict (replace it if it doesn't change behaviour); the ADR-142 re-read **2026-10-28** (gate-change PRs, lens
   verdicts, DIFFERS lines, weakened gates; revert = `/scripts/` in CODEOWNERS + governance-lint GOVERNANCE); the r8
   reports (#2522, merged on the bot by ruling — read after).
-  (4) Prod routers on 26.7.5 with 26.7.6 pending on the official path (39 packages, no reboot) — an attended window.
+  (4) Prod routers: see the 2026-11-17 router PICKUP above (26.7.9_3 offered, REBOOT needed).
   (5) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
   (6) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless: a monitor/GPU visit or a deliberate
