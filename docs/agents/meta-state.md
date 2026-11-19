@@ -18,6 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
+  READ THE FIRST LIVE RESULTS of 11-20, none seen yet: (1) 03:30Z dig — does it re-test `RouterRunModelUnverifiable`,
+  `ControlPlaneNodeMemoryLow`, `RetroReportOverdue` (#3546)? (2) 05:00Z gateway sitting — does it get
+  `responder/KubePodNotReady/homelab` (#3544; expected outcome a `forward` to agent-loop, whose fix is the claim's
+  `scratch: 40Gi` or the ride janitor), release #3533 / #3505 / #3269 under the closed list (#3549), keep #3538 parked,
+  and run the first wait read (#3555)? (3) Fri 06:00Z `island-rules-digest` first run — does its report PR merge on
+  the bot review (operator: fine, they read it on master); the `IslandRulesDigestOverdue` silence ends 07:00Z.
+  NEXT BUILDS: the replay runner + the edit-PR leg (cases in `agents/island-intake-fixtures/wait-cases/`); cron
+  sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
+  launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
   window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
   on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.
