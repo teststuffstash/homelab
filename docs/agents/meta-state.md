@@ -26,7 +26,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   FIRING BY DESIGN until then: `MgmtRouterFirmwareBehind` (nx02) and `MgmtRouterFirmwareUnread` (pve — the same missing
   route; it needs a rule for "the BACKUP has no WAN" or the egress fix). `MgmtOpnsenseDrillScoreRegressed`: a drill run was
   started on the box 11-19 at wind-down and NOT read — expect ~17 (the dnsmasq rows gone, the rest wait on the firmware).
-  OPEN PR: #3539 (content-keyed test-VM verdict, armed) — after merge, the first bot update of an open router PR should
+  #3539 (content-keyed test-VM verdict) MERGED 11-19 05:47Z — the first bot update of an open router PR should
   post "PASS carried from"; unproven live. Also unproven live from #3528: the hourly re-read of a drifted group and the
   7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. Same host-key class
   as #3527 still in `opnsense-test-vm.sh`, `opnsense-drill.sh`, `host-maintenance.sh`, `node-maintenance.sh`,
