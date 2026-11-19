@@ -3,9 +3,9 @@ world: "pr-board"
 repo: "teststuffstash/homelab"
 visibility: "public"
 items: [3557, 3147]
-recorded_at: "2026-11-19T22:18:10Z"
+recorded_at: "2026-11-19T22:27:55Z"
 recorder: "islands/scan/scripts/record_world.py"
-recorder_commit: "fc523e5f8dd5e643d245516d142d66af8549dd9e"
+recorder_commit: "eb4d43486bdebe094622afbfbe9a472556ab4bfe"
 rest_description: {"repo": "github/rest-api-description", "commit": "c9c95fe34ced05fe076001f5c55704742bc8e7f8", "file": "descriptions-next/api.github.com/api.github.com.2022-11-28.json"}
 reads:
   - argv: ["pr", "list", "--repo", "teststuffstash/homelab", "--state", "open", "--limit", "100", "--json", "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName"]
@@ -17,11 +17,11 @@ reads:
   - argv: ["pr", "view", "3557", "--repo", "teststuffstash/homelab", "--json", "commits,reviews"]
     file: "pr-view-3557.commits,reviews.json"
     auth: "token"
-  - argv: ["api", "repos/teststuffstash/homelab/commits/fc523e5f8dd5e643d245516d142d66af8549dd9e/check-runs?per_page=100"]
-    file: "api.commits.fc523e5f8dd5e643d245516d142d66af8549dd9e.check-runs@per_page=100.json"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4/check-runs?per_page=100"]
+    file: "api.commits.3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4.check-runs@per_page=100.json"
     auth: "token"
-  - argv: ["api", "repos/teststuffstash/homelab/commits/fc523e5f8dd5e643d245516d142d66af8549dd9e/status"]
-    file: "api.commits.fc523e5f8dd5e643d245516d142d66af8549dd9e.status.json"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4/status"]
+    file: "api.commits.3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4.status.json"
     auth: "token"
   - argv: ["api", "repos/teststuffstash/homelab/pulls/3557"]
     file: "api.pulls.3557.json"

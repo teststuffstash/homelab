@@ -104,22 +104,13 @@ def test_every_list_a_first_leg_row_varies_holds_a_recorded_element():
 
     board = _answer("pr-board", "pr-list.json")
     assert len(board) >= 2, "pr-board's snapshot holds fewer than two pull requests"
-    for key in ("labels", "reviews"):
+    for key in ("labels", "reviews", "latestReviews"):
         assert any(pr[key] for pr in board), f"pr-board snapshot: no PR has a recorded {key} element"
     assert all(_answer("pr-board", f)["commits"] for f in _reads("pr-board", r"pr-view-\d+\.commits(,reviews)?\.json"))
     assert any(_answer("pr-board", f)["reviews"] for f in _reads("pr-board", r"pr-view-\d+\.commits,reviews\.json"))
     runs = _reads("pr-board", r"api\.commits\.[0-9a-f]{40}\.check-runs@per_page=100\.json")
     assert runs and any(_answer("pr-board", f)["check_runs"] for f in runs)
 
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="no open PR of teststuffstash/homelab carried a latestReviews element at recording time (GitHub leaves "
-    "the author's own and comment-only reviews out of it). Re-record pr-board while an open PR holds a bot "
-    "verdict, then drop this mark — strict, so the re-record that fixes it fails until the mark goes.",
-)
-def test_pr_board_snapshot_holds_a_latest_review_element():
-    assert any(pr["latestReviews"] for pr in _answer("pr-board", "pr-list.json"))
 
 
 def _recorder_module():
