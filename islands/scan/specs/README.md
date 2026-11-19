@@ -43,7 +43,10 @@ What this island adds, by rule:
   published, and no `git.commit` stamp is attached.
   A requirement with rule-labelled tests says `🚧 WIP → #3389 — rule-labelled tests in <file>;
   no evidence publisher for this root (fixture: <dir>)` in its Status. A requirement whose
-  fixture exists but has no tests yet keeps `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`.
+  rule-labelled cases are sourced from its page over a recorded world says `🚧 WIP → #3490 —
+  rule-labelled tests in <file> over recorded world <world>; no evidence publisher for this root
+  (comparison: <dir>)`.
+  A requirement whose fixture exists but has no tests yet keeps `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`.
   A requirement with no fixture keeps the unverified marker.
   Verified-ness is derived, never declared: nothing on these pages is verified in rule 5's sense
   until an evidence publisher exists for this root.
@@ -55,7 +58,10 @@ What this island adds, by rule:
   expected column is the fixture's `expect?` template (the row's action stream,
   `expected/<expect>.txt`). That is the header-is-the-parameter-list rule mapped onto the
   harness's own argnames (`id · world · patch · env · expect · params`); the join itself is
-  unbuilt.
+  unbuilt. That binding stays for a requirement not yet re-sourced. For a re-sourced requirement
+  the header is the parameter list (CONVENTIONS § The intent column), the world is a recorded
+  world, no cell names a patch file or a stub variable, and the description stays the replay row
+  id where a replay row exists.
 - **Rule 9 (external facts):** GitHub REST/GraphQL behaviour (update-branch merge commits,
   `reviewDecision`, review `commit_id` re-pointing, label endpoints, the 500k-node cap) and Argo
   Events/Workflows semantics (Sensor parameter defaults, mutex, CronWorkflow labels) are linked
@@ -66,8 +72,10 @@ What this island adds, by rule:
   `/router-status` and `/report/latest` reads against the old proxy; the non-platform stacks'
   coordinator still on `resolve-model.sh` → `/route`; the labels-and-body-keys soup not yet one
   block; no detector + revert drill (P4 (c)).
-- **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a replay world
-  (recorded or constructed GitHub/kubectl answers) plus, where it matters, an env condition.
+- **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)). For a requirement
+  whose cases are sourced from its page the world is a recorded world (`worlds/<name>/`, the whole
+  answers of the surface). Until a requirement is re-sourced its world is a replay world of the
+  harness. A row adds its condition in its own cells.
 - **Table shape:** expected columns end in `?`; one question per table; the rows brief's
   checklist is advisory. Mermaid flow overviews are omitted (no site build).
 

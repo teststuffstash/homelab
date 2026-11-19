@@ -1,0 +1,40 @@
+# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).
+world: "pr-handoff"
+repo: "teststuffstash/homelab"
+visibility: "public"
+items: [3344]
+recorded_at: "2026-11-19T22:18:15Z"
+recorder: "islands/scan/scripts/record_world.py"
+recorder_commit: "fc523e5f8dd5e643d245516d142d66af8549dd9e"
+rest_description: {"repo": "github/rest-api-description", "commit": "c9c95fe34ced05fe076001f5c55704742bc8e7f8", "file": "descriptions-next/api.github.com/api.github.com.2022-11-28.json"}
+reads:
+  - argv: ["pr", "view", "3344", "--repo", "teststuffstash/homelab", "--json", "state,labels,reviews,commits"]
+    file: "pr-view-3344.state,labels,reviews,commits.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/issues/3344/labels"]
+    file: "api.issues.3344.labels.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3344"]
+    file: "api.pulls.3344.json"
+    auth: "token"
+writes:
+  - op: "add-labels"
+    method: "POST"
+    path: "repos/teststuffstash/homelab/issues/{issue_number}/labels"
+    operation_id: "issues/add-labels"
+    statuses: ["200"]
+  - op: "remove-label"
+    method: "DELETE"
+    path: "repos/teststuffstash/homelab/issues/{issue_number}/labels/{name}"
+    operation_id: "issues/remove-label"
+    statuses: ["200", "404"]
+  - op: "pr-merge-auto"
+    method: "gh"
+    path: "pr merge {pull_number} --repo teststuffstash/homelab --auto --squash"
+    exit: 0
+  - op: "get-pull-after-arm"
+    method: "GET"
+    path: "repos/teststuffstash/homelab/pulls/{pull_number}"
+    operation_id: "pulls/get"
+    statuses: ["200"]
+    after: "pr-merge-auto"
