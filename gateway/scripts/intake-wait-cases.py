@@ -15,7 +15,7 @@ replayed against it later. One directory per case under agents/island-intake-fix
   comments-after.json  …the objects after as_of (the release evidence — never shown to a replayed sitting)
   events.json          GET …/events at or before as_of;  events-after.json  after it
   snapshots/*.json     optional: {fetched_at, path, answer} — a live read the outcome depended on
-  expected.json        {outcome, blocked_on, class, split, basis}: the ruling the rules SHOULD have produced
+  expected.json        {outcome, blocked_on, class, split, basis}: the outcome the rules SHOULD have produced
                        (outcome + `blocked-on` target, never wording), its wait class (H|R|O|U — U is not scored),
                        train|heldout, one line of basis
 

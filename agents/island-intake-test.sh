@@ -928,17 +928,23 @@ witem 311 "gateway: blocked, no comment" OPEN '["agent/blocked"]' '[]' "[$(we_ L
 witem 312 "gateway: closed by the operator" CLOSED '[]' "[$(wc_ "$SEATH" 2026-10-10T00:00:00Z $B true)]" "[$(we_ ClosedEvent 2026-10-12T00:00:00Z '' $OP false)]"
 witem 313 "gateway: released before the lookback" OPEN '[]' "[$(wc_ "$SEATH" 2026-09-01T00:00:00Z $B true),$(wc_ 'intake: requeue — y' 2026-09-10T00:00:00Z $OP false)]"
 witem 314 "gateway: a seat on an open issue" OPEN '["agent/blocked"]' "[$(wc_ $'intake: seat — waits on #950\nblocked-on: issue=950' 2026-10-10T00:00:00Z $B true)]"
+# the FULL self-repo form names a target (#903) exactly as the short form does; another repo's ref (#904) is
+# nobody's target here — the refs seam lacks 904, so reading it would be a loud exit 2
+witem 315 "gateway: names the full form" OPEN '[]' "[$(wc_ $'intake: seat — after teststuffstash/homelab#903 merges (not other/repo#904)\nblocked-on: human' 2026-10-10T00:00:00Z $B true)]"
+# a pile pr-hold (agent/review, its open PR parked on a human) whose issue's marker target closed: stale too
+witem 316 "gateway: in review, PR parked, its marker target closed" OPEN '["agent-fix","agent/review"]' "[$(wc_ $'waiting on the catalog\nblocked-on: issue=905' 2026-10-15T00:00:00Z $B true)]"
 jq -s . "$WISS.rows" > "$WISS"
 WREFS="$TMP/wait-refs.json"
 jq -n '{"900": {state: "CLOSED", closed_at: "2026-10-25T00:00:00Z"}, "901": {state: "MERGED", closed_at: "2026-10-25T00:00:00Z"},
-        "902": {state: "MERGED", closed_at: "2026-10-05T00:00:00Z"}, "950": {state: "OPEN", closed_at: null}}' > "$WREFS"
+        "902": {state: "MERGED", closed_at: "2026-10-05T00:00:00Z"}, "950": {state: "OPEN", closed_at: null},
+        "903": {state: "MERGED", closed_at: "2026-10-25T00:00:00Z"}, "905": {state: "CLOSED", closed_at: "2026-10-25T00:00:00Z"}}' > "$WREFS"
 wreceipt() { # <day> <run> <mode> <ts> <ruled-json>
   mkdir -p "$TSW2/homelab/intake-gateway-$1/$2"
   jq -n --arg m "$3" --arg ts "$4" --argjson r "$5" '{schema:"island-intake-receipt/v1", island:"gateway", mode:$m, ts:$ts, session_ran:true, inputs:[], ruled:$r,
     waits: [{wait: "prior", item: "x#1", class: "H", rules: [], writer: "intake"}]}' > "$TSW2/homelab/intake-gateway-$1/$2/receipt.json"
 }
 wreceipt 2026-10-22 a apply 2026-10-22T05:00:00Z "[{\"input\":\"$H#303\",\"outcome\":\"unchanged\",\"refs\":[]},{\"input\":\"$H#309\",\"outcome\":\"unchanged\",\"refs\":[]},
-  {\"input\":\"$H#310\",\"outcome\":\"unchanged\",\"refs\":[]},{\"input\":\"$H#307@2026-10-09T00:00:00Z/released\",\"outcome\":\"read\",\"refs\":[]}]"
+  {\"input\":\"$H#310\",\"outcome\":\"unchanged\",\"refs\":[]},{\"input\":\"$H#315\",\"outcome\":\"unchanged\",\"refs\":[]},{\"input\":\"$H#307@2026-10-09T00:00:00Z/released\",\"outcome\":\"read\",\"refs\":[]}]"
 wreceipt 2026-10-23 b dry-run 2026-10-23T05:00:00Z "[{\"input\":\"$H#304\",\"outcome\":\"unchanged\",\"refs\":[]}]"
 wsel() { INTAKE_ISSUES_JSON="$WISS" INTAKE_REFS_JSON="${WREFS_OVR:-$WREFS}" INTAKE_TS_DIR="$TSW2" INTAKE_NOW="$NOW" "$@" \
            bash "$SEL" --source wait --island "${WISL:-gateway}" --out "$TMP/wsel.json" 2>"$TMP/wsel.err"; }
@@ -947,9 +953,9 @@ wsel env INTAKE_WAIT_MAX=20; rc=$?
 [ "$rc" = 0 ] && jq -e '.schema == "island-intake-select/v1" and .source == "wait"' "$TMP/wsel.json" >/dev/null \
   && ok "fires (exit 0) with one selection in the shared shape" || bad "wait fire" "rc=$rc $(cat "$TMP/wsel.err")"
 # released by release time: #312 (close 10-12), #302 ×2 (10-15), #301 (10-20), #305 (10-21); standing by parking:
-# #309 #310 (10-10, both re-read unchanged on 10-22), #303 (10-12, the same), #311 (10-15, label-only)
-[ "$(wids)" = "312@2026-10-10/released 302@2026-10-05/released 302@2026-10-08/released 301@2026-10-10/released 305@2026-10-10/released 309@2026-10-10/standing 310@2026-10-10/standing 303@2026-10-12/standing 311@2026-10-15/standing" ] \
-  && ok "released (oldest release first, one row per parking comment: #302 twice) then standing (#309 #310 #303 re-read unchanged, #311 label-only)" \
+# #309 #310 #315 (10-10, re-read unchanged on 10-22), #303 (10-12, the same), #311 (10-15, label-only)
+[ "$(wids)" = "312@2026-10-10/released 302@2026-10-05/released 302@2026-10-08/released 301@2026-10-10/released 305@2026-10-10/released 309@2026-10-10/standing 310@2026-10-10/standing 315@2026-10-10/standing 303@2026-10-12/standing 311@2026-10-15/standing" ] \
+  && ok "released (oldest release first, one row per parking comment: #302 twice) then standing (#309 #310 #315 #303 re-read unchanged, #311 label-only)" \
   || bad "wait selection" "got: $(wids)"
 case " $(wids) " in *" 304@"*|*" 306@"*|*" 307@"*|*" 313@"*|*" 314@"*)
     bad "wait negatives" "got: $(wids)";;
@@ -963,18 +969,18 @@ esac
   && [ "$(jq -c '.inputs[] | select(.number == 303) | [.parked_at, .unchanged_reads, has("days_parked")]' "$TMP/wsel.json")" = '["2026-10-12T00:00:00Z",1,false]' ] \
   && ok "a row carries the parking TIMESTAMP (never days parked); a label-only wait is dated and authored by its label event" \
   || bad "wait row shape" "$(jq -c '.inputs[] | select(.number == 311 or .number == 303)' "$TMP/wsel.json")"
-[ "$(jq -r '[.inputs[] | select(.kind == "reread") | "\(.number):\(.stale.target):\(.stale.target_state)"] | join(" ")' "$TMP/wsel.json")" = "308:900:CLOSED 309:901:MERGED" ] \
-  && ok "stale: a marker target closed (#308 → issue=900), a #<n> the parking named merged AFTER it (#309 → #901, though a receipt ruled it unchanged before the merge); not #310 (#902 merged before), not #314 (#950 open)" \
+[ "$(jq -r '[.inputs[] | select(.kind == "reread") | "\(.number):\(.stale.target):\(.stale.target_state)"] | join(" ")' "$TMP/wsel.json")" = "308:900:CLOSED 309:901:MERGED 315:903:MERGED 316:905:CLOSED" ] \
+  && ok "stale: a marker target closed (#308 → issue=900, #316 → issue=905), a #<n> the parking named merged AFTER it (#309 → #901, though a receipt ruled it unchanged before the merge; #315 → the full form teststuffstash/homelab#903, never other/repo#904); not #310 (#902 merged before), not #314 (#950 open)" \
   || bad "wait stale" "$(jq -c '[.inputs[] | select(.kind == "reread")]' "$TMP/wsel.json")"
-jq -e '[.inputs[] | select(.kind == "reread") | .id] == ["'"$H"'#308", "'"$H"'#309"]' "$TMP/wsel.json" >/dev/null \
+jq -e '[.inputs[] | select(.kind == "reread") | .id] == ["'"$H"'#308", "'"$H"'#309", "'"$H"'#315", "'"$H"'#316"]' "$TMP/wsel.json" >/dev/null \
   && ok "…a stale row carries the pile's id (<owner/repo>#<n>) so its ruling is the re-read's receipt line" || bad "stale id" "$(jq -c '[.inputs[] | select(.kind == "reread") | .id]' "$TMP/wsel.json")"
 [ "$(jq -c '[(.prior | length), .counts.read]' "$TMP/wsel.json")" = '[1,1]' ] \
   && ok "the APPLY receipts' wait records ride as prior (the ledger's input); the read wait counts as read" || bad "wait prior" "$(jq -c '{p: .prior, c: .counts}' "$TMP/wsel.json")"
-wsel; [ "$(jq -c '[.counts.waits, .counts.over_cap, .counts.stale, .counts.inputs]' "$TMP/wsel.json")" = '[6,3,2,8]' ] \
+wsel; [ "$(jq -c '[.counts.waits, .counts.over_cap, .counts.stale, .counts.inputs]' "$TMP/wsel.json")" = '[6,4,4,10]' ] \
   && [ "$(wids)" = "312@2026-10-10/released 302@2026-10-05/released 302@2026-10-08/released 301@2026-10-10/released 305@2026-10-10/released 309@2026-10-10/standing" ] \
   && ok "INTAKE_WAIT_MAX (default 6) caps the waits, released first; stale rows are not capped" || bad "wait cap" "$(jq -c .counts "$TMP/wsel.json") $(wids)"
 wreceipt 2026-10-26 c apply 2026-10-26T05:00:00Z "[{\"input\":\"$H#308\",\"outcome\":\"unchanged\",\"refs\":[]}]"
-wsel; [ "$(jq -r '[.inputs[] | select(.kind == "reread") | .number] | join(" ")' "$TMP/wsel.json")" = "309" ] \
+wsel; [ "$(jq -r '[.inputs[] | select(.kind == "reread") | .number] | join(" ")' "$TMP/wsel.json")" = "309 315 316" ] \
   && ok "a receipt that listed the item AFTER its target closed ends the stale re-read (#308)" || bad "stale ledger" "$(jq -c '[.inputs[] | select(.kind == "reread")]' "$TMP/wsel.json")"
 rm -rf "$TSW2/homelab/intake-gateway-2026-10-26"
 WISL=agent-loop wsel; [ "$(wids)" = "306@2026-10-10/released" ] && ok "another island's wait is that island's (#306 → agent-loop)" || bad "wait island" "got: $(wids)"
@@ -990,8 +996,9 @@ INTAKE_ISSUES_JSON="$WISS" INTAKE_TS_DIR="$TMP/nowhere" INTAKE_NOW="$NOW" bash "
 # no longer hides it; #310's #902 merged BEFORE its receipt, so #310 stays hidden
 INTAKE_ISSUES_JSON="$WISS" INTAKE_REFS_JSON="$WREFS" INTAKE_TS_DIR="$TSW2" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island gateway --out "$TMP/wpile.json" 2>"$TMP/wpile.err"
 { jq -e '[.inputs[] | select(.number == 309) | .stale.target] == [901]' "$TMP/wpile.json" >/dev/null \
+    && jq -e '[.inputs[] | select(.number == 315) | .stale.target] == [903]' "$TMP/wpile.json" >/dev/null \
     && ! jq -e '.inputs[] | select(.number == 310)' "$TMP/wpile.json" >/dev/null && ! jq -e '.inputs[] | select(.number == 303)' "$TMP/wpile.json" >/dev/null; } \
-  && ok "pile: a receipt that ruled a wait unchanged BEFORE its named target merged does not hide it (#309, stale #901); #310 and #303 stay hidden" \
+  && ok "pile: a receipt that ruled a wait unchanged BEFORE its named target merged does not hide it (#309 → #901; #315 → the full form teststuffstash/homelab#903, the wait source's reader); #310 and #303 stay hidden" \
   || bad "pile stale ledger" "$(jq -c '[.inputs[] | select(.kind == "reread") | {number, stale}]' "$TMP/wpile.json") $(head -c 300 "$TMP/wpile.err")"
 
 # the workflow: the wait source rides the SAME sitting — wait inputs in the brief, INTAKE-WAIT lines joined
@@ -1008,22 +1015,39 @@ INTAKE-WAIT: {"wait": "$H#305@2026-10-10T00:00:00Z/released", "class": "R", "rul
 INTAKE-WAIT: {"wait": "$H#312@2026-10-10T00:00:00Z/released", "class": "H", "rules": [{"file": "gateway/intake.md", "mark": "caused", "words": "- Operator-only, not yours to reason around:"}], "direction": "none", "widens": false}
 INTAKE-WAIT: {"wait": "$H#999@2026-10-10T00:00:00Z/released", "class": "R", "rules": []}
 INTAKE-WAIT: {"wait": "$H#309@2026-10-10T00:00:00Z/standing", "class": "Q", "rules": []}
+INTAKE-WAIT: {"wait": "$H#310@2026-10-10T00:00:00Z/standing", "class": "R" BROKEN
+INTAKE-WAIT: not json at all
+INTAKE-WAIT: {"wait": "$H#311@2026-10-15T00:00:00Z/standing", "class": "U", "rules": ["a string, not an object"]}
 ## Wait proposals
 INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "mark": "caused", "words": "$KEY_WORDS", "diff": "-old\n+new", "widens_authority": false}
 INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "mark": "missing", "words": "## Hard limits", "diff": "+x"}
+INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "diff": "+y" BROKEN
 ## Facts I lacked
 INTAKE-RULED: $H#301@2026-10-10T00:00:00Z/released read -
 INTAKE-RULED: $H#302@2026-10-05T00:00:00Z/released read -
 INTAKE-RULED: $H#308 unchanged -
 EOF
-WAIT_MAX=6 PILE_JSON="$WISS" REFS_JSON="$WREFS" TS="$TSW2" RUN_ENV="PUSHGATEWAY=http://pgw" run_script apply; rc=$?
+# #316 is a pile pr-hold (agent/review; its open PR #920's newest marker is blocked-on: human) AND stale
+jq -n '[{number: 920, state: "OPEN", headRefName: "fix/issue-316-x", body: "", closingIssuesReferences: [],
+         comments: [{body: "blocked-on: human", createdAt: "2026-10-20T00:00:00Z"}]}]' > "$TMP/wait-prs.json"
+WAIT_MAX=6 PILE_JSON="$WISS" PRS_JSON="$TMP/wait-prs.json" REFS_JSON="$WREFS" TS="$TSW2" RUN_ENV="PUSHGATEWAY=http://pgw INTAKE_PR_HOLDS=1" run_script apply; rc=$?
 { [ "$rc" = 0 ] && grep -q '^wait:$' "$TMP/up/brief.md" && grep -qF "\"id\": \"$H#302@2026-10-08T00:00:00Z/released\"" "$TMP/up/brief.md" \
     && grep -qF 'step W' "$TMP/up/brief.md" && grep -qF '"stale": {' "$TMP/up/brief.md"; } \
   && ok "the brief lists \`wait:\` (one row per parking comment) and the stale re-reads under \`reread:\`" || bad "wait brief" "rc=$rc $(tail -3 "$TMP/run.log")"
-[ "$(jq -c '[.counts.waits, .counts.stale]' "$TMP/up/inputs.json" 2>/dev/null)" = '[6,2]' ] \
-  && [ "$(jq '[.inputs[] | select(.id == "'"$H"'#309")] | length' "$TMP/up/inputs.json")" = 1 ] \
-  && jq -e '.inputs[] | select(.id == "'"$H"'#309") | .stale.target == 901 and .kind == "reread"' "$TMP/up/inputs.json" >/dev/null \
-  && ok "inputs.json: 6 waits + 2 stale; a stale wait the pile also re-reads (#309) is ONE input carrying \`stale\`" || bad "wait merge" "$(jq -c .counts "$TMP/up/inputs.json" 2>/dev/null)"
+# the merge keeps the PILE row (its `wait` and `pr`) and adds only `stale`: #309 stays `seat`, #316 `pr-hold` (PR #920);
+# #315 is the pile's seat too; #308 (agent/blocked + an issue marker) is the pile's `agent/blocked`
+[ "$(jq -c '[.counts.waits, .counts.stale]' "$TMP/up/inputs.json" 2>/dev/null)" = '[6,4]' ] \
+  && [ "$(jq '[.inputs[] | select(.id == "'"$H"'#309" or .id == "'"$H"'#316")] | length' "$TMP/up/inputs.json")" = 2 ] \
+  && [ "$(jq -c '[.inputs[] | select(.kind == "reread" and .stale != null) | [.number, .wait, .stale.target, (.pr // null)]] | sort' "$TMP/up/inputs.json")" \
+       = '[[308,"agent/blocked",900,null],[309,"seat",901,null],[315,"seat",903,null],[316,"pr-hold",905,920]]' ] \
+  && ok "inputs.json: 6 waits + 4 stale; a stale wait the pile also re-reads is ONE input — the pile's \`wait\` kept (seat, agent/blocked, pr-hold with its PR), only \`stale\` added" \
+  || bad "wait merge" "$(jq -c '[.counts, [.inputs[] | select(.kind == "reread") | [.number, .wait, .stale.target, .pr]]]' "$TMP/up/inputs.json" 2>/dev/null)"
+[ "$(jq '.counts.inputs as $n | [.counts.dig, .counts.members, .counts.rereads, .counts.gaps, .counts.escapes, .counts.waits, .counts.stale] | add == $n' "$TMP/up/inputs.json")" = true ] \
+  && ok "the source split is disjoint: dig + member + reread + gap + escape + wait + stale = inputs" || bad "split sum" "$(jq -c .counts "$TMP/up/inputs.json")"
+{ jq -e '.wait_lines_dropped.count == 5 and ([.wait_lines_dropped.samples[].reason] | sort) == ["invalid","invalid","invalid","unparseable","unparseable"]' "$TMP/up/receipt.json" >/dev/null \
+    && jq -e '.wait_ledger.unparseable.proposals.count == 1' "$TMP/up/receipt.json" >/dev/null; } \
+  && ok "malformed model lines are skipped and counted with samples (5 INTAKE-WAIT: two unparseable, an unknown wait id, an unknown class, a bad rule entry; 1 proposal) — the valid lines beside them survive (next rows)" \
+  || bad "wait malformed lines" "$(jq -c '{wait_lines_dropped, u: .wait_ledger.unparseable}' "$TMP/up/receipt.json" 2>/dev/null)"
 [ "$(jq -c '[.waits[] | [.number, .class, .writer, .release]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[[301,"R","intake","operator"],[302,"R","intake","reread"],[305,"R","lane","operator"],[312,"H","intake","operator"]]' ] \
   && ok "receipt.waits: each INTAKE-WAIT joined to its selector row (writer, release from the selector); an unknown wait id and an unknown class dropped" \
   || bad "wait receipt" "$(jq -c '.waits' "$TMP/up/receipt.json" 2>/dev/null)"
@@ -1031,12 +1055,12 @@ WAIT_MAX=6 PILE_JSON="$WISS" REFS_JSON="$WREFS" TS="$TSW2" RUN_ENV="PUSHGATEWAY=
 # (the key: file|mark|first eight words, markdown and punctuation stripped — intake-wait-ledger.py's norm_words)
 { jq -e '.wait_ledger.at_bar == ["gateway/intake.md|caused|3 does it need a human fact the"] and .wait_ledger.false_waits == {records: 2, items: 2}' "$TMP/up/receipt.json" >/dev/null \
     && jq -e '.wait_proposals | length == 1 and .[0].items == ["'"$H"'#301", "'"$H"'#302"] and .[0].widens_authority == true' "$TMP/up/receipt.json" >/dev/null \
-    && jq -e '.wait_proposals_dropped == [{key: "gateway/intake.md|missing|hard limits", reason: "not at the bar"}]' "$TMP/up/receipt.json" >/dev/null; } \
+    && jq -e '.wait_proposals_dropped[0] == {key: "gateway/intake.md|missing|hard limits", reason: "not at the bar"} and .wait_proposals_dropped[1].reason == "unparseable"' "$TMP/up/receipt.json" >/dev/null; } \
   && ok "the ledger: the key at the bar (two intake items; the ride's #305 not counted), its proposal kept with the ledger's items and widens; one below the bar dropped" \
   || bad "wait ledger in receipt" "$(jq -c '{wait_ledger, wait_proposals, wait_proposals_dropped}' "$TMP/up/receipt.json" 2>/dev/null)"
 grep -q '^## Wait records' <(jq -r '.wait_records' "$TMP/up/receipt.json" 2>/dev/null) && [ -s "$TMP/up/wait-ledger.json" ] \
   && ok "the report's \`## Wait records\` section rides the receipt verbatim; wait-ledger.json is uploaded beside it" || bad "wait records md" "$(jq -c .wait_records "$TMP/up/receipt.json" 2>/dev/null | head -c 200)"
-{ grep -qx 'island_intake_source_inputs{source="wait"} 6' "$TMP/pgw.body" && grep -qx 'island_intake_source_inputs{source="stale"} 2' "$TMP/pgw.body" \
+{ grep -qx 'island_intake_source_inputs{source="wait"} 6' "$TMP/pgw.body" && grep -qx 'island_intake_source_inputs{source="stale"} 4' "$TMP/pgw.body" \
     && grep -qx 'island_intake_wait_records{class="R"} 2' "$TMP/pgw.body" && grep -qx 'island_intake_wait_records{class="H"} 1' "$TMP/pgw.body" \
     && grep -qx 'island_intake_false_waits 2' "$TMP/pgw.body" && grep -qx 'island_intake_false_wait_items 2' "$TMP/pgw.body"; } 2>/dev/null \
   && ok "gauges: wait/stale inputs, records by class (intake-written: R=2 H=1), the false-wait KPI (2) and its distinct items" \

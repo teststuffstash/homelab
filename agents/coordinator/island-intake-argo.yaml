@@ -46,7 +46,9 @@
 #                brief's outcomes) + the receipt, inputs, brief, transcript and an A1 manifest in the
 #                bucket; then ONE /coordinate ring for the platform stack when anything was queued.
 #   belts      = island_intake_* gauges (job island_intake; island_intake_source_inputs{source} =
-#                the dig / member / reread / gap / escape / wait / stale split; the wait read's
+#                the dig / member / reread / gap / escape / wait / stale split — DISJOINT, summing to
+#                island_intake_inputs: `reread` = re-reads with no `stale`, `stale` = every re-read carrying
+#                one (the wait source's own rows and pile rows it or the pile's ledger marked); the wait read's
 #                island_intake_wait_records{class} (intake-written records of this run, by class H|R|O|U),
 #                island_intake_false_waits (this run's R + O — the loop's KPI) and
 #                island_intake_false_wait_items (distinct items behind R/O records over the ledger's window))
@@ -276,18 +278,20 @@ spec:
               fi
               # ONE input set for ONE sitting: the dig's text inputs, the pile's issues and waits, the gap rows,
               # the escape PRs, the wait inputs. A stale wait (the wait source's `reread` row) merges into the
-              # pile's row of the same id — one input, `stale` added — or joins as a re-read of its own.
+              # pile's row of the same id — the PILE row wins (its `wait`: seat | agent/blocked | pr-hold), only
+              # `stale` is added (the pile's own `stale` kept when it has one) — or joins as a re-read of its own.
               jq -n --slurpfile d /tmp/sel-dig.json --slurpfile p /tmp/sel-pile.json --slurpfile g /tmp/sel-gaps.json --slurpfile e /tmp/sel-escape.json \
                     --slurpfile w /tmp/sel-wait.json \
-                'def by_id: reduce .[] as $x ({}; .[$x.id] = ((.[$x.id] // {}) + $x)) | [.[]];
+                'def by_id: reduce .[] as $x ({}; if .[$x.id] == null then .[$x.id] = $x
+                                                 else .[$x.id].stale = (.[$x.id].stale // $x.stale) end) | [.[]];
                  ($p[0].inputs + [$w[0].inputs[] | select(.kind == "reread")] | by_id) as $pile
                  | [$w[0].inputs[] | select(.kind == "wait")] as $waits
                  | {schema: "island-intake-select/v1", island: $d[0].island, source: "dig+pile+gaps+escape+wait", ts: $p[0].ts,
                   specs_root: $g[0].specs_root,
                   counts: {dig: $d[0].counts.inputs, members: $p[0].counts.members,
-                           rereads: ([$pile[] | select(.kind == "reread")] | length),
+                           rereads: ([$pile[] | select(.kind == "reread" and .stale == null)] | length),
                            gaps: $g[0].counts.inputs, escapes: $e[0].counts.inputs,
-                           waits: ($waits | length), stale: $w[0].counts.stale,
+                           waits: ($waits | length), stale: ([$pile[] | select(.stale != null)] | length),
                            inputs: ($d[0].counts.inputs + ($pile | length) + $g[0].counts.inputs + $e[0].counts.inputs + ($waits | length))},
                   inputs: ($d[0].inputs + $pile + $g[0].inputs + $e[0].inputs + $waits), escape_prior: ($e[0].prior // [])}' > /tmp/sel.json \
                 || { _push 0 0 0 0 0; echo "island-intake: selection failed (the merge) — exit 1, Argo retries"; exit 1; }
@@ -485,18 +489,28 @@ spec:
                         | select(.pr as $p | $ids | index($p)) ] | unique_by([.pr, .finding])' > /tmp/escapes.json 2>/dev/null || echo '[]' > /tmp/escapes.json
               # the wait read's records: one per wait input of THIS run, the model's class + rule keys joined to the
               # selector's row (item, writer, parking and release facts are the selector's, never the model's)
-              grep -oE '^ *INTAKE-WAIT: \{.*\}$' /tmp/intake.log | sed 's/^ *INTAKE-WAIT: //' \
+              # A line that is not a JSON object, or names no wait of this run, or carries an unknown class or a bad
+              # rule entry, is model output gone wrong: skipped and counted (`wait_lines_dropped`, with samples),
+              # never a reason to lose the valid lines beside it.
+              { grep -E '^ *INTAKE-WAIT: ' /tmp/intake.log || true; } | sed 's/^ *INTAKE-WAIT: //' \
                 | jq -R -s --slurpfile sel /tmp/sel.json --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" '
                     ([$sel[0].inputs[] | select(.kind == "wait") | {key: .id, value: .}] | from_entries) as $rows
-                    | [ split("\n")[] | select(length > 0) | (fromjson? // empty) | select(type == "object")
-                        | select((.wait | type) == "string" and $rows[.wait] != null and (.class | IN("H","R","O","U")))
-                        | select((.rules // []) | type == "array" and all(.[]; type == "object" and (.mark | IN("caused","missing")) and ((.file // "") != "")))
-                        | $rows[.wait] as $w
-                        | {wait, class, rules: (.rules // []), direction: (.direction // ""), widens: (.widens == true), fact: (.fact // ""),
-                           item: ($w.id | sub("@.*$"; "")), number: $w.number, state: $w.wait, parked_at: $w.parked_at, parked_by: $w.parked_by,
-                           writer: $w.writer, released_at: ($w.released_at // null), release: ($w.release // null), run: $run} ]
-                    | unique_by(.wait)' > /tmp/waits.json 2>/dev/null || echo '[]' > /tmp/waits.json
-              grep -oE '^ *INTAKE-WAIT-PROPOSAL: \{.*\}$' /tmp/intake.log | sed 's/^ *INTAKE-WAIT-PROPOSAL: //' > /tmp/wait/proposals.jsonl 2>/dev/null || : > /tmp/wait/proposals.jsonl
+                    | def ok: (.wait | type) == "string" and $rows[.wait] != null and (.class | IN("H","R","O","U"))
+                        and ((.rules // []) | type == "array" and all(.[]; type == "object" and (.mark | IN("caused","missing")) and ((.file // "") | type == "string" and . != "")));
+                      [ split("\n")[] | select(length > 0) | . as $line | (try fromjson catch null) as $o
+                        | if ($o | type) != "object" then {drop: "unparseable", sample: $line[0:120]}
+                          elif ($o | try ok catch false) | not then {drop: "invalid", sample: $line[0:120]}
+                          else ($o | $rows[.wait] as $w
+                            | {keep: {wait, class, rules: (.rules // []), direction: ((.direction // "") | tostring), widens: (.widens == true),
+                                      fact: ((.fact // "") | tostring), item: ($w.id | sub("@.*$"; "")), number: $w.number, state: $w.wait,
+                                      parked_at: $w.parked_at, parked_by: $w.parked_by, writer: $w.writer,
+                                      released_at: ($w.released_at // null), release: ($w.release // null), run: $run}}) end ]
+                    | {kept: ([.[] | .keep // empty] | unique_by(.wait)),
+                       dropped: {count: ([.[] | select(.drop)] | length), samples: ([.[] | select(.drop) | {reason: .drop, sample}] | .[0:5])}}' \
+                > /tmp/wait-lines.json 2>/dev/null || echo '{"kept": [], "dropped": {"count": -1, "samples": [{"reason": "the harvest itself failed"}]}}' > /tmp/wait-lines.json
+              jq '.kept' /tmp/wait-lines.json > /tmp/waits.json; jq '.dropped' /tmp/wait-lines.json > /tmp/waits-dropped.json
+              # every proposal line goes to the ledger as written: it skips and counts a malformed one, keeps the rest
+              { grep -E '^ *INTAKE-WAIT-PROPOSAL: ' /tmp/intake.log || true; } | sed 's/^ *INTAKE-WAIT-PROPOSAL: //' > /tmp/wait/proposals.jsonl
               # the ledger over the receipts' prior records + this run's: keeps a proposal only for a key at the bar
               python3 gateway/scripts/intake-wait-ledger.py --records /tmp/wait/prior.json --records /tmp/waits.json \
                   --proposals /tmp/wait/proposals.jsonl --json > /tmp/wait-ledger.json 2>/tmp/wait-ledger.err \
@@ -807,6 +821,7 @@ spec:
                     --arg review "$REVIEW" --arg ps "$P_STATUS" --arg pr "$P_RAIL" --arg pm "$P_MODEL" \
                     --argjson labelled "$NL" --argjson unheld "$UNHELD" --rawfile escmd /tmp/escape-records.md \
                     --rawfile waitmd /tmp/wait-records.md --slurpfile waits /tmp/waits.json --slurpfile wl /tmp/wait-ledger.json \
+                    --slurpfile wdrop /tmp/waits-dropped.json \
                     --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json --slurpfile filed /tmp/ruled-filed.json --slurpfile holds /tmp/holds.json \
                     --slurpfile units /tmp/units.json --slurpfile lenses /tmp/lenses.json \
                     --slurpfile findings /tmp/findings.json --slurpfile escapes /tmp/escapes.json \
@@ -819,8 +834,8 @@ spec:
                                repair: {status: $ps, rail: $pr, model: $pm}},
                       findings: [$findings[0][] | {id, lens, posture, finding, fate, reason}],
                       escapes: $escapes[0], escape_records: $escmd,
-                      waits: $waits[0], wait_records: $waitmd,
-                      wait_ledger: ($wl[0] | {bar, records, classes, false_waits, other_writers, at_bar, invalid}),
+                      waits: $waits[0], wait_records: $waitmd, wait_lines_dropped: $wdrop[0],
+                      wait_ledger: ($wl[0] | {bar, records, classes, false_waits, other_writers, at_bar, invalid, unparseable}),
                       wait_proposals: ($wl[0].proposals // []), wait_proposals_dropped: ($wl[0].dropped // [])}' > /tmp/receipt.json
               echo "island-intake: $NR of $NIN input(s) ruled ($NQ queued) — review: $(jq -r '[.review.lenses[] | "\(.lens)#\(.unit) \(.status)"] | join(" · ") | if . == "" then "no lens" else . end' /tmp/receipt.json) · repair $P_STATUS — receipt:"
               jq -c '.ruled[]' /tmp/receipt.json; jq -c '.findings[]' /tmp/receipt.json

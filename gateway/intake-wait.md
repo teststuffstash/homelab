@@ -13,7 +13,7 @@ wait`. An item that waited several times arrives as several inputs, one record e
 who wrote it (`writer`: `intake` — an `intake:` comment, whoever's login; `lane` — a bot that is not
 intake, such as a ride's stop; `human`), when (`parked_at`), and, for a released wait, what released
 it (`release`: `operator` — any comment, label change or close under a non-bot login, the operator's
-login being the operator; `reread` — the intake bot's own later ruling; `lane` — another bot) and
+login being the operator; `reread` — the intake bot's own later outcome; `lane` — another bot) and
 when (`released_at`). A standing wait carries how many re-reads left it `unchanged`.
 
 For EACH input: was the fact it waited on really a human's — and if not, which line of the rules
@@ -101,7 +101,7 @@ from the ledger. The edit:
 - carries rules only — no issue number, no model id, no vendor name, no date; history stays in the
   records;
 - states its replay: the recorded wait cases (`agents/island-intake-fixtures/wait-cases/`) whose
-  expected ruling it changes, and those it must not;
+  expected outcome it changes, and those it must not;
 - sets `widens_authority: true` when any record behind it says `widens: yes` — that class is read
   individually, never batched with the rest.
 A proposal is a record, not a write: nothing is filed, branched or pushed from this step.

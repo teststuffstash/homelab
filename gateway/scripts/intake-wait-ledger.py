@@ -23,7 +23,9 @@ island-intake-receipt/v1), `waits[]`; --records adds records (a JSON array, or o
 A record appearing twice (same `wait` id) counts once, the later one winning. Exit 0; 2 on unreadable input.
 """
 import argparse
+import contextlib
 import glob
+import io
 import json
 import os
 import re
@@ -47,22 +49,41 @@ def rule_key(rule):
     return "{}|{}|{}".format(f, m, norm_words(rule.get("words", "")))
 
 
-def load_records_file(path):
+SAMPLE = 120  # characters of an unparseable line kept as its sample
+
+
+def load_records_file(path, bad=None):
+    """→ the JSON objects of <path> (an array, or one object per line). A line — or a whole array — that is not
+    a JSON object is model output gone wrong, never fatal: it is skipped and, when <bad> is a list, its truncated
+    text appended there; every valid object is kept. Only an unreadable FILE raises (OSError)."""
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     text = text.strip()
+    bad = [] if bad is None else bad
     if not text:
         return []
     if text.startswith("["):
-        data = json.loads(text)
-        return [r for r in data if isinstance(r, dict)]
+        try:
+            data = json.loads(text)
+        except ValueError:
+            bad.append(text[:SAMPLE])
+            return []
+        out = [r for r in data if isinstance(r, dict)]
+        bad += [json.dumps(r)[:SAMPLE] for r in data if not isinstance(r, dict)]
+        return out
     out = []
     for line in text.splitlines():
         line = line.strip()
-        if line:
+        if not line:
+            continue
+        try:
             r = json.loads(line)
-            if isinstance(r, dict):
-                out.append(r)
+        except ValueError:
+            r = None
+        if isinstance(r, dict):
+            out.append(r)
+        else:
+            bad.append(line[:SAMPLE])
     return out
 
 
@@ -179,7 +200,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
-    recs = []
+    recs, bad_recs, bad_props = [], [], []
     try:
         if a.dir:
             if not os.path.isdir(os.path.join(a.dir, "homelab")):
@@ -187,18 +208,21 @@ def main(argv=None):
                 return 2
             recs += load_dir(a.dir, a.island)
         for f in a.records:
-            recs += load_records_file(f)
-    except (OSError, ValueError) as e:
+            recs += load_records_file(f, bad_recs)
+    except OSError as e:
         print(f"intake-wait-ledger: unreadable input: {e}", file=sys.stderr)
         return 2
     led = tally(recs, a.bar)
     if a.proposals:
         try:
-            props = load_records_file(a.proposals)
-        except (OSError, ValueError) as e:
+            props = load_records_file(a.proposals, bad_props)
+        except OSError as e:
             print(f"intake-wait-ledger: unreadable proposals: {e}", file=sys.stderr)
             return 2
         led["proposals"], led["dropped"] = check_proposals(led, props)
+        led["dropped"] += [{"key": None, "reason": "unparseable", "sample": b} for b in bad_props]
+    led["unparseable"] = {"records": {"count": len(bad_recs), "samples": bad_recs[:5]},
+                          "proposals": {"count": len(bad_props), "samples": bad_props[:5]}}
     print(json.dumps(led, indent=1, sort_keys=True) if a.json else text_report(led))
     return 0
 
@@ -273,6 +297,33 @@ def self_test():
         check("…a proposal below the bar or without a diff is dropped with a reason",
               [x["reason"] for x in dropped] == ["not at the bar", "no diff"], dropped)
         check("--bar is a knob (3: nothing at the bar)", tally(load_dir(d, "gateway") + load_records_file(fresh), 3)["at_bar"] == [])
+        # model output gone wrong: a malformed proposal line beside a valid one, a malformed record line beside
+        # valid ones — each skipped and counted with a sample, everything valid kept (never exit 2)
+        props = os.path.join(d, "props.jsonl")
+        with open(props, "w") as fh:
+            fh.write(json.dumps(dict(step3, diff="-old\n+new")) + "\n")
+            fh.write('{"file": "gateway/intake.md", "diff": "+x" BROKEN\n')
+        with open(fresh, "a") as fh:
+            fh.write("{not json at all\n")
+        out = os.path.join(d, "out.json")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main(["--dir", d, "--records", fresh, "--proposals", props, "--json"])
+        got = json.loads(buf.getvalue()) if rc == 0 else {}
+        with open(out, "w") as fh:
+            fh.write(buf.getvalue())
+        check("a malformed proposal line is skipped and counted; the valid proposal beside it is kept",
+              rc == 0 and len(got.get("proposals", [])) == 1 and got["unparseable"]["proposals"]["count"] == 1
+              and any(x["reason"] == "unparseable" and x["sample"].startswith('{"file"') for x in got.get("dropped", [])), got)
+        check("a malformed record line is skipped and counted; the bar still stands on the valid records",
+              rc == 0 and got["unparseable"]["records"]["count"] == 1 and got["at_bar"] == [k3]
+              and got["false_waits"] == {"records": 4, "items": 3}, got.get("unparseable"))
+        bad = []
+        arr = os.path.join(d, "arr.json")
+        with open(arr, "w") as fh:
+            fh.write('[{"wait": "a", "class": "R"}, 7')
+        check("a whole array that is not JSON is one dropped sample, never a raise",
+              load_records_file(arr, bad) == [] and len(bad) == 1, bad)
         rc = main(["--dir", os.path.join(d, "nowhere")])
         check("a dir that is not bucket-shaped is exit 2, never an empty tally", rc == 2, rc)
     print("intake-wait-ledger self-test: " + ("PASS" if not fails else f"FAIL ({len(fails)})"))

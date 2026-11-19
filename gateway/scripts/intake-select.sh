@@ -752,6 +752,12 @@ for i, row in enumerate(json.load(sys.stdin)):
     if v:
         print("F_touches[%d]=%s" % (i, shlex.quote(v)))'
 
+# The ONE reader of the numbers a comment names — `#<n>` or this repo's full `<owner/repo>#<n>`, never another
+# repo's — shared by the wait source (targets_of) and the pile's re-read ledger (F_refs), so the two agree.
+# shellcheck disable=SC2016  # a jq program, not a shell expansion
+JQ_REFS='def refs_in($self): [ (. // "") | scan("(?:^|[^A-Za-z0-9_/])(?:" + $repo_re + ")?#([0-9]+)\\b") | .[0] | tonumber | select(. != $self) ] | unique;'
+REPO_RE="$(printf '%s' "$REPO" | sed 's/[.]/\\./g')"
+
 # blocked_on_def → the scan's ONE marker grammar (`def blocked_on_kind:` — `human` / `issue=<n>` / `pr=<n>` / ""),
 # read out of agents/coordinator-scan.sh's >>>REPLAY:blocked-on-jq>>> block, so no reader here can drift
 # from it; exit 2 when it cannot be read.
@@ -859,7 +865,6 @@ JQ_WAIT='
   def writer: if (.body | outcome) != "" then "intake" elif (.author | bot) then "lane" else "human" end;
   def by_kind($a; $o): if ($a | bot | not) then "operator" elif $o != "" then "reread" else "lane" end;
   def ts: try fromdateiso8601 catch 0;
-  def refs($self): [ (. // "") | scan("(?:^|[^A-Za-z0-9_/])(?:" + $repo_re + ")?#([0-9]+)\\b") | .[0] | tonumber | select(. != $self) ] | unique;
   def releases:
       [ (.comments // [])[] | select(((.body | outcome) as $o | $o != "" and $o != "seat") or ((.body | kind_of) | test("^(issue|pr)=")))
         | {at: .createdAt, via: "comment", by: .author.login, release: by_kind(.author; (.body | outcome)),
@@ -872,7 +877,7 @@ JQ_WAIT='
   def parkings:
     . as $i | [ (.comments // [])[] | select(parking)
       | {at: .createdAt, by: .author.login, writer: writer, comment_id: .id, marker: (.body | kind_of),
-         line: (.body | split("\n")[0] | .[0:200]), refs: (.body | refs($i.number))} ] | sort_by(.at | ts);
+         line: (.body | split("\n")[0] | .[0:200]), refs: (.body | refs_in($i.number))} ] | sort_by(.at | ts);
   def released_of($p; $rels): [ $rels[] | select((.at | ts) > ($p.at | ts)) ] | first;
   # per item: its parkings, each with its release (or null), and the newest marker comment
   def walk_item:
@@ -901,9 +906,9 @@ cmd_wait() {
   members="$(island_numbers "${TMPDIR:-/tmp}/intake-wait-items.$$.json" | jq -R 'tonumber' | jq -sc .)" \
     || { rm -f "${TMPDIR:-/tmp}/intake-wait-items.$$.json"; echo "intake-select: wait membership failed" >&2; exit 2; }
   rm -f "${TMPDIR:-/tmp}/intake-wait-items.$$.json"
-  local re; re="$(printf '%s' "$REPO" | sed 's/[.]/\\./g')"
+  local re="$REPO_RE"
   # phase 1: the targets whose state decides staleness — read in ONE batched call
-  targets="$(jq -r --argjson m "$members" --arg repo_re "$re" "$bod $JQ_WAIT"'
+  targets="$(jq -r --argjson m "$members" --arg repo_re "$re" "$bod $JQ_REFS $JQ_WAIT"'
     [ .[] | select(.number as $n | $m | index($n)) | walk_item | targets_of[] | .n ] | unique | .[]' <<< "$witems")" \
     || { echo "intake-select: wait targets jq failed" >&2; exit 2; }
   # shellcheck disable=SC2086  # one number per word
@@ -911,7 +916,7 @@ cmd_wait() {
   sel="$(jq -n --arg island "$ISLAND" --arg repo "$REPO" --arg repo_re "$re" --arg ts "$ts" --arg today "$today" \
       --argjson now "$now" --argjson lookback "$lookback" --argjson stand "$stand" --argjson wmax "$wmax" --argjson dmax "$dmax" \
       --argjson m "$members" --argjson refs "$refs" --slurpfile items <(printf '%s' "$witems") \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$bod $JQ_WAIT $JQ_RECEIPTS"'
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$bod $JQ_REFS $JQ_WAIT $JQ_RECEIPTS"'
     ($now - $lookback * 86400) as $cut | ($now - $stand * 86400) as $old
     | ruled_ids($r) as $read
     | [ applied($r) | (.ts // "") as $t | .ruled[]? | select(.outcome != "deferred") | {id: .input, t: ($t | ts), o: .outcome} ] as $lines
@@ -1006,12 +1011,12 @@ JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\
       | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt) | @sh); "
   + "F_refs[\($i)]=\((try ((.number) as $self | [.comments[]? | select(((.body // "") | split("\n")[0] | startswith("intake:")) or ((.body // "") | test("(^|\n)blocked-on:")))]
       | sort_by(.createdAt // "") | last // {} | (.body // "")
-      | [scan("(?:^|[^A-Za-z0-9_/])#([0-9]+)\\b"), scan("(?:^|\n)blocked-on: (?:issue|pr)=([0-9]+)")] | map(.[0] | tonumber) | unique
+      | [refs_in($self)[], (scan("(?:^|\n)blocked-on: (?:issue|pr)=([0-9]+)") | .[0] | tonumber)] | unique
       | map(select(. != $self) | tostring) | join(" ")) catch "") | @sh); "
   + "F_fwd[\($i)]=\([.comments[]? | (.body // "") | split("\n")[0] | select(test("^intake:\\s*forward\\b"))] | length); "
   + "F_author[\($i)]=\(lazy(.author.login) | @sh); F_created[\($i)]=\(.createdAt | r | @sh)"'
 F_num=(); F_title=(); F_life=(); F_bot=(); F_ruling=(); F_since=(); F_author=(); F_created=(); F_touches=(); F_fwd=(); F_refs=()
-fields="$(printf '%s' "$issues" | jq -r "$JQ_FIELDS")"
+fields="$(printf '%s' "$issues" | jq -r --arg repo_re "$REPO_RE" "$JQ_REFS $JQ_FIELDS")"
 eval "$fields"
 eval "$(printf '%s' "$issues" | python3 -I -c "$PY_TOUCHES" "$ROOT/agents" 2>/dev/null || true)"
 
