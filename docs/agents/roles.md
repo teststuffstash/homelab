@@ -425,7 +425,12 @@ never harder posture on quiet ones.
   marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).
   Every session now writes `homelab/alert-<fp>/responder-r1-<ts>/` — input alert, `triage.log`,
   the transcript, an A1 manifest and a typed `finding.json` — with the write-only bucket key, before
-  the post-session belts, degrading loudly rather than failing.
+  the post-session belts, degrading loudly rather than failing. **A recurring report-only class is
+  consumed:** findings that filed nothing but carry a `remediation_would`, on an island's alert or a
+  ride of an island's issue, reach that island's intake sitting as one input per alert + namespace
+  once they recur — the rule and its floor live in
+  [`intake-select.sh`](../../gateway/scripts/intake-select.sh)'s header (`--source dig`, FU-320);
+  the responder itself still files nothing for them.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).

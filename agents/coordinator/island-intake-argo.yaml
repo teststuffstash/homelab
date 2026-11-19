@@ -15,8 +15,10 @@
 # Machinery inventory (the deep dig's shape, deep-dig-argo.yaml):
 #   predicate  = `gateway/scripts/intake-select.sh`, twice (deterministic shell; the model never picks
 #                its inputs — ADR-094): `--source dig` = dig `cause-found` findings from the last 7 d
-#                on one of the island's ALERTS (or citing its paths as evidence), minus every input an
-#                earlier APPLY receipt ruled; `--source pile` = the island's unruled, unlabelled issues
+#                on one of the island's ALERTS (or citing its paths as evidence), plus every class of
+#                ≥ INTAKE_RESPONDER_MIN report-only responder findings (same alert + namespace, a
+#                `remediation_would`, on the island's alerts or rides of its issues — the selector's
+#                header), minus every input an earlier APPLY receipt ruled; `--source pile` = the island's unruled, unlabelled issues
 #                (`member`) + its waits (`reread`: `agent/blocked` or a latest `intake: seat`, ≥
 #                INTAKE_REREAD_AGE_D days old, not re-read by a receipt of the last
 #                INTAKE_REREAD_EVERY_D days); `--source gaps` = the `⚑ gap` / `🚧 WIP` rows of the
@@ -324,6 +326,11 @@ spec:
               rule them together — one issue for one change. When you \`file\`, the issue's prose names
               the finding id(s) as its origin (\`Origin=\` is prose for a non-issue source).
 
+              \`text:\` inputs with \`source: responder\` — one per recurring class of report-only
+              responder triages (same alert, same namespace, on the island's subjects), listing every
+              member finding (intake.md §Inputs). Rule the class on its cause, never by applying a
+              member's \`remediation_would\`; name the class id as the origin.
+
               \`issues:\` — the island's open issues nobody has ruled (no lifecycle label, no
               \`intake:\` comment). Rule each one.
 
@@ -352,7 +359,7 @@ spec:
 
               RECEIPT PROTOCOL (the shell parses this; the receipt is the ONLY record that an input was
               ruled — an input without a line re-presents tomorrow). For EVERY input id below (a dig
-              finding id, \`<owner/repo>#<n>\` for an issue or an escape PR, \`<specs page>#<REQ>\` for a
+              finding id, a \`responder/<alert>/<namespace>\` class id, \`<owner/repo>#<n>\` for an issue or an escape PR, \`<specs page>#<REQ>\` for a
               gap row) print exactly one line, at the end, outside any code fence:
                 INTAKE-RULED: <input id> <outcome> <refs>
               <outcome> is one of queue|goal|seat|fold|close|requeue|standing|split|file|forward|unchanged|deferred|read
@@ -385,6 +392,7 @@ spec:
               fi
               printf '\nINPUTS (island-intake-select/v1, built %s):\n' "$(jq -r .ts /tmp/sel.json)"
               printf '\ntext: (source: dig)\n'; jq '[.inputs[] | select(.kind == "dig")]' /tmp/sel.json
+              printf '\ntext: (source: responder)\n'; jq '[.inputs[] | select(.kind == "responder")]' /tmp/sel.json
               printf '\nissues:\n'; jq '[.inputs[] | select(.kind == "member" or .kind == "attribution")]' /tmp/sel.json
               printf '\nreread:\n'; jq '[.inputs[] | select(.kind == "reread")]' /tmp/sel.json
               printf '\ngap:\n'; jq '[.inputs[] | select(.kind == "gap")]' /tmp/sel.json

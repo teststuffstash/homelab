@@ -1,0 +1,17 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-15T01:32:34Z",
+  "alertname": "AgentReviewLoop",
+  "fingerprint": "a564019c253066bb",
+  "subject": "repo:homelab",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": true,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-4tsfl-respond-1208575131",
+  "remediation_would": []
+}

@@ -61,6 +61,28 @@
 # directory laid out like the bucket (<dir>/homelab/dig-…, <dir>/homelab/intake-…) served instead
 # of S3 — agents/island-intake-test.sh and a jail run use it.
 #
+# The same source also presents RECURRING report-only RESPONDER findings (FU-320; the responder
+# files nothing for them and writes `finding.json` only — docs/agents/roles.md §responder CAPTURE),
+# as `kind: responder` inputs beside the dig's:
+#   finding   = homelab/alert-<fp>/responder-r<k>-<ts>/finding.json (`responder-finding/v1`) over the
+#               same INTAKE_DIG_LOOKBACK_D days (the run dir's date), that filed NO issue (`issue` empty)
+#               and carries a non-empty `remediation_would` — a triage that found something to do and
+#               had nowhere to put it
+#   owner     = finding_owner's step 1 (its `alertname` is defined in an island's alert-rule file), else
+#               its SUBJECT is a ride of an issue of this repo — `workload:<ns>/agent-<repo>-issue-<n>-r<k>`,
+#               the pod name agents/agent-session.sh gives a ride — and the island that issue belongs
+#               to (island_of_issue: its title, else every Touches entry). A ride pod is the ride of
+#               ONE issue by construction, so the issue's island is the subject's; nothing enumerated.
+#               The issue is read through INTAKE_ISSUES_JSON when set (a missing number is then a
+#               probe failure), else `gh issue view` (state any); a failed read is exit 2
+#   class     = the island's findings sharing `alertname` + owning namespace (`workload:<ns>/…`; any
+#               other subject is its own namespace), ONE input per class with ≥ INTAKE_RESPONDER_MIN
+#               (default 3) members, id `responder/<alertname>/<namespace>`, listing every member —
+#               a one-off triage never starts a sitting; folding members by cause is the sitting's job
+#   ruled     = the dig's ledger, unchanged: an APPLY receipt of the lookback that lists the class id
+#               with an outcome other than `deferred`. A class still recurring after its ruling ages
+#               out re-presents — by then every member postdates the ruling (same window).
+#
 # --source pile (FU-320, the second wired source — the same CronWorkflow runs it after the dig):
 # the island's issue pile, as ONE selection in the dig's shape (`island-intake-select/v1`).
 #
@@ -237,6 +259,7 @@ island_specs_root() {
 # The table, flattened once per run (no fork per path): TRES[i] = row i's title ERE, in ISLANDS
 # order; PFX[j]/PISL[j] = every prefix and its island.
 TRES=(); PFX=(); PISL=(); _TBL=0
+declare -A TMATCH=()   # the title rows per item (island_of_issue); filled by the pile walk and ride_islands
 load_table() {
   [ "$_TBL" = 1 ] && return 0; _TBL=1
   local isl pre first
@@ -333,6 +356,72 @@ read_receipts() {
     ts_read_objects "intake-$ISLAND-$d" 'receipt.json'
   done
 }
+# responder_day <rel> → the YYYYMMDD of a responder run dir (`…/responder-r<k>-<YYYYMMDD>T…Z/…`), or nothing.
+responder_day() { if [[ "$1" =~ /responder-r[0-9]+-([0-9]{8})T ]]; then printf '%s' "${BASH_REMATCH[1]}"; fi; }
+# <now> <days> → the responder findings of today and the <days> days before it (by the run dir's
+# date), one JSON per line stamped with `_key` (the path under homelab/). ONE listing covers every
+# fingerprint; a run outside the window is never fetched.
+read_responder() {
+  local cut top f rel d rows
+  cut="$(date -u -d "@$(( $1 - $2 * 86400 ))" +%Y%m%d)"; top="$(date -u -d "@$1" +%Y%m%d)"
+  if [ -n "${INTAKE_TS_DIR:-}" ]; then
+    for f in "$INTAKE_TS_DIR"/homelab/alert-*/responder-*/finding.json; do
+      [ -f "$f" ] || continue
+      rel="${f#"$INTAKE_TS_DIR"/homelab/}"; d="$(responder_day "$rel")"
+      [ -n "$d" ] && [ "$d" -ge "$cut" ] && [ "$d" -le "$top" ] || continue
+      jq -c --arg k "$rel" '. + {_key: $k}' "$f" 2>/dev/null || echo "intake-select: unparseable $rel — skipped" >&2
+    done
+    return 0
+  fi
+  # no match is s5cmd's ERROR + exit 1, the normal case on a quiet week (ts_read_objects' note)
+  rows="$(_s5 ls "s3://$TS_BUCKET/homelab/alert-*/responder-*/finding.json" 2>/dev/null || true)"
+  printf '%s\n' "$rows" | { grep -oE 'alert-[^/ ]+/responder-[^/ ]+/finding\.json$' || true; } | sort -u \
+    | while read -r rel; do
+        d="$(responder_day "$rel")"
+        [ -n "$d" ] && [ "$d" -ge "$cut" ] && [ "$d" -le "$top" ] || continue
+        _s5 cat "s3://$TS_BUCKET/homelab/$rel" 2>/dev/null | jq -c --arg k "$rel" '. + {_key: $k}' 2>/dev/null \
+          || echo "intake-select: unreadable $rel — skipped" >&2
+      done
+}
+# ride_islands <issue numbers…> → a JSON object {"<n>": "<island>" | ""}: the island each ride's
+# issue belongs to (island_of_issue over its title + Touches, the pile's membership). Read through
+# INTAKE_ISSUES_JSON when set, else `gh issue view` (any state: a finished ride's issue may be
+# closed). Return 1 on a failed read — an unread issue is not "nobody's".
+ride_islands() {
+  local n row title touches isl out='{}' t i
+  load_table
+  for n in "$@"; do
+    if [ -n "${INTAKE_ISSUES_JSON:-}" ]; then
+      row="$(jq -c --argjson n "$n" '[.[] | select(.number == $n)] | first // empty' "$INTAKE_ISSUES_JSON" 2>/dev/null)" || row=""
+    else
+      row="$(gh issue view "$n" --repo "$REPO" --json number,title,body 2>/dev/null)" || row=""
+    fi
+    [ -n "$row" ] || { echo "intake-select: issue #$n (a responder finding's ride) unreadable — cannot tell whose finding it is" >&2; return 1; }
+    title="$(jq -r '.title // ""' <<< "$row")"
+    touches="$(jq -r '.body // ""' <<< "$row" | python3 -I "$ROOT/agents/issue_body.py" get Touches 2>/dev/null || true)"
+    # island_of_issue reads the title rows from TMATCH (the pile's one grep per island); fill row `ride`
+    i=0; for t in $ISLANDS; do
+      if grep -qiE "${TRES[$i]}" <<< "$title"; then TMATCH["$t:ride"]=1; else TMATCH["$t:ride"]=""; fi
+      i=$((i + 1))
+    done
+    isl="$(island_of_issue "$title" "$touches" ride)"
+    out="$(jq -c --arg n "$n" --arg i "$isl" '. + {($n): $i}' <<< "$out")"
+  done
+  printf '%s' "$out"
+}
+# The jq the responder half of --source dig shares between its two passes:
+#   rf_live         a report-only finding with something to do (filed no issue, `remediation_would` non-empty)
+#   rf_ns           its owning namespace (`workload:<ns>/…`, else the whole subject)
+#   rf_ride($repo)  the issue number of a ride subject of <repo> (agent-<repo>-issue-<n>-r<k>), else empty
+#   rule_owner($t)  the first island whose alert rules define its alertname (finding_owner's step 1)
+# shellcheck disable=SC2016  # a jq program, not a shell expansion
+JQ_RESPONDER='def esc: gsub("(?<c>[.\\[\\](){}*+?^$|\\\\])"; "\\\(.c)");
+  def rf_live: select(.schema == "responder-finding/v1" and ((.issue // "") == "")
+    and ((.remediation_would // []) | type == "array" and length > 0));
+  def rf_ns: (.subject // "") as $s | (($s | capture("^workload:(?<ns>[^/]+)/") | .ns) // $s);
+  def rf_ride($repo): (.subject // "") | capture("^workload:[^/]+/agent-" + ($repo | esc) + "-issue-(?<n>[0-9]+)-r[0-9]+$") | .n;
+  def rule_owner($tbl): (.alertname // "") as $a | ([ $tbl[] | select(.alerts | index($a)) | .island ] | first);'
+
 # The jq every receipt-reading source shares — one definition each of:
 #   applied($r)       the APPLY receipts (dry-runs rule nothing)
 #   sittings($r; $d)  today's APPLY sittings (the daily cap's count)
@@ -370,25 +459,39 @@ owner_table() {
 }
 
 cmd_dig() {
-  local now lookback verdicts dmax d k findings receipts sel n today sittings tbl
+  local now lookback verdicts dmax rmin d k findings responders receipts sel n today sittings tbl need rides
   case " $ISLANDS " in *" $ISLAND "*) ;; *) echo "intake-select: no dig row for island '$ISLAND'" >&2; exit 2;; esac
   tbl="$(owner_table)" || exit 2
   now="${INTAKE_NOW:-$(date -u +%s)}"; lookback="${INTAKE_DIG_LOOKBACK_D:-7}"
   verdicts="${INTAKE_DIG_VERDICTS:-cause-found}"; dmax="${INTAKE_DAILY_MAX:-2}"
+  rmin="${INTAKE_RESPONDER_MIN:-3}"   # the recurrence floor: a smaller responder class starts no sitting
   ts_probe
   findings=""
   for k in $(seq 0 "$lookback"); do
     d="$(date -u -d "@$(( now - k * 86400 ))" +%Y-%m-%d)"
     findings="${findings}$(ts_read_objects "dig-$d" 'finding-*.json')"$'\n'
   done
+  responders="$(read_responder "$now" "$lookback")"
   receipts="$(read_receipts "$now" "$lookback")"
   today="$(date -u -d "@$now" +%Y-%m-%d)"
+  # the ride issues whose island decides a responder finding — only for findings no alert rule owns,
+  # in a class (alertname + namespace) that reaches the floor before ownership: a one-off reads nothing
+  need="$(jq -rn --argjson tbl "$tbl" --arg repo "${REPO#*/}" --argjson min "$rmin" \
+      --slurpfile f <(printf '%s' "$responders" | grep -v '^$' || true) "$JQ_RESPONDER"'
+    [ $f[] | rf_live | select(rule_owner($tbl) == null) | {a: (.alertname // ""), ns: rf_ns, n: rf_ride($repo)} ]
+    | group_by([.a, .ns]) | map(select(length >= $min)) | [ .[][] | .n | select(. != null) ] | unique | .[]')" \
+    || { echo "intake-select: responder pre-pass jq failed" >&2; exit 2; }
+  # shellcheck disable=SC2086  # one issue number per word
+  rides="$(ride_islands $need)" || exit 2
   sel="$(jq -n --argjson tbl "$tbl" --arg verdicts "$verdicts" --arg island "$ISLAND" --arg today "$today" \
-      --argjson dmax "$dmax" --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" \
+      --argjson dmax "$dmax" --argjson rmin "$rmin" --arg repo "${REPO#*/}" --argjson rides "$rides" \
+      --arg ts "$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)" \
       --slurpfile f <(printf '%s' "$findings" | grep -v '^$' || true) \
-      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS"'
+      --slurpfile rf <(printf '%s' "$responders" | grep -v '^$' || true) \
+      --slurpfile r <(printf '%s' "$receipts" | grep -v '^$' || true) "$JQ_RECEIPTS $JQ_RESPONDER"'
     def fid: (._key | sub("\\.json$"; ""));
-    def esc: gsub("(?<c>[.\\[\\](){}*+?^$|\\\\])"; "\\\(.c)");
+    # a responder finding is the island its alert rules name, else the island of the issue its ride served
+    def responder_owner: rule_owner($tbl) // (rf_ride($repo) as $n | $rides[$n]) // "";
     # finding_owner: ONE island per finding, so no finding is ruled by two sittings.
     #  1. the first ISLANDS row whose alert rules define one of the alerts of the finding (members[].alertname,
     #     else the leading token of an alerts[] line);
@@ -417,19 +520,31 @@ cmd_dig() {
              | {id: fid, kind: "dig", run: (.run // ""), verdict, alerts: (.alerts // []), members: (.members // []),
                 cause, recommendation, evidence: (.evidence // []), related: (.related // []), pr: (.pr // "")} ] as $match
     | [ $match[] | select(.id as $i | $ruled | index($i) | not) ] as $inputs
+    | [ $rf[] | rf_live | select(responder_owner == $island) ] as $rmine
+    | [ $rmine | group_by([(.alertname // ""), rf_ns])[] | select(length >= $rmin)
+        | (.[0].alertname // "") as $a | (.[0] | rf_ns) as $ns | sort_by(.ts // "")
+        | {id: ("responder/" + $a + "/" + $ns), kind: "responder", alertname: $a, namespace: $ns, count: length,
+           first_ts: (.[0].ts // ""), last_ts: (.[-1].ts // ""),
+           members: [ .[] | {finding: (._key | sub("/finding\\.json$"; "")), ts, fingerprint, subject, verdict,
+                             route_repo, route_stack, self_referential, remediation_would} ]} ] as $rclasses
+    | [ $rclasses[] | select(.id as $i | $ruled | index($i) | not) ] as $rinputs
     | {schema: "island-intake-select/v1", island: $island, source: "dig", ts: $ts,
-       counts: {matched: ($match | length), ruled: (($match | length) - ($inputs | length)), inputs: ($inputs | length)},
-       sittings_today: $sittings, daily_max: $dmax, inputs: $inputs}')" \
+       counts: {matched: ($match | length), ruled: (($match | length) - ($inputs | length)),
+                responder: {findings: ($rmine | length), classes: ($rclasses | length),
+                            ruled: (($rclasses | length) - ($rinputs | length)), inputs: ($rinputs | length)},
+                inputs: (($inputs | length) + ($rinputs | length))},
+       responder_min: $rmin, sittings_today: $sittings, daily_max: $dmax, inputs: ($inputs + $rinputs)}')" \
     || { echo "intake-select: selection jq failed" >&2; exit 2; }
   [ -n "$OUT" ] && printf '%s\n' "$sel" > "$OUT" || printf '%s\n' "$sel"
-  printf '%s' "$sel" | jq -r '.inputs[] | "\(.id)\t\(.verdict)\t\(.alerts | join(", ") | .[0:80])"' >&2
+  printf '%s' "$sel" | jq -r '.inputs[] | if .kind == "responder" then "\(.id)\tresponder×\(.count)\t\(.first_ts) → \(.last_ts)"
+    else "\(.id)\t\(.verdict)\t\(.alerts | join(", ") | .[0:80])" end' >&2
   n="$(printf '%s' "$sel" | jq '.counts.inputs')"; sittings="$(printf '%s' "$sel" | jq '.sittings_today')"
   if [ "$n" -eq 0 ]; then
-    echo "hold: no unruled dig finding is island $ISLAND's ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
+    echo "hold: no unruled dig finding or responder class is island $ISLAND's ($(printf '%s' "$sel" | jq -c .counts))" >&2; exit 1
   elif [ "$sittings" -ge "$dmax" ]; then
     echo "hold: daily cap — $sittings apply sitting(s) today (INTAKE_DAILY_MAX=$dmax); $n input(s) wait for tomorrow" >&2; exit 1
   fi
-  echo "fire: $n unruled dig finding(s) for island $ISLAND" >&2; exit 0
+  echo "fire: $n unruled dig input(s) for island $ISLAND ($(printf '%s' "$sel" | jq -c '{dig: (.counts.inputs - .counts.responder.inputs), responder: .counts.responder.inputs}'))" >&2; exit 0
 }
 # read_issues → $issues: the repo's OPEN issues, one REST list call (paginated by gh), bodies and
 # comments riding it; exit 2 on a failed or empty read (never "no issues").

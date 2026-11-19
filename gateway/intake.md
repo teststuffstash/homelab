@@ -49,6 +49,11 @@ The dispatch prompt names them:
   the island's alerts (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   ruling would be `queue`, `goal` or `seat`; a `standing` or `close` ruling on text is
   report-only — the source record keeps it (one home per fact), the report says why.
+  **`responder`** rides the same run: ONE input per recurring class of report-only responder
+  triages — same alert, same namespace, on the island's subjects, at least `INTAKE_RESPONDER_MIN`
+  in the dig's lookback — listing every member finding (`--source dig`, the selector's header).
+  Each member's `remediation_would` is an untested proposal for one instance: rule the class on
+  its cause, never by applying an instance's act (ADR-148).
 - `reread:` `<owner/repo>#<n>` … — island issues that an earlier ruling left waiting on a human
   (`agent/blocked`, or a standing `intake: seat`) for `INTAKE_REREAD_AGE_D` days or more
   (`scripts/intake-select.sh --source pile`). A row with `wait: pr-hold` is an issue the loop still
@@ -141,16 +146,21 @@ rule on what you have, or `seat` naming it. Never: `docs/agents/` as a corpus, `
    already shipped — then it is not covering, treat the item as standalone.
 3. **Does it need a human fact?** The body (or meta-state) says "operator-only", "ruling pending",
    "needs a window", "needs the login" → `seat`, naming the fact. Do not reason around a missing
-   credential or an unmade ruling; the ruling is theirs.
-   **A ruling already on the page is not a pending one.** Before you ask for a ruling, read the
-   one recorded: when it is executable as written and only the means are missing (a view, a gate
-   a sibling has), the ruling stands and the means are the gap — the parity check below, never a
-   `seat` asking the operator to rule again.
-   **An operator `text:` that answers the question an item waits on IS the ruling**, however it
-   is phrased — a lean counts. Carry it: quote it in the body you write, mark the rows and pins
-   it decides ⚖, and rule the item as if the fact were on the page. What the text leaves open is
-   a fork you pin ⚖ with the cheaper-to-reverse option and name under `Unverified`; it is `seat`
-   only when no option is safe to take without the operator.
+   credential or a pending ruling; the ruling is theirs.
+   **A ruling already on the page is not a pending one, and it binds the question it answered** —
+   the rows, pins or heading it decided. Read it and name that question. The item asks it again:
+   the ruling stands. It asks another: the ruling does not decide it, and a sentence beside the
+   ruling that would forbid this item's means is spec prose the body edits as an exception
+   (§A queue-ready body), the ruled answer intact. Executable as written with only the means
+   missing (a view, a gate a sibling has): the means are the gap — the parity check below. Never
+   a `seat` asking the operator to rule again or to amend wording their ruling did not decide.
+   **An operator's text that answers the question an item waits on IS the ruling** — a `text:`
+   input or the body of an issue under the operator's login, however phrased; a lean counts.
+   Carry it: quote it in the body you write, mark the rows and pins it decides ⚖, and rule the
+   item as if the fact were on the page.
+   **A fork no ruling decides is yours to pin**, whether an operator text left it open or none
+   touched it: pin ⚖ the cheaper-to-reverse option and name the others under `Unverified`; `seat`
+   only when no option is safe to take without the operator (§Island facts' operator-only lines).
    **Before `seat`, the parity check.** Ask what the wait is made of. When part of it is a fact
    the island already reads for a sibling (§Island facts names the sibling sets) through a
    facility this member lacks — a view, a read leg, a gauge that a sibling already has under the
