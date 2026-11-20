@@ -24,7 +24,7 @@ it lacks, or a close with evidence — well enough that the operator reads PRs i
 
 ## What was built
 
-- **The brief** — [`gateway/intake.md`](../../gateway/intake.md): seven outcomes (`queue`, `goal`,
+- **The brief** — [`gateway/intake.md`](../../islands/intake/rules/intake.md): seven outcomes (`queue`, `goal`,
   `seat`, `fold`, `close`, `standing`, `file`), a five-step procedure (still real? → already
   owned? → needs a human fact? → how big? → worth a ride now?), a queue-ready body shape that
   carries the KEY ROWS (pinned rule 2: "an issue carries a handful of key rows … the implementing
@@ -113,7 +113,7 @@ memory; homelab#3166, a retro report): both cite `argocd/resources/pushgateway/�
 `gateway/`.
 
 What changed: the age-aware ownership rule (ADR-163), the `reread:` input with procedure step R
-and the `requeue` outcome, a wider live read set (in the [brief](../../gateway/intake.md)); the
+and the `requeue` outcome, a wider live read set (in the [brief](../../islands/intake/rules/intake.md)); the
 selector's `--source pile` and a dig match on the island's alerts and evidence paths; the cron
 running both sources in one sitting (§Open questions 1).
 
@@ -164,7 +164,7 @@ drifted from `gateway/specs/README.md`.
 the worker PRs' reviewers later found? **Truth:** six gateway worker PRs built from intake bodies
 (#3260, #3264, #3324, #3327, #3336, #3337) plus a held-out stack Goal (private repo, not
 committed here); each blocking review finding classed A–E by the brief that is now
-[`gateway/intake-escape.md`](../../gateway/intake-escape.md). **Method:** each Goal or single was
+[`gateway/intake-escape.md`](../../islands/intake/rules/intake-escape.md). **Method:** each Goal or single was
 frozen as a case (bodies, human comments, edges, base sha); two lenses ran on each, as fresh
 sessions with no view of the PRs — a unit review (cross-issue, against the base) and the pinned
 specs reviewer's `rows.md` mapped onto the issue body with its masked first pass. Two brief
@@ -191,8 +191,8 @@ iterations (v0, v1) and one cross-model run, each finding scored against what me
   unchanged plus an input mapping.
 
 **Decided (operator, 2026-11-14).** Review live, platform first:
-[`gateway/intake.md`](../../gateway/intake.md) §Review and repair — two lenses once each
-([unit](../../gateway/intake-review-unit.md), [rows](../../gateway/intake-review-rows.md)), one
+[`gateway/intake.md`](../../islands/intake/rules/intake.md) §Review and repair — two lenses once each
+([unit](../../islands/intake/rules/intake-review-unit.md), [rows](../../islands/intake/rules/intake-review-rows.md)), one
 author repair pass answering every finding by id, queue regardless, unresolved findings and
 advisories posted for the worker (the trial's one landed defect was an advisory nobody carried:
 #3180's `health.md:8`). One strong model, no agreement gate. Each island runs its own ESCAPE READ
