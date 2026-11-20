@@ -88,14 +88,17 @@ Bounded on purpose ([`islands-no-corpus-read`](../../../docs/spikes/context-and-
 | The alert's live state (Alertmanager `/api/v2/alerts`) and the gauge it reads (Prometheus `/api/v1/query`), for any input that names an alert or a metric; for a `dig` input also the log lines its annotation names | is the condition still there, since when, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this outcome's) |
 | The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
-| What the ride can do: the repo's recipe (`.agents/fix.yaml`, `.agents/build.yaml` — the paths it may not touch, the gates it runs, its stop markers) and the pod's reach ([`docs/agents/agentstack.md`](../../../docs/agents/agentstack.md) §The egress dial, with the repo's `fixer:` block in its claim) | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
+| What the ride can do: the facts file's `## What a ride can do` — the recipe that rides the island and what it refuses, the write tier of its paths, the gates its PR runs, what the pod reaches and what it does not | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
 | For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
 | For a `wait:` input: the item's comments (its events when they show the release), and the lines the wait cites at the default-branch commit before its parking comment | step W — whether the rules made the wait necessary |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
-These rows are the ones every island shares. The island's own reads (its README and specs, its
-views, its deployed files) are the rows under `## Sources` in its facts file (§Island facts); they
-are part of this table.
+These rows are the ones every island shares. The island's own reads are the rows under
+`## Sources` in its facts file (§Island facts) — a table `question | read | note`: which read
+answers which kind of question (where a limit is declared, its live value, the alert rule file,
+the ledger), each a command to run as written. They are part of this table. A row whose note
+says `seat-only` is a read your identity cannot make: what it would answer is `deferred (fact)`
+or `Unverified`, never guessed.
 
 Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
 decide on what you have. Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, and what
@@ -104,8 +107,10 @@ never a guess.** There are two kinds:
 - **A fact the decision stands on** — which means fixes it, how large, whether it fits, whether
   the fix is possible at all. You establish it before a body is written, with the narrowest GET
   that answers it (a cluster read, a Prometheus query, the one ledger or doc section that holds
-  it) — outside the table when it has to be, but never from the Never list above. Name each such read under **Facts I lacked**, so
-  the facts file gains the row. A deciding fact you cannot read leaves the input with no write:
+  it) — outside the table when it has to be, but never from the Never list above. A read made
+  outside the facts file's `## Sources` is reported under **Facts I lacked** with the exact
+  command, and a facts-file row for it is the sitting's own edit proposal (the row as it would
+  read, under the same line; a record, not a write). A deciding fact you cannot read leaves the input with no write:
   the report lists it `deferred (fact)` with the fact and where it lives (receipt line
   `deferred`). It is never handed to the worker.
 - **Any other fact** goes under `Unverified` and into **Facts I lacked** (step 3), never a wider
@@ -481,4 +486,6 @@ never pad it, never leave it out.
 ## Island facts
 
 The island's facts file, named by the launcher (a platform island's is `docs/intake/<island>.md`,
-a stack island's lives in its own repo — ADR-160): read it in full after this brief.
+a stack island's lives in its own repo — ADR-160): read it in full after this brief. Every facts
+file has three parts: the island's facts, `## Sources` and `## What a ride can do` (§What you
+read); one that lacks a heading, or whose `## Sources` table has no row, fails the island's test.

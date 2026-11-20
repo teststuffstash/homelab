@@ -1322,6 +1322,65 @@ nofile=""; for f in "$REPO"/docs/intake/*.md; do
   { [ "$(grep -cE '^Body shape: (spec|edit)$' "$f")" = 1 ] && [ "$(grep -c '^Body shape:' "$f")" = 1 ]; } || nofile="$nofile $(basename "$f")"; done
 [ -z "$nofile" ] && ok "every docs/intake/*.md carries exactly one \`Body shape: spec|edit\` line" || bad "body shape line" "missing or malformed in:$nofile"
 
+# ── every facts file names its sources and what a ride can do (homelab#3578, Goal #3574 pin 4) ─────────
+# The shape, from the issue's acceptance 1 + intake.md §What you read: `## Sources` holds a table whose
+# header is `| question | read | note |` with at least one data row (question and read both filled);
+# `## What a ride can do` holds at least one line. The files checked are the ones the SELECTOR lists
+# (--list-islands), so an island gaining a facts file is checked without an edit here.
+# facts_sections <file> → one line per shortfall on stdout; nothing = the file has both sections.
+facts_sections() {
+  awk '
+    function cells(l,  n, a) { sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l); n = split(l, a, "|"); return n }
+    function cell(l, i,  a) { sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l); split(l, a, "|"); gsub(/^[ \t]+|[ \t]+$/, "", a[i]); return a[i] }
+    /^## / { sec = $0 }
+    sec == "## Sources" && /^## Sources$/ { src = 1; next }
+    sec == "## What a ride can do" && /^## What a ride can do$/ { ride = 1; next }
+    sec == "## Sources" && /^[ \t]*\|/ {
+      if (!hdr) { if (tolower(cell($0,1)) == "question" && tolower(cell($0,2)) == "read" && tolower(cell($0,3)) == "note" && cells($0) == 3) hdr = 1; next }
+      if ($0 ~ /^[ \t]*\|[ \t:|-]+\|[ \t]*$/) next          # the separator line
+      if (cells($0) == 3 && cell($0,1) != "" && cell($0,2) != "") rows++
+    }
+    sec == "## What a ride can do" && /[^ \t]/ { ridelines++ }
+    END {
+      if (!src) print "no `## Sources` heading"
+      else if (!hdr) print "`## Sources` has no `| question | read | note |` table"
+      else if (!rows) print "`## Sources` table has no row"
+      if (!ride) print "no `## What a ride can do` heading"
+      else if (!ridelines) print "`## What a ride can do` is empty"
+    }' "$1"
+}
+section "facts files — \`## Sources\` and \`## What a ride can do\` (homelab#3578)"
+FACTS_ISLANDS="$(env -u GH_TOKEN -u INTAKE_TS_DIR -u INTAKE_ISSUES_JSON bash "$SEL" --list-islands 2>/dev/null)"
+# expected = ALL_ISLANDS above (the selector's ISLANDS row): the check walks what the selector knows, all nine
+[ "$(printf '%s' "$FACTS_ISLANDS" | tr '\n' ' ')" = "$ALL_ISLANDS" ] \
+  && ok "the facts files checked are the selector's list (--list-islands), all nine" || bad "facts list" "got '$(printf '%s' "$FACTS_ISLANDS" | tr '\n' ' ')'"
+for isl in $FACTS_ISLANDS; do
+  miss="$(facts_sections "$REPO/docs/intake/$isl.md" | tr '\n' ';')"
+  [ -z "$miss" ] && ok "docs/intake/$isl.md: both sections, a Sources row" || bad "facts sections $isl" "$miss"
+done
+# the check can fail: one file per shortfall, built here (never a copy of a real facts file)
+FX="$TMP/facts-fx"; mkdir -p "$FX"
+printf '# x\n\nBody shape: edit\n\n- a fact\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| where is the cap | `a.yaml`, `storage:` | — |\n\n## What a ride can do\n\n- **Recipe**: x\n' > "$FX/good.md"
+printf '# x\n\n- a fact\n\n## What a ride can do\n\n- **Recipe**: x\n' > "$FX/no-sources.md"
+printf '# x\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| q | `r` | n |\n' > "$FX/no-ride.md"
+printf '# x\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n\n## What a ride can do\n\n- x\n' > "$FX/no-row.md"
+printf '# x\n\n## Sources\n\n| Read | Why |\n|---|---|\n| `r` | w |\n\n## What a ride can do\n\n- x\n' > "$FX/old-table.md"
+printf '# x\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| q |  | n |\n\n## What a ride can do\n\n- x\n' > "$FX/empty-read.md"
+printf '# x\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| q | `r` | n |\n\n## What a ride can do\n\n## Next\n\n- x\n' > "$FX/empty-ride.md"
+printf '# x\n\nthe island rows live under `## Sources` and `## What a ride can do` below\n' > "$FX/mention-only.md"
+fx() { # <file> <expected shortfall lines, ;-joined> <label>
+  got="$(facts_sections "$FX/$1" | tr '\n' ';')"
+  [ "$got" = "$2" ] && ok "$3" || bad "$3" "want '$2' got '$got'"
+}
+fx good.md          ''                                                   "a file with both sections and one row passes"
+fx no-sources.md    'no `## Sources` heading;'                           "…without \`## Sources\`: fails"
+fx no-ride.md       'no `## What a ride can do` heading;'                "…without \`## What a ride can do\`: fails"
+fx no-row.md        '`## Sources` table has no row;'                     "…a \`## Sources\` table with a header and no row: fails"
+fx old-table.md     '`## Sources` has no `| question | read | note |` table;' "…a \`## Sources\` table in another shape (\`Read | Why\`): fails"
+fx empty-read.md    '`## Sources` table has no row;'                     "…a row whose read cell is empty is not a row"
+fx empty-ride.md    '`## What a ride can do` is empty;'                  "…an empty \`## What a ride can do\`: fails"
+fx mention-only.md  'no `## Sources` heading;no `## What a ride can do` heading;' "…a prose mention of the headings is not the headings"
+
 # ── the workflow's review stage, run (islands/intake/rules/intake.md §Review and repair) ─────────────────────
 # Stubs: `claude` answers per session (author / unit lens / rows pass 1 / rows pass 2 / repair, told
 # apart by the prompt) and writes each lens's ONE file where its prompt says; `gh` records. The
