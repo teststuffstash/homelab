@@ -1,112 +1,1269 @@
 {
-  "about": "The decision table of experiment.py decide (homelab#3603 acceptance 4). t0 is 5 s past a minute on purpose. A series is a step function of the window in minutes: [[from_minute, answer], …] — the last entry whose from_minute <= the window answers; null (or no entry) is an answer with no sample; \"raise\" is a failed read. body.md: min_window 1h, max_window 7d (10080m), min_samples 20, pass <= 3, one guard `errors` < 1. stays-zero.md: min_window = max_window = 7d, pass <= 0, no guard. Every expected object is written by hand from the rule: at = t0 + window (2000m = 33h20m; 5000m = 3d11h20m), bound = t0 + 7d.",
-  "t0": "2026-11-01T00:00:05Z",
-  "rows": [
-    {"name": "pass", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "decided, then read a day after the bound: the same output", "body": "body.md", "now": "2026-11-09T00:00:05Z", "max_asks": 16, "same_as": "pass",
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "read at the deciding instant itself: the same output", "body": "body.md", "now": "2026-11-02T09:20:05Z", "max_asks": 16, "same_as": "pass",
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "read one second before the deciding instant: pending", "body": "body.md", "now": "2026-11-02T09:20:04Z", "max_asks": 14,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": 3,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query has not reached 20 yet"}},
-    {"name": "fail on the value", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 7]], "errors": [[0, 0]]},
-     "expect": {"verdict": "fail", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 7, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "7 <= 3 does not hold"}},
-    {"name": "the threshold itself passes <=", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 3]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 3, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "3 <= 3 holds"}},
-    {"name": "pending: short of samples before the bound", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 14,
-     "series": {"samples": [[0, 3]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": 3,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query has not reached 20 yet"}},
-    {"name": "pending: min_window has not elapsed, nothing is asked", "body": "body.md", "now": "2026-11-01T00:30:05Z", "max_asks": 0,
-     "series": {"samples": [[0, 50]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": null,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_window (1h) has not elapsed since t0"}},
-    {"name": "pending: read before t0, nothing is asked", "body": "body.md", "now": "2026-10-31T00:00:00Z", "max_asks": 0,
-     "series": {"samples": [[0, 50]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": null,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_window (1h) has not elapsed since t0"}},
-    {"name": "no data at the bound", "body": "body.md", "now": "2026-11-08T00:00:05Z", "max_asks": 15,
-     "series": {"samples": [[0, 3]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "no data", "window_s": null, "at": null, "value": null, "samples": 3,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query did not reach 20 within max_window (7d)"}},
-    {"name": "no data at the bound, read two days later: the same output", "body": "body.md", "now": "2026-11-10T00:00:05Z", "max_asks": 15, "same_as": "no data at the bound",
-     "series": {"samples": [[0, 3]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "no data", "window_s": null, "at": null, "value": null, "samples": 3,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query did not reach 20 within max_window (7d)"}},
-    {"name": "no data at the bound: min_samples_query answering nothing counts as zero samples", "body": "body.md", "now": "2026-11-08T00:00:05Z", "max_asks": 15,
-     "series": {"samples": [], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "no data", "window_s": null, "at": null, "value": null, "samples": 0,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query did not reach 20 within max_window (7d)"}},
-    {"name": "query answering nothing (an `and on()` term not met): no data, never pass", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 15,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [], "errors": [[0, 0]]},
-     "expect": {"verdict": "no data", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": null, "samples": 20,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "query answered no sample over the deciding window"}},
-    {"name": "a guard failing", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 4]]},
-     "expect": {"verdict": "fail", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 4, "ok": false}], "bound": "2026-11-08T00:00:05Z", "reason": "guard errors: 4 < 1 does not hold"}},
-    {"name": "a guard at its threshold fails <", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, 1]]},
-     "expect": {"verdict": "fail", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 1, "ok": false}], "bound": "2026-11-08T00:00:05Z", "reason": "guard errors: 1 < 1 does not hold"}},
-    {"name": "a guard answering nothing", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": []},
-     "expect": {"verdict": "fail", "window_s": 120000, "at": "2026-11-02T09:20:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": null, "ok": false}], "bound": "2026-11-08T00:00:05Z", "reason": "guard errors: no sample"}},
-    {"name": "samples reached only at max_window exactly: decided at the bound", "body": "body.md", "now": "2026-11-08T00:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [10080, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 604800, "at": "2026-11-08T00:00:05Z", "value": 2, "samples": 20,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "samples reached only at max_window exactly, read one second before the bound: pending", "body": "body.md", "now": "2026-11-08T00:00:04Z", "max_asks": 14,
-     "series": {"samples": [[0, 3], [10080, 20]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": 3,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_samples_query has not reached 20 yet"}},
-    {"name": "samples there from the start: the window is min_window, never shorter", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 50]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 3600, "at": "2026-11-01T01:00:05Z", "value": 2, "samples": 50,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "a count that falls as the window grows (25 from 100m, 5 from 200m, 25 from 5000m): the window is a crossing that holds the floor — here 5000m, the one the bisection meets", "body": "body.md", "now": "2026-11-08T00:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 0], [100, 25], [200, 5], [5000, 25]], "value": [[0, 2]], "errors": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 300000, "at": "2026-11-04T11:20:05Z", "value": 2, "samples": 25,
-                "guards": [{"id": "errors", "value": 0, "ok": true}], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 3 holds"}},
-    {"name": "min_window = max_window, read a minute before the bound: pending, nothing is asked", "body": "stays-zero.md", "now": "2026-11-07T23:59:05Z", "max_asks": 0,
-     "series": {"samples": [[0, 31]], "value": [[0, 0]]},
-     "expect": {"verdict": "pending", "window_s": null, "at": null, "value": null, "samples": null,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "min_window (7d) has not elapsed since t0"}},
-    {"name": "min_window = max_window, read at the bound: decided", "body": "stays-zero.md", "now": "2026-11-08T00:00:05Z", "max_asks": 2,
-     "series": {"samples": [[0, 3], [10080, 31]], "value": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 604800, "at": "2026-11-08T00:00:05Z", "value": 0, "samples": 31,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "0 <= 0 holds"}},
-    {"name": "min_window = max_window, read two days after the bound: the same output", "body": "stays-zero.md", "now": "2026-11-10T00:00:05Z", "max_asks": 2, "same_as": "min_window = max_window, read at the bound: decided",
-     "series": {"samples": [[0, 3], [10080, 31]], "value": [[0, 0]]},
-     "expect": {"verdict": "pass", "window_s": 604800, "at": "2026-11-08T00:00:05Z", "value": 0, "samples": 31,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "0 <= 0 holds"}},
-    {"name": "a stays-at-zero claim that did not hold", "body": "stays-zero.md", "now": "2026-11-08T00:00:05Z", "max_asks": 2,
-     "series": {"samples": [[0, 31]], "value": [[0, 2]]},
-     "expect": {"verdict": "fail", "window_s": 604800, "at": "2026-11-08T00:00:05Z", "value": 2, "samples": 31,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "2 <= 0 does not hold"}},
-    {"name": "a stays-at-zero claim whose source was not observable: no data, never pass", "body": "stays-zero.md", "now": "2026-11-08T00:00:05Z", "max_asks": 2,
-     "series": {"samples": [[0, 31]], "value": []},
-     "expect": {"verdict": "no data", "window_s": 604800, "at": "2026-11-08T00:00:05Z", "value": null, "samples": 31,
-                "guards": [], "bound": "2026-11-08T00:00:05Z", "reason": "query answered no sample over the deciding window"}},
-    {"name": "a failed read of min_samples_query raises", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [1500, "raise"]], "value": [[0, 2]], "errors": [[0, 0]]}, "raises": true},
-    {"name": "a failed read of query raises", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, "raise"]], "errors": [[0, 0]]}, "raises": true},
-    {"name": "a failed read of a guard raises", "body": "body.md", "now": "2026-11-03T02:00:05Z", "max_asks": 16,
-     "series": {"samples": [[0, 3], [2000, 20]], "value": [[0, 2]], "errors": [[0, "raise"]]}, "raises": true}
-  ]
+ "about": "The decision table of experiment.py decide (homelab#3603 acceptance 4). t0 is 5 s past a minute on purpose. A series is a step function of the window in minutes: [[from_minute, answer], …] — the last entry whose from_minute <= the window answers; null (or no entry) is an answer with no sample; \"raise\" is a failed read. body.md: min_window 1h, max_window 7d (10080m), min_samples 20, pass <= 3, one guard `errors` < 1. stays-zero.md: min_window = max_window = 7d, pass <= 0, no guard. Every expected object is written by hand from the rule: at = t0 + window (2000m = 33h20m; 5000m = 3d11h20m), bound = t0 + 7d. A window is asked about only once it ended 300 s ago (the settle time): a row read at the bound itself is still pending, and 2026-11-08T00:05:05Z is the first instant the bound has settled.",
+ "t0": "2026-11-01T00:00:05Z",
+ "rows": [
+  {
+   "name": "pass",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   }
+  },
+  {
+   "name": "decided, then read a day after the bound: the same output",
+   "body": "body.md",
+   "now": "2026-11-09T00:00:05Z",
+   "max_asks": 16,
+   "same_as": "pass",
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   }
+  },
+  {
+   "name": "read at the deciding instant itself: pending — the window has ended but not settled",
+   "body": "body.md",
+   "now": "2026-11-02T09:20:05Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "read 300 s after the deciding instant (the settle time): decided, the same output",
+   "body": "body.md",
+   "now": "2026-11-02T09:25:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   },
+   "same_as": "pass"
+  },
+  {
+   "name": "read 299 s after the deciding instant: still pending",
+   "body": "body.md",
+   "now": "2026-11-02T09:25:04Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "read one second before the deciding instant: pending",
+   "body": "body.md",
+   "now": "2026-11-02T09:20:04Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "fail on the value",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      7
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "fail",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 7,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "7 <= 3 does not hold"
+   }
+  },
+  {
+   "name": "the threshold itself passes <=",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      3
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 3,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "3 <= 3 holds"
+   }
+  },
+  {
+   "name": "pending: short of samples before the bound",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "pending: min_window has not elapsed, nothing is asked",
+   "body": "body.md",
+   "now": "2026-11-01T00:30:05Z",
+   "max_asks": 0,
+   "series": {
+    "samples": [
+     [
+      0,
+      50
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": null,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "no window of min_window (1h) has ended and settled yet"
+   }
+  },
+  {
+   "name": "pending: read before t0, nothing is asked",
+   "body": "body.md",
+   "now": "2026-10-31T00:00:00Z",
+   "max_asks": 0,
+   "series": {
+    "samples": [
+     [
+      0,
+      50
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": null,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "no window of min_window (1h) has ended and settled yet"
+   }
+  },
+  {
+   "name": "no data once the bound has settled",
+   "body": "body.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 15,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "no data",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query did not reach 20 within max_window (7d)"
+   }
+  },
+  {
+   "name": "short of samples at the bound itself, not yet settled: pending",
+   "body": "body.md",
+   "now": "2026-11-08T00:00:05Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "short of samples 299 s after the bound: still pending",
+   "body": "body.md",
+   "now": "2026-11-08T00:05:04Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "no data, read two days after the bound: the same output",
+   "body": "body.md",
+   "now": "2026-11-10T00:00:05Z",
+   "max_asks": 15,
+   "same_as": "no data once the bound has settled",
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "no data",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query did not reach 20 within max_window (7d)"
+   }
+  },
+  {
+   "name": "no data once the bound has settled: min_samples_query answering nothing counts as zero samples",
+   "body": "body.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 15,
+   "series": {
+    "samples": [],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "no data",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 0,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query did not reach 20 within max_window (7d)"
+   }
+  },
+  {
+   "name": "query answering nothing (an `and on()` term not met): no data, never pass",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 15,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "no data",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": null,
+    "samples": 20,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "query answered no sample over the deciding window"
+   }
+  },
+  {
+   "name": "a guard failing",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      4
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "fail",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 4,
+      "ok": false
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "guard errors: 4 < 1 does not hold"
+   }
+  },
+  {
+   "name": "a guard at its threshold fails <",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      1
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "fail",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 1,
+      "ok": false
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "guard errors: 1 < 1 does not hold"
+   }
+  },
+  {
+   "name": "a guard answering nothing",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": []
+   },
+   "expect": {
+    "verdict": "fail",
+    "window_s": 120000,
+    "at": "2026-11-02T09:20:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": null,
+      "ok": false
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "guard errors: no sample"
+   }
+  },
+  {
+   "name": "samples reached only at max_window exactly: decided once the bound has settled",
+   "body": "body.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      10080,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 604800,
+    "at": "2026-11-08T00:00:05Z",
+    "value": 2,
+    "samples": 20,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   }
+  },
+  {
+   "name": "samples reached only at max_window exactly, read one second before the bound: pending",
+   "body": "body.md",
+   "now": "2026-11-08T00:00:04Z",
+   "max_asks": 14,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      10080,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": 3,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "min_samples_query has not reached 20 yet"
+   }
+  },
+  {
+   "name": "samples there from the start: the window is min_window, never shorter",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      50
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 3600,
+    "at": "2026-11-01T01:00:05Z",
+    "value": 2,
+    "samples": 50,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   }
+  },
+  {
+   "name": "a count that falls as the window grows (25 from 100m, 5 from 200m, 25 from 5000m): the window is a crossing that holds the floor — here 5000m, the one the bisection meets",
+   "body": "body.md",
+   "now": "2026-11-08T00:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      0
+     ],
+     [
+      100,
+      25
+     ],
+     [
+      200,
+      5
+     ],
+     [
+      5000,
+      25
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 300000,
+    "at": "2026-11-04T11:20:05Z",
+    "value": 2,
+    "samples": 25,
+    "guards": [
+     {
+      "id": "errors",
+      "value": 0,
+      "ok": true
+     }
+    ],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 3 holds"
+   }
+  },
+  {
+   "name": "min_window = max_window, read a minute before the bound: pending, nothing is asked",
+   "body": "stays-zero.md",
+   "now": "2026-11-07T23:59:05Z",
+   "max_asks": 0,
+   "series": {
+    "samples": [
+     [
+      0,
+      31
+     ]
+    ],
+    "value": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": null,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "no window of min_window (7d) has ended and settled yet"
+   }
+  },
+  {
+   "name": "min_window = max_window, read once the bound has settled: decided",
+   "body": "stays-zero.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 2,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      10080,
+      31
+     ]
+    ],
+    "value": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 604800,
+    "at": "2026-11-08T00:00:05Z",
+    "value": 0,
+    "samples": 31,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "0 <= 0 holds"
+   }
+  },
+  {
+   "name": "min_window = max_window, read at the bound itself: pending, nothing is asked",
+   "body": "stays-zero.md",
+   "now": "2026-11-08T00:00:05Z",
+   "max_asks": 0,
+   "series": {
+    "samples": [
+     [
+      0,
+      31
+     ]
+    ],
+    "value": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pending",
+    "window_s": null,
+    "at": null,
+    "value": null,
+    "samples": null,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "no window of min_window (7d) has ended and settled yet"
+   }
+  },
+  {
+   "name": "min_window = max_window, read two days after the bound: the same output",
+   "body": "stays-zero.md",
+   "now": "2026-11-10T00:00:05Z",
+   "max_asks": 2,
+   "same_as": "min_window = max_window, read once the bound has settled: decided",
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      10080,
+      31
+     ]
+    ],
+    "value": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "pass",
+    "window_s": 604800,
+    "at": "2026-11-08T00:00:05Z",
+    "value": 0,
+    "samples": 31,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "0 <= 0 holds"
+   }
+  },
+  {
+   "name": "a stays-at-zero claim that did not hold",
+   "body": "stays-zero.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 2,
+   "series": {
+    "samples": [
+     [
+      0,
+      31
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ]
+   },
+   "expect": {
+    "verdict": "fail",
+    "window_s": 604800,
+    "at": "2026-11-08T00:00:05Z",
+    "value": 2,
+    "samples": 31,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "2 <= 0 does not hold"
+   }
+  },
+  {
+   "name": "a stays-at-zero claim whose source was not observable: no data, never pass",
+   "body": "stays-zero.md",
+   "now": "2026-11-08T00:05:05Z",
+   "max_asks": 2,
+   "series": {
+    "samples": [
+     [
+      0,
+      31
+     ]
+    ],
+    "value": []
+   },
+   "expect": {
+    "verdict": "no data",
+    "window_s": 604800,
+    "at": "2026-11-08T00:00:05Z",
+    "value": null,
+    "samples": 31,
+    "guards": [],
+    "bound": "2026-11-08T00:00:05Z",
+    "reason": "query answered no sample over the deciding window"
+   }
+  },
+  {
+   "name": "a failed read of min_samples_query raises",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      1500,
+      "raise"
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "raises": true
+  },
+  {
+   "name": "a failed read of query raises",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      "raise"
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "raises": true
+  },
+  {
+   "name": "a failed read of a guard raises",
+   "body": "body.md",
+   "now": "2026-11-03T02:00:05Z",
+   "max_asks": 16,
+   "series": {
+    "samples": [
+     [
+      0,
+      3
+     ],
+     [
+      2000,
+      20
+     ]
+    ],
+    "value": [
+     [
+      0,
+      2
+     ]
+    ],
+    "errors": [
+     [
+      0,
+      "raise"
+     ]
+    ]
+   },
+   "raises": true
+  }
+ ]
 }

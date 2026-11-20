@@ -11,7 +11,7 @@ defines it (pin 1) — an unknown key at any level is refused, so two loaders ca
   requirement        non-empty string (carried, never run)
   cases              array (carried, never run — the platform read decides the kpi only)
   kpi                object, required by this loader:
-    query              string containing $window
+    query              string containing $window (the token: `$windows` is another name and does not count)
     pass               one of < <= > >=, one space, a number
     baseline           number
     min_window         a whole number followed by m, h or d
@@ -46,10 +46,13 @@ and `now` are whole epoch seconds, and `ask(promql, at)` is the only way it lear
 `None` for an answer with no sample, `ReadFailed` raised for a read that failed. A failed read raises out of
 `decide`; no verdict is returned for it.
 
-  bound    = t0 + max_window;  horizon = min(now, bound)
+  bound    = t0 + max_window;  horizon = min(now - 5 min, bound)
+             (the five minutes are the settle time: a window is asked about only once it ended that long
+             ago, so that its last scrapes and rule evaluations are in Prometheus — a window read while they
+             are still arriving could answer differently a minute later)
   W        = the deciding window: the shortest whole number of minutes, min_window <= W <= horizon - t0, for
              which min_samples_query over W, asked at t0 + W, is >= min_samples (no sample counts as zero)
-  no W     → `pending` while now < bound, `no data` from the bound on
+  no W     → `pending` while now - 5 min < bound, `no data` once the bound has settled
   with W   → query over W at t0 + W: no sample → `no data`; else every guard the same way — a guard with no
              sample, or failing its `pass`, → `fail` with the guard named; else the value against `pass`
   $window  → `<minutes>m`, wherever the token `$window` stands; nothing else in a query is rewritten
@@ -58,7 +61,7 @@ W is found by bisection over the whole minutes min_window … max_window (about 
 on the assumption that the count does not fall as the window grows. A window that lies past the horizon is
 never asked about: it is taken as reaching the floor, and the search ends `pending` if it lands there. So
 the questions asked on the way to a W depend on t0 and the block, not on `now`, and a decided verdict reads
-the same at every later `now`. The W returned was always asked about itself and holds the floor, and W − 1
+the same at every later `now` (a row of the table reads one at its settle instant and again days later). The W returned was always asked about itself and holds the floor, and W − 1
 (unless W is min_window) was asked about and does not. Where the count does fall as the window grows, that
 is all that is promised: W is such a crossing, not necessarily the first one, and a count that falls again
 in a window still in the future can move it.
@@ -74,11 +77,15 @@ in a window still in the future can move it.
   bound      t0 + max_window, RFC3339
   reason     one line
 
-`read` asks `<url>/api/v1/query` with `query` and `time` (GET, 20 s for a whole answer, one retry after a
-transport fault, an HTTP 5xx or an answer that is not JSON; no proxy from the environment, a redirect is not
-followed). Everything in an answer is untrusted text: anything but HTTP 200 `status: success` with a `vector`
+`read` asks `<url>/api/v1/query` with `query` and `time` (GET; one retry after a transport fault, an HTTP 5xx
+or an answer that is not JSON; no proxy from the environment, a redirect is not followed). The time limit of
+one attempt: 20 s of silence at most on the way to the response's headers (a socket timeout), and 20 s in
+all, from the request, for the body's last byte — each read of the body is given only what is left. Everything in an answer is untrusted text: anything but HTTP 200 `status: success` with a `vector`
 of no sample or one sample `[<the instant asked>, "<a finite decimal number>"]` is a failed read — two
 samples ("one sample expected"), `NaN`, `+Inf`, a scalar, a matrix, a short or oversized body among them.
+`NaN` is refused on purpose, although Prometheus answers it honestly for 0/0: a query whose claim can divide
+by nothing says so with an `and on()` term (pin 2) and then answers no sample, which is `no data`; a bare
+`NaN` read as "no sample" would let a query that never had that term look as if it did.
 
 `read` exits (0, 1 and 2 are the verdict; a body that does not load never shares a code with one):
   0   pass
@@ -89,12 +96,14 @@ samples ("one sample expected"), `NaN`, `+Inf`, a scalar, a matrix, a short or o
   4   the body has no experiment section              (the same)
   5   the section is malformed                        (the same; `load` exits 2 for this)
   6   the file cannot be read                         (`load` exits 1 for this)
+  70  a fault of this script itself (an exception nobody foresaw): the object is printed with `error`
+      naming it and a null verdict — never exit 2, which a caller reads as "keep waiting"
   64  a usage error — an argument missing, `--since`/`--now` not RFC3339 (`2026-11-20T13:09:05Z`, or a
       numeric offset), `--prometheus` not an http(s) URL
 
 `at` prints the one number `--query` answers over `--window` at `--at` (the replay intake reads a baseline
 with), or `no sample`, and exits 0; 2 when the read failed (stderr says why, nothing on stdout); 64 on a usage
-error. `--window` is a whole number of m, h or d and is not held to the seven-day limit.
+error; 70 on a fault of the script itself. `--window` is a whole number of m, h or d and is not held to the seven-day limit.
 """
 import argparse
 import calendar
@@ -127,10 +136,12 @@ READ_EXIT = {"pass": 0, "fail": 1, "pending": 2, "no data": 2}
 READ_EXIT_FAILED = 2
 READ_EXIT_BODY = {"none": 3, "absent": 4, "malformed": 5}
 READ_EXIT_UNREADABLE = 6
+EXIT_INTERNAL = 70  # a fault of this script, not of the read: never the code a caller takes for "keep waiting"
 
-TIMEOUT_S = 20  # for one whole answer, headers to last byte
+TIMEOUT_S = 20  # the socket timeout up to the headers, and the whole attempt's limit for the body
 RETRY_PAUSE_S = 1
 MAX_ANSWER_BYTES = 1 << 20  # an instant vector of one sample is a few hundred bytes
+SETTLE_S = 300  # a window is asked about once it ended this long ago: its last scrapes and rule evaluations are in
 MAX_INSTANT = 253402300799  # 9999-12-31T23:59:59Z
 
 HEADING = "## Experiment"
@@ -152,6 +163,7 @@ PASS = re.compile(r"(<=|>=|<|>) (-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]
 DURATION = re.compile(r"([0-9]{1,9})([mhd])", re.ASCII)  # bounded: int() of a digit run has a length limit
 MAX_INT_DIGITS = 300  # an integer token longer than this is refused before int() or float() can raise on it
 MAX_DEPTH = 32  # nesting of the block's JSON, refused before the parser's own recursion limit can be met
+WINDOW = re.compile(r"\$window(?![A-Za-z0-9_])")  # the token: `$windows` is another name and is left alone
 ABSENT = 'no "## Experiment" section and no "Experiment: none — <why>" line'
 
 
@@ -200,7 +212,7 @@ def _nonempty(v, where):
 
 
 def _query(v, where):
-    if not isinstance(v, str) or "$window" not in v:
+    if not isinstance(v, str) or not WINDOW.search(v):  # the token the read replaces, not the substring
         raise Malformed(f"{where} is not a string containing $window")
 
 
@@ -401,7 +413,6 @@ class ReadFailed(Exception):
     """A number could not be read; str() says why. Never a verdict."""
 
 
-WINDOW = re.compile(r"\$window(?![A-Za-z0-9_])")  # the token: `$windows` is another name and is left alone
 RFC3339 = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})",
                      re.ASCII)
 OPS = {"<": lambda a, b: a < b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, ">=": lambda a, b: a >= b}
@@ -451,6 +462,12 @@ def _instant(value, name):
     return value
 
 
+def _blank_report(bound):
+    """The report's keys, nothing decided: one shape for a verdict and for a failed read."""
+    return {"verdict": None, "window_s": None, "at": None, "value": None, "samples": None, "guards": [],
+            "bound": rfc3339(bound), "reason": None}
+
+
 def decide(experiment, t0, now, ask):
     """The verdict of one loaded experiment — a function of t0 and what `ask` answers (the module docstring).
 
@@ -460,7 +477,8 @@ def decide(experiment, t0, now, ask):
     t0, now = _instant(t0, "t0"), _instant(now, "now")
     bound = t0 + kpi["max_window_s"]
     low, top = kpi["min_window_s"] // 60, kpi["max_window_s"] // 60
-    reach = (min(now, bound) - t0) // 60  # the longest whole-minute window that has ended; negative before t0
+    settled = now - SETTLE_S  # what ended by then is asked about; what ended later is still arriving
+    reach = (min(settled, bound) - t0) // 60  # the longest whole-minute window that has ended and settled
     floor = kpi["min_samples"]
 
     def number(query, minutes, what):
@@ -479,8 +497,7 @@ def decide(experiment, t0, now, ask):
             counts[minutes] = 0.0 if got is None else got
         return counts[minutes]
 
-    out = {"verdict": None, "window_s": None, "at": None, "value": None, "samples": None, "guards": [],
-           "bound": rfc3339(bound), "reason": None}
+    out = _blank_report(bound)
 
     def done(verdict, reason):
         out["verdict"], out["reason"] = verdict, reason
@@ -497,10 +514,10 @@ def decide(experiment, t0, now, ask):
     if window > reach or samples(window) < floor:  # the confirmation: the window found is asked about itself
         if counts:
             out["samples"] = counts[max(counts)]
-        if now >= bound:
+        if settled >= bound:
             return done("no data", f"min_samples_query did not reach {floor} within max_window ({kpi['max_window']})")
         if reach < low:
-            return done("pending", f"min_window ({kpi['min_window']}) has not elapsed since t0")
+            return done("pending", f"no window of min_window ({kpi['min_window']}) has ended and settled yet")
         return done("pending", f"min_samples_query has not reached {floor} yet")
 
     out["window_s"], out["at"], out["samples"] = window * 60, rfc3339(t0 + window * 60), counts[window]
@@ -557,6 +574,18 @@ def _refuse_constant(name):
     raise ValueError(name)
 
 
+def _socket_timeout(resp, seconds):
+    """Give the next read of the body only `seconds`. The socket sits behind the response's buffered reader,
+    which has no public name for it; where it cannot be reached the read keeps the timeout it was opened with
+    and the deadline is checked between reads."""
+    sock = getattr(getattr(getattr(resp, "fp", None), "raw", None), "_sock", None)
+    if sock is not None:
+        try:
+            sock.settimeout(max(seconds, 0.001))
+        except (OSError, ValueError):
+            pass
+
+
 def _get(opener, url, timeout):
     """One GET → the body's bytes. Raises _Transient or ReadFailed."""
     deadline = time.monotonic() + timeout
@@ -566,8 +595,9 @@ def _get(opener, url, timeout):
                 raise ReadFailed(f"HTTP {resp.status}")
             chunks, size = [], 0
             while True:
-                if time.monotonic() > deadline:
+                if time.monotonic() >= deadline:
                     raise _Transient(f"no whole answer within {_fmt(timeout)} s")
+                _socket_timeout(resp, deadline - time.monotonic())
                 chunk = resp.read1(65536)
                 if not chunk:
                     break
@@ -655,6 +685,9 @@ def http_ask(base, timeout=None, pause=None):
     return ask
 
 
+_ASK = http_ask  # the commands' way to Prometheus; the self-test swaps it to plant a fault of the script
+
+
 # ── the command ──────────────────────────────────────────────────────────────────────────────────────
 class _Parser(argparse.ArgumentParser):
     def error(self, message):  # 2 means "malformed section" here; a usage error must not look like one
@@ -703,15 +736,15 @@ def _read(a):
         print(f"experiment: {status} — {value}", file=sys.stderr)
         return READ_EXIT_BODY[status]
     now = int(time.time()) if a.now is None else a.now
+    failed = dict(_blank_report(a.since + value["kpi"]["max_window_s"]))
     try:
-        report = decide(value, a.since, now, http_ask(a.prometheus))
+        report = decide(value, a.since, now, _ASK(a.prometheus))
         report["error"] = None
         code = READ_EXIT[report["verdict"]]
-    except Exception as e:  # ReadFailed, and anything unforeseen: no verdict, said in the report, never a traceback
-        why = str(e) if isinstance(e, ReadFailed) else f"{type(e).__name__}: {e}"
-        report = {"verdict": None, "window_s": None, "at": None, "value": None, "samples": None, "guards": [],
-                  "bound": rfc3339(a.since + value["kpi"]["max_window_s"]), "reason": None, "error": why[:600]}
-        code = READ_EXIT_FAILED
+    except ReadFailed as e:
+        report, code = dict(failed, error=str(e)[:600]), READ_EXIT_FAILED
+    except Exception as e:  # unforeseen: said in the report under its own exit, never a traceback
+        report, code = dict(failed, error=f"internal: {type(e).__name__}: {e}"[:600]), EXIT_INTERNAL
     report["id"], report["t0"] = value["id"], rfc3339(a.since)
     print(json.dumps(report, sort_keys=True, allow_nan=False))
     return code
@@ -719,11 +752,13 @@ def _read(a):
 
 def _at(a):
     try:
-        got = http_ask(a.prometheus)(window_query(a.query, a.window), a.at)
-    except Exception as e:  # as in _read: a failed read, never a traceback
-        why = str(e) if isinstance(e, ReadFailed) else f"{type(e).__name__}: {e}"
-        print(f"experiment: read failed — {why[:600]}", file=sys.stderr)
+        got = _ASK(a.prometheus)(window_query(a.query, a.window), a.at)
+    except ReadFailed as e:
+        print(f"experiment: read failed — {str(e)[:600]}", file=sys.stderr)
         return READ_EXIT_FAILED
+    except Exception as e:  # as in _read
+        print(f"experiment: internal — {type(e).__name__}: {e}"[:600], file=sys.stderr)
+        return EXIT_INTERNAL
     print("no sample" if got is None else _fmt(got))
     return 0
 
@@ -1036,6 +1071,11 @@ def _self_test_read(check, run):
         check("ask: an answer that does not come within the timeout is a failed read, asked twice",
               isinstance(got, str) and got.startswith("failed: ") and "(asked twice)" in got and n == 2
               and time.monotonic() - started < 1.4, (got, n))
+        started = time.monotonic()
+        got, n, _ = one("drip", timeout=0.5)  # a byte every 0.2 s, 3 s in all: no single read times out, the attempt does
+        check("ask: a body that keeps trickling past the attempt's time limit is a failed read, asked twice",
+              isinstance(got, str) and got.startswith("failed: ") and "(asked twice)" in got and n == 2
+              and time.monotonic() - started < 2.0, (got, n, time.monotonic() - started))
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             dead = s.getsockname()[1]
@@ -1079,6 +1119,8 @@ def _self_test_read(check, run):
         check("read: pending exits 2 with the verdict said", rc == 2 and obj["verdict"] == "pending" and obj["error"] is None
               and obj["samples"] == 3 and obj["window_s"] is None, (rc, out, err))
         rc, obj, err, out, _ = read("pending", "2026-11-08T00:00:05Z")
+        check("read: at the bound itself, not yet settled, it is still pending", rc == 2 and obj["verdict"] == "pending", (rc, out))
+        rc, obj, err, out, _ = read("pending", "2026-11-08T00:05:05Z")
         check("read: no data exits 2 with the verdict said", rc == 2 and obj["verdict"] == "no data" and obj["error"] is None, (rc, out))
         rc, obj, err, out, _ = read("two-samples", "2026-11-03T02:00:05Z")
         check("read: two samples exit 2 — no verdict, the error says one sample expected", rc == 2 and sorted(obj) == keys
@@ -1090,6 +1132,19 @@ def _self_test_read(check, run):
         rc, obj, err, out, _ = read("value-down", "2026-11-03T02:00:05Z")
         check("read: a read that fails after the window was found is still no verdict", rc == 2 and obj["verdict"] is None
               and obj["window_s"] is None and obj["error"] == "HTTP 503 (asked twice)", (rc, out))
+        global _ASK
+
+        def broken(base):
+            raise KeyError("planted")
+        kept, _ASK = _ASK, broken
+        try:
+            rc, obj, err, out, _ = read("pass", "2026-11-03T02:00:05Z")
+            rc2, out2, err2 = run(["at", "--prometheus", base, "--query", "up[$window]", "--window", "1h", "--at", "2026-11-02T09:20:05Z"])
+        finally:
+            _ASK = kept
+        check("read: a fault of the script itself exits 70, not 2 — the object says so, no traceback", rc == EXIT_INTERNAL
+              and sorted(obj) == keys and obj["verdict"] is None and obj["error"] == "internal: KeyError: 'planted'" and err == "", (rc, out, err))
+        check("at: the same — exit 70, nothing on stdout", (rc2, out2, err2) == (EXIT_INTERNAL, "", "experiment: internal — KeyError: 'planted'\n"), (rc2, out2, err2))
         for name, code in (("none.md", 3), ("neither.md", 4), ("malformed-no-block.md", 5), ("no-such-body.md", 6)):
             rc, obj, err, out, sent = read("pass", "2026-11-03T02:00:05Z", path=os.path.join(loader, name))
             check(f"read: {name} exits {code} — nothing on stdout, one stderr line, nothing asked",

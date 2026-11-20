@@ -83,6 +83,14 @@
   "exit": 2,
   "fault": "kpi.guards[0].pass \"0.01\" is not one of < <= > >=, a space, a number"
  },
+ "malformed-guard-query-window-longer-name.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].query is not a string containing $window"
+ },
+ "malformed-query-window-longer-name.md": {
+  "exit": 2,
+  "fault": "kpi.query is not a string containing $window"
+ },
  "malformed-guard-query-without-window.md": {
   "exit": 2,
   "fault": "kpi.guards[1].query is not a string containing $window"

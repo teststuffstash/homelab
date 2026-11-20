@@ -77,6 +77,7 @@
     "truncated": [{"truncate": "5"}],
     "redirect": [{"redirect": "/one/api/v1/query?query=fx_x%5B5m%5D&time=1793611205"}],
     "slow": [{"hang": 1.5}],
+    "drip": [{"drip": [0.2, 15]}],
     "oversized": [{"pad": 1100000}]
   }
 }

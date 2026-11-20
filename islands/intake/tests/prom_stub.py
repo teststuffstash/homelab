@@ -24,6 +24,7 @@ and then exactly one of:
   hang        seconds        → sleeps, then answers `value` "0"
   truncate    a value        → the full one-sample body, under a Content-Length 40 bytes longer; then closes
   pad         bytes          → a valid one-sample answer followed by that much whitespace
+  drip        [gap, count]   → the headers, then one blank every `gap` seconds, `count` times, then a one-sample body
 
 A request no rule matches is HTTP 404. The server exits by itself after 300 s: a harness that died cannot
 leave it behind.
@@ -57,9 +58,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         for k, v in headers:
             self.send_header(k, v)
         self.send_header("Connection", "close")
-        self.end_headers()
-        self.wfile.write(body)
         self.close_connection = True
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:  # the caller has gone (a row that makes it give up): nothing to say
+            pass
 
     def do_GET(self):
         srv = self.server
@@ -101,6 +105,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if "hang" in rule:
             time.sleep(rule["hang"])
             return self._send(200, json.dumps(_vector(["0"], ts)).encode())
+        if "drip" in rule:
+            gap, count = rule["drip"]
+            body = json.dumps(_vector(["1"], ts)).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body) + count))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            try:
+                for _ in range(count):
+                    self.wfile.write(b" ")
+                    self.wfile.flush()
+                    time.sleep(gap)
+                self.wfile.write(body)
+            except OSError:  # the caller gave up, as it should
+                pass
+            return None
         if "truncate" in rule:
             return self._send(200, json.dumps(_vector([rule["truncate"]], ts)).encode(), extra_length=40)
         if "pad" in rule:
