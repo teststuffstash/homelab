@@ -104,7 +104,7 @@ never a guess.** There are two kinds:
 - **A fact the decision stands on** — which means fixes it, how large, whether it fits, whether
   the fix is possible at all. You establish it before a body is written, with the narrowest GET
   that answers it (a cluster read, a Prometheus query, the one ledger or doc section that holds
-  it) — outside the table when it has to be. Name each such read under **Facts I lacked**, so
+  it) — outside the table when it has to be, but never from the Never list above. Name each such read under **Facts I lacked**, so
   the facts file gains the row. A deciding fact you cannot read leaves the input with no write:
   the report lists it `deferred (fact)` with the fact and where it lives (receipt line
   `deferred`). It is never handed to the worker.
@@ -179,7 +179,8 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
    - **(f) not yours to close** — §Hard limits keeps the issue (another human's; a close of a
      recent operator-login one).
    `seat` names the entry and the one fact. **No entry → you decide**: pin ⚖ the
-   cheaper-to-reverse option, name the others under `Unverified`, go on to step 4 — production
+   cheaper-to-reverse option, name the options you did not take with the reason each lost (as
+   rejected options, never as open facts for the worker), go on to step 4 — production
    feedback (alerts, the dig, step E, a prober ride) corrects a wrong pin. **You decide on
    evidence.** When the fix is a choice between means (raise a limit, shrink what consumes it,
    clean up sooner), read what each costs and whether it fits (§What you read — a fact the
@@ -347,7 +348,9 @@ Unverified: <what you did not read on the wire — "verify during implementation
   fork on step 3's list is not a `⚖` in the body: it is `seat`. An island's facts file
   may tighten this (e.g. `⚖` for operator forks only, row alternatives written under
   `Unverified`). A row you could not ground in the page or a merged PR is marked
-  `verify during implementation` (rule 10), never asserted.
+  `verify during implementation` (rule 10), never asserted — unless the fix depends on it (the
+  row decides the means, `Touches` or a number in the body): that fact is read first, or the
+  input is `deferred (fact)` (§What you read).
 - **Quote before you author.** Where an existing row, a sibling's row or the page's own text
   already says it, copy it verbatim and name where it came from; author a new table only for what
   no row says yet. A quoted row is still read. Before it goes into the body, read it yourself as
