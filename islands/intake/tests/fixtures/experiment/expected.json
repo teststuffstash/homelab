@@ -1,7 +1,15 @@
 {
+ "malformed-baseline-infinity.md": {
+  "exit": 2,
+  "fault": "the block holds Infinity, which is not a JSON number"
+ },
  "malformed-baseline-not-number.md": {
   "exit": 2,
   "fault": "kpi.baseline is not a number"
+ },
+ "malformed-baseline-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds 1e999, a number too large to read"
  },
  "malformed-block-after-fence-only.md": {
   "exit": 2,
@@ -31,6 +39,10 @@
   "exit": 2,
   "fault": "an experiment block outside a \"## Experiment\" section"
  },
+ "malformed-case-number-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds -1e999, a number too large to read"
+ },
  "malformed-cases-not-array.md": {
   "exit": 2,
   "fault": "cases is not an array"
@@ -50,6 +62,10 @@
  "malformed-guard-pass-non-ascii-digit.md": {
   "exit": 2,
   "fault": "kpi.guards[1].pass \">= \\u0661\\u0660\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-guard-pass-overflow.md": {
+  "exit": 2,
+  "fault": "kpi.guards[0].pass \"<= 1e999\" holds a number too large to read"
  },
  "malformed-guard-pass.md": {
   "exit": 2,
@@ -134,6 +150,10 @@
  "malformed-pass-operator.md": {
   "exit": 2,
   "fault": "kpi.pass \"== 0\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-overflow.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"< 1e999\" holds a number too large to read"
  },
  "malformed-pass-trailing-newline.md": {
   "exit": 2,

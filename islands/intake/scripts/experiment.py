@@ -42,6 +42,7 @@ import argparse
 import contextlib
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -92,11 +93,14 @@ def split_pass(value, where):
     m = PASS.fullmatch(value) if isinstance(value, str) else None
     if not m:
         raise Malformed(f"{where} {json.dumps(value)} is not one of < <= > >=, a space, a number")
-    return m.group(1), float(m.group(2))
+    number = float(m.group(2))
+    if not math.isfinite(number):
+        raise Malformed(f"{where} {json.dumps(value)} holds a number too large to read")
+    return m.group(1), number
 
 
 def _is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _keys(obj, where, required, optional=()):
@@ -174,10 +178,18 @@ def _constant(name):
     raise Malformed(f"the block holds {name}, which is not a JSON number")
 
 
+def _float(token):
+    # json.loads turns an overflowing token (1e999) into inf without calling parse_constant
+    number = float(token)
+    if not math.isfinite(number):
+        raise Malformed(f"the block holds {token}, a number too large to read")
+    return number
+
+
 def parse_block(text):
     """The fenced block's text → the parsed JSON object. Raises Malformed."""
     try:
-        block = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant)
+        block = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_float)
     except json.JSONDecodeError as e:
         raise Malformed(f"the block is not one JSON value (line {e.lineno} column {e.colno} of the block)") from None
     if not isinstance(block, dict):
@@ -305,7 +317,7 @@ def main(argv=None):
     if a.check:
         return EXIT[status]
     if status == "ok":
-        print(json.dumps(value, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False))
     else:
         print(f"experiment: {status} — {value}", file=sys.stderr)
     return EXIT[status]
