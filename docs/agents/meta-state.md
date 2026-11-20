@@ -19,12 +19,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
-  READ THE FIRST LIVE RESULTS of 11-20, none seen yet: (1) 03:30Z dig — does it re-test `RouterRunModelUnverifiable`,
-  `ControlPlaneNodeMemoryLow`, `RetroReportOverdue` (#3546)? (2) 05:00Z gateway sitting — does it get
-  `responder/KubePodNotReady/homelab` (#3544; expected outcome a `forward` to agent-loop, whose fix is the claim's
-  `scratch: 40Gi` or the ride janitor), release #3533 / #3505 / #3269 under the closed list (#3549), keep #3538 parked,
-  and run the first wait read (#3555)? (3) Fri 06:00Z `island-rules-digest` first run — does its report PR merge on
-  the bot review (operator: fine, they read it on master); the `IslandRulesDigestOverdue` silence ends 07:00Z.
+  FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
+  unattended merge (#3565) all worked. STILL OWED: #3533 and #3538 were not offered (parked <3 d, `INTAKE_REREAD_AGE_D`)
+  — read #3533's release on the 11-21/22 05:00Z sitting; #3563 (scratch quota, forwarded to agent-loop) carries no
+  labels and no agent-loop sitting is scheduled; `TierEvidenceStale` re-cut is due (dig: seat; intake folded it).
   NEXT BUILDS: the replay runner + the edit-PR leg (cases in `agents/island-intake-fixtures/wait-cases/`); cron
   sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
   launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.

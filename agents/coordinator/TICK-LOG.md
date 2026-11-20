@@ -15601,3 +15601,16 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Left:** the ⚖ choices and open spec questions (#3561 body, #3490); #3448/#3550 await a scan sitting; #3391, #3461
   untouched; `docs/intake/scan.md` one-line fix only.
 
+
+## 2026-11-20 ~06:10–06:20Z — seat: the island rules learning loop's first live results read (FU-320)
+
+- **03:30Z dig (`deep-dig-1795145400`):** `RetroReportOverdue` + `RouterRunModelUnverifiable` selected as a RE-TEST group
+  (← #3166, #2555), verdict `explained`, records hold. `ControlPlaneNodeMemoryLow` not re-tested — not firing at the read
+  (FU-315 refill of 11-19), which is the rule. Also `cause-found`: `TierEvidenceStale` (re-cut 8.3 d old), circles CI +
+  `RegistryMirrorColdBlobAbandoned` (cold playwright image, probably one event).
+- **05:00Z gateway sitting (`intake-gateway-2026-11-20`):** responder class `KubePodNotReady/homelab` → `forward`,
+  #3563; #3269 queued after review-repair (8 findings, 6 changed), dispatched 06:04Z; #3505 → `blocked-on: issue=3504`;
+  #3504 → `issue=3088`; #3308 requeued (PR #3564); first wait read: 6 released waits, 4 ledger records (H), no
+  proposals. #3533 / #3538 not offered — parked under 3 days.
+- **06:00Z digest:** #3565 opened un-armed 06:03Z, armed by the reflex's C9, both reviewers approved 06:17–06:18Z,
+  merged 06:18Z with no seat act.
