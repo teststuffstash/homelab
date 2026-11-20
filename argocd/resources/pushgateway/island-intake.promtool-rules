@@ -15,7 +15,7 @@ groups:
   - name: agent-runs
     rules:
       - alert: IslandIntakeStale
-        expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+        expr: ((time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400) and on (island) (max by (island) (max_over_time(island_intake_listed_timestamp_seconds[8d])) == on () group_left () max(max_over_time(island_intake_listed_timestamp_seconds[8d])))
         for: 6h
         labels:
           severity: warning

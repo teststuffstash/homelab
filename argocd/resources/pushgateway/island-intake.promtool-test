@@ -25,6 +25,8 @@ tests:
     input_series:
       - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
         values: "0+0x30"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
+        values: "0+0x30"
     alert_rule_test:
       - eval_time: 10m
         alertname: IslandIntakeStale
@@ -41,6 +43,8 @@ tests:
     name: "(b) a pushgateway wipe of a <2d-old run must not page"
     input_series:
       - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
+        values: "_x40 144000 stale"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
         values: "_x40 144000 stale"
     alert_rule_test:
       - eval_time: 50h
@@ -69,6 +73,8 @@ tests:
     name: "(c) a continuously-present run ages past 2d and fires after for:6h"
     input_series:
       - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
+        values: "0+0x60"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
         values: "0+0x60"
     alert_rule_test:
       - eval_time: 47h
@@ -101,7 +107,11 @@ tests:
     input_series:
       - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
         values: "0+3600x90"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
+        values: "0+0x90"
       - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="scan"}'
+        values: "0+0x90"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="scan"}'
         values: "0+0x90"
     alert_rule_test:
       # 47h: scan's run is under 2 d old — nobody fires
@@ -119,6 +129,44 @@ tests:
             exp_annotations:
               summary: "Island intake has not run for the scan island in >2 days — its findings, issues and waits are not being admitted"
               description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the scan island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+
+  # ── (f) AN ISLAND THAT LEFT THE LIST is not reported stale (the assembly review of #3574) ────
+  # The Pushgateway serves scan's last run for good, so by age alone scan would fire from hour 54
+  # for ever. The list step's gauge is the gate: every listed island carries the list run's epoch.
+  # Day 0's list holds gateway and scan (value 0); from day 1 the list holds gateway only — the
+  # replaced group no longer carries scan (`stale`), and gateway's value moves to that run's epoch.
+  # scan's bridged listed value (0) is then older than the newest (86400, 172800, …): silent at
+  # hour 78, where case (d) — scan still listed — fires. gateway is fresh throughout.
+  - interval: 1h
+    name: "(f) scan left the list on day 1: its old push is never reported stale"
+    input_series:
+      - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
+        values: "0+3600x90"
+      - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="scan"}'
+        values: "0+0x90"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
+        values: "0+0x23 86400+0x23 172800+0x23 259200+0x18"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="scan"}'
+        values: "0+0x23 stale"
+    alert_rule_test:
+      - eval_time: 60h
+        alertname: IslandIntakeStale
+        exp_alerts: []
+      - eval_time: 78h
+        alertname: IslandIntakeStale
+        exp_alerts: []
+  # (f2) a name that was never listed (a mistyped `-p island=`): its push ages, nothing fires.
+  - interval: 1h
+    name: "(f2) a never-listed island name pushes a timestamp and is never reported stale"
+    input_series:
+      - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="scna"}'
+        values: "0+0x90"
+      - series: 'island_intake_listed_timestamp_seconds{job="island_intake_list", island="gateway"}'
+        values: "0+0x90"
+    alert_rule_test:
+      - eval_time: 78h
+        alertname: IslandIntakeStale
+        exp_alerts: []
 
   # ── (e) IslandIntakeClaimsUnread (homelab#3580) — the stack islands' source went unread ───────
   # The list step pushes island_intake_claims_read_ok once per daily run (1 = the claims were read,

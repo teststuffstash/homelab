@@ -246,6 +246,10 @@ spec:
               jq -Rnc '[inputs | select(length > 0)]' /tmp/island-intake-islands.txt > "$OUT" \
                 || { echo "island-intake: could not write the island list"; exit 1; }
               [ "$(jq 'length' "$OUT")" -gt 0 ] || { echo "island-intake: the island list is empty — no sitting would run"; exit 1; }
+              # which islands this run walks, for IslandIntakeStale: an island that left the list
+              # (or was never in it) is not reported stale. Only the full walk says so — a run of
+              # one named island (above) leaves the last full list in force.
+              bash islands/intake/scripts/listed-push.sh /tmp/island-intake-islands.txt
               echo "island-intake: islands $(cat "$OUT")"
           resources:
             requests: { cpu: "50m", memory: "128Mi" }

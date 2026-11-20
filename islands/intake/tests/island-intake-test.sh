@@ -1864,5 +1864,31 @@ done
   && ok "no stack or stack-repo name ($(printf '%s\n' "$NAMES" | grep -c .) searched: the mirror's non-platform stacks and repos, the fixture's) in islands/intake/scripts/ or the manifest" \
   || bad "a stack name in the launcher, the selector or the manifest" "$hits"
 
+# ── the listed-islands gauge (the gate of IslandIntakeStale; the #3574 assembly review) ─────────
+section "the list step says which islands it walks (listed-push.sh)"
+LP="$REPO/islands/intake/scripts/listed-push.sh"; LBIN="$TMP/lbin"; mkdir -p "$LBIN"
+cat > "$LBIN/curl" <<'LPEOF'
+#!/bin/bash
+echo "curl $*" >> "$H/lp.calls"
+for a in "$@"; do case "$a" in @*) cat "${a#@}" >> "$H/lp.body";; esac; done
+exit "${STUB_CURL_RC:-0}"
+LPEOF
+chmod +x "$LBIN/curl"
+printf 'gateway\nscan\nalpha/alpha-app\n' > "$TMP/lp.txt"; : > "$TMP/lp.calls"; : > "$TMP/lp.body"
+H="$TMP" PATH="$LBIN:$PATH" PUSHGATEWAY=http://pgw bash "$LP" "$TMP/lp.txt" > "$TMP/lp.log" 2>&1; rc=$?
+{ [ "$rc" = 0 ] && grep -q -- '-X PUT' "$TMP/lp.calls" && grep -q 'http://pgw/metrics/job/island_intake_list$' "$TMP/lp.calls" \
+    && [ "$(grep -c '^island_intake_listed_timestamp_seconds{island=' "$TMP/lp.body")" = 3 ] \
+    && grep -q '{island="alpha/alpha-app"} ' "$TMP/lp.body" \
+    && [ "$(grep '^island_intake_listed' "$TMP/lp.body" | awk '{print $2}' | sort -u | wc -l)" = 1 ]; } \
+  && ok "one PUT (the group is replaced) to job island_intake_list: one series per listed island, all with the same epoch" \
+  || bad "listed-push" "rc=$rc $(cat "$TMP/lp.calls" "$TMP/lp.body" "$TMP/lp.log" 2>/dev/null | head -8)"
+H="$TMP" PATH="$LBIN:$PATH" PUSHGATEWAY=http://pgw STUB_CURL_RC=7 bash "$LP" "$TMP/lp.txt" > "$TMP/lp.log" 2>&1; rc=$?
+{ [ "$rc" = 0 ] && grep -q 'not pushed (the previous list stays in force)' "$TMP/lp.log"; } \
+  && ok "…and a Pushgateway that cannot be reached is said and is never fatal to the walk" || bad "listed-push unreachable" "rc=$rc $(cat "$TMP/lp.log")"
+yq -r '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .container.args[0]' "$YAML" > "$TMP/list-step.sh"
+{ [ "$(grep -c 'bash islands/intake/scripts/listed-push.sh /tmp/island-intake-islands.txt' "$TMP/list-step.sh")" = 1 ] \
+    && [ "$(grep -n 'listed-push.sh /tmp' "$TMP/list-step.sh" | cut -d: -f1)" -gt "$(grep -n 'exit 0' "$TMP/list-step.sh" | head -1 | cut -d: -f1)" ]; } \
+  && ok "the list step calls it once, on the full walk only (after the named-island early exit)" || bad "list step listed-push" "$(grep -n 'listed-push\|exit 0' "$TMP/list-step.sh" 2>/dev/null | head -4)"
+
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

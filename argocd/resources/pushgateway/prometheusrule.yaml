@@ -93,12 +93,18 @@ spec:
         # (grouping label `island`) — the scheduled run walks every island (homelab#3579). PER ISLAND
         # (`max by (island)`): one island's run never hides another's silence. Same 8d bridge and 2 d on
         # a daily schedule as DeepDigStale, but NO `or vector(0)`: an island that never pushed the series
-        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires —
-        # and stops firing when its last push leaves the 8d window (an island removed from the list).
+        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires.
+        # The Pushgateway serves an island's last push for good (its store is a PVC), so age alone
+        # would fire forever for an island that LEFT the list (a facts file removed, a stack dropping
+        # `repos[].intake.facts`, a mistyped `-p island=`). The second term is the gate: the list step
+        # pushes island_intake_listed_timestamp_seconds{island} for every island of the full walk,
+        # all with that run's epoch (islands/intake/scripts/listed-push.sh, one replaced group), and
+        # an island counts only while its value equals the newest one. Same 8d bridge on both sides,
+        # so a wipe or a dead list step keeps the last list in force and a stale island still fires.
         # triage: none + platform_machinery — the remedy is reading the cron in Argo.
         # Fixture: island-intake.promtool-test.
         - alert: IslandIntakeStale
-          expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+          expr: ((time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400) and on (island) (max by (island) (max_over_time(island_intake_listed_timestamp_seconds[8d])) == on () group_left () max(max_over_time(island_intake_listed_timestamp_seconds[8d])))
           for: 6h
           labels:
             severity: warning
