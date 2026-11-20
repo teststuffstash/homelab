@@ -7,7 +7,8 @@ code it replaces** — the way [`gateway/`](../gateway/README.md) replaced the o
 shape. **The `islands/` location is provisional** — the final home is the operator's
 call. It sits outside `agents/` on purpose: the rules that bind that tree stay on the old code while
 old and new run side by side. **Nothing in the running loop reads or calls anything under
-`islands/`**; the old members each README names are live and authoritative until a separate
+`islands/`** — except [`intake/`](intake/README.md), which is running code moved here, not a fresh
+build; the old members each README names are live and authoritative until a separate
 switch-over change (a `seat` decision per island).
 
 The pages were carved from the spike PR #3147 (`agents/islands/`, 2026-11-07/08), which rendered
@@ -16,16 +17,18 @@ section — not on master) measured as separable pieces of the agent loop. They 
 (§Interfaces — gateway `POST /sessions`, ADR-122's one machine block); every old-contract site is a
 `⚑ gap` row, every unbuilt one `🚧 WIP`. What an island is: [docs/glossary.md](../docs/glossary.md)
 ("island"). Intake facts per island: [`docs/intake/`](../docs/intake/) — each a row in
-`gateway/scripts/intake-select.sh`.
+`islands/intake/scripts/intake-select.sh`.
 
 | Island | Prefix | Specs | Intake facts | What it will own |
 |---|---|---|---|---|
 | [scan](scan/README.md) | `SCAN-` | [specs/](scan/specs/README.md) | [scan.md](../docs/intake/scan.md) | the coordinator scan's decision + dispatch, the GitHub grammar, the updater, the review reflex, the major handoff, liveness signals |
 | [launch](launch/README.md) | `LAUNCH-` | [specs/](launch/specs/README.md) | [launch.md](../docs/intake/launch.md) | the ride: dispatch params × recipe × claim → gateway admission → context bundle → pod env → outcome |
 | [retro](retro/README.md) | `RETRO-` | [specs/](retro/specs/README.md) | [retro.md](../docs/intake/retro.md) | the weekly retro series: guard, pipeline, activity, cells, harvest, findings |
+| [intake](intake/README.md) | — | — (no spec root) | — (its items ride the gateway's sitting) | island intake as it runs today, moved into one directory (#3575): the rules, the selector, the launcher script, the tests |
 
-Not started: `review` (the code and specs reviewers, the IAC-G04 sentinel) and `intake` (island
-intake, the deep dig, the responder) — the spike drafted both; they wait.
+Not started: `review` (the code and specs reviewers, the IAC-G04 sentinel) and a fresh build of
+`intake` (island intake, the deep dig, the responder) — the spike drafted both; they wait. The
+[`intake/`](intake/README.md) row above is the running island intake in one place, not that build.
 
 ## What every island shares (and what is not built)
 

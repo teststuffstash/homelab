@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# intake-select — the deterministic half of the island intake sitting (gateway/intake.md).
+# intake-select — the deterministic half of the island intake sitting (islands/intake/rules/intake.md).
 #
 # Lists the island's OPEN issues that nobody has ruled yet and says whether the sitting should
 # fire: ≥ --min such issues, or the oldest ≥ --age-h hours. The judgment is the sitting's
-# (an LLM over gateway/intake.md); this script only selects, exactly as coordinator-scan.sh
+# (an LLM over islands/intake/rules/intake.md); this script only selects, exactly as coordinator-scan.sh
 # selects units for the coordinator's clauses. bash + gh + jq + python3 (the ONE body parser,
 # agents/issue_body.py — never a grep for Touches).
 #
-#   bash gateway/scripts/intake-select.sh [--island gateway] [--repo teststuffstash/homelab] [--min 3] [--age-h 24] [--json]
+#   bash islands/intake/scripts/intake-select.sh [--island gateway] [--repo teststuffstash/homelab] [--min 3] [--age-h 24] [--json]
 #
 # A candidate is an open issue that
 #   - belongs to the island (--island, default gateway; the table is island_members below): the
@@ -24,7 +24,7 @@
 # by NO island and is BOT-filed (the brief's §Hard limits test: not author type `User` — `is_bot`,
 # an `app/<slug>` or `<login>[bot]` login) is selected by `--island $ATTRIBUTION_ISLAND` only, marked
 # `kind: attribution` (members are `kind: member`). The loop's filers leave component attribution to
-# intake, so that sitting names the owning island(s) first (gateway/intake.md outcome `split`). A
+# intake, so that sitting names the owning island(s) first (islands/intake/rules/intake.md outcome `split`). A
 # human-filed unclaimed issue stays nobody's — the seat's `none` list.
 #
 # Output: one line per candidate `<number>\t<age_h>\t<author>\t<title>` (an attribution input adds
@@ -33,7 +33,7 @@
 # (an empty answer from a failed read is NOT "no candidates" — jail-subagent-card, 2026-10-26).
 # --json prints the candidate array instead of the lines (the verdict line still goes to stderr).
 # Seam: INTAKE_ISSUES_JSON = a file holding the `gh issue list --json …` answer, served instead of
-# the live read (agents/island-intake-test.sh drives membership through it).
+# the live read (islands/intake/tests/island-intake-test.sh drives membership through it).
 #
 # --source dig (FU-320, the first wired source — agents/coordinator/island-intake-argo.yaml runs it):
 # the island's inputs are the deep dig's `cause-found` findings (docs/agents/roles.md §deep dig)
@@ -41,7 +41,7 @@
 # `text:` inputs (`source: dig`), so the dig itself files nothing and intake stays the island's one
 # admission — dedup (step 2's `fold`) happens BEFORE anything is filed.
 #
-#   bash gateway/scripts/intake-select.sh --source dig [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source dig [--island gateway] [--out sel.json]
 #
 #   inputs    = homelab/dig-<date>/<run>/finding-N.json over INTAKE_DIG_LOOKBACK_D days, verdict in
 #               INTAKE_DIG_VERDICTS, OWNED by the island (finding_owner below): one of its ALERTS is
@@ -59,7 +59,7 @@
 # Exit 0 = fire, 1 = hold, 2 = a probe failed: an unreadable bucket is NEVER "no inputs" (it would
 # also be "nothing ruled", i.e. the same findings fed again every day). Seam: INTAKE_TS_DIR = a local
 # directory laid out like the bucket (<dir>/homelab/dig-…, <dir>/homelab/intake-…) served instead
-# of S3 — agents/island-intake-test.sh and a jail run use it.
+# of S3 — islands/intake/tests/island-intake-test.sh and a jail run use it.
 #
 # The same source also presents RECURRING report-only RESPONDER findings (FU-320; the responder
 # files nothing for them and writes `finding.json` only — docs/agents/roles.md §responder CAPTURE),
@@ -90,11 +90,11 @@
 # --source pile (FU-320, the second wired source — the same CronWorkflow runs it after the dig):
 # the island's issue pile, as ONE selection in the dig's shape (`island-intake-select/v1`).
 #
-#   bash gateway/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
 #
 #   member    = the default selection above (unruled, unlabelled) — `kind: member|attribution`.
 #               An issue whose LATEST `intake:` ruling is `forward` counts as unruled (another
-#               island's sitting passed it on and retitled it — gateway/intake.md step 0); its row
+#               island's sitting passed it on and retitled it — islands/intake/rules/intake.md step 0); its row
 #               carries `forwards` = how many `intake: forward` comments it has (the hop cap's count).
 #   reread    = `kind: reread`: the island's OPEN issues an earlier ruling left waiting on a human —
 #               label `agent/blocked`, or the LATEST `intake:` ruling is `seat` — whose wait is
@@ -121,12 +121,12 @@
 #
 # --source gaps (FU-320, night run 2026-11-14): the island's OWN incompleteness — the `⚑ gap` /
 # `🚧 WIP` requirement rows of its specs index (`<specs root>/README.md`, the root from
-# island_specs_root below), as `kind: gap` inputs (gateway/intake.md §Inputs `gap:`).
+# island_specs_root below), as `kind: gap` inputs (islands/intake/rules/intake.md §Inputs `gap:`).
 #
-#   bash gateway/scripts/intake-select.sh --source gaps [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source gaps [--island gateway] [--out sel.json]
 #
 #   row       = an index table row whose first cell is `[<REQ-ID>](<page>#…)` and that carries `⚑ gap`
-#               or `🚧`; id = `<specs page>#<REQ-ID>` (gateway/intake.md §Inputs `gap:`)
+#               or `🚧`; id = `<specs page>#<REQ-ID>` (islands/intake/rules/intake.md §Inputs `gap:`)
 #   minus     = every id an APPLY receipt of the last INTAKE_GAP_LOOKBACK_D days (default 30) lists
 #               with an outcome other than `deferred` (the dig's ledger), and every row an OPEN issue
 #               already names (its title or body names the REQ-ID, or the row's own `#<n>` is open)
@@ -136,10 +136,10 @@
 # unreadable is a probe failure (exit 2). Seams: INTAKE_ISSUES_JSON + INTAKE_TS_DIR + INTAKE_NOW.
 #
 # --source escape (FU-320, the island's improvement loop): the PRs of work this island QUEUED that
-# drew a CHANGES_REQUESTED review — read later by the same sitting (gateway/intake-escape.md), one
+# drew a CHANGES_REQUESTED review — read later by the same sitting (islands/intake/rules/intake-escape.md), one
 # record per blocking finding, `kind: escape`.
 #
-#   bash gateway/scripts/intake-select.sh --source escape [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source escape [--island gateway] [--out sel.json]
 #
 #   queued    = every issue id (`<owner/repo>#<n>`, the input or a ref) of a `queue`/`goal`/`requeue`
 #               line in an APPLY receipt of this island's last INTAKE_ESCAPE_LOOKBACK_D days (default 30)
@@ -155,9 +155,9 @@
 # INTAKE_TS_DIR + INTAKE_NOW.
 #
 # --source wait (FU-320, the island's other improvement loop): the island's WAITS to classify —
-# read later by the same sitting (gateway/intake-wait.md), one record per parking comment, `kind: wait`.
+# read later by the same sitting (islands/intake/rules/intake-wait.md), one record per parking comment, `kind: wait`.
 #
-#   bash gateway/scripts/intake-select.sh --source wait [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source wait [--island gateway] [--out sel.json]
 #
 #   item      = an issue of the island (island_of_issue), OPEN, or CLOSED inside the lookback — ONE batched
 #               GraphQL read (comments + label/close timeline, author types: a Bot is a bot, whatever its login)
@@ -177,7 +177,7 @@
 #               when it is released
 #   minus     = every wait id an APPLY receipt of the lookback lists (outcome ≠ deferred): read once
 #   cap       = INTAKE_WAIT_MAX (default 6) per sitting: released first (oldest release first), then standing
-#   prior     = the `waits` records of those receipts — the ledger's input (gateway/scripts/intake-wait-ledger.py)
+#   prior     = the `waits` records of those receipts — the ledger's input (islands/intake/scripts/intake-wait-ledger.py)
 #   stale     = NOT waits to classify: OPEN items whose newest marker names `issue=<n>` / `pr=<n>` that is
 #               closed or merged, or whose unreleased human parking names `#<n>` that closed or merged AFTER it —
 #               rows `kind: reread` (id `<owner/repo>#<n>`, the pile's) carrying `stale`, which the sitting
@@ -189,7 +189,7 @@
 # that ruled a wait `unchanged` BEFORE a target its parking names closed does not hide it.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
 REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -207,7 +207,7 @@ done
 
 # ── the island table ─────────────────────────────────────────────────────────────────────────────
 # One row per island in island_pattern / island_alert_rules (dig findings) AND island_members
-# (issues); a new island adds its rows plus its §Island facts file (gateway/intake.md names where those live). ISLANDS is the
+# (issues); a new island adds its rows plus its §Island facts file (islands/intake/rules/intake.md names where those live). ISLANDS is the
 # PRECEDENCE order — most specific first, gateway first so its selection never moves: an item
 # belongs to the first island that claims it, so it is never ruled by two sittings.
 # scan / launch / retro (night run 2026-11-14) sit right after the gateway: their title row
@@ -254,7 +254,7 @@ island_pattern() {
 island_members() {
   case "$1" in
     gateway) printf '%s\n' '^gateway([:/ ]|$)|\bGW-[A-Z]' \
-      gateway/;;
+      gateway/ islands/intake/;;   # islands/intake/ = the intake files that lived under gateway/ until homelab#3575 (same owner, moved)
     scan|launch|retro) printf '%s\n' "^$1 island:" "islands/$1/";;   # islands/README.md (provisional home)
     router-pair) printf '%s\n' '^(opnsense|carp|router[- ]pair|router-move|haproxy|unbound|wireguard|dnsmasq)\b' \
       opnsense/ ansible/opnsense- ansible/roles/opnsense- ansible/group_vars/opnsense.yml ansible/router-nodes/ \
@@ -1042,7 +1042,7 @@ lazy() { # <value> → the field, or jq's own error line + exit 5 where the per-
 # >>>REPLAY:blocked-on-jq>>> block (§BLOCKED-ON PREDICATE — the seam the replay harnesses already
 # extract by), so the two readers cannot drift; a definition that cannot be read is exit 2. The
 # newest comment carrying a marker rules.
-# Offered only under INTAKE_PR_HOLDS=1 (default off: gateway/intake.md step R rules these rows in
+# Offered only under INTAKE_PR_HOLDS=1 (default off: islands/intake/rules/intake.md step R rules these rows in
 # the report only, until the release of a PR-level hold has a rule — the cron does not set it).
 declare -A PRHOLD_PR=() PRHOLD_SINCE=()
 if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
@@ -1099,7 +1099,7 @@ while [ "$i" -lt "$count" ]; do
   esac
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
-  # …except `intake: forward → <island>`: another sitting passed the item on (gateway/intake.md
+  # …except `intake: forward → <island>`: another sitting passed the item on (islands/intake/rules/intake.md
   # step 0) and retitled it, so it is an UNRULED candidate of whichever island its title names now
   # (the SAME test as F_fwd's count above: `forward` as the outcome word, whatever follows it)
   [[ "$ruling" =~ ^intake:[[:space:]]*forward($|[^[:alnum:]_]) ]] && ruling=""

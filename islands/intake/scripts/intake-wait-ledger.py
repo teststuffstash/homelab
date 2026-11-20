@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""intake-wait-ledger — the tally behind the wait read's accumulation bar (gateway/intake-wait.md).
+"""intake-wait-ledger — the tally behind the wait read's accumulation bar (islands/intake/rules/intake-wait.md).
 
-Reads wait records (one per parking comment, written by step W of gateway/intake.md and carried in each
+Reads wait records (one per parking comment, written by step W of islands/intake/rules/intake.md and carried in each
 APPLY receipt's `waits`) and prints, deterministically:
   - per rule-line KEY: the records and the distinct ITEMS behind it, by class;
   - per class: how many records (intake-written waits only — a wait a ride or a reviewer wrote is listed
@@ -14,9 +14,9 @@ The KEY of a `rule:` line is `<file>|<mark>|<the line's first eight words>`, the
 markdown and punctuation stripped (`caused`: the line that produced the wait; `missing`: the line the
 missing one would FOLLOW) — so two records naming the same line are one key whatever its line number.
 
-  python3 gateway/scripts/intake-wait-ledger.py [--dir <bucket-shaped dir>] [--island gateway]
+  python3 islands/intake/scripts/intake-wait-ledger.py [--dir <bucket-shaped dir>] [--island gateway]
         [--records <file.json|.jsonl>]... [--proposals <file>] [--bar 2] [--json]
-  python3 gateway/scripts/intake-wait-ledger.py --self-test
+  python3 islands/intake/scripts/intake-wait-ledger.py --self-test
 
 --dir reads <dir>/homelab/intake-<island>-*/*/receipt.json (APPLY receipts only, schema
 island-intake-receipt/v1), `waits[]`; --records adds records (a JSON array, or one JSON object per line).
@@ -43,8 +43,23 @@ def norm_words(text, n=8):
     return " ".join([w for w in words if w][:n])
 
 
+# The rules files moved from gateway/ to islands/intake/rules/ (homelab#3575): a record written before the
+# move names the old path. Both spellings are ONE file, so earlier records keep counting on the same key.
+RULES_DIR = "islands/intake/rules"
+OLD_RULES_DIR = "gateway"
+
+
+def canon_file(f):
+    """→ the rules file's path as it is today: `<OLD_RULES_DIR>/intake*.md` reads as `<RULES_DIR>/intake*.md`."""
+    f = str(f or "").strip()
+    d, base = os.path.split(f)
+    if d == OLD_RULES_DIR and base.startswith("intake") and base.endswith(".md"):
+        return RULES_DIR + "/" + base
+    return f
+
+
 def rule_key(rule):
-    f = str(rule.get("file", "")).strip()
+    f = canon_file(rule.get("file", ""))
     m = str(rule.get("mark", "")).strip()
     return "{}|{}|{}".format(f, m, norm_words(rule.get("words", "")))
 
@@ -129,7 +144,7 @@ def tally(records, bar=2):
     for r in mine:
         for rule in r.get("rules", []):
             k = rule_key(rule)
-            e = keys.setdefault(k, {"key": k, "file": rule["file"], "mark": rule["mark"],
+            e = keys.setdefault(k, {"key": k, "file": canon_file(rule["file"]), "mark": rule["mark"],
                                     "words": norm_words(rule.get("words", "")), "records": [],
                                     "items": set(), "false_items": set(),
                                     "classes": {c: 0 for c in CLASSES}, "widens": False})
@@ -165,6 +180,8 @@ def check_proposals(ledger, proposals):
         if not isinstance(p, dict):
             continue
         k = p.get("key") or rule_key(p)
+        if "|" in k:  # an explicit key written before the move
+            k = canon_file(k.split("|", 1)[0]) + "|" + k.split("|", 1)[1]
         if k in at and isinstance(p.get("diff"), str) and p.get("diff").strip():
             kept.append({"key": k, "file": at[k]["file"], "diff": p["diff"],
                          "items": at[k]["false_items"], "records": at[k]["records"],
@@ -237,11 +254,11 @@ def self_test():
             fails.append(name)
 
     H = "teststuffstash/homelab"
-    step3 = {"file": "gateway/intake.md", "mark": "caused",
+    step3 = {"file": "islands/intake/rules/intake.md", "mark": "caused",
              "words": "3. **Does it need a human fact?** The body (or meta-state) says"}
-    step3_moved = {"file": "gateway/intake.md", "mark": "caused",
+    step3_moved = {"file": "islands/intake/rules/intake.md", "mark": "caused",
                    "words": "3. Does it need a human fact? The body or meta-state says"}
-    facts_missing = {"file": "gateway/intake.md", "mark": "missing",
+    facts_missing = {"file": "islands/intake/rules/intake.md", "mark": "missing",
                      "words": "- Sibling sets (step 3's parity check): the rails — `opencode`,"}
 
     def rec(wait, cls, rules, writer="intake", widens=False):
@@ -288,9 +305,20 @@ def self_test():
         check("classes count intake-written records: R=3 (#1 twice, #4) H=1 O=1",
               led["classes"] == {"H": 1, "R": 3, "O": 1, "U": 0}, led["classes"])
         check("the false-wait KPI: 4 R/O records on 3 items", led["false_waits"] == {"records": 4, "items": 3}, led["false_waits"])
+        # the move's alias: a record keyed on the OLD path and one keyed on the NEW path, same words → ONE key.
+        # Expected from the contract (canon_file): OLD_RULES_DIR/intake.md reads as RULES_DIR/intake.md,
+        # so #6 (old path, R) and #7 (new path, R) are two items behind one key — at the bar (2), on the new path.
+        moved = {"file": RULES_DIR + "/intake.md", "mark": "caused", "words": "- A wait names ONE fact"}
+        moved_old = dict(moved, file=OLD_RULES_DIR + "/intake.md")
+        al = tally([rec(H + "#6@2026-11-15T00:00:00Z/released", "R", [moved_old]),
+                    rec(H + "#7@2026-11-21T00:00:00Z/released", "R", [moved])])
+        check("an old-path record and a new-path record of the same words count as one key (the move's alias)",
+              len(al["keys"]) == 1 and al["at_bar"] == ["islands/intake/rules/intake.md|caused|- a wait names one fact"]
+              and al["keys"][0]["items"] == [H + "#6", H + "#7"] and al["keys"][0]["file"] == "islands/intake/rules/intake.md",
+              al["keys"])
         km = rule_key(facts_missing)
         check("a missing line keys on the line it would follow, `missing` mark",
-              km.startswith("gateway/intake.md|missing|- sibling sets"), km)
+              km.startswith("islands/intake/rules/intake.md|missing|- sibling sets"), km)
         kept, dropped = check_proposals(led, [dict(step3, diff="-old\n+new"), dict(facts_missing, diff="+x"), dict(step3, diff="")])
         check("a proposal is kept only at the bar, with the ledger's items and widens",
               len(kept) == 1 and kept[0]["items"] == [H + "#1", H + "#4"] and kept[0]["widens_authority"] is True, kept)
@@ -302,7 +330,7 @@ def self_test():
         props = os.path.join(d, "props.jsonl")
         with open(props, "w") as fh:
             fh.write(json.dumps(dict(step3, diff="-old\n+new")) + "\n")
-            fh.write('{"file": "gateway/intake.md", "diff": "+x" BROKEN\n')
+            fh.write('{"file": "islands/intake/rules/intake.md", "diff": "+x" BROKEN\n')
         with open(fresh, "a") as fh:
             fh.write("{not json at all\n")
         out = os.path.join(d, "out.json")

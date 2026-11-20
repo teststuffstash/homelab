@@ -1,7 +1,7 @@
 # Island facts — dependency upgrades
 
 > The §Island facts block for the **dependency-upgrades** island (Renovate, version sets, the lock
-> intake). Rules: [`gateway/intake.md`](../../gateway/intake.md) — this file replaces only its
+> intake). Rules: [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — this file replaces only its
 > §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
@@ -14,7 +14,7 @@
   [`renovate.md`](../renovate.md) (policy; §Coordinator × Renovate — closing a Renovate PR is never a
   terminal action).
 - **Membership** — `island_members dependency-upgrades` in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh): title `renovate` / `dependency` /
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh): title `renovate` / `dependency` /
   `version set` / `S9` (the Renovate stint), or every `Touches` entry under the prefixes. Renovate's
   own PRs are not intake inputs — the lanes own them.
 - **Write tier** (`classify_touches`, run 2026-10-31): `.github/renovate-global.json` and

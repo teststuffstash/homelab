@@ -2,7 +2,7 @@
 
 > The §Island facts block for the **router-pair** island (OPNsense CARP, `.1` VIP; nodes
 > `opnsense-nx02` .70 + `opnsense-pve` .71; the test VM and the rebuild drill). Rules:
-> [`gateway/intake.md`](../../gateway/intake.md) — this file replaces only its §Island facts and
+> [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — this file replaces only its §Island facts and
 > island read rows. Island list: [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
 - **Repo** `teststuffstash/homelab`; paths `ansible/opnsense-*` + `ansible/roles/opnsense-*` +
@@ -13,7 +13,7 @@
   (§Status is the live state), [`opnsense-test-vm.md`](../opnsense-test-vm.md),
   [`management-box.md`](../management-box.md) §Router config converge — BACKUP-only.
 - **Membership** — `island_members router-pair` in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh): title `opnsense` / `carp` /
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh): title `opnsense` / `carp` /
   `router pair` / `router-move` / `haproxy` / `unbound` / `wireguard` / `dnsmasq`, or every `Touches`
   entry under the prefixes. Bare `router` is NOT a cue — the model router (`openrouter-proxy`) is
   the agent loop's.

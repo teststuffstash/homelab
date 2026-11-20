@@ -668,7 +668,7 @@ the block needs pruning, not more headings.
       strike store (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01). Relates FU-199, agent-runtime#85, model-routing §M1a.
 
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg).** Brief
-      [`gateway/intake.md`](../gateway/intake.md), selector `gateway/scripts/intake-select.sh`, design + evidence
+      [`islands/intake/rules/intake.md`](../islands/intake/rules/intake.md), selector `islands/intake/scripts/intake-select.sh`, design + evidence
       [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). WIRED: dig source 2026-10-28 (#3004 + #3008, `island-intake`
       CronWorkflow 05:00Z, receipts = the ruled-input ledger); issue pile + re-reads 2026-11-11 (#3259, ADR-163; `prefer: strongest`).
       **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),

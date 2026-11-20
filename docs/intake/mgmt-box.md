@@ -1,7 +1,7 @@
 # Island facts — the management box
 
 > The §Island facts block for the **mgmt-box** island (R12: holds main's tofu state, applies from
-> master, the upgrade lease). Rules: [`gateway/intake.md`](../../gateway/intake.md) — this file
+> master, the upgrade lease). Rules: [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — this file
 > replaces only its §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
@@ -13,7 +13,7 @@
   names (MB2 belt, MB3 sentinel, MB4 reconciler, MB5 lease); it is the largest owning doc on any
   island.
 - **Membership** — `island_members mgmt-box` in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh): title `mgmt` / `management box` /
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh): title `mgmt` / `management box` /
   `upgrade lease`, or every `Touches` entry under the prefixes. Precedes the substrate and agent
   loop; a `Mgmt*Opnsense*` dig finding is the router pair's (earlier row).
 - **Write tier** (`classify_touches`, run 2026-10-31): `mgmt/scripts/**` and

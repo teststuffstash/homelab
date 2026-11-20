@@ -2,7 +2,7 @@
 
 > Step E of [island intake](intake.md) §The procedure, for each `escape:` input. The sitting that
 > follows it already holds the rules home; this page is the classification. Evidence and the
-> frozen regression set: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) §Run 4.
+> frozen regression set: [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) §Run 4.
 
 Island intake wrote the issue body a loop worker then built. The PR's reviewers (code reviewer +
 specs reviewer) requested changes. For EACH blocking finding in EACH review round: could it have

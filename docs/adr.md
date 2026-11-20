@@ -3074,7 +3074,7 @@ under the operator's login, weighted by age: old and stale, a free hand on the e
 light editing only, and a would-be close is `seat`. Any other human's issue stays `seat`. Every such
 write is reversible from the comment and edit history. Re-reading the waits an earlier ruling left
 (`agent/blocked`, `intake: seat`) is part of the sitting. Mechanism:
-[`gateway/intake.md`](../gateway/intake.md) §Hard limits and procedure step R; evidence:
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §Hard limits and procedure step R; evidence:
 [`spikes/island-intake.md`](spikes/island-intake.md) §Run 3.
 **Considered:** keeping "never close a human-filed issue" (rejected: 18 of 28 gateway issues are
 under the operator's login but nearly all were written by jail sessions, so most of the pile could
@@ -3095,7 +3095,7 @@ another owner's gate, a ruling the tracker records as pending on that question, 
 whose-issue limits. With no entry, intake pins the cheaper-to-reverse option ⚖ and queues; the
 island's alerts, the deep dig, the escape read and prober rides correct a wrong pin. "Ruling" means
 the operator's recorded answer, whatever session typed it under the operator's login. Mechanism:
-[`gateway/intake.md`](../gateway/intake.md) §The procedure step 3; each island's instances are its
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §The procedure step 3; each island's instances are its
 facts' `Operator-only` lines ([`intake/`](intake/)).
 **Considered:** the open-ended "a human fact is missing" trigger (rejected: a read of ten gateway
 waits found six decidable from what intake already reads); drafting the list and waiting for
