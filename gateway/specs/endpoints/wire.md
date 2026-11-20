@@ -137,7 +137,7 @@ answers; `stored?` = the record's bytes; `load?` = whether the declarations load
 | an allowlisted key is kept at any depth and in a list | `[slug]` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}` | loads |
 | no declarations file keeps no string ⚖ | `GATEWAY_WIRE` unset, source `codex-usage` | the observed usage shape | every string as its length | — |
 | an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE…"}` | the value as its length | loads |
-| an allowlisted value equal to the account id is kept as its length ⚖ | `[slug]` | `{"slug": "dummy-account"}` | the value as its length | loads |
+| an allowlisted value equal to the account id is kept as its length ⚖ | `[slug]` | `{"slug": "dummy-account"}` | the account id as its length | loads |
 
 #### What an allowlist may not name
 
