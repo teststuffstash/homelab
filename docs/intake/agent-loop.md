@@ -21,7 +21,8 @@
 - **Read set = the item's SLICE**: the owning doc SECTION the item names + the script it changes —
   never `docs/agents/` as a corpus (the design-agents read is operator-typed only;
   [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Design questions). A fact outside the
-  slice goes under `Unverified` (intake.md step 3), never a wider read.
+  slice that the decision stands on is read with the narrowest GET (intake.md §What you read);
+  any other goes under `Unverified`, never a wider read.
 - **New or re-grouped loop machinery** (a coordinator clause, a responder lane, a dig, a reviewer
   change of shape) is **`seat`**, never `queue`/`goal` — it is designed against the component's
   slice by the seat (same card, "a proposed change to a LOOP component IS the stop-and-ask trigger").

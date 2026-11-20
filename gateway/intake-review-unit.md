@@ -36,7 +36,9 @@ two things that disagree, or the one thing that is missing and the place it belo
   needs; the request takes another path than the one expected; nothing at the worker's HEAD can
   check it);
 - a claim the release is judged by that could pass while the feature is broken;
-- a behaviour the worker must choose because no body decides it.
+- a behaviour the worker must choose because no body decides it;
+- a line that sends the worker to measure, look up or check a fact before it can know what to
+  build ("verify …", "stop and report if …") — the author reads that fact; quote the line.
 Not yours: table layout, wording, `⚖` marks, description cells — the rows lens reviews those.
 
 ## Output — the one file your prompt names
