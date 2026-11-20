@@ -119,3 +119,60 @@ tests:
             exp_annotations:
               summary: "Island intake has not run for the scan island in >2 days — its findings, issues and waits are not being admitted"
               description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the scan island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+
+  # ── (e) IslandIntakeClaimsUnread (homelab#3580) — the stack islands' source went unread ───────
+  # The list step pushes island_intake_claims_read_ok once per daily run (1 = the claims were read,
+  # 0 = the read failed or answered no claim) and the Pushgateway serves that value until the next
+  # run. Sampled every MINUTE, as a scrape sees it (the alert reads the instant value, with no
+  # `max_over_time` bridge: at a 1 h sample interval the series would go stale between samples and
+  # `for:` would never be served). A "day" is 1440 samples; `for: 2d` = 48 h at 0.
+  #   (e1) every run reads the claims: 1 throughout — silent.
+  - interval: 1m
+    name: "(e1) the claims are read on every run: silent"
+    input_series:
+      - series: 'island_intake_claims_read_ok{job="island_intake_claims"}'
+        values: "1+0x7200"
+    alert_rule_test:
+      - eval_time: 100h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts: []
+  #   (e2) ONE failed day: 1 for hours 0–24, 0 for hours 24–48 (the failed run's value, served for a
+  #   day), 1 again from hour 48 (the next run reads them). 0 never lasted 48 h — silent at the end of
+  #   the failed day (47 h), right after the recovery (49 h) and two days on (96 h).
+  - interval: 1m
+    name: "(e2) one failed day, then a good run: silent"
+    input_series:
+      - series: 'island_intake_claims_read_ok{job="island_intake_claims"}'
+        values: "1+0x1439 0+0x1439 1+0x4320"
+    alert_rule_test:
+      - eval_time: 47h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts: []
+      - eval_time: 49h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts: []
+      - eval_time: 96h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts: []
+  #   (e3) TWO failed days: 1 for hours 0–24, 0 from hour 24 on (the runs of hours 24 and 48 both
+  #   failed, and nothing has read the claims since). At hour 71 the gauge has been 0 for 47 h —
+  #   pending; at hour 73 for 49 h — firing.
+  - interval: 1m
+    name: "(e3) two failed days: fires once the gauge has been 0 for 2 d"
+    input_series:
+      - series: 'island_intake_claims_read_ok{job="island_intake_claims"}'
+        values: "1+0x1439 0+0x5760"
+    alert_rule_test:
+      - eval_time: 71h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts: []
+      - eval_time: 73h
+        alertname: IslandIntakeClaimsUnread
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "Island intake has not read the AgentStack claims for 2 days — no stack island is getting a sitting"
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) reads the live AgentStack claims in its list step to find the stack islands (repos[].intake.facts). That read has failed or answered no claim on every run for 2 days: the platform islands are still walked, every stack island is skipped. Check the `islands` step's log of the newest island-intake-* workflow (the line `island-intake: claims read FAILED — stack islands not walked` and the one after it), and: kubectl auth can-i list agentstacks.platform.teststuff.net --as=system:serviceaccount:agent-coordinator:island-intake (the rule is on ClusterRole island-intake-read, agents/coordinator/rbac.yaml). Reader: islands/intake/scripts/claims-read.sh."

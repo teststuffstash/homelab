@@ -176,7 +176,8 @@ subjects:
 #     coordinator's lanes already read (pods and their logs, events, workloads, PVCs, nodes,
 #     Longhorn, ArgoCD apps, workflows, network policies, ESO specs, claims). `agents/
 #     subscription-latch.sh`'s belt (`kubectl get pods -A -l …subscription-session`) rides it;
-#   - `island-intake-read` below: the four kinds a ruling needed and could not read;
+#   - `island-intake-read` below: the four kinds a ruling needed and could not read, and the
+#     AgentStack claims (the stack islands' declaration, homelab#3580);
 #   - the chart-rendered `argo-workflows-workflow` Role (`workflowtaskresults` create/patch — the
 #     Argo executor's own write), the `specs-review` pattern above.
 # NOT bound to ClusterRole `agent-coordinator`, to `responder-ledger` or to
@@ -190,7 +191,10 @@ metadata:
 ---
 # What the read roles lack and an intake ruling stands on: a namespace's quota (is the ride
 # starved or the quota wrong), the alert rule as deployed (not as the repo has it), and the
-# schedules and templates of the loop's own workflows. get/list, nothing else.
+# schedules and templates of the loop's own workflows. And the AgentStack claims (homelab#3580):
+# a stack declares an intake island as `repos[].intake.facts` in its claim, and the workflow's list
+# step and a stack island's sitting read the claims live (islands/intake/scripts/claims-read.sh) —
+# never agents/stacks.json, so a stack turning intake on needs no homelab commit. get/list, nothing else.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -204,6 +208,9 @@ rules:
     verbs: [get, list]
   - apiGroups: [argoproj.io]
     resources: [cronworkflows, workflowtemplates]
+    verbs: [get, list]
+  - apiGroups: [platform.teststuff.net]
+    resources: [agentstacks]
     verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

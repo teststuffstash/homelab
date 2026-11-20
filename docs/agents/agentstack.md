@@ -139,6 +139,10 @@ The Composition renders nothing for it; two consumers read it:
   without the field (and for cluster-less runs). The `specs-review` SA holds `agentstacks`
   get/list for this one read ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
 
+**Island intake for a stack repo: `repos[].intake: {facts}`.** Present = the daily
+[island intake](../../islands/intake/README.md#stack-islands) run holds a sitting for the repo as the island `<stack>/<repo>`,
+ruled by the platform's rules and the facts file at that repo-relative path; absent = off. The Composition renders nothing for it.
+
 **Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
 has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
 evidence bucket all belong to it), and each further root is listed here — homelab lists

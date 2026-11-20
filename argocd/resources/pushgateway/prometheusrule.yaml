@@ -107,6 +107,26 @@ spec:
           annotations:
             summary: "Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted"
             description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+        # ── island intake: the stack islands' source went unread (homelab#3580) ─────────────────
+        # The workflow's list step reads the live AgentStack claims for the stack islands
+        # (islands/intake/scripts/claims-read.sh) and pushes island_intake_claims_read_ok 1|0 on every
+        # scheduled run (job island_intake_claims). A failed read still walks the platform islands, so
+        # nothing else goes red: without this, every stack island would be skipped silently.
+        # `for: 2d` on a daily push = two consecutive failed runs (one failed day flips back to 1 at
+        # the next run and never fires). No bridge: after a Pushgateway wipe the series is absent until
+        # the next 05:00Z run pushes it again, and the clock restarts — a day late, never a false page.
+        # triage: none + platform_machinery — the remedy is reading the list step's log.
+        # Fixture: island-intake.promtool-test.
+        - alert: IslandIntakeClaimsUnread
+          expr: max(island_intake_claims_read_ok) == 0
+          for: 2d
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "Island intake has not read the AgentStack claims for 2 days — no stack island is getting a sitting"
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) reads the live AgentStack claims in its list step to find the stack islands (repos[].intake.facts). That read has failed or answered no claim on every run for 2 days: the platform islands are still walked, every stack island is skipped. Check the `islands` step's log of the newest island-intake-* workflow (the line `island-intake: claims read FAILED — stack islands not walked` and the one after it), and: kubectl auth can-i list agentstacks.platform.teststuff.net --as=system:serviceaccount:agent-coordinator:island-intake (the rule is on ClusterRole island-intake-read, agents/coordinator/rbac.yaml). Reader: islands/intake/scripts/claims-read.sh."
         # ── the island rules digest's own belt (FU-320) ─────────────────────────────────────────
         # agents/coordinator/island-rules-digest-argo.yaml pushes
         # island_rules_digest_last_success_timestamp_seconds only when the week's outcome LANDED (the

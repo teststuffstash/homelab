@@ -1,0 +1,9 @@
+[
+  {"number": 1, "title": "release: 1.4.0", "body": "checklist", "labels": [], "createdAt": "2026-10-01T00:00:00Z", "updatedAt": "2026-10-01T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": []},
+  {"number": 2, "title": "Roadmap: accounts", "body": "an epic", "labels": [{"name": "epic"}], "createdAt": "2026-10-01T00:00:00Z", "updatedAt": "2026-10-01T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": []},
+  {"number": 3, "title": "login page 500s after the release: session cookie", "body": "free text, no Touches", "labels": [{"name": "bug"}], "createdAt": "2026-10-02T00:00:00Z", "updatedAt": "2026-10-02T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": []},
+  {"number": 4, "title": "gateway: a title a platform island's row would claim", "body": "Touches: gateway/src/x.py", "labels": [], "createdAt": "2026-10-03T00:00:00Z", "updatedAt": "2026-10-03T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": []},
+  {"number": 5, "title": "already queued", "body": "x", "labels": [{"name": "agent/queued"}], "createdAt": "2026-10-03T00:00:00Z", "updatedAt": "2026-10-03T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": []},
+  {"number": 6, "title": "already ruled standing", "body": "x", "labels": [], "createdAt": "2026-10-03T00:00:00Z", "updatedAt": "2026-10-03T00:00:00Z", "author": {"login": "dev", "is_bot": false}, "comments": [{"body": "intake: standing — a note", "createdAt": "2026-10-04T00:00:00Z"}]},
+  {"number": 7, "title": "chore(deps): bump a library", "body": "x", "labels": [], "createdAt": "2026-10-03T00:00:00Z", "updatedAt": "2026-10-03T00:00:00Z", "author": {"login": "app/renovate", "is_bot": true}, "comments": []}
+]
