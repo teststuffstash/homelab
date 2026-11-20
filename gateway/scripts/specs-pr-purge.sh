@@ -31,16 +31,8 @@ N="${1:?usage: specs-pr-purge.sh <pr-number>}"
 # shellcheck disable=SC1091
 source scripts/lib/s3-publish.sh
 s3_publish_remote specs "$GATEWAY_SPECS_S3_ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
+# shellcheck disable=SC1091
+source scripts/lib/site-build.sh
 for PREFIX in "specs:gateway-specs/pr-${N}" "specs:gateway-specs/evidence/pr-${N}"; do
-  listing=""
-  if ! listing="$(s3_publish_ls lsf -R --files-only "$PREFIX")"; then
-    echo "::error::listing probe failed for ${PREFIX}/" >&2
-    exit 1
-  fi
-  if [ -n "$listing" ]; then
-    echo "purging ${PREFIX}/ (close-time cleanup)"
-    rclone delete --checkers "$S3_PUBLISH_WORKERS" "$PREFIX"
-  else
-    echo "no objects under ${PREFIX}/ — nothing to purge"
-  fi
+  site_purge_prefix "$PREFIX"
 done

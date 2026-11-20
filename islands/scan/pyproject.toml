@@ -23,7 +23,8 @@ packages = ["src/scan_island"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Raw Allure results for every run; no publisher exists for this spec root yet (goal #3389 pin 6).
+# Raw Allure results for every run: the specs site joins them into the pages (islands/scripts/specs-site.sh).
+# No evidence pack is published for the specs reviewer from this root (goal #3389 pin 6).
 addopts = "--alluredir=allure-results --clean-alluredir --allure-no-capture"
 # Case ids are the fixture row ids / spec description cells verbatim.
 disable_test_id_escaping_and_forfeit_all_rights_to_community_support = true
