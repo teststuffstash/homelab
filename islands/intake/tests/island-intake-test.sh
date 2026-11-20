@@ -1321,6 +1321,71 @@ section "the experiment block's loader"
 python3 -I "$REPO/islands/intake/scripts/experiment.py" --self-test > "$TMP/experiment-st.log" 2>&1 \
   && ok "experiment.py --self-test" || bad "experiment self-test" "$(grep -e FAIL "$TMP/experiment-st.log" | head -5)"
 
+# the verdict and the Prometheus read (homelab#3603): the two commands as a shell caller runs them, against a
+# stub HTTP server (tests/prom_stub.py) answering from fixtures/experiment-read/prom.json — one scenario per
+# URL path prefix. The decision table itself (fixtures/experiment-read/decide.json) and every refused answer
+# are rows of the self-test above. Expected values, from the fixture and the rule (issue #3603 acceptance 2):
+# body.md has min_window 1h, max_window 7d, min_samples 20, pass "<= 3", guard errors "< 1"; t0 is
+# 2026-11-01T00:00:05Z = 1793491205; the stub's sample count is 3 before t0 + 2000m and 20 from it on, so the
+# deciding window is 2000m = 120000 s and the deciding instant 1793491205 + 120000 = 1793611205.
+section "the experiment's verdict and its Prometheus read (experiment.py read, at)"
+EXP="$REPO/islands/intake/scripts/experiment.py"; EXPFX="$REPO/islands/intake/tests/fixtures/experiment-read"
+python3 -I "$REPO/islands/intake/tests/prom_stub.py" "$EXPFX/prom.json" "$TMP/prom.port" "$TMP/prom.log" > "$TMP/prom-stub.log" 2>&1 &
+PROM_PID=$!
+for _ in $(seq 1 100); do [ -s "$TMP/prom.port" ] && break; sleep 0.1; done
+PROM="http://127.0.0.1:$(cat "$TMP/prom.port" 2>/dev/null)"; : >> "$TMP/prom.log"
+expread() { # <scenario> <now> [body]  → $TMP/exp.out, $TMP/exp.err; the exit is the command's own
+  python3 -I "$EXP" read --prometheus "$PROM/$1" --since 2026-11-01T00:00:05Z --now "$2" "${3:-$EXPFX/body.md}" > "$TMP/exp.out" 2> "$TMP/exp.err"
+}
+asked() { grep -c "\"scenario\": \"$1\"" "$TMP/prom.log"; }
+expread pass 2026-11-03T02:00:05Z; rc=$?
+{ [ "$rc" = 0 ] && [ "$(wc -l < "$TMP/exp.out")" = 1 ] && [ ! -s "$TMP/exp.err" ] \
+    && jq -e '.verdict == "pass" and .window_s == 120000 and .at == "2026-11-02T09:20:05Z" and .value == 2 and .samples == 20
+              and .bound == "2026-11-08T00:00:05Z" and .id == "press-waits-down" and .t0 == "2026-11-01T00:00:05Z" and .error == null
+              and .guards == [{id: "errors", value: 0, ok: true}] and (keys | length) == 11' "$TMP/exp.out" > /dev/null; } \
+  && ok "read: a claim that holds exits 0 — one JSON line: verdict pass, the 2000m window, the instant it ends, the value, the samples, the guard" \
+  || bad "read pass" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+{ jq -e -s 'any(.[]; .scenario == "pass" and .time == "1793611205" and .query == "max_over_time(fx_value[2000m]) and on() (avg_over_time(fx_up[2000m]) > 0.95)")' "$TMP/prom.log" > /dev/null \
+    && [ "$(asked pass)" -le 16 ] && ! grep -qF '$window' "$TMP/prom.log"; } \
+  && ok "…the stub was asked query over [2000m] at t0 + 2000m, \$window never left in a question, and the bisection took at most 16 questions for a seven-day bound" \
+  || bad "read pass questions" "$(asked pass) asked: $(tail -3 "$TMP/prom.log")"
+cp "$TMP/exp.out" "$TMP/exp.first"
+expread pass 2026-11-09T00:00:05Z; rc=$?
+{ [ "$rc" = 0 ] && cmp -s "$TMP/exp.out" "$TMP/exp.first"; } \
+  && ok "…and the same read a day after the bound prints the same line (the verdict is of t0 and the series, not of when it is read)" \
+  || bad "read pass twice" "rc=$rc $(cat "$TMP/exp.out")"
+expread fail 2026-11-03T02:00:05Z; rc=$?
+{ [ "$rc" = 1 ] && jq -e '.verdict == "fail" and .value == 7 and .reason == "7 <= 3 does not hold" and .error == null' "$TMP/exp.out" > /dev/null; } \
+  && ok "read: a value over the threshold (7 against <= 3) exits 1, verdict fail" || bad "read fail" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+expread pending 2026-11-03T02:00:05Z; rc=$?
+{ [ "$rc" = 2 ] && jq -e '.verdict == "pending" and .window_s == null and .samples == 3 and .error == null' "$TMP/exp.out" > /dev/null; } \
+  && ok "read: three samples of twenty before the bound exit 2, verdict pending and no error" || bad "read pending" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+expread two-samples 2026-11-03T02:00:05Z; rc=$?
+{ [ "$rc" = 2 ] && [ "$(jq -c '[.verdict, .error, .id, .bound]' "$TMP/exp.out")" = '[null,"one sample expected, the answer holds 2","press-waits-down","2026-11-08T00:00:05Z"]' ]; } \
+  && ok "read: an answer of two samples exits 2 with no verdict — the error says one sample expected" || bad "read two samples" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+expread down 2026-11-03T02:00:05Z; rc=$?
+{ [ "$rc" = 2 ] && [ "$(jq -c '[.verdict, .error]' "$TMP/exp.out")" = '[null,"HTTP 500 (asked twice)"]' ] && [ "$(asked down)" = 2 ]; } \
+  && ok "read: HTTP 500 exits 2 with no verdict, after exactly one retry (two requests)" || bad "read HTTP 500" "rc=$rc asked=$(asked down) $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+before="$(wc -l < "$TMP/prom.log")"; codes=""
+for b in none.md neither.md malformed-no-block.md no-such-body.md; do
+  expread pass 2026-11-03T02:00:05Z "$REPO/islands/intake/tests/fixtures/experiment/$b"; codes="$codes $?:$(wc -c < "$TMP/exp.out"):$(wc -l < "$TMP/exp.err")"
+done
+{ [ "$codes" = " 3:0:1 4:0:1 5:0:1 6:0:1" ] && [ "$(wc -l < "$TMP/prom.log")" = "$before" ]; } \
+  && ok "read: a body that does not load never shares an exit with a verdict — none 3, absent 4, malformed 5, unreadable 6; nothing on stdout, nothing asked" \
+  || bad "read body exits" "got:$codes"
+python3 -I "$EXP" at --prometheus "$PROM/baseline" --window 10d --at 2026-11-02T09:20:05Z \
+  --query 'max_over_time(fx_value[$window]) and on() (avg_over_time(fx_up[$window]) > 0.95)' > "$TMP/exp.out" 2> "$TMP/exp.err"; rc=$?
+{ [ "$rc" = 0 ] && [ "$(cat "$TMP/exp.out")" = 5 ] && [ ! -s "$TMP/exp.err" ]; } \
+  && ok "at: the baseline replay prints the one number (10d asked as [14400m], at the instant given — the stub answers no other question)" \
+  || bad "at" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+python3 -I "$EXP" at --prometheus "$PROM/baseline" --window 1h --at 2026-11-02T09:20:05Z --query 'fx_gone[$window]' > "$TMP/exp.out" 2> "$TMP/exp.err"; rc=$?
+{ [ "$rc" = 0 ] && [ "$(cat "$TMP/exp.out")" = "no sample" ]; } \
+  && ok "at: an answer with no sample prints \`no sample\`, exit 0" || bad "at no sample" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+python3 -I "$EXP" at --prometheus "$PROM/down" --window 1h --at 2026-11-02T09:20:05Z --query 'fx_value[$window]' > "$TMP/exp.out" 2> "$TMP/exp.err"; rc=$?
+{ [ "$rc" = 2 ] && [ ! -s "$TMP/exp.out" ] && grep -q '^experiment: read failed — HTTP 500 (asked twice)$' "$TMP/exp.err"; } \
+  && ok "at: HTTP 500 exits 2 — nothing on stdout, the reason on stderr" || bad "at HTTP 500" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
+kill "$PROM_PID" 2>/dev/null; wait "$PROM_PID" 2>/dev/null
+
 # ── the rules write the experiment (homelab#3605; intake.md §Experiment) ─────────────────────────────────
 # Expected, from the issue's acceptance 2, 4 and 6: BOTH body templates of intake.md show `## Experiment` in
 # place — after the part that decides the means (`## Spec changes` / `## Decision`), before `## Out of scope` —
