@@ -1,0 +1,652 @@
+{
+  "about": "prom.json plus one rule per scenario (except `down`) answering experiment-read.sh's preflight read (count(count_over_time(up[…])) → no sample): the scheduled read asks it before it writes anything (homelab#3604).",
+  "scenarios": {
+    "pass": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "fx_samples",
+        "from": 1793611205,
+        "value": "20"
+      },
+      {
+        "has": "fx_samples",
+        "value": "3"
+      },
+      {
+        "has": "fx_value",
+        "value": "2"
+      },
+      {
+        "has": "fx_errors",
+        "value": "0"
+      }
+    ],
+    "fail": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "fx_samples",
+        "from": 1793611205,
+        "value": "20"
+      },
+      {
+        "has": "fx_samples",
+        "value": "3"
+      },
+      {
+        "has": "fx_value",
+        "value": "7"
+      },
+      {
+        "has": "fx_errors",
+        "value": "0"
+      }
+    ],
+    "pending": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "fx_samples",
+        "value": "3"
+      }
+    ],
+    "two-samples": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "fx_samples",
+        "from": 1793611205,
+        "value": "20"
+      },
+      {
+        "has": "fx_samples",
+        "value": "3"
+      },
+      {
+        "has": "fx_value",
+        "values": [
+          "2",
+          "2"
+        ]
+      },
+      {
+        "has": "fx_errors",
+        "value": "0"
+      }
+    ],
+    "down": [
+      {
+        "status": 500,
+        "text": "Internal Server Error\n"
+      }
+    ],
+    "value-down": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "fx_samples",
+        "from": 1793611205,
+        "value": "20"
+      },
+      {
+        "has": "fx_samples",
+        "value": "3"
+      },
+      {
+        "has": "fx_value",
+        "status": 503,
+        "text": "Service Unavailable\n"
+      },
+      {
+        "has": "fx_errors",
+        "value": "0"
+      }
+    ],
+    "baseline": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "has": "max_over_time(fx_value[14400m]) and on() (avg_over_time(fx_up[14400m]) > 0.95)",
+        "from": 1793611205,
+        "to": 1793611205,
+        "value": "5"
+      },
+      {
+        "has": "fx_fraction[30m]",
+        "value": "0.25"
+      },
+      {
+        "has": "fx_gone",
+        "values": []
+      }
+    ],
+    "one": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "5"
+      }
+    ],
+    "exponent": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "1.5e+03"
+      }
+    ],
+    "negative": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "-0.5"
+      }
+    ],
+    "empty": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "values": []
+      }
+    ],
+    "two": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "values": [
+          "1",
+          "2"
+        ]
+      }
+    ],
+    "nan": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "NaN"
+      }
+    ],
+    "inf": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "+Inf"
+      }
+    ],
+    "minus-inf": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "-Inf"
+      }
+    ],
+    "word": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "abc"
+      }
+    ],
+    "blank": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": ""
+      }
+    ],
+    "spaced": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": " 5"
+      }
+    ],
+    "newline": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "5\n"
+      }
+    ],
+    "hex": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "0x10"
+      }
+    ],
+    "overflow": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "1e999"
+      }
+    ],
+    "other-digits": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "٥"
+      }
+    ],
+    "long": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "1000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "number-not-string": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1793611205,
+                  5
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "nan-constant": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "text": "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":[{\"metric\":{},\"value\":[1793611205,NaN]}]}}"
+      }
+    ],
+    "scalar": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "scalar",
+            "result": [
+              1793611205,
+              "5"
+            ]
+          }
+        }
+      }
+    ],
+    "matrix": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "matrix",
+            "result": [
+              {
+                "metric": {},
+                "values": [
+                  [
+                    1793611205,
+                    "5"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "string": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "string",
+            "result": [
+              1793611205,
+              "5"
+            ]
+          }
+        }
+      }
+    ],
+    "histogram": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "histogram": [
+                  1793611205,
+                  {
+                    "count": "5",
+                    "sum": "5"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "pair-of-three": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1793611205,
+                  "5",
+                  "6"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "sample-not-object": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": [
+              "5"
+            ]
+          }
+        }
+      }
+    ],
+    "result-not-list": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success",
+          "data": {
+            "resultType": "vector",
+            "result": {
+              "value": [
+                1793611205,
+                "5"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "no-data-key": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "success"
+        }
+      }
+    ],
+    "status-error": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "status": "error",
+          "errorType": "timeout",
+          "error": "query timed out in expression evaluation"
+        }
+      }
+    ],
+    "status-missing": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": {
+          "data": {
+            "resultType": "vector",
+            "result": [
+              {
+                "metric": {},
+                "value": [
+                  1793611205,
+                  "5"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "list": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "json": [
+          1,
+          2
+        ]
+      }
+    ],
+    "html": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "text": "<html><body>sign in</body></html>"
+      }
+    ],
+    "unclosed": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "text": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["
+      }
+    ],
+    "stale-stamp": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "value": "5",
+        "ts": 1793611145
+      }
+    ],
+    "bad-request": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "status": 400,
+        "json": {
+          "status": "error",
+          "errorType": "bad_data",
+          "error": "invalid parameter \"query\": 1:9: parse error: unexpected character: '$'"
+        }
+      }
+    ],
+    "http-204": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "status": 204,
+        "text": ""
+      }
+    ],
+    "http-500": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "status": 500,
+        "text": "Internal Server Error\n"
+      }
+    ],
+    "flaky": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "fail_first": 1,
+        "value": "5"
+      }
+    ],
+    "flaky-twice": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "fail_first": 2,
+        "value": "5"
+      }
+    ],
+    "truncated": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "truncate": "5"
+      }
+    ],
+    "redirect": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "redirect": "/one/api/v1/query?query=fx_x%5B5m%5D&time=1793611205"
+      }
+    ],
+    "slow": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "hang": 1.5
+      }
+    ],
+    "drip": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "drip": [
+          0.2,
+          15
+        ]
+      }
+    ],
+    "oversized": [
+      {
+        "has": "count_over_time(up[",
+        "values": []
+      },
+      {
+        "pad": 1100000
+      }
+    ]
+  }
+}

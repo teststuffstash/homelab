@@ -224,3 +224,75 @@ tests:
             exp_annotations:
               summary: "Island intake has not read the AgentStack claims for 2 days — no stack island is getting a sitting"
               description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) reads the live AgentStack claims in its list step to find the stack islands (repos[].intake.facts). That read has failed or answered no claim on every run for 2 days: the platform islands are still walked, every stack island is skipped. Check the `islands` step's log of the newest island-intake-* workflow (the line `island-intake: claims read FAILED — stack islands not walked` and the one after it), and: kubectl auth can-i list agentstacks.platform.teststuff.net --as=system:serviceaccount:agent-coordinator:island-intake (the rule is on ClusterRole island-intake-read, agents/coordinator/rbac.yaml). Reader: islands/intake/scripts/claims-read.sh."
+
+  # ── (g) IntakeExperimentOverdue / IntakeExperimentReadStale (homelab#3604) ────────────────────
+  # The experiment read pushes island_intake_experiments_oldest_overdue_seconds (now − the bound of the
+  # oldest experiment still open past it; 0 when none) and ..._last_run_timestamp_seconds once per run,
+  # job island_intake_experiments. Sampled every MINUTE, as a scrape sees it (an hourly series goes stale between samples and `for:` is never served); "ran at test-hour H" is H*3600.
+  #   (g1) quiet: a run every day, nothing overdue — silent at every check.
+  - interval: 1m
+    name: "(g1) a daily read with nothing overdue stays quiet"
+    input_series:
+      - series: 'island_intake_experiments_oldest_overdue_seconds{job="island_intake_experiments"}'
+        values: "0+0x7200"
+      - series: 'island_intake_experiments_last_run_timestamp_seconds{job="island_intake_experiments"}'
+        values: "0+0x1439 86400+0x1439 172800+0x1439 259200+0x1439 345600+0x1439"
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: IntakeExperimentOverdue
+        exp_alerts: []
+      - eval_time: 100h
+        alertname: IntakeExperimentOverdue
+        exp_alerts: []
+      - eval_time: 100h
+        alertname: IntakeExperimentReadStale
+        exp_alerts: []
+  #   (g2) an experiment 1 day overdue (86400) is below the 2 d line; the value grows by an hour per hour,
+  #   crosses 2 d (172800) at hour 48 and — `for: 1h` — fires from hour 49.
+  - interval: 1m
+    name: "(g2) an experiment left open past 2 days over its bound fires; one day over does not"
+    input_series:
+      - series: 'island_intake_experiments_oldest_overdue_seconds{job="island_intake_experiments"}'
+        values: "0+60x7200"
+      - series: 'island_intake_experiments_last_run_timestamp_seconds{job="island_intake_experiments"}'
+        values: "0+60x7200"
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: IntakeExperimentOverdue
+        exp_alerts: []
+      - eval_time: 48h
+        alertname: IntakeExperimentOverdue
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: IntakeExperimentOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "An intake experiment is still open more than 2 days past its bound \u2014 its verdict was not written"
+              description: "An issue labelled experiment/open is still undecided two days after its window ended. The scheduled island-intake CronWorkflow (ns agent-coordinator) reads every such issue in its `experiments` step, before the sittings. Check that step's log in the newest island-intake-* workflow (a Prometheus or GitHub read that failed, an upload that failed, an issue in fault \u2014 the comment on the issue names it) and read by hand: bash islands/intake/scripts/experiment-read.sh --dry-run. Reader: islands/intake/scripts/experiment-read.sh."
+  #   (g3) the read stops: last run at hour 0, nothing pushed since. Fires after 2 d + `for: 6h`.
+  - interval: 1m
+    name: "(g3) a read that last ran 2 days ago fires IntakeExperimentReadStale after for:6h"
+    input_series:
+      - series: 'island_intake_experiments_last_run_timestamp_seconds{job="island_intake_experiments"}'
+        values: "0+0x7200"
+    alert_rule_test:
+      - eval_time: 47h
+        alertname: IntakeExperimentReadStale
+        exp_alerts: []
+      - eval_time: 53h
+        alertname: IntakeExperimentReadStale
+        exp_alerts: []
+      - eval_time: 55h
+        alertname: IntakeExperimentReadStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "The intake experiment read has not run for more than 2 days \u2014 open experiments are not being decided"
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) runs the experiment read as its first step; no run has pushed island_intake_experiments_last_run_timestamp_seconds in over 2 days. Check: argo -n agent-coordinator cron get island-intake and the `experiments` step of the newest island-intake-* workflow (a clone or devbox install that failed, a pod that never started). Reader: islands/intake/scripts/experiment-read.sh."
