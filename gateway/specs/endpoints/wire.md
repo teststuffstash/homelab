@@ -66,7 +66,7 @@ candidate model, so it keeps the last model's answer) and `codex-usage` (the usa
 
 A source is `public` when the read sent no credential and no account header: the answer's bytes are
 kept verbatim. Every other read is `account`: the answer is sanitised structurally before it is
-persisted — keys, numbers, booleans and nulls stay, every string not under an allowlisted key ([GW-WIRE-PROBE](#gw-wire-probe)'s `keep_keys`; a credential-shaped value stays a length) becomes `{"len": n}` ⚖ (an unseen
+persisted — keys, numbers, booleans and nulls stay, every string not under an allowlisted key ([GW-WIRE-PROBE](#gw-wire-probe)'s `keep_keys`; a credential-shaped value stays a length, and so does a value equal to the rail's account id) becomes `{"len": n}` ⚖ (an unseen
 payload can carry identity nobody listed, so a scrub of known values is rejected). The class is
 decided by what the read sent, not by the caller's declaration: a read that carried a credential is
 never `public`. Only the latest answer is kept, one row per source; a failed read (a non-200, an
