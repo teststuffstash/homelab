@@ -105,19 +105,19 @@ async def test_refresh_runs_the_derivation(gw, app, clock, store_before, refresh
 # ── The derivation at a refresh ──────────────────────────────────────────────────────────────
 DERIVE_ROWS = [
     pytest.param("catalogs and benched rows at T0, no derivation", "ok", "openrouter", "T0 + 21600 s",
-                 "heavy V4 · standard V41, V4 · light GLM, V41, V4", "none", "none", "heavy false · standard true · light false",
+                 "heavy V4 · standard V41, V4 · light GLM, V41, V4", "none", "none", "heavy true · standard true · light true",
                  id="a good refresh derives every rail's tiers ⚖"),
     pytest.param("a derivation at T0", "GLM intelligence 30 → 48", "openrouter", "T0 + 21600 s",
-                 "heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4", "none", "none", "heavy false · standard false · light false",
+                 "heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4", "none", "none", "heavy true · standard true · light true",
                  id="the feed moves, the lists move with no commit ⚖"),
     pytest.param("a derivation at T0: heavy V4 · standard V41, V4 · light GLM, V41, V4", "every openrouter price null", "openrouter", "T0 + 21600 s",
-                 "heavy V4 · standard V41, V4 · light GLM, V41, V4", "heavy, standard, light", "none", "heavy false · standard true · light false",
+                 "heavy V4 · standard V41, V4 · light GLM, V41, V4", "heavy, standard, light", "none", "heavy true · standard true · light true",
                  id="a tier with no priced candidate is undecided and keeps its last derived list ⚖"),
     pytest.param("catalogs at T0", "GLM intelligence null", "openrouter", "T0 + 21600 s",
-                 "heavy V4 · standard V41, V4 · light V41, V4", "none", "GLM", "heavy false · standard true · light false",
+                 "heavy V4 · standard V41, V4 · light V41, V4", "none", "GLM", "heavy true · standard true · light true",
                  id="a benched candidate with no value on the score axis is in no list and is named ⚖"),
     pytest.param("policy rails.anthropic.models naming four aliases", "ok", "anthropic", "T0 + 21600 s",
-                 "heavy FXD · standard FXC, FXD · light FXB, FXC, FXD", "none", "none", "heavy true · standard false · light false",
+                 "heavy FXD · standard FXC, FXD · light FXB, FXC, FXD", "none", "none", "heavy true · standard true · light true",
                  id="a subscription rail's candidates are the policy's ids ⚖"),
 ]
 
@@ -284,3 +284,23 @@ async def test_view_shape(gw, app, state, expected_shape):
         diff = {k: {"schema": want[k], "view": got[k]} for k in want if want[k] != got[k]}
         actual = expected_shape if not diff and rails else f"differs: {diff}"
     verdict(f"shape = {expected_shape}", expected_shape={"expected": expected_shape, "actual": actual}, state={"actual": state})
+
+
+# ── The walked list is the derived one ───────────────────────────────────────────────────────
+WALKED_ROWS = [pytest.param("a derivation at T0", "true on every tier", id="after the cut-over every tier equals what the admission walks ⚖")]
+
+
+@pytest.mark.real_walk
+@pytest.mark.parametrize(("store_state", "expected_equals_walked"), WALKED_ROWS, ids=[p.id for p in WALKED_ROWS])
+async def test_the_walked_list_is_the_derived_one(gw, app, store_state, expected_equals_walked):
+    world(note=f"{WORLD}; a hand-written openrouter view")
+    with given("store = a derivation at T0"):
+        app.state.tier_derivation.or_view = lambda: hand_view()
+        assert app.state.tier_derivation.run()
+    with when("GET /catalog/tiers"):
+        v = await tiers_view(gw)
+    attach_json("GET /catalog/tiers", v)
+    flags = {f"{r}/{t}": v["rails"][r]["tiers"][t]["equals_walked"] for r in v["rails"] for t in TIERS}
+    verdict("equals_walked = true on every tier", expected_equals_walked={"expected": expected_equals_walked,
+                                    "actual": "true on every tier" if flags and all(flags.values()) else f"differs: {flags}"},
+            store_state={"actual": store_state})

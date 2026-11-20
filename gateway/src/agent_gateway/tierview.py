@@ -7,8 +7,8 @@ and rides, the manual benchmark rows when a file is mounted, and the policy's `t
 is `agent_gateway.tiers`' own (`build_snapshot` assembles the candidate rows, `derive` / `unscored` run the
 rules) — nothing of it is rewritten here; only where its inputs come from and where its output goes.
 
-SHADOW: nothing here is read by the admission. `GET /catalog/tiers` shows the derivation beside the lists
-the admission walks (`equals_walked`). The last good derivation is kept in the store (`catalog_snapshots`,
+CUT OVER (GW-SESSIONS-ADMIT): the admission walks `walk()`; the policy's priced-rail lists order nothing.
+`GET /catalog/tiers` shows the derivation and `equals_walked` (true wherever a list is derived). The last good derivation is kept in the store (`catalog_snapshots`,
 source `tier-derivation`) and survives a restart; a refresh whose derivation cannot run keeps it.
 """
 
@@ -157,6 +157,14 @@ class TierDerivation:
                 "score_source": row.get("score_source", "feed"),
                 "rides": {"clean": rides.get("clean", 0), "judged": rides.get("judged", 0), "prior": rides.get("prior", 1.0)}}
 
+    def walk(self, rail: str, tier: str) -> tuple[str, ...] | None:
+        """The list the admission walks (GW-SESSIONS-ADMIT): the derivation's (last good) list for (rail, tier).
+        None = the rail has no derivation; () = derived, nothing for this tier."""
+        v = (self.body.get("rails") or {}).get(rail)
+        if v is None:
+            return None
+        return tuple(((v.get("tiers") or {}).get(tier) or {}).get("list") or ())
+
     # -- the view ---------------------------------------------------------------------------------
     def view(self) -> dict:
         """`GET /catalog/tiers`: the derivation beside the lists the admission walks. No derivation =
@@ -165,11 +173,10 @@ class TierDerivation:
         manual = self.body.get("manual") or {"used": [], "retired": [], "refused": None}
         rails: dict[str, dict] = {}
         for rail, v in (self.body.get("rails") or {}).items():
-            policy_rail = self.policy.rails.get(rail)
             tiers = {}
             for tier in TIERS:
                 t = (v.get("tiers") or {}).get(tier) or {"list": [], "evidence": {}}
-                walked = list(policy_rail.models.get(tier, ())) if policy_rail else None
-                tiers[tier] = {"list": t["list"], "evidence": t["evidence"], "equals_walked": walked is not None and walked == t["list"]}
+                walked = self.walk(rail, tier)  # the cut-over: the admission walks the derivation itself
+                tiers[tier] = {"list": t["list"], "evidence": t["evidence"], "equals_walked": walked is not None and list(walked) == t["list"]}
             rails[rail] = {"tiers": tiers, "undecided": v.get("undecided", []), "unscored": v.get("unscored", [])}
         return {"derived_at": _iso(self.derived_at), **stamps, "manual": manual, "rails": rails}

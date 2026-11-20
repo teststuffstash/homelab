@@ -41,7 +41,7 @@ from ._catalog_rows import (
     or_view,
     verdict,
 )
-from .conftest import attach_json, bearer, given, quiet, rule, when, world
+from .conftest import attach_json, bearer, given, quiet, rule, walk_policy_lists, when, world
 
 pytestmark = rule("GW-CATALOG-OR-CANARY")
 WORLD = "openrouter-catalog"
@@ -95,6 +95,7 @@ async def test_what_a_ride_pins(gw, app, store, upstreams, session, cell_before,
     world(upstream="upstream-ok", note=WORLD)
     with given(f"a first good refresh; cell_before = {cell_before}"):
         await or_refreshed(app)
+        walk_policy_lists(app)  # this row is about the pin, not the derived list the refresh just made
         if cell_before.startswith("eligible"):
             await canary_ride(gw, upstreams)
     with given(f"session = {session}"):

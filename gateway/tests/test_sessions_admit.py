@@ -394,3 +394,118 @@ async def test_counting(gw, policy, clock, world, before, action, expected_gauge
             r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": TASK, "rail": "opencode"})
             assert r.json()["decision"] == "defer", r.text
     expect({"gauge": await _active(gw, "opencode")}, gauge=expected_gauge)
+
+
+# ── Where a tier's list comes from (the derivation the walk reads) ───────────────────────────
+HAIKU = "opencode-go/claude-haiku-5-5"
+V41 = "deepseek/deepseek-v4.1-flash"
+
+
+def derived_body(**rails: dict[str, list[str]]) -> dict:
+    """A stored derivation body: {rail: {tier: [ids]}} → the tier-derivation snapshot's shape."""
+    return {"stamps": {}, "manual": {"used": [], "retired": [], "refused": None},
+            "rails": {r: {"tiers": {t: {"list": ids, "evidence": {}} for t, ids in tiers.items()}, "undecided": [], "unscored": []}
+                      for r, tiers in rails.items()}}
+
+
+FULL = {"light": [HAIKU], "standard": [HAIKU], "heavy": [HAIKU]}
+DERIVED_ROWS = [
+    pytest.param("policy-default", "O and R derived, O standard `opencode-go/claude-haiku-5-5`", "worker", "standard", "dispatch", "opencode", HAIKU, DASH, DASH,
+                 id="the walk reads the derived list, not the policy's ⚖"),
+    pytest.param("policy-default", "none", "worker", "standard", "defer", DASH, DASH, "tiers-underived", 60, id="no derivation anywhere: every session defers ⚖"),
+    pytest.param("policy-default", "R derived, R standard `deepseek/deepseek-v4.1-flash`, none for O", "worker", "standard", "dispatch", "openrouter", V41, DASH, DASH,
+                 id="a rail with no derivation is held, the next rail serves ⚖"),
+    pytest.param("policy-default", "O derived, light undecided, its kept list `opencode-go/claude-haiku-5-5`", "worker", "light", "dispatch", "opencode", HAIKU, DASH, DASH,
+                 id="an undecided tier walks its last derived list ⚖"),
+    pytest.param("policy-default", "O derived with an empty heavy list, R derived, R heavy `deepseek/deepseek-v4.1-flash`", "worker", "heavy", "dispatch", "openrouter", V41, DASH, DASH,
+                 id="a tier never derived on a derived rail is empty there ⚖"),
+]
+BODIES = {
+    "O and R derived, O standard `opencode-go/claude-haiku-5-5`": {"opencode": FULL, "openrouter": {"standard": [V41], "light": [V41], "heavy": [V41]}},
+    "none": {},
+    "R derived, R standard `deepseek/deepseek-v4.1-flash`, none for O": {"openrouter": {"standard": [V41], "light": [V41], "heavy": [V41]}},
+    "O derived, light undecided, its kept list `opencode-go/claude-haiku-5-5`": {"opencode": FULL},
+    "O derived with an empty heavy list, R derived, R heavy `deepseek/deepseek-v4.1-flash`": {
+        "opencode": {"light": [HAIKU], "standard": [HAIKU], "heavy": []}, "openrouter": {"standard": [V41], "light": [V41], "heavy": [V41]}},
+}
+
+
+@pytest.mark.real_walk
+@pytest.mark.parametrize(("world", "derivation", "role", "tier", "expected_decision", "expected_rail", "expected_model", "expected_reason",
+                          "expected_retry_after_s"), DERIVED_ROWS, ids=[p.id for p in DERIVED_ROWS])
+async def test_where_a_tiers_list_comes_from(gw, app, world, derivation, role, tier, expected_decision, expected_rail, expected_model,
+                                             expected_reason, expected_retry_after_s):
+    enter_world(world)
+    inputs(derivation=derivation, role=role, tier=tier)
+    with given("the gateway's derivation holds: " + derivation):
+        app.state.tier_derivation.body = derived_body(**BODIES[derivation])
+        app.state.tier_derivation.derived_at = 1_800_000_000.0 if BODIES[derivation] else None
+    with when(f"POST /sessions role={role} tier={tier}"):
+        r = await gw.post("/sessions", json={"stack": "platform", "role": role, "task": TASK, "tier": tier})
+    doc = r.json()
+    attach_json("the answer", doc)
+    expect(doc, decision=expected_decision, rail=expected_rail, model=expected_model, reason=expected_reason,
+           retry_after_s=expected_retry_after_s)
+
+
+RESTART_ROWS = [
+    pytest.param("policy-default", "a derivation at T0", "dispatch", HAIKU, DASH, id="a restart on a file store dispatches from the stored derivation ⚖"),
+    pytest.param("policy-default", "empty", "defer", DASH, "tiers-underived", id="a restart on an empty store defers until the first derivation ⚖"),
+]
+
+
+@pytest.mark.real_walk
+@pytest.mark.parametrize(("world", "store_state", "expected_decision", "expected_model", "expected_reason"), RESTART_ROWS, ids=[p.id for p in RESTART_ROWS])
+async def test_a_restart_keeps_the_derivation(gw, app, settings, policy, secrets, reviews, pods, clock, mcp_transport,
+                                              world, store_state, expected_decision, expected_model, expected_reason):
+    from agent_gateway.tierview import SOURCE
+
+    from ._catalog_rows import SecondGateway
+
+    enter_world(world)
+    inputs(store_state=store_state)
+    with given(f"store_state = {store_state}"):
+        if store_state != "empty":
+            app.state.store.snapshot_save(SOURCE, clock(), derived_body(opencode=FULL, openrouter={"standard": [V41]}))
+    with when("a new gateway starts on the same store file, before any refresh"):
+        second = SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+        r = await second.gw.post("/sessions", json={"stack": "platform", "role": "worker", "task": TASK, "tier": "standard"})
+        await second.close()
+    doc = r.json()
+    attach_json("the answer", doc)
+    expect(doc, decision=expected_decision, model=expected_model, reason=expected_reason)
+
+
+# ── The policy without the priced rails' lists ───────────────────────────────────────────────
+LOAD_ROWS = [
+    pytest.param("policy-default", "ok", id="a policy with the lists loads; they order nothing"),
+    pytest.param("policy-default with those two blocks removed", "ok",
+                 id="a policy without `rails.opencode.models` and `rails.openrouter.models` loads ⚖"),
+    pytest.param("policy-default with that block removed", "refused, naming rails.anthropic.models",
+                 id="a policy without `rails.anthropic.models` is refused ⚖"),
+]
+
+
+@pytest.mark.parametrize(("policy", "expected_load"), LOAD_ROWS, ids=[p.id for p in LOAD_ROWS])
+def test_the_policy_without_the_priced_lists(policy, expected_load):
+    import json
+
+    from agent_gateway.config import Policy, PolicyError
+
+    from .conftest import POLICY_FIXTURE
+
+    enter_world("policy-default")
+    inputs(policy=policy)
+    doc = json.loads(POLICY_FIXTURE.read_text(encoding="utf-8"))
+    if "two blocks" in policy:
+        for rail in ("opencode", "openrouter"):
+            doc["rails"][rail].pop("models")
+    elif "that block" in policy:
+        doc["rails"]["anthropic"].pop("models")
+    with when(f"Policy.from_dict loads {policy}"):
+        try:
+            Policy.from_dict(doc)
+            actual = "ok"
+        except PolicyError as e:
+            actual = "refused, naming rails.anthropic.models" if "rails.anthropic.models" in str(e) else f"refused: {e}"
+    expect({"load": actual}, load=expected_load)

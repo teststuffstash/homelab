@@ -211,6 +211,14 @@ budget class — the rest of the ADR-096 ladder is a gap, rendered as rows, not 
 transport facts the gateway sees FIRST-HAND (a 429, a 401/403, a stream's end) are its own and are
 [GW-SESSIONS-CAPACITY](#gw-sessions-capacity)'s rows; a ride's outcome is the consumer's and is not read here. The
 caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limit answer.
+⚖ **A tier's list is the derived one** ([GW-MODEL-TIERS §The derivation at a refresh](catalog.md#the-derivation-at-a-refresh);
+operator ruling 2026-11-12, "2 defer"): the walk reads each rail's list from the gateway's last good
+derivation, never from the policy's `rails.<rail>.models`; everything else about the walk — the order,
+the overrides, the harness rule, `prefer`, the rail choice — is as above. A rail with **no derivation** is
+held — the typed defer `tiers-underived`, `retry_after_s` the policy's `defer_retry_s` — and the walk moves to
+the role's next rail; every rail held answers that defer, so a gateway on an empty store defers every session
+until its first derivation lands. A tier a derived rail holds no list for is passed over on that rail. The last
+good derivation is stored and a restart on a file store dispatches from it at once.
 
 #### The policy walk
 
@@ -228,6 +236,43 @@ sessions per rail as `anthropic/opencode/openrouter`; `credential` = how the sta
 | the stack's anthropic ref does not resolve, the walk continues ⚖ | policy-default | platform | reviewer | 0/0/0 | anthropic_ref definitive miss | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | the only allowed rail's credential does not resolve | policy-default | platform | prober | 0/0/0 | anthropic_ref definitive miss | defer | — | — | credential-unresolved |
 | an unknown stack | policy-default | nope | worker | 0/0/0 | all resolve | defer | — | — | stack-unknown |
+
+#### Where a tier's list comes from
+
+**World: [policy-default](../worlds/README.md#policy-worlds)**, the task `homelab-2588-r1`, no rail holds a session,
+the stack's refs all resolve. Legend: `derivation` = what the gateway's derivation holds
+(`O` = `opencode`, `R` = `openrouter`; `none` = no derivation on any rail); the policy's lists would answer
+`opencode-go/deepseek-v4.1-flash` for the worker's `standard` tier.
+
+| description | world | derivation | role | tier | decision? | rail? | model? | reason? | retry_after_s? |
+|---|---|---|---|---|---|---|---|---|---|
+| the walk reads the derived list, not the policy's ⚖ | policy-default | O and R derived, O standard `opencode-go/claude-haiku-5-5` | worker | standard | dispatch | opencode | opencode-go/claude-haiku-5-5 | — | — |
+| no derivation anywhere: every session defers ⚖ | policy-default | none | worker | standard | defer | — | — | tiers-underived | 60 |
+| a rail with no derivation is held, the next rail serves ⚖ | policy-default | R derived, R standard `deepseek/deepseek-v4.1-flash`, none for O | worker | standard | dispatch | openrouter | deepseek/deepseek-v4.1-flash | — | — |
+| an undecided tier walks its last derived list ⚖ | policy-default | O derived, light undecided, its kept list `opencode-go/claude-haiku-5-5` | worker | light | dispatch | opencode | opencode-go/claude-haiku-5-5 | — | — |
+| a tier never derived on a derived rail is empty there ⚖ | policy-default | O derived with an empty heavy list, R derived, R heavy `deepseek/deepseek-v4.1-flash` | worker | heavy | dispatch | openrouter | deepseek/deepseek-v4.1-flash | — | — |
+
+⚑ gap: the issue's sixth proposed row (an explicit `model` outside the derived lists) has no input — a
+`POST /sessions` body names no model; the explicit overrides are `tier`, `harness`, `rail` and `prefer`, whose rows
+are unchanged and read the derived lists.
+
+#### A restart keeps the derivation
+
+**World: [policy-default](../worlds/README.md#policy-worlds)**, a file store; the derivation at T0 is stored; the
+new gateway starts on that file (a pod roll) before any refresh.
+
+| description | world | store_state | decision? | model? | reason? |
+|---|---|---|---|---|---|
+| a restart on a file store dispatches from the stored derivation ⚖ | policy-default | a derivation at T0 | dispatch | opencode-go/claude-haiku-5-5 | — |
+| a restart on an empty store defers until the first derivation ⚖ | policy-default | empty | defer | — | tiers-underived |
+
+#### The policy without the priced rails' lists
+
+| description | policy | load? |
+|---|---|---|
+| a policy with the lists loads; they order nothing | policy-default | ok |
+| a policy without `rails.opencode.models` and `rails.openrouter.models` loads ⚖ | policy-default with those two blocks removed | ok |
+| a policy without `rails.anthropic.models` is refused ⚖ | policy-default with that block removed | refused, naming rails.anthropic.models |
 
 #### Explicit tier, harness and rail
 

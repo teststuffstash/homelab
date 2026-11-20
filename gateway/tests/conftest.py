@@ -830,6 +830,33 @@ def mcp_transport(mcp, vendor_transport):  # noqa: F811 — the fixture, importe
     return McpTransport(mcp, vendor_transport)
 
 
+@pytest.fixture(autouse=True)
+def _default_derivation(request, monkeypatch):
+    """GW-SESSIONS-ADMIT: the walk reads the DERIVED lists, and a gateway with none defers. The `policy-default`
+    world stands for a gateway whose derivation equals the policy's lists, so every walk row that is not about the
+    derivation itself keeps its table: a rail with no stored derivation walks the policy's list. A test marked
+    `real_walk` walks the derivation only (the rows of §Where a tier's list comes from)."""
+    if request.node.get_closest_marker("real_walk"):
+        return
+    from agent_gateway.tierview import TierDerivation
+
+    real = TierDerivation.walk
+
+    def walk(self, rail, tier):
+        got = real(self, rail, tier)
+        if got is None and rail in self.policy.rails and self.policy.rails[rail].models:
+            return tuple(self.policy.rails[rail].models.get(tier, ()))
+        return got
+
+    monkeypatch.setattr(TierDerivation, "walk", walk)
+
+
+def walk_policy_lists(app) -> None:
+    """The world's derivation for a row that is about something else (a canary's pin): drop what a real refresh
+    derived, so the walk reads the `policy-default` world's lists again (see `_default_derivation`)."""
+    app.state.tier_derivation.body = {}
+
+
 @pytest.fixture
 async def app(settings, policy, secrets, store, mcp_transport, clock, reviews, pods):  # noqa: F811 — the fixture, imported below
     client = httpx.AsyncClient(transport=mcp_transport)  # the rails' fakes + the Go catalog's fake vendor + the fake MCP
