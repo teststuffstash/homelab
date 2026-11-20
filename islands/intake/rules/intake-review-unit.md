@@ -39,7 +39,8 @@ two things that disagree, or the one thing that is missing and the place it belo
 - a behaviour the worker must choose because no body decides it;
 - a line that sends the worker to measure, look up or check a fact before it can know what to
   build ("verify …", "stop and report if …") — the author reads that fact; quote the line.
-Not yours: table layout, wording, `⚖` marks, description cells — the rows lens reviews those.
+Not yours: table layout, wording, `⚖` marks, description cells — the rows lens reviews those, on
+a `spec` body only. An `edit` body (no `## Spec changes`, no rows table) is read by no other lens.
 
 ## Output — the one file your prompt names
 ```

@@ -1,14 +1,13 @@
 # Island intake — the sitting that turns an island's unshaped inputs into queued work
 
-> **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it. **The rules here
-> are island-agnostic and live only here;** the §Island facts block at the end is the gateway's,
-> every other PLATFORM island's lives in [`docs/intake/<island>.md`](../../../docs/intake/), and a STACK
-> island's lives in its own repo (ADR-160) —
-> [agent-loop](../../../docs/intake/agent-loop.md), [substrate](../../../docs/intake/substrate.md),
+> **Brief, v0 (spike, 2026-10-27).** **The rules here are island-agnostic and live only here;**
+> an island's facts live in its facts file: a PLATFORM island's is
+> [`docs/intake/<island>.md`](../../../docs/intake/), a STACK island's lives in its own repo
+> (ADR-160) —
+> [gateway](../../../docs/intake/gateway.md), [agent-loop](../../../docs/intake/agent-loop.md), [substrate](../../../docs/intake/substrate.md),
 > [dependency-upgrades](../../../docs/intake/dependency-upgrades.md), [mgmt-box](../../../docs/intake/mgmt-box.md),
-> [router-pair](../../../docs/intake/router-pair.md), [scan](../../../docs/intake/scan.md), [launch](../../../docs/intake/launch.md), [retro](../../../docs/intake/retro.md). A sitting for another island reads this brief, then
-> that file IN PLACE OF §Island facts and the gateway rows of §What you read (`README.md`,
-> `specs/`, `src/`); membership is `intake-select.sh --island <island>`. Design, evidence and the open
+> [router-pair](../../../docs/intake/router-pair.md), [scan](../../../docs/intake/scan.md), [launch](../../../docs/intake/launch.md), [retro](../../../docs/intake/retro.md). A sitting reads this brief, then
+> its island's facts file (§Island facts); membership is `intake-select.sh --island <island>`. Design, evidence and the open
 > questions: [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
 > the coordinator's `goal-decompose` clause
 > ([`agents/coordinator/README.md`](../../../agents/coordinator/README.md) §The `goal-decompose` clause):
@@ -84,22 +83,23 @@ Bounded on purpose ([`islands-no-corpus-read`](../../../docs/spikes/context-and-
 | Read | Why |
 |---|---|
 | The item: body, every comment, linked PR **bodies** (never diffs) | the claim and its history |
-| [`README.md`](../../../gateway/README.md) + [`specs/README.md`](../../../gateway/specs/README.md) + the pinned `RULES.md` it names (a `gh api` GET of the pinned tag) | the island and its process (the pinned rules) |
-| The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
 | The alert's live state (Alertmanager `/api/v2/alerts`) and the gauge it reads (Prometheus `/api/v1/query`), for any input that names an alert or a metric; for a `dig` input also the log lines its annotation names | is the condition still there, since when, and is it still THIS cause (a re-fire on a new cause is the next dig's, not this outcome's) |
 | The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
-| The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` outcome's own trigger |
 | What the ride can do: the repo's recipe (`.agents/fix.yaml`, `.agents/build.yaml` — the paths it may not touch, the gates it runs, its stop markers) and the pod's reach ([`docs/agents/agentstack.md`](../../../docs/agents/agentstack.md) §The egress dial, with the repo's `fixer:` block in its claim) | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
 | For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
 | For a `wait:` input: the item's comments (its events when they show the release), and the lines the wait cites at the default-branch commit before its parking comment | step W — whether the rules made the wait necessary |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
 
+These rows are the ones every island shares. The island's own reads (its README and specs, its
+views, its deployed files) are the rows under `## Sources` in its facts file (§Island facts); they
+are part of this table.
+
 Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
-decide on what you have. Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's
-`src/` (you judge the contract, not the code). **A fact you need and cannot find in that set is
+decide on what you have. Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, and what
+the facts file's `## Sources` rules out. **A fact you need and cannot find in that set is
 never a guess.** There are two kinds:
 - **A fact the decision stands on** — which means fixes it, how large, whether it fits, whether
   the fix is possible at all. You establish it before a body is written, with the narrowest GET
@@ -268,11 +268,12 @@ labels whatever the findings say, and the outcome stands.
    The report lists the review units under `## Review units`, one line each:
    - `unit: <owner/repo>#<n> [#<child> …] base=<sha>` — one issue, or a Goal with every child;
      `base` is the default-branch commit your reads stood on;
-   - `rows: <owner/repo>#<n> base=<sha>` — each body of the unit that carries rows
-     (`## Spec changes` or `## Key rows`).
+   - `rows: <owner/repo>#<n> base=<sha>` — each `spec` body of the unit (§A queue-ready body:
+     the one shape that carries `## Spec changes`). An `edit` body gets no `rows:` line.
 2. **Two lenses, once each.** The launcher runs [`intake-review-unit.md`](intake-review-unit.md)
    on each `unit:` line and [`intake-review-rows.md`](intake-review-rows.md) on each `rows:` line,
-   each as a separate session. You never run a lens and never review your own bodies. A rows
+   each as a separate session. The rows lens runs only on a `spec` body; an `edit` body is read
+   by the unit lens alone. You never run a lens and never review your own bodies. A rows
    review whose `## Pass 1 (frozen)` section is empty (no line at all — `- none` is a line), or a
    lens run that wrote no findings file, is a failed run: it is re-run once, and a second failure
    skips that lens for that body.
@@ -294,7 +295,19 @@ labels whatever the findings say, and the outcome stands.
 In dry-run nothing is posted, so nothing is reviewed live; the report still carries
 `## Review units` and the bodies, and a harness may run the lenses on them.
 
-## A queue-ready body — the spec is written into the issue (rule 2)
+## A queue-ready body — one of two shapes
+
+A body has one of two named shapes. The island's facts file names its default in one line,
+`Body shape: spec | edit`:
+
+- **`spec`** — the item changes a requirement on a spec page: the template with `## Spec changes`.
+- **`edit`** — the item has no spec page: exact edits and check commands, a `## Decision`, no rows
+  table.
+
+An item with no spec page on a `spec` island uses `edit`. No body carries a table written to fill
+a heading.
+
+### The `spec` shape — the spec is written into the issue (rule 2)
 
 The pinned process says an issue "carries a handful of key rows (the happy path + the failure
 modes worth a conversation)"; the worker grows the boundary rows and the specs reviewer gates
@@ -314,7 +327,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 1. <checkable; names the rule id and the row>
 2. …
 
-## Spec changes   ← on an island without specs/: `## Key rows`, the rows its facts file names
+## Spec changes
 Requirement: `GW-<REQ>` on `specs/endpoints/<page>.md` — world `<world>`.
 | description | <input cols> || <expected cols> |
 |---|---||---|
@@ -326,6 +339,42 @@ Unverified: <what you did not read on the wire — "verify during implementation
 ## Out of scope
 <the sibling gap on the same row that stays; what step 3 left to the operator>
 ```
+
+### The `edit` shape — exact edits, no rows
+
+```markdown
+<machine block — written by issue_body.py set, never by hand:
+ Touches=<the files the acceptance lines edit — exact paths>
+ Origin=<as in the `spec` shape>
+ Class=fix|build  (mirrored by the task/* label)>
+
+## Deliverable
+<ONE sentence: the thing that exists when this is done.>
+
+## Acceptance
+1. In `<file>`, the line `<the old text, verbatim>` reads `<the new text, verbatim>`.
+2. `<command>` prints `<its expected output>`.
+3. …
+
+## Decision
+<The means chosen, one sentence — decided here; the ride implements it and decides nothing.>
+The numbers the choice stood on, each with its read (the query, the file and line, the object):
+- …
+Options not taken, each with the reason it lost:
+- **<option>** — <the reason>
+Unverified: <as in the `spec` shape>; never a fact the fix depends on.
+
+## Out of scope
+<what stays as it is; what step 3 left to the operator>
+```
+
+Every acceptance line is an exact replacement (the old text, the new text, the file) or a command
+with its expected output. The body carries no rows table.
+
+### Both shapes
+
+The bullets that name rows (`Touches` naming the `rule(…)` test file, "you state the rows",
+"quote before you author", the `⚑ gap` flag) bind a `spec` body; every other bullet binds both.
 
 - The machine block goes through `python3 agents/issue_body.py set … < body > final` and the
   gate `python3 agents/issue_body.py json < final` (exit 2 ⇒ fix, never post) — README §Authoring
@@ -356,8 +405,8 @@ Unverified: <what you did not read on the wire — "verify during implementation
   no row says yet. A quoted row is still read. Before it goes into the body, read it yourself as
   the rows lens will — the author's own reading, not a lens run: description covered, fixture and
   patch names ignored, its input cells and the requirement prose must decide every expected cell.
-  Where they do not, `## Spec changes` (`## Key rows` on an island without `specs/`) carries the
-  missing input column or prose clause, and the body does not call that row unchanged.
+  Where they do not, `## Spec changes` carries the missing input column or prose clause, and the
+  body does not call that row unchanged.
 - **An exception names the universal it breaks.** When a row adds an exception to a universal
   sentence elsewhere (a sibling's Deliverable, requirement prose, a glossary row), the body names
   that sentence's edit and its file is in `Touches`.
@@ -429,35 +478,7 @@ repair; the repair pass adds each finding id with its `changed:` / `declined:` a
 the fact, where you looked. That list is the spike's evidence (which reads the brief is missing);
 never pad it, never leave it out.
 
-## Island facts — the gateway
+## Island facts
 
-- Repo `teststuffstash/homelab`; island root `gateway/`; specs `gateway/specs/` (`GW-` ids, pages
-  under `specs/endpoints/`, worlds under `specs/worlds/`, each row names its world); tests
-  `gateway/tests/`; the deploy surface `argocd/resources/agent-gateway/` (an image bump rolls the pod).
-- Membership: `Touches` entirely under `gateway/**`, or a title starting `gateway` / naming a
-  `GW-` id. `.github/workflows/gateway-image.yaml` is `codeowner-author` (entry (d)).
-- Worker-writable: `gateway/**` is `machine-merge` (`classify_touches` — an issue body that says
-  `gateway/specs/**` is a codeowner path is wrong).
-- The specs reviewer is the second required approval on `gateway/specs/**` + `gateway/tests/**`
-  (ADR-155); the `Spec changes:` PR-body heading, ⚖ on judgment rows, per-row OBSERVED values —
-  the review classes that cost rounds.
-- Pinned process: `allure-behavior-snippets` RULES.md/CONVENTIONS.md, at the version
-  `gateway/specs/README.md` §Rules pins (no number here — it drifted). "Rule N" means rule N there.
-- Sibling sets (step 3's parity check): the rails — `opencode`, `openrouter`, `anthropic`,
-  `codex`. A per-rail facility is a `/catalog/<rail>` view, a catalog read leg, a headroom
-  reading, a metric family.
-- **A new upstream read is the island's to decide** (no entry) when it is public and
-  credential-free, on a vendor the source already reads, a machine-readable endpoint (never a
-  scrape of a rendered app), on the existing refresh cadence with the gateway's identifying
-  User-Agent, declared as a row under `specs/endpoints/catalog.md` §What a fetch sends, its
-  fixture recorded from the wire, and failing to the last good snapshot. A vendor wire answer
-  nobody recorded is such work (a recorder, a declared read) — never a hand-copied fixture.
-- The operator's ruling, pinned into any Goal that touches it: a read on a subscription
-  credential (entry (a)), or an account-bound value reaching a committed file — such a
-  declaration lives in a file of its own on a codeowner path, never in a machine-merged one.
-- Assemblies: `gateway/**` has no codeowner, so a gateway-only assembly merges on the two bot
-  approvals; the Goal's verdict is the operator's point.
-- An entry canary is the loop's to launch, on every rail, capped at ONE ride per rail per catalog
-  refresh: the trigger that launches it is island work like any other, never a `seat`.
-- Operator-only: (a) the Go key mint (FU-313), the codex login (seed); (b) a window on an `attended` or `manual` surface;
-  (e) any ruling the tracker marks "ruling pending" (FU-270 names them).
+The island's facts file, named by the launcher (a platform island's is `docs/intake/<island>.md`,
+a stack island's lives in its own repo — ADR-160): read it in full after this brief.
