@@ -253,7 +253,9 @@ spec:
               # island}; a stack island (`<stack>/<repo>`) is only judged when the claims were read (a
               # failed read lists the platform islands alone and must not wipe the stack islands'
               # groups). A failed delete is logged, never fatal to the walk.
-              if curl -fsS --max-time 10 "$PUSHGATEWAY/api/v1/metrics" > /tmp/island-intake-groups.json 2>/dev/null; then
+              if [ -z "${PUSHGATEWAY:-}" ]; then
+                echo "island-intake: no Pushgateway configured — unlisted islands not pruned"
+              elif curl -fsS --max-time 10 "$PUSHGATEWAY/api/v1/metrics" > /tmp/island-intake-groups.json 2>/dev/null; then
                 jq -r --slurpfile keep "$OUT" --argjson claims "${#CLAIMS_ARGS[@]}" '
                   .data[]? | .labels // {} | select((keys | sort) == ["island","job"] and .job == "island_intake")
                   | .island | select(. as $i | ($keep[0] | index($i)) == null)
