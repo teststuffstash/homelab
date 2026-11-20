@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://teststuff.net/agent-gateway/specs/endpoints/catalog.schema.json",
-  "$comment": "MACHINE half of GET /catalog/opencode, GET /catalog/openrouter and of the normalised snapshots the two catalog legs keep in their store; the HUMAN half is catalog.md. GW-CATALOG-OR owns `openrouter_output`, `$defs.openrouter_snapshot` (the endpoint rows are openai-chat.schema.json $defs.endpoint_row), `$defs.catalog_block` and `$defs.canary_block` (the policy's two openrouter blocks), `$defs.cell_state`. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns `tiers_output` (GET /catalog/tiers — the lists the gateway derived at its last good refresh, beside the lists the admission walks), $defs.benchmarks_snapshot (the committed tier-evidence snapshot, argocd/resources/agent-gateway/benchmarks.json) and $defs.tiers_block (the policy's derivation rules).",
+  "$comment": "MACHINE half of GET /catalog/opencode, GET /catalog/openrouter and of the normalised snapshots the two catalog legs keep in their store; the HUMAN half is catalog.md. GW-CATALOG-OR owns `openrouter_output`, `$defs.openrouter_snapshot` (the endpoint rows are openai-chat.schema.json $defs.endpoint_row), `$defs.catalog_block` and `$defs.canary_block` (the policy's two openrouter blocks), `$defs.cell_state`. Prices are $ per 1M tokens; a null cache rate = the vendor names none for that class. No error codes: the view answers 200, an absent snapshot is empty rows. A second rule, GW-MODEL-TIERS, owns `tiers_output` (GET /catalog/tiers — the lists the gateway derived at its last good refresh, beside the lists the admission walks), $defs.candidate_row (the evidence the derivation assembles from the store — nothing committed) and $defs.tiers_block (the policy's derivation rules — the only numbers git keeps).",
   "x-endpoint": "catalog",
   "x-use-cases": ["UC-1"],
   "$defs": {
@@ -154,6 +154,7 @@
       "x-requirements": ["GW-MODEL-TIERS", "GW-RAIL-CHOICE"]
     },
     "candidate_row": {
+      "description": "one candidate's evidence as the runtime derivation assembles it from the store (agent_gateway.tiers.build_snapshot) — never committed or mounted; GET /catalog/tiers shows the listed ids' evidence (`derived_tier.evidence`)",
       "type": "object",
       "additionalProperties": false,
       "required": ["aa_id", "intelligence", "coding", "agentic", "out_price", "in_price", "monthly_limit_usd", "provider", "price_basis", "rides"],
@@ -165,14 +166,14 @@
         "monthly_limit_usd": { "$ref": "#/$defs/limit", "description": "the Go plan's monthly limit; null on the other rails" },
         "provider": { "type": ["string", "null"], "description": "the openrouter model's selected provider slug (the cell the price and the rides belong to); null elsewhere" },
         "price_basis": { "$ref": "#/$defs/price_basis" },
-        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at snapshot time" },
+        "rides": { "$ref": "#/$defs/rides", "description": "the cell's clean-ride evidence from the gateway's outcome store at derivation time" },
         "score_source": { "const": "manual", "description": "OPTIONAL — present only on a row a manual benchmark row scored (the feed does not carry `aa_id`); absent = the scores are the feed's" },
         "score_source_url": { "type": "string", "description": "OPTIONAL, with score_source: where the hand-entered score was read" },
         "score_read_at": { "type": "string", "format": "date", "description": "OPTIONAL, with score_source: the day it was read" }
       }
     },
     "manual_benchmarks": {
-      "description": "the committed manual benchmark rows (argocd/resources/agent-gateway/benchmarks-manual.json): hand-entered scores for ids the feed does not carry yet — read by `tiers snapshot --manual` only, never mounted. A `_`-prefixed top-level key is a comment.",
+      "description": "the manual benchmark rows: hand-entered scores for ids the feed does not carry yet — the optional file GATEWAY_BENCHMARKS_MANUAL names, read by the runtime derivation at each refresh (a file parse_manual refuses is refused whole). A `_`-prefixed top-level key is a comment.",
       "type": "object",
       "required": ["rows"],
       "patternProperties": { "^_": {} },
@@ -217,65 +218,6 @@
           }
         },
         "equals_walked": { "type": "boolean", "description": "the list is the same ids in the same order as the policy's `rails.<rail>.models.<tier>` the admission walks (false when the policy holds none)" }
-      },
-      "x-requirements": ["GW-MODEL-TIERS"]
-    },
-    "benchmarks_snapshot": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["snapshot_at", "sources", "rails"],
-      "properties": {
-        "snapshot_at": { "type": "string", "format": "date-time" },
-        "sources": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["capability", "go_catalog", "openrouter_catalog"],
-          "properties": {
-            "capability": {
-              "type": "object", "additionalProperties": false, "required": ["source", "pulled_at", "rows"],
-              "properties": {
-                "source": { "const": "artificial-analysis" },
-                "pulled_at": { "$ref": "#/$defs/timestamp", "description": "the newest updated_ts of the old proxy's capability table" },
-                "rows": { "type": "integer", "minimum": 0, "description": "the capability table's row count (the snapshot keeps only the candidates)" },
-                "manual": {
-                  "type": "object", "additionalProperties": false, "required": ["used", "retired"],
-                  "description": "OPTIONAL — present when the snapshot was cut with a manual benchmark file",
-                  "properties": {
-                    "used": { "type": "array", "items": { "type": "string" }, "description": "the manual ids that scored a candidate (the feed lacks them)" },
-                    "retired": { "type": "array", "items": { "type": "string" }, "description": "the manual ids the feed carries now — the feed's scores stand, the rows are to be deleted" }
-                  }
-                }
-              }
-            },
-            "go_catalog": {
-              "type": "object", "additionalProperties": false, "required": ["fetched_at", "fee_usd_month", "draw_30d_usd"],
-              "properties": {
-                "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/opencode sources.config.fetched_at" },
-                "fee_usd_month": { "type": ["number", "null"], "description": "pricing.fee_usd_month — the plan's monthly fee the Go prices divide" },
-                "draw_30d_usd": { "type": ["number", "null"], "description": "pricing.draw_30d_usd — the rail's list-priced draw over the trailing 30 days at snapshot time" }
-              }
-            },
-            "openrouter_catalog": {
-              "type": "object", "additionalProperties": false, "required": ["fetched_at", "cells"],
-              "properties": {
-                "fetched_at": { "$ref": "#/$defs/timestamp", "description": "GET /catalog/openrouter fetched_at" },
-                "cells": { "type": "object", "description": "the view's cells by entry state at snapshot time — how many openrouter prices could exist" }
-              }
-            }
-          }
-        },
-        "rails": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["anthropic", "opencode", "openrouter", "codex"],
-          "description": "per rail, the CANDIDATE rows keyed by POLICY model id (the rail's spelling: claude/<alias>, opencode-go/<id>, a bare openrouter id, codex/<id>)",
-          "properties": {
-            "anthropic": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
-            "opencode": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
-            "openrouter": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" } },
-            "codex": { "type": "object", "additionalProperties": { "$ref": "#/$defs/candidate_row" }, "description": "the ChatGPT-subscription rail's candidates: the ENROLLED account's model evidence (FU-270), unpriced like the anthropic aliases" }
-          }
-        }
       },
       "x-requirements": ["GW-MODEL-TIERS"]
     },

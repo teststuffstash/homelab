@@ -224,6 +224,14 @@ a ⚖ choice, so the world is composed two ways, and each row says which:
 
 The manual file is a tmp file the settings' `benchmarks_manual_path` names (`GATEWAY_BENCHMARKS_MANUAL`).
 
+The rulings rows ([GW-MODEL-TIERS §The rulings](../endpoints/catalog.md#the-rulings)) run one good refresh
+of the hand-written view with `rails.anthropic.models` naming the four aliases and three more openrouter
+models beside the three above: `z-ai/glm-5.2` (benched, coding 70, no `intelligence`; out $0.05/M),
+`fx/unbenched` (no benched row; out $0.01/M) and `fx/unpriced` (benched, intelligence 49; no selected
+endpoint). The evidence-age rows ([§The evidence age](../endpoints/catalog.md#the-evidence-age)) set the
+view's `sources.benchmarks.as_of` (or drop it) and its `fetched_at`; their failing refresh is the real
+OpenRouter leg against the fake MCP answering 503.
+
 ## The fake TokenReview (`StaticTokenReviews`)
 
 The kube TokenReview API is a seam (`TokenReviewer` protocol). `StaticTokenReviews` maps a

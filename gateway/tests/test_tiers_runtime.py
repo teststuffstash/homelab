@@ -1,6 +1,7 @@
 """GW-MODEL-TIERS §The derivation at a refresh — the gateway derives the tier lists itself after every good
 catalog refresh, keeps the last good derivation, and shows it on GET /catalog/tiers beside the lists the
-admission walks (specs/endpoints/catalog.md; homelab#3307, the shadow step of the runtime-tiers Goal).
+admission walks (specs/endpoints/catalog.md; homelab#3307, the shadow step of the runtime-tiers Goal); §The
+rulings bound on such a derivation and §The evidence age (homelab#3309: no committed snapshot).
 
 Worlds: `policy-default · openrouter-endpoints` with the Go catalog (catalog-ok + docs-ok, T0 = the test clock)
 and, per row, either the real legs (the openrouter-catalog fakes: the trigger, failed-input and restart rows)
@@ -11,11 +12,25 @@ tier derivation world). The tables are the spec's, verbatim (the header is the p
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
-from ._catalog_rows import SecondGateway, at_iso, iso, or_refresh, or_refreshed, verdict
+from agent_gateway.config import RAIL_PREFIX
+from agent_gateway.tiers import PRICELESS_RAILS, join_aa_id, row_cost, same_model
+
+from ._catalog_rows import (
+    SecondGateway,
+    at_iso,
+    at_offset,
+    iso,
+    joined,
+    num,
+    or_refresh,
+    or_refreshed,
+    verdict,
+)
 from .conftest import attach_json, given, quiet, rule, when, world
 
 pytestmark = rule("GW-MODEL-TIERS")
@@ -34,7 +49,10 @@ WALKED = {
 }
 
 
-def hand_view(*, glm_intelligence="30", priced=True, at: float = T0) -> dict:
+AS_OF = "2027-01-14T00:00:00Z"
+
+
+def hand_view(*, glm_intelligence="30", priced=True, at: float = T0, as_of: str | None = AS_OF) -> dict:
     """The OpenRouter leg's evidence as `GET /catalog/openrouter` carries it (the hand-written world)."""
     bench = {mid: {"intelligence": v, "coding": None, "agentic": None} for mid, v in BENCH.items()}
     bench[GLM]["intelligence"] = None if glm_intelligence == "null" else float(glm_intelligence)
@@ -43,7 +61,7 @@ def hand_view(*, glm_intelligence="30", priced=True, at: float = T0) -> dict:
     models = {mid: {"selected": "p", "endpoints": [{"slug": "p", "service_tier": None, "in_price": 0.05, "uptime_1d": 100.0,
                                                      "out_price": price if priced else None, "rides": {"clean": 0, "judged": 0}}]}
               for mid, price in OUT.items()}
-    return {"fetched_at": iso(at), "sources": {"benchmarks": {"as_of": "2027-01-14T00:00:00Z"}}, "benchmarks": bench, "models": models}
+    return {"fetched_at": iso(at), "sources": {"benchmarks": {"as_of": as_of}}, "benchmarks": bench, "models": models}
 
 
 def _abbr(ids) -> str:
@@ -304,3 +322,214 @@ async def test_the_walked_list_is_the_derived_one(gw, app, store_state, expected
     verdict("equals_walked = true on every tier", expected_equals_walked={"expected": expected_equals_walked,
                                     "actual": "true on every tier" if flags and all(flags.values()) else f"differs: {flags}"},
             store_state={"actual": store_state})
+
+
+# ── The rulings, over a derivation ───────────────────────────────────────────────────────────
+GLM52, UNBENCHED, UNPRICED = "z-ai/glm-5.2", "fx/unbenched", "fx/unpriced"
+
+
+def ruling_view() -> dict:
+    """The tier derivation's world plus the three openrouter models the rulings need (specs/worlds/README.md)."""
+    v = hand_view()
+    v["benchmarks"][GLM52] = {"intelligence": None, "coding": 70, "agentic": None}
+    v["benchmarks"][UNPRICED] = {"intelligence": 49, "coding": None, "agentic": None}
+    ep = {"slug": "p", "service_tier": None, "in_price": 0.01, "uptime_1d": 100.0, "rides": {"clean": 0, "judged": 0}}
+    v["models"][GLM52] = {"selected": "p", "endpoints": [{**ep, "out_price": 0.05}]}
+    v["models"][UNBENCHED] = {"selected": "p", "endpoints": [{**ep, "out_price": 0.01}]}
+    v["models"][UNPRICED] = {"selected": None, "endpoints": []}
+    return v
+
+
+class Evidence:
+    """The raw evidence the derivation read — the OpenRouter view, the Go view, the policy — read here by the
+    page's candidate rule, not through the derivation, so each invariant is a second reading."""
+
+    def __init__(self, orv: dict, gov: dict, policy):
+        self.orv, self.gov, self.policy = orv, gov, policy
+        self.benched = sorted(orv["benchmarks"])
+        listed_go = sorted(mid for mid, m in (gov.get("models") or {}).items() if m.get("listed") and m.get("monthly_limit_usd") is not None)
+        sub = {r: sorted({pid for t in ("light", "standard", "heavy") for pid in (policy.rails[r].models.get(t, ()) if r in policy.rails else ())})
+               for r in PRICELESS_RAILS}
+        sub_aa = [a for r in PRICELESS_RAILS for pid in sub[r] if (a := join_aa_id(pid, self.benched))]
+        self.candidates = {"openrouter": sorted(orv["models"]), **sub,
+                           "opencode": [RAIL_PREFIX["opencode"] + mid for mid in listed_go
+                                        if not any(same_model(RAIL_PREFIX["opencode"] + mid, a) for a in sub_aa)]}
+
+    def aa(self, pid: str) -> str | None:
+        return join_aa_id(pid, self.benched)
+
+    def score(self, pid: str):
+        a = self.aa(pid)
+        return self.orv["benchmarks"][a].get("intelligence") if a else None
+
+    def price(self, rail: str, pid: str):
+        if rail == "openrouter":
+            m = self.orv["models"][pid]
+            ep = next((e for e in m["endpoints"] if e["slug"] == m.get("selected")), None)
+            return ep["out_price"] if ep else None
+        if rail == "opencode":
+            return (((self.gov.get("pricing") or {}).get("models") or {}).get(pid[len(RAIL_PREFIX["opencode"]):]) or {}).get("out")
+        return None
+
+    def pool(self, rail: str) -> dict[str, float]:
+        return {pid: float(self.score(pid)) for pid in self.candidates.get(rail, [])
+                if isinstance(self.score(pid), int | float) and (rail in PRICELESS_RAILS or self.price(rail, pid) is not None)}
+
+
+def _listed(v: dict):
+    """(rail, tier, id, its evidence row) for every id of every derived list on the view."""
+    return [(rail, t, pid, r["tiers"][t]["evidence"][pid]) for rail, r in v["rails"].items() for t in TIERS for pid in r["tiers"][t]["list"]]
+
+
+def _ruling_score(v, ev, policy):
+    axis = policy.tiers.score
+    out = [f"{rail}.{t}:{pid} has no {axis}" for rail, t, pid, e in _listed(v) if not isinstance(e["score"], int | float)]
+    for rail, r in v["rails"].items():
+        without = sorted(pid for pid in ev.candidates.get(rail, []) if ev.aa(pid) and ev.score(pid) is None)
+        out += [f"{rail}:{pid} is benched with no {axis} and `unscored` does not name it" for pid in without if pid not in r["unscored"]]
+        out += [f"`unscored` names {rail}:{pid}, which carries {axis} or is unbenched" for pid in r["unscored"] if pid not in without]
+    return f"tiers.score: {axis}", out
+
+
+def _ruling_bands(v, ev, policy):
+    out = []
+    for rail, t, pid, e in _listed(v):
+        top = max(ev.pool(rail).values())
+        if e["score"] < policy.tiers.bands[t] * top:
+            out.append(f"{rail}.{t}:{pid} {num(e['score'])} < {policy.tiers.bands[t]} × {num(top)}")
+    return "tiers.bands", out
+
+
+def _ruling_cheapest(v, ev, policy):
+    out = []
+    for rail, r in v["rails"].items():
+        if rail in PRICELESS_RAILS:
+            continue
+        for t in TIERS:
+            ids = r["tiers"][t]["list"]
+            costs = [row_cost({"out_price": r["tiers"][t]["evidence"][pid]["price"], "rides": r["tiers"][t]["evidence"][pid]["rides"]}, policy.tiers.cost) for pid in ids]
+            if len(ids) > policy.tiers.cap:
+                out.append(f"{rail}.{t} has {len(ids)} ids, over the cap")
+            if costs != sorted(costs):
+                out.append(f"{rail}.{t} not cost-ascending: {costs}")
+    return "tiers.cap", out
+
+
+def _ruling_subscription(v, ev, policy):
+    out = []
+    for rail in PRICELESS_RAILS:
+        r = v["rails"].get(rail)
+        if r is None:
+            continue
+        for t in TIERS:
+            ev_rows = r["tiers"][t]["evidence"]
+            out += [f"{rail}.{t}:{pid} priced" for pid, e in ev_rows.items() if e["price"] is not None or e["basis"] is not None]
+            scores = [ev_rows[pid]["score"] for pid in r["tiers"][t]["list"]]
+            if scores != sorted(set(scores)):
+                out.append(f"{rail}.{t} not strictly score-ascending: {scores}")
+    return "PRICELESS_RAILS", out
+
+
+def _ruling_candidates(v, ev, policy):
+    out = [f"{rail}.{t}:{pid} is no candidate of its rail" for rail, t, pid, _ in _listed(v) if pid not in ev.candidates.get(rail, [])]
+    out += [f"openrouter.{t}:{pid} priced off {e['basis']}" for rail, t, pid, e in _listed(v) if rail == "openrouter" and e["basis"] != "endpoint"]
+    out += [f"opencode.{t}:{pid} priced off {e['basis']}" for rail, t, pid, e in _listed(v)
+            if rail == "opencode" and e["basis"] not in ("promise", "measured", "unlimited")]
+    return "the sources", out
+
+
+def _ruling_join(v, ev, policy):
+    return "the rule", [f"{rail}.{t}:{pid} aa_id {e['aa_id']} ≠ {ev.aa(pid)}" for rail, t, pid, e in _listed(v) if e["aa_id"] != ev.aa(pid)]
+
+
+def _ruling_unbenched(v, ev, policy):
+    out = [f"{rail}.{t}:{pid} has no AA row" for rail, t, pid, e in _listed(v) if e["aa_id"] is None]
+    out += [f"{rail}.{t}:{pid} unpriced on a priced rail" for rail, t, pid, e in _listed(v) if rail not in PRICELESS_RAILS and e["price"] is None]
+    return "derive", out
+
+
+RULINGS = {
+    "every id of a derived list carries `intelligence`; a benched row without it is in no list and is named by `unscored`": _ruling_score,
+    "within a rail, every id of a derived list scores ≥ its band × the rail's top score": _ruling_bands,
+    "every priced-rail list has ≤ cap ids with non-decreasing cost per clean ride": _ruling_cheapest,
+    "every anthropic and codex row is unpriced and each of their lists is strictly score-ascending": _ruling_subscription,
+    "every id of a derived list is a candidate of its rail's source: openrouter = the OpenRouter view's ids priced at the selected endpoint; "
+    "anthropic and codex = the policy's ids; opencode = the Go catalog's listed ids at the Go price, none a subscription rail's twin": _ruling_candidates,
+    "every evidence row's `aa_id` is what `join_aa_id` returns over the store's benched ids": _ruling_join,
+    "no id in a derived list has a null `aa_id`, nor a null price on a priced rail": _ruling_unbenched,
+}
+_INV = list(RULINGS)
+RULING_ROWS = [
+    pytest.param(_INV[0], "tiers.score: intelligence", "none", id="the score is the Artificial Analysis intelligence index ⚖"),
+    pytest.param(_INV[1], "tiers.bands", "none", id="a tier is a band of the rail's best ⚖"),
+    pytest.param(_INV[2], "tiers.cap", "none", id="each list is cheapest per clean ride first, capped ⚖"),
+    pytest.param(_INV[3], "PRICELESS_RAILS", "none", id="the subscription rail has no price: score ascending is its cost proxy ⚖"),
+    pytest.param(_INV[4], "the sources", "none", id="the candidates per rail ⚖"),
+    pytest.param(_INV[5], "the rule", "none", id="the join to the AA row is a rule, not a table ⚖"),
+    pytest.param(_INV[6], "derive", "none", id="unbenched never tiers ⚖"),
+]
+
+
+@pytest.mark.parametrize(("invariant", "expected_knob", "expected_violations"), RULING_ROWS, ids=[p.id for p in RULING_ROWS])
+async def test_rulings(gw, app, policy, invariant, expected_knob, expected_violations):
+    world(note=f"{WORLD}; a hand-written openrouter view + the rulings' three models")
+    td = app.state.tier_derivation
+    with given("the tier derivation's world with z-ai/glm-5.2 (no intelligence), fx/unbenched, fx/unpriced; "
+               "rails.anthropic.models naming four aliases; one good refresh at T0"):
+        _walk(policy, "anthropic")
+        orv = ruling_view()
+        td.or_view = lambda: orv
+        attach_json("the OpenRouter view (the evidence)", orv)
+        app.state.orcatalog.on_refresh()
+        v = await tiers_view(gw)
+        attach_json("GET /catalog/tiers (the derivation)", v)
+    ev = Evidence(orv, td.go_view(), policy)
+    assert v["rails"]["openrouter"]["tiers"]["light"]["list"] and v["rails"]["anthropic"]["tiers"]["heavy"]["list"], "the world derives lists to rule on"
+    assert GLM52 in v["rails"]["openrouter"]["unscored"], "the world carries a benched row with no intelligence"
+    with when(f"the invariant is evaluated over the derivation and its evidence: {invariant}"):
+        knob, violations = RULINGS[invariant](v, ev, policy)
+        attach_json("candidates per rail (the page's rule over the raw evidence)", ev.candidates)
+    verdict(f"knob = {expected_knob} · violations = {expected_violations}",
+            expected_knob={"expected": expected_knob, "actual": knob},
+            expected_violations={"expected": expected_violations, "actual": joined(violations)},
+            invariant={"actual": invariant})
+
+
+# ── The evidence age ─────────────────────────────────────────────────────────────────────────
+AGE_ROWS = [
+    pytest.param("a derivation whose benched set is as of T0 − 600 s", "T0", "600", id="age is seconds since the walked derivation's benched `as_of` ⚖"),
+    pytest.param("empty store", "T0", "absent", id="no derivation, no series"),
+    pytest.param("a derivation as of T0, refreshes failing", "T0 + 43200 s", "43200", id="a kept derivation ages while refreshes fail"),
+    pytest.param("a derivation with no `as_of`, fetched at T0 − 600 s", "T0", "600",
+                 id="a benched set with no `as_of` ages from the OpenRouter snapshot's fetch ⚖"),
+]
+
+
+@pytest.mark.parametrize(("store_state", "read_at", "expected_age"), AGE_ROWS, ids=[p.id for p in AGE_ROWS])
+async def test_evidence_age(gw, app, mcp, clock, store_state, read_at, expected_age):
+    world(note=f"{WORLD}; a hand-written openrouter view, the real OpenRouter leg for the failing refresh")
+    td = app.state.tier_derivation
+    with given(f"store_state = {store_state}"):
+        if store_state != "empty store":
+            if "no `as_of`" in store_state:
+                view = hand_view(at=T0 - 600, as_of=None)
+            elif "T0 − 600 s" in store_state:
+                view = hand_view(as_of=iso(T0 - 600))
+            else:
+                view = hand_view(as_of=iso(T0))
+            td.or_view = lambda: view
+            assert td.run()
+            attach_json("the derivation's stamps", {k: v for k, v in (td.view()).items() if k != "rails"})
+        clock.advance(at_offset(read_at))
+        if "refreshes failing" in store_state:
+            mcp.mcp = "503"
+            with quiet():
+                outcome = await app.state.orcatalog.refresh()
+            assert outcome != "ok", "the refresh fails"
+            attach_json("the failing refresh", {"outcome": outcome, "derived_at": td.view()["derived_at"]})
+    with when(f"GET /metrics at {read_at}"):
+        text = (await gw.get("/metrics")).text
+    m = re.search(r"^gateway_tier_evidence_age_seconds (\S+)$", text, re.M)
+    verdict(f"age = {expected_age}", expected_age={"expected": expected_age, "actual": num(float(m.group(1))) if m else "absent"},
+            declared={"expected": True, "actual": "# TYPE gateway_tier_evidence_age_seconds gauge" in text}, store_state={"actual": store_state},
+            read_at={"actual": read_at})
