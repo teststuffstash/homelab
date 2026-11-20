@@ -81,9 +81,6 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: loki
-      toPorts:
-        - ports:
-            - { port: "3100", protocol: TCP }
     # Baseline FQDNs — git over TLS + nix upstream fallback
     - toFQDNs:
         - { matchName: github.com }
