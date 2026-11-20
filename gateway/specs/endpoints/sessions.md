@@ -261,10 +261,13 @@ are unchanged and read the derived lists.
 **World: [policy-default](../worlds/README.md#policy-worlds)**, a file store; the derivation at T0 is stored; the
 new gateway starts on that file (a pod roll) before any refresh.
 
-| description | world | store_state | decision? | model? | reason? |
-|---|---|---|---|---|---|
-| a restart on a file store dispatches from the stored derivation ⚖ | policy-default | a derivation at T0 | dispatch | opencode-go/claude-haiku-5-5 | — |
-| a restart on an empty store defers until the first derivation ⚖ | policy-default | empty | defer | — | tiers-underived |
+`store_state` names what the T0 derivation holds: on `opencode` the `standard` list leads with
+`opencode-go/claude-haiku-5-5`, on `openrouter` the `standard` list is `deepseek/deepseek-v4.1-flash`; `empty` holds none.
+
+| description | world | store_state | role | tier | decision? | model? | reason? |
+|---|---|---|---|---|---|---|---|
+| a restart on a file store dispatches from the stored derivation ⚖ | policy-default | a derivation at T0 (opencode standard `opencode-go/claude-haiku-5-5`) | worker | standard | dispatch | opencode-go/claude-haiku-5-5 | — |
+| a restart on an empty store defers until the first derivation ⚖ | policy-default | empty | worker | standard | defer | — | tiers-underived |
 
 The first derivation does not wait out the snapshot's interval: a restart that holds no derivation refreshes at
 once, even on an OpenRouter snapshot younger than `refresh_s` (the leg that carries the benchmark rows) (else every session defers for up to `refresh_s`).
@@ -286,8 +289,8 @@ A boot refresh that does not come back `ok` still derives from the stored snapsh
 | description | policy | load? |
 |---|---|---|
 | a policy with the lists loads; they order nothing | policy-default | ok |
-| a policy without `rails.opencode.models` and `rails.openrouter.models` loads ⚖ | policy-default with those two blocks removed | ok |
-| a policy without `rails.anthropic.models` is refused ⚖ | policy-default with that block removed | refused, naming rails.anthropic.models |
+| a policy without `rails.opencode.models` and `rails.openrouter.models` loads ⚖ | policy-default without `rails.opencode.models` and `rails.openrouter.models` | ok |
+| a policy without `rails.anthropic.models` is refused ⚖ | policy-default without `rails.anthropic.models` | refused, naming rails.anthropic.models |
 
 #### Explicit tier, harness and rail
 
