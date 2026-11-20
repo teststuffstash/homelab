@@ -164,8 +164,8 @@ comment_text() { # <n> → $W/<n>.comment.md
   } > "$W/$n.comment.md"
 }
 goal_of() { # <n> → prints the Goal number; exit 0 found, 1 none, 2 error
-  local cur="$1" i p
-  for i in 1 2 3 4 5; do
+  local cur="$1" p
+  for _ in 1 2 3 4 5; do
     p="$(gh api "repos/$REPO/issues/$cur/parent" 2> "$W/p.err")" || {
       grep -qiE '404|not found' "$W/p.err" && return 1
       say "GitHub did not answer for the parent of #$cur: $(tr '\n' ' ' < "$W/p.err" | cut -c1-200)" >&2; return 2; }

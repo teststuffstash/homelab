@@ -2055,7 +2055,7 @@ yq -r '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .conta
 # is inside the window: pending.
 section "the scheduled experiment read (experiment-read.sh)"
 ER="$REPO/islands/intake/scripts/experiment-read.sh"; EXPFX="$REPO/islands/intake/tests/fixtures/experiment-read"
-EH="$TMP/er"; mkdir -p "$EH/bin"
+EH="$TMP/er"; export EH; mkdir -p "$EH/bin"
 cat > "$EH/bin/gh" <<'GHEOF'
 #!/bin/bash
 echo "gh $*" >> "$EH/gh.calls"
@@ -2095,7 +2095,7 @@ issue_row() { # <n> <labels-csv> <body-file|-> [comments-json] [closing-pr|-]
 erun() { # <scenario> <now> [args] — a fresh world per call: $EH/list.json (set by the row), logs cleared
   : > "$EH/gh.calls"; : > "$EH/gh.bodies"; : > "$EH/s5.calls"; : > "$EH/curl.calls"; rm -f "$EH"/up-* "$EH/metrics.body"
   local sc="$1" now="$2"; shift 2
-  EH="$EH" PATH="$EH/bin:$PATH" PROMETHEUS="$EPROM/$sc" EXP_NOW="$now" PUSHGATEWAY=http://pgw EXPERIMENT_REPO=o/r \
+  PATH="$EH/bin:$PATH" PROMETHEUS="$EPROM/$sc" EXP_NOW="$now" PUSHGATEWAY=http://pgw EXPERIMENT_REPO=o/r \
     AGENT_TS_ENDPOINT=http://garage AGENT_TS_BUCKET=agent-transcripts AGENT_TS_ACCESS_KEY_ID=wkey AGENT_TS_SECRET_ACCESS_KEY=wsec \
     bash "$ER" "$@" > "$EH/out.log" 2>&1
 }
