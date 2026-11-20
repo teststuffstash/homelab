@@ -31,7 +31,8 @@
 #                as `reread:` rows merged into the pile's by id. Any one firing starts the ONE sitting over
 #                all five sets.
 #   edge       = this CronWorkflow, daily 05:00Z (after the 03:30Z dig). No Sensor: nothing here is
-#                urgent, and one sitting over the day's batch is the cost shape (≈150k tokens).
+#                urgent, and one sitting per island over the day's batch is the cost shape (≈150k
+#                tokens a sitting; an island with no inputs starts no session).
 #   key        = the receipts — homelab/intake-<island>-<date>/<run>/receipt.json, read back with the
 #                READER key (the dig's own re-dig key pattern); `ruled` lines carry dig ids and issue
 #                ids (`<owner/repo>#<n>`). An input with no ruling line in the session's output is NOT
@@ -39,7 +40,7 @@
 #                so its receipt line is the only thing that keeps it from being re-read daily.
 #   capacity   = INTAKE_DAILY_MAX apply sittings per UTC day (the responder's daily-cap shape) + the
 #                subscription-capacity semaphore on the LEAF (FU-198 — the retry wrapper holds no slot)
-#                + activeDeadline 1 h. The model is the goal-decompose class (authoring, not checking —
+#                + the leaf's activeDeadline (one sitting) inside the workflow's (the walk). The model is the goal-decompose class (authoring, not checking —
 #                coordinator-scan.sh's ruling for the same work one level later); it is not served on
 #                the Go rail, so a Go-only window defers to the retry.
 #   output     = the sitting's GitHub writes (issues, labels, one `intake:` comment per ruling — the
@@ -90,8 +91,15 @@
 #                records + this run's: classes, the false-wait count, the keys at the bar) + `wait_proposals`
 #                (INTAKE-WAIT-PROPOSAL lines the ledger kept: diff, the items behind it, widens_authority —
 #                a record, never a pushed branch).
-#   islands    = any island of the selector's table (`-p island=scan|launch|retro|…`); the schedule runs
-#                the gateway only — the others are hand-submitted:
+#   islands    = parameter `island`, default `all` (homelab#3579): the `list-islands` step prints the
+#                selector's own list (`intake-select.sh --list-islands` — every island with a membership
+#                row and a facts file, gateway first) and the entrypoint runs `intake-retry` once per
+#                name. No island is named in this file: a new island is a selector row + a facts file.
+#                One sitting at a time: `workflowSpec.parallelism: 1` (at most one pod of this workflow
+#                runs), and each sitting still takes the semaphore. An island that fails (its own
+#                retries spent) does not stop the others; the workflow ends Failed when any did.
+#                Every island's pod pays the bootstrap, pushes its own `island`-labelled metrics and
+#                writes its own receipt prefix. ONE island by hand:
 #                `argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan`.
 #   dry-run    = `argo -n agent-coordinator submit --from cronworkflow/island-intake -p mode=dry-run`:
 #                the sitting writes nothing to GitHub and its receipt consumes nothing (the lenses and
@@ -113,16 +121,23 @@ spec:
   startingDeadlineSeconds: 3600
   workflowSpec:
     serviceAccountName: island-intake
-    # the review stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (3) lenses × two
-    # runs × (PASS1 240 + LENS 1200 s) + the repair (1200 s); the script's _fits keeps it inside
-    # RUN_DEADLINE_S (= this, 14400) so the pod is never killed mid-review. A real unit lens explored
-    # past 600 s and wrote nothing, twice (in-cluster dry-run 2026-11-15)
-    activeDeadlineSeconds: 14400
+    # THE WALK's deadline (homelab#3579): 23 h, so a run always ends before the next 05:00Z and
+    # `concurrencyPolicy: Forbid` never skips a day. One SITTING's deadline is the `intake` leaf's own
+    # (14400 s, below). The walk is sequential, so 82800 s holds every island's bootstrap (≤ 600 s
+    # each) plus five sittings at the leaf's full 14400 s; an island the walk does not reach is read
+    # by the next run (no receipt line → its inputs re-present), and one that is not reached for two
+    # days fires IslandIntakeStale with its own `island` label.
+    activeDeadlineSeconds: 82800
+    # One pod of this workflow at a time: the sittings run in sequence (the subscription rail latched
+    # for 3.5 h on three concurrent heavy sessions, 2026-11-14). Workflow-level on purpose — a
+    # template-level `parallelism` does not count the pods of the steps templates it invokes.
+    parallelism: 1
     ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
     arguments:
       parameters:
         - { name: mode, value: apply }
-        - { name: island, value: gateway }
+        # all = every island `intake-select.sh --list-islands` prints; a name = that island only.
+        - { name: island, value: all }
         # off = the author labels as it rules (the pre-review shape); review-repair = the author
         # holds labels + ruling, the lenses read the queued bodies, ONE repair pass answers them and
         # posts review comment → labels → ruling (islands/intake/rules/intake.md §Review and repair).
@@ -146,7 +161,7 @@ spec:
                     operator: NotIn
                     values:
                       - "true"
-    entrypoint: intake-retry
+    entrypoint: intake-islands
     volumes:
       - { name: work, emptyDir: {} }
       # GW-SESSIONS-AUTH: this pod's projected ServiceAccount token for the gateway's caller check.
@@ -155,19 +170,92 @@ spec:
           sources:
             - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
     templates:
+      # THE WALK — the island list first, then one `intake-retry` per name. The expanded steps are one
+      # step group: a failed island leaves its siblings running, and the group (so the workflow)
+      # fails once all are done if any failed. Sequence = workflowSpec.parallelism above.
+      - name: intake-islands
+        steps:
+          - - name: islands
+              template: list-islands
+          - - name: sitting
+              template: intake-retry
+              arguments:
+                parameters:
+                  - { name: island, value: "{{item}}" }
+              withParam: "{{steps.islands.outputs.parameters.islands}}"
+      # THE LIST — a JSON array of island names for the walk's withParam. `all` asks the selector in a
+      # fresh clone (the table and the facts files are the checkout's; no gh, no bucket, no kube read);
+      # a named island is that one name, no clone. An empty list fails: zero sittings is never a pass.
+      - name: list-islands
+        metadata:
+          labels: { app: island-intake-workflow }
+        retryStrategy:
+          limit: "3"
+          retryPolicy: OnFailure
+          backoff: { duration: "1m", factor: "2" }
+        outputs:
+          parameters:
+            - name: islands
+              valueFrom: { path: /tmp/island-intake-islands.json }
+        container:
+          image: registry.teststuff.net/agent-base
+          env:
+            - { name: HOME, value: "/home/devbox" }
+            - { name: ISLAND, value: "{{workflow.parameters.island}}" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              OUT=/tmp/island-intake-islands.json
+              if [ "$ISLAND" != all ]; then
+                jq -nc --arg i "$ISLAND" '[$i]' > "$OUT" || { echo "island-intake: could not write the island list"; exit 1; }
+                echo "island-intake: islands $(cat "$OUT")"; exit 0
+              fi
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the island list)"; exit 1; }
+              cd /work/homelab || exit 1
+              bash islands/intake/scripts/intake-select.sh --list-islands > /tmp/island-intake-islands.txt \
+                || { echo "island-intake: the selector did not list the islands"; exit 1; }
+              jq -Rnc '[inputs | select(length > 0)]' /tmp/island-intake-islands.txt > "$OUT" \
+                || { echo "island-intake: could not write the island list"; exit 1; }
+              [ "$(jq 'length' "$OUT")" -gt 0 ] || { echo "island-intake: the island list is empty — no sitting would run"; exit 1; }
+              echo "island-intake: islands $(cat "$OUT")"
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { memory: "512Mi" }
       # THE RETRY WRAPPER — no semaphore here; every attempt is a fresh `intake` node that acquires
-      # and releases the slot (FU-198, the dig's and the responder's split).
+      # and releases the slot (FU-198, the dig's and the responder's split). One invocation per island.
       - name: intake-retry
+        inputs:
+          parameters:
+            - { name: island }
         steps:
           - - name: intake
               template: intake
+              arguments:
+                parameters:
+                  - { name: island, value: "{{inputs.parameters.island}}" }
         retryStrategy:
           limit: "3"
           retryPolicy: OnFailure
           backoff: { duration: "30m", factor: "2" }
       - name: intake
+        inputs:
+          parameters:
+            - { name: island }
         metadata:
           labels: { app: island-intake-workflow }
+        # ONE sitting's deadline (it was the workflow's while the workflow was one sitting). The review
+        # stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (3) lenses × two
+        # runs × (PASS1 240 + LENS 1200 s) + the repair (1200 s); the script's _fits keeps it inside
+        # RUN_DEADLINE_S (= this, 14400) so the pod is never killed mid-review. A real unit lens explored
+        # past 600 s and wrote nothing, twice (in-cluster dry-run 2026-11-15)
+        activeDeadlineSeconds: 14400
         synchronization:
           semaphores:
             - configMapKeyRef: { name: subscription-capacity, key: claude }
@@ -193,7 +281,7 @@ spec:
             - { name: VERSION_CACHE_TTL, value: "31536000" }
             - { name: ORG, value: "teststuffstash" }
             - { name: MODE, value: "{{workflow.parameters.mode}}" }
-            - { name: ISLAND, value: "{{workflow.parameters.island}}" }
+            - { name: ISLAND, value: "{{inputs.parameters.island}}" }
             - { name: REVIEW, value: "{{workflow.parameters.review}}" }
             - { name: INTAKE_DAILY_MAX, value: "2" }
             # The pile's waits: re-read once the wait is this old, and the same wait at most this often.
