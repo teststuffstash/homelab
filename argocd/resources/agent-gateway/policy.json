@@ -152,6 +152,11 @@
       "roles": ["coordinator", "responder", "retro"],
       "bind_namespaces": ["openrouter-operator"]
     },
+    "system:serviceaccount:agent-coordinator:island-intake": {
+      "stacks": ["platform"],
+      "roles": ["coordinator"],
+      "bind_namespaces": []
+    },
     "system:serviceaccount:agent-coordinator:outcome-judge": {
       "stacks": ["platform"],
       "roles": [],

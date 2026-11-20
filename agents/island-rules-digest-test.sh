@@ -46,7 +46,7 @@ BIN="$TMP/bin"; mkdir -p "$BIN"
 cat > "$BIN/git" <<EOF
 #!/bin/bash
 # clone → a fixture repo from this checkout (base before the window; scenario "changes" adds one
-# commit on gateway/intake.md inside it); push → logged; everything else → real git.
+# commit on islands/intake/rules/intake.md inside it); push → logged; everything else → real git.
 case "\$1" in
   clone)
     dest="\${@: -1}"; mkdir -p "\$dest"
@@ -58,7 +58,7 @@ case "\$1" in
     "$REALGIT" init -q -b master && "$REALGIT" add -A \
       && GIT_AUTHOR_DATE=2026-01-01T12:00:00Z GIT_COMMITTER_DATE=2026-01-01T12:00:00Z "$REALGIT" commit -qm base || exit 1
     if [ "\$SCENARIO" != quiet ]; then
-      printf '\nA session now does one more thing.\n' >> gateway/intake.md
+      printf '\nA session now does one more thing.\n' >> islands/intake/rules/intake.md
       GIT_AUTHOR_DATE=2026-01-06T10:00:00Z GIT_COMMITTER_DATE=2026-01-06T10:00:00Z "$REALGIT" commit -qam "intake: one more thing (#7)" || exit 1
     fi
     exit 0;;
@@ -116,7 +116,7 @@ run changes
 has   "the session ran on the role's model (old path: resolve-model)" "$H/calls.log" "claude -p"
 has   "…the brief is the committed brief file" "$TMP/r/digest/brief.md" "# Island rules digest — the session brief"
 has   "…and names the inputs" "$TMP/r/digest/brief.md" "digest/changes.json"
-[ -f "$TMP/r/digest/diffs/gateway_intake.md.diff" ] && grep -q '^+A session now does one more thing' "$TMP/r/digest/diffs/gateway_intake.md.diff" \
+[ -f "$TMP/r/digest/diffs/islands_intake_rules_intake.md.diff" ] && grep -q '^+A session now does one more thing' "$TMP/r/digest/diffs/islands_intake_rules_intake.md.diff" \
   && ok "the per-file diff over the window is an input" || bad "diff input" "$(ls "$TMP/r/digest/diffs" 2>&1)"
 grep -qm1 '^Verdict:' "$REPORT" 2>/dev/null && ok "the report is committed at the dated path, verdict first" || bad "report path" "$(ls "$TMP/w/homelab/docs/agents/retros/island-rules" 2>&1)"
 [ "$(git -C "$TMP/w/homelab" log -1 --format=%s 2>/dev/null)" = "island rules digest: week ending 2026-01-11 (1 change(s), FU-320)" ] \

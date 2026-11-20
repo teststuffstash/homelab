@@ -3,7 +3,7 @@
 > A lens of [island intake](intake.md) §Review and repair: run once per review unit, as its own
 > session, never by the sitting that wrote the bodies. Its sibling is
 > [`intake-review-rows.md`](intake-review-rows.md); evidence in
-> [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) §Run 4.
+> [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) §Run 4.
 
 A worker will build exactly what these issue bodies say. You are an independent reviewer: you did
 not write them. Find what would make the work come out wrong. You are read-only: you write ONE
@@ -20,7 +20,7 @@ Your prompt names the unit (one issue, or a Goal with every child) and the base 
   written: `git show <base>:<path>`, `git grep -n <pattern> <base> -- <path>`. Never the working
   tree, never another ref.
 - Instead of live numbers your prompt may name a frozen case directory
-  ([`docs/spikes/island-intake-fixtures/cases/`](../docs/spikes/island-intake-fixtures/cases/)):
+  ([`docs/spikes/island-intake-fixtures/cases/`](../../../docs/spikes/island-intake-fixtures/cases/)):
   `issues/<n>.md`, `issues/<n>.comments.md`, `edges.md`, `BASE_SHA` stand for the reads above.
 
 Do not read the pinned spec process or the rows lens's output. Context is limited: never read a
@@ -39,7 +39,8 @@ two things that disagree, or the one thing that is missing and the place it belo
 - a behaviour the worker must choose because no body decides it;
 - a line that sends the worker to measure, look up or check a fact before it can know what to
   build ("verify …", "stop and report if …") — the author reads that fact; quote the line.
-Not yours: table layout, wording, `⚖` marks, description cells — the rows lens reviews those.
+Not yours: table layout, wording, `⚖` marks, description cells — the rows lens reviews those, on
+a `spec` body only. An `edit` body (no `## Spec changes`, no rows table) is read by no other lens.
 
 ## Output — the one file your prompt names
 ```

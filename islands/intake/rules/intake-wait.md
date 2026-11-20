@@ -5,7 +5,7 @@
 > page reads what it held back on a human. The sitting that runs it already holds the rules home and
 > the island's facts file. A wait is a claim about one fact (ADR-163); this read asks whether the
 > rules made that claim necessary. Evidence and open questions:
-> [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md).
+> [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md).
 
 A `wait:` input is ONE parking comment — a comment whose `blocked-on:` marker is `human`, or an
 `intake: seat` with no marker — on one item of the island, selected by `intake-select.sh --source
@@ -84,7 +84,7 @@ INTAKE-WAIT: {"wait": "<input id>", "class": "H|R|O|U", "rules": [{"file": "<pat
 ## When a rule line repeats
 One sighting changes nothing. Earlier sittings' records reach you only through the ledger: write
 this sitting's `INTAKE-WAIT` objects, one per line, to `/tmp/wait/records.jsonl`, then run
-`python3 gateway/scripts/intake-wait-ledger.py --records /tmp/wait/prior.json --records
+`python3 islands/intake/scripts/intake-wait-ledger.py --records /tmp/wait/prior.json --records
 /tmp/wait/records.jsonl` — it prints every key, the distinct ITEMS behind it, and `AT-BAR` on a
 key whose R or O records stand on two or more distinct items (intake-written waits only). Two
 parking comments of one item are one item.
@@ -100,7 +100,7 @@ from the ledger. The edit:
   records name a missing one;
 - carries rules only — no issue number, no model id, no vendor name, no date; history stays in the
   records;
-- states its replay: the recorded wait cases (`agents/island-intake-fixtures/wait-cases/`) whose
+- states its replay: the recorded wait cases (`islands/intake/tests/fixtures/wait-cases/`) whose
   expected outcome it changes, and those it must not;
 - sets `widens_authority: true` when any record behind it says `widens: yes` — that class is read
   individually, never batched with the rest.

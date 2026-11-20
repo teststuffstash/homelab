@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# intake-select — the deterministic half of the island intake sitting (gateway/intake.md).
+# intake-select — the deterministic half of the island intake sitting (islands/intake/rules/intake.md).
 #
 # Lists the island's OPEN issues that nobody has ruled yet and says whether the sitting should
 # fire: ≥ --min such issues, or the oldest ≥ --age-h hours. The judgment is the sitting's
-# (an LLM over gateway/intake.md); this script only selects, exactly as coordinator-scan.sh
+# (an LLM over islands/intake/rules/intake.md); this script only selects, exactly as coordinator-scan.sh
 # selects units for the coordinator's clauses. bash + gh + jq + python3 (the ONE body parser,
 # agents/issue_body.py — never a grep for Touches).
 #
-#   bash gateway/scripts/intake-select.sh [--island gateway] [--repo teststuffstash/homelab] [--min 3] [--age-h 24] [--json]
+#   bash islands/intake/scripts/intake-select.sh [--island gateway] [--repo teststuffstash/homelab] [--min 3] [--age-h 24] [--json]
 #
 # A candidate is an open issue that
 #   - belongs to the island (--island, default gateway; the table is island_members below): the
@@ -24,7 +24,7 @@
 # by NO island and is BOT-filed (the brief's §Hard limits test: not author type `User` — `is_bot`,
 # an `app/<slug>` or `<login>[bot]` login) is selected by `--island $ATTRIBUTION_ISLAND` only, marked
 # `kind: attribution` (members are `kind: member`). The loop's filers leave component attribution to
-# intake, so that sitting names the owning island(s) first (gateway/intake.md outcome `split`). A
+# intake, so that sitting names the owning island(s) first (islands/intake/rules/intake.md outcome `split`). A
 # human-filed unclaimed issue stays nobody's — the seat's `none` list.
 #
 # Output: one line per candidate `<number>\t<age_h>\t<author>\t<title>` (an attribution input adds
@@ -33,7 +33,7 @@
 # (an empty answer from a failed read is NOT "no candidates" — jail-subagent-card, 2026-10-26).
 # --json prints the candidate array instead of the lines (the verdict line still goes to stderr).
 # Seam: INTAKE_ISSUES_JSON = a file holding the `gh issue list --json …` answer, served instead of
-# the live read (agents/island-intake-test.sh drives membership through it).
+# the live read (islands/intake/tests/island-intake-test.sh drives membership through it).
 #
 # --source dig (FU-320, the first wired source — agents/coordinator/island-intake-argo.yaml runs it):
 # the island's inputs are the deep dig's `cause-found` findings (docs/agents/roles.md §deep dig)
@@ -41,7 +41,7 @@
 # `text:` inputs (`source: dig`), so the dig itself files nothing and intake stays the island's one
 # admission — dedup (step 2's `fold`) happens BEFORE anything is filed.
 #
-#   bash gateway/scripts/intake-select.sh --source dig [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source dig [--island gateway] [--out sel.json]
 #
 #   inputs    = homelab/dig-<date>/<run>/finding-N.json over INTAKE_DIG_LOOKBACK_D days, verdict in
 #               INTAKE_DIG_VERDICTS, OWNED by the island (finding_owner below): one of its ALERTS is
@@ -59,7 +59,7 @@
 # Exit 0 = fire, 1 = hold, 2 = a probe failed: an unreadable bucket is NEVER "no inputs" (it would
 # also be "nothing ruled", i.e. the same findings fed again every day). Seam: INTAKE_TS_DIR = a local
 # directory laid out like the bucket (<dir>/homelab/dig-…, <dir>/homelab/intake-…) served instead
-# of S3 — agents/island-intake-test.sh and a jail run use it.
+# of S3 — islands/intake/tests/island-intake-test.sh and a jail run use it.
 #
 # The same source also presents RECURRING report-only RESPONDER findings (FU-320; the responder
 # files nothing for them and writes `finding.json` only — docs/agents/roles.md §responder CAPTURE),
@@ -90,11 +90,11 @@
 # --source pile (FU-320, the second wired source — the same CronWorkflow runs it after the dig):
 # the island's issue pile, as ONE selection in the dig's shape (`island-intake-select/v1`).
 #
-#   bash gateway/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source pile [--island gateway] [--out sel.json]
 #
 #   member    = the default selection above (unruled, unlabelled) — `kind: member|attribution`.
 #               An issue whose LATEST `intake:` ruling is `forward` counts as unruled (another
-#               island's sitting passed it on and retitled it — gateway/intake.md step 0); its row
+#               island's sitting passed it on and retitled it — islands/intake/rules/intake.md step 0); its row
 #               carries `forwards` = how many `intake: forward` comments it has (the hop cap's count).
 #   reread    = `kind: reread`: the island's OPEN issues an earlier ruling left waiting on a human —
 #               label `agent/blocked`, or the LATEST `intake:` ruling is `seat` — whose wait is
@@ -121,12 +121,12 @@
 #
 # --source gaps (FU-320, night run 2026-11-14): the island's OWN incompleteness — the `⚑ gap` /
 # `🚧 WIP` requirement rows of its specs index (`<specs root>/README.md`, the root from
-# island_specs_root below), as `kind: gap` inputs (gateway/intake.md §Inputs `gap:`).
+# island_specs_root below), as `kind: gap` inputs (islands/intake/rules/intake.md §Inputs `gap:`).
 #
-#   bash gateway/scripts/intake-select.sh --source gaps [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source gaps [--island gateway] [--out sel.json]
 #
 #   row       = an index table row whose first cell is `[<REQ-ID>](<page>#…)` and that carries `⚑ gap`
-#               or `🚧`; id = `<specs page>#<REQ-ID>` (gateway/intake.md §Inputs `gap:`)
+#               or `🚧`; id = `<specs page>#<REQ-ID>` (islands/intake/rules/intake.md §Inputs `gap:`)
 #   minus     = every id an APPLY receipt of the last INTAKE_GAP_LOOKBACK_D days (default 30) lists
 #               with an outcome other than `deferred` (the dig's ledger), and every row an OPEN issue
 #               already names (its title or body names the REQ-ID, or the row's own `#<n>` is open)
@@ -136,10 +136,10 @@
 # unreadable is a probe failure (exit 2). Seams: INTAKE_ISSUES_JSON + INTAKE_TS_DIR + INTAKE_NOW.
 #
 # --source escape (FU-320, the island's improvement loop): the PRs of work this island QUEUED that
-# drew a CHANGES_REQUESTED review — read later by the same sitting (gateway/intake-escape.md), one
+# drew a CHANGES_REQUESTED review — read later by the same sitting (islands/intake/rules/intake-escape.md), one
 # record per blocking finding, `kind: escape`.
 #
-#   bash gateway/scripts/intake-select.sh --source escape [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source escape [--island gateway] [--out sel.json]
 #
 #   queued    = every issue id (`<owner/repo>#<n>`, the input or a ref) of a `queue`/`goal`/`requeue`
 #               line in an APPLY receipt of this island's last INTAKE_ESCAPE_LOOKBACK_D days (default 30)
@@ -155,9 +155,9 @@
 # INTAKE_TS_DIR + INTAKE_NOW.
 #
 # --source wait (FU-320, the island's other improvement loop): the island's WAITS to classify —
-# read later by the same sitting (gateway/intake-wait.md), one record per parking comment, `kind: wait`.
+# read later by the same sitting (islands/intake/rules/intake-wait.md), one record per parking comment, `kind: wait`.
 #
-#   bash gateway/scripts/intake-select.sh --source wait [--island gateway] [--out sel.json]
+#   bash islands/intake/scripts/intake-select.sh --source wait [--island gateway] [--out sel.json]
 #
 #   item      = an issue of the island (island_of_issue), OPEN, or CLOSED inside the lookback — ONE batched
 #               GraphQL read (comments + label/close timeline, author types: a Bot is a bot, whatever its login)
@@ -177,7 +177,7 @@
 #               when it is released
 #   minus     = every wait id an APPLY receipt of the lookback lists (outcome ≠ deferred): read once
 #   cap       = INTAKE_WAIT_MAX (default 6) per sitting: released first (oldest release first), then standing
-#   prior     = the `waits` records of those receipts — the ledger's input (gateway/scripts/intake-wait-ledger.py)
+#   prior     = the `waits` records of those receipts — the ledger's input (islands/intake/scripts/intake-wait-ledger.py)
 #   stale     = NOT waits to classify: OPEN items whose newest marker names `issue=<n>` / `pr=<n>` that is
 #               closed or merged, or whose unreleased human parking names `#<n>` that closed or merged AFTER it —
 #               rows `kind: reread` (id `<owner/repo>#<n>`, the pile's) carrying `stale`, which the sitting
@@ -187,10 +187,48 @@
 # (the normalized item array: comments[].author.is_bot, events[]) + INTAKE_REFS_JSON ({"<n>": {state,
 # closed_at}}) + INTAKE_TS_DIR + INTAKE_NOW. The pile's re-read ledger uses the same target read: a receipt
 # that ruled a wait `unchanged` BEFORE a target its parking names closed does not hide it.
+#
+# --list-islands (homelab#3579): the islands the scheduled run holds a sitting for — one name per line,
+# every ISLANDS row that has an island_members row AND a facts file (docs/intake/<island>.md), in ISLANDS
+# order (gateway first). An island without a facts file is named on stderr and left out: a sitting with
+# no facts would improvise. No read but the checkout (no gh, no bucket, no kube); exit 0.
+#
+#   bash islands/intake/scripts/intake-select.sh --list-islands
+#
+# STACK ISLANDS (homelab#3580) — an island declared by a stack's AgentStack claim, never by a row here:
+# `repos[].intake.facts: <path in that repo>` (argocd/resources/agentstack/xrd.yaml). Its name is
+# `<stack>/<repo>` as the claim spells them (claim `metadata.name`, `spec.repos[].name`); the slash is what
+# tells it from a platform island. No stack and no stack repo is named in this file: every one comes from
+# the claims file (`--claims <file>` = a `kubectl get agentstacks.platform.teststuff.net -o json` answer,
+# read by scripts/claims-read.sh).
+#
+#   --list-islands --claims <file>   the platform islands as above, then one line per claim-declared repo,
+#                                    by stack name then repo name. A name or a facts path that is not a
+#                                    plain repo-relative path is named on stderr and left out.
+#   --resolve --island <name> [--claims <file>]
+#                                    one JSON line {island, kind: platform|stack, repo, facts}: a platform
+#                                    island is this repo and docs/intake/<island>.md (no claims read); a
+#                                    stack island is `<org>/<repo>` (org = $ORG, default teststuffstash — a
+#                                    claim's repos live in that org, the XRD's `repos[].name`) and the
+#                                    claim's facts path. A name that resolves to nothing is exit 2.
+#   --source … --island <stack>/<repo> --claims <file> [--facts <facts file in the clone>]
+#     repo      = the claim's repo — every read (`gh`, the receipts) is that repo's
+#     members   = EVERY open issue of the repo the pile's walk calls undecided (the same lifecycle and
+#                 ruling filters as a platform island; no title or Touches test), MINUS what the facts
+#                 file's `## Membership` section excludes. Its lines, one per rule (a leading `- ` allowed):
+#                   exclude label: <label>     an issue carrying exactly that label
+#                   exclude title: <ERE>       an issue whose title matches (grep -E, case-sensitive)
+#                 No section (or no --facts) = no exclusion. Any other `exclude …` line, an unreadable
+#                 file or an ERE grep refuses is exit 2 — a typo never widens the membership silently.
+#     dig, wait = select NOTHING, said on stderr (`no dig source for a stack island`): the dig diagnoses
+#                 the platform's alerts; a stack's alerts reach its repo as issues, which are the pile
+#     gaps      = nothing (no specs root is declared for a stack island); escape = as a platform island
+#     receipts  = homelab/intake-<stack>-<repo>-<day>/ — the name with `/` replaced by `-`
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
-REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""
+ROOT="$(cd "$HERE/../../.." && pwd)"
+REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""; LIST=0
+CLAIMS=""; FACTS_FILE=""; RESOLVE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) SOURCE="$2"; shift 2;;
@@ -200,14 +238,88 @@ while [ $# -gt 0 ]; do
     --min)   MIN="$2"; shift 2;;
     --age-h) AGE_H="$2"; shift 2;;
     --json)  JSON=1; shift;;
+    --list-islands) LIST=1; shift;;
+    --claims) CLAIMS="$2"; shift 2;;
+    --facts) FACTS_FILE="$2"; shift 2;;
+    --resolve) RESOLVE=1; shift;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0;;
     *) echo "intake-select: unknown arg $1" >&2; exit 2;;
   esac
 done
 
+# ── stack islands (homelab#3580; the header's STACK ISLANDS) ─────────────────────────────────────
+# Kept OUT of the island table below (agents/island_rules.py evaluates that block): a stack island has
+# no row. ISLAND_KEY = the name wherever a slash is invalid (the receipts' prefix).
+STACK_ISLAND=0; case "$ISLAND" in */*) STACK_ISLAND=1;; esac
+ISLAND_KEY="${ISLAND//\//-}"
+PLATFORM_REPO="$REPO"
+# claims_islands <claims file> → `<stack>/<repo>\t<repo>\t<facts>` per repo declaring intake.facts, by
+# stack then repo. Names and the path are DATA from a claim a stack wrote: each must be a plain name /
+# repo-relative path (the XRD's own pattern) — anything else is named on stderr and dropped.
+claims_islands() {
+  jq -e '(.items | type) == "array"' "$1" >/dev/null 2>&1 || { echo "intake-select: --claims $1 is unreadable or not a claims list" >&2; return 1; }
+  jq -r '[ .items[] | (.metadata.name // "") as $s | (.spec.repos // [])[]
+           | select((.intake | type) == "object" and (.intake.facts | type) == "string" and (.intake.facts | length) > 0)
+           | {s: $s, r: (.name // ""), f: .intake.facts} ] | sort_by([.s, .r]) | .[] | [.s, .r, .f] | @tsv' "$1" \
+    | while IFS=$'\t' read -r _s _r _f; do
+        if [[ "$_s" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] && [[ "$_r" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+           && [[ "$_f" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$ ]]; then
+          printf '%s/%s\t%s\t%s\n' "$_s" "$_r" "$_r" "$_f"
+        else
+          printf "intake-select: a claim's intake declaration is not a plain stack/repo name and repo-relative path — left out: %q/%q → %q\n" "$_s" "$_r" "$_f" >&2
+        fi
+      done
+}
+STACK_REPO=""; STACK_FACTS=""
+if [ "$STACK_ISLAND" = 1 ] && [ "$LIST" = 0 ]; then
+  [ -n "$CLAIMS" ] || { echo "intake-select: island '$ISLAND' is a stack island — it needs --claims <file>" >&2; exit 2; }
+  _rows="$(claims_islands "$CLAIMS")" || exit 2
+  _row="$(awk -F'\t' -v i="$ISLAND" '$1 == i && !seen { print; seen = 1 }' <<< "$_rows")"
+  [ -n "$_row" ] || { echo "intake-select: island '$ISLAND' resolves to nothing — no claim declares repos[].intake.facts under that stack/repo name" >&2; exit 2; }
+  STACK_REPO="$(printf '%s' "$_row" | cut -f2)"; STACK_FACTS="$(printf '%s' "$_row" | cut -f3)"
+  REPO="${ORG:-teststuffstash}/$STACK_REPO"
+fi
+# island_known <island> → the guard every source opens with: a stack island resolved above, or a table row
+island_known() { [ "$STACK_ISLAND" = 1 ] || island_members "$1" >/dev/null; }
+# stack_exclusions <facts file> <issues json file> → the numbers the facts file's `## Membership` section
+# excludes, one per line (the header's grammar); return 2 on an unreadable file, an unknown `exclude`
+# line or an ERE grep refuses.
+stack_exclusions() {
+  local facts="$1" iss="$2" lines kind val rc
+  [ -r "$facts" ] || { echo "intake-select: --facts $facts is unreadable" >&2; return 2; }
+  lines="$(awk '
+    /^## / { on = ($0 ~ /^## Membership[ \t]*$/); next }
+    on { l = $0; sub(/^[ \t]*([-*][ \t]+)?/, "", l); sub(/[ \t]+$/, "", l)
+         if (l ~ /^exclude label:[ \t]*[^ \t]/) { sub(/^exclude label:[ \t]*/, "", l); print "label\t" l }
+         else if (l ~ /^exclude title:[ \t]*[^ \t]/) { sub(/^exclude title:[ \t]*/, "", l); print "title\t" l }
+         else if (l ~ /^exclude([ \t:]|$)/) { print "bad\t" l } }' "$facts")"
+  [ -n "$lines" ] || return 0
+  jq -r '.[] | "\(.number)\t\((.title // "") | gsub("[\n\t]"; " "))"' "$iss" > "$iss.titles"
+  while IFS=$'\t' read -r kind val; do
+    case "$kind" in
+      label) jq -r --arg l "$val" '.[] | select([.labels[]?.name] | index($l)) | .number' "$iss";;
+      title) rc=0; cut -f2- "$iss.titles" | grep -nE -e "$val" > "$iss.hits" || rc=$?
+             [ "$rc" -le 1 ] || { echo "intake-select: \`exclude title: $val\` is not a usable ERE ($facts)" >&2; rm -f "$iss.titles" "$iss.hits"; return 2; }
+             cut -d: -f1 "$iss.hits" | while read -r ln; do sed -n "${ln}p" "$iss.titles" | cut -f1; done;;
+      *) echo "intake-select: unknown membership line \`$val\` in $facts (exclude label: <label> | exclude title: <ERE>)" >&2
+         rm -f "$iss.titles" "$iss.hits"; return 2;;
+    esac
+  done <<< "$lines"
+  rm -f "$iss.titles" "$iss.hits"
+}
+# stack_none — `--source dig|wait` for a stack island: a valid EMPTY selection and a hold (exit 1)
+stack_none() {
+  local sel ts; ts="$(date -u -d "@${INTAKE_NOW:-$(date -u +%s)}" +%Y-%m-%dT%H:%M:%SZ)"
+  sel="$(jq -n --arg island "$ISLAND" --arg source "$SOURCE" --arg ts "$ts" --argjson dmax "${INTAKE_DAILY_MAX:-2}" \
+    '{schema: "island-intake-select/v1", island: $island, source: $source, ts: $ts, counts: {inputs: 0},
+      sittings_today: 0, daily_max: $dmax, inputs: [], prior: []}')"
+  if [ -n "$OUT" ]; then printf '%s\n' "$sel" > "$OUT"; else printf '%s\n' "$sel"; fi
+  echo "hold: no dig source for a stack island ($ISLAND: --source $SOURCE selects nothing)" >&2; exit 1
+}
+
 # ── the island table ─────────────────────────────────────────────────────────────────────────────
 # One row per island in island_pattern / island_alert_rules (dig findings) AND island_members
-# (issues); a new island adds its rows plus its §Island facts file (gateway/intake.md names where those live). ISLANDS is the
+# (issues); a new island adds its rows plus its §Island facts file (islands/intake/rules/intake.md names where those live). ISLANDS is the
 # PRECEDENCE order — most specific first, gateway first so its selection never moves: an item
 # belongs to the first island that claims it, so it is never ruled by two sittings.
 # scan / launch / retro (night run 2026-11-14) sit right after the gateway: their title row
@@ -254,7 +366,7 @@ island_pattern() {
 island_members() {
   case "$1" in
     gateway) printf '%s\n' '^gateway([:/ ]|$)|\bGW-[A-Z]' \
-      gateway/;;
+      gateway/ islands/intake/;;   # islands/intake/ = the intake files that lived under gateway/ until homelab#3575 (same owner, moved)
     scan|launch|retro) printf '%s\n' "^$1 island:" "islands/$1/";;   # islands/README.md (provisional home)
     router-pair) printf '%s\n' '^(opnsense|carp|router[- ]pair|router-move|haproxy|unbound|wireguard|dnsmasq)\b' \
       opnsense/ ansible/opnsense- ansible/roles/opnsense- ansible/group_vars/opnsense.yml ansible/router-nodes/ \
@@ -394,7 +506,7 @@ read_receipts() {
   local k d
   for k in $(seq 0 "$2"); do
     d="$(date -u -d "@$(( $1 - k * 86400 ))" +%Y-%m-%d)"
-    ts_read_objects "intake-$ISLAND-$d" 'receipt.json'
+    ts_read_objects "intake-$ISLAND_KEY-$d" 'receipt.json'
   done
 }
 # responder_day <rel> → the YYYYMMDD of a responder run dir (`…/responder-r<k>-<YYYYMMDD>T…Z/…`), or nothing.
@@ -631,7 +743,7 @@ emit_sel() {
 # ── --source gaps ────────────────────────────────────────────────────────────────────────────────
 cmd_gaps() {
   local root now dmax gmax lookback receipts sel ts today
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"
   gmax="${INTAKE_GAP_MAX:-6}"; lookback="${INTAKE_GAP_LOOKBACK_D:-30}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
@@ -681,7 +793,7 @@ cmd_gaps() {
 # ── --source escape ──────────────────────────────────────────────────────────────────────────────
 cmd_escape() {
   local now dmax lookback receipts queued prs sel ts today since
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"; lookback="${INTAKE_ESCAPE_LOOKBACK_D:-30}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
   since="$(date -u -d "@$(( now - lookback * 86400 ))" +%Y-%m-%d)"
@@ -893,7 +1005,7 @@ JQ_WAIT='
 
 cmd_wait() {
   local now dmax lookback stand wmax receipts since sel ts today members bod targets refs isl
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"; lookback="${INTAKE_WAIT_LOOKBACK_D:-30}"
   stand="${INTAKE_WAIT_STANDING_D:-${INTAKE_REREAD_AGE_D:-3}}"; wmax="${INTAKE_WAIT_MAX:-6}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
@@ -967,6 +1079,32 @@ cmd_wait() {
   emit_sel "$sel" "waits to read or stale waits"
 }
 
+# ── --list-islands ───────────────────────────────────────────────────────────────────────────────
+if [ "$LIST" = 1 ]; then
+  for _isl in $ISLANDS; do
+    island_members "$_isl" >/dev/null 2>&1 || { echo "intake-select: '$_isl' is in ISLANDS without an island_members row — not listed" >&2; continue; }
+    [ -f "$ROOT/docs/intake/$_isl.md" ] || { echo "intake-select: '$_isl' has no facts file (docs/intake/$_isl.md) — not listed" >&2; continue; }
+    printf '%s\n' "$_isl"
+  done
+  if [ -n "$CLAIMS" ]; then
+    _rows="$(claims_islands "$CLAIMS")" || exit 2
+    printf '%s\n' "$_rows" | cut -f1 | { grep -v '^$' || true; }
+  fi
+  exit 0
+fi
+
+# ── --resolve ────────────────────────────────────────────────────────────────────────────────────
+if [ "$RESOLVE" = 1 ]; then
+  if [ "$STACK_ISLAND" = 1 ]; then
+    jq -nc --arg island "$ISLAND" --arg repo "$REPO" --arg facts "$STACK_FACTS" '{island: $island, kind: "stack", repo: $repo, facts: $facts}'
+  else
+    island_members "$ISLAND" >/dev/null 2>&1 || { echo "intake-select: island '$ISLAND' resolves to nothing — no row in the island table, and not a <stack>/<repo> name" >&2; exit 2; }
+    jq -nc --arg island "$ISLAND" --arg repo "$PLATFORM_REPO" --arg facts "docs/intake/$ISLAND.md" '{island: $island, kind: "platform", repo: $repo, facts: $facts}'
+  fi
+  exit 0
+fi
+if [ "$STACK_ISLAND" = 1 ]; then case "$SOURCE" in dig|wait) stack_none;; esac; fi
+
 case "$SOURCE" in
   issues|pile) ;;
   dig) cmd_dig; exit $?;;
@@ -977,7 +1115,7 @@ case "$SOURCE" in
 esac
 
 # ── the issue pile (--source issues, --source pile) ──────────────────────────────────────────────
-island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
 PARSER="$ROOT/agents/issue_body.py"
 [ -f "$PARSER" ] || { echo "intake-select: $PARSER missing (run from a homelab checkout)" >&2; exit 2; }
 
@@ -1042,7 +1180,7 @@ lazy() { # <value> → the field, or jq's own error line + exit 5 where the per-
 # >>>REPLAY:blocked-on-jq>>> block (§BLOCKED-ON PREDICATE — the seam the replay harnesses already
 # extract by), so the two readers cannot drift; a definition that cannot be read is exit 2. The
 # newest comment carrying a marker rules.
-# Offered only under INTAKE_PR_HOLDS=1 (default off: gateway/intake.md step R rules these rows in
+# Offered only under INTAKE_PR_HOLDS=1 (default off: islands/intake/rules/intake.md step R rules these rows in
 # the report only, until the release of a PR-level hold has a rule — the cron does not set it).
 declare -A PRHOLD_PR=() PRHOLD_SINCE=()
 if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
@@ -1069,6 +1207,15 @@ if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
     || { echo "intake-select: PR-hold jq failed" >&2; exit 2; }
   eval "$holds"
 fi
+# a stack island's exclusions (its facts file's `## Membership` section), read once
+declare -A STACK_EXCL=()
+if [ "$STACK_ISLAND" = 1 ] && [ -n "$FACTS_FILE" ]; then
+  printf '%s' "$issues" > "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"
+  _ex="$(stack_exclusions "$FACTS_FILE" "${TMPDIR:-/tmp}/intake-stack-issues.$$.json")" || { rm -f "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"; exit 2; }
+  rm -f "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"
+  for _n in $_ex; do STACK_EXCL[$_n]=1; done
+  echo "intake-select: $ISLAND — ${#STACK_EXCL[@]} open issue(s) excluded by the facts file's \`## Membership\` lines" >&2
+fi
 cand_args=(); reread_args=()
 i=0
 while [ "$i" -lt "$count" ]; do
@@ -1089,6 +1236,10 @@ while [ "$i" -lt "$count" ]; do
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
   touches="${F_touches[$ix]:-}"
   kind=member
+  if [ "$STACK_ISLAND" = 1 ]; then
+    # a stack island: every issue of its repo, minus what its facts file excludes (the header's STACK ISLANDS)
+    [ -z "${STACK_EXCL[$num]:-}" ] || continue
+  else
   case "$(island_of_issue "$title" "$touches" "$ix")" in
     "$ISLAND") ;;
     "") # nobody's: an attribution input for ATTRIBUTION_ISLAND when bot-filed (not author type User)
@@ -1097,9 +1248,10 @@ while [ "$i" -lt "$count" ]; do
       kind=attribution;;
     *) continue;;
   esac
+  fi
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
-  # …except `intake: forward → <island>`: another sitting passed the item on (gateway/intake.md
+  # …except `intake: forward → <island>`: another sitting passed the item on (islands/intake/rules/intake.md
   # step 0) and retitled it, so it is an UNRULED candidate of whichever island its title names now
   # (the SAME test as F_fwd's count above: `forward` as the outcome word, whatever follows it)
   [[ "$ruling" =~ ^intake:[[:space:]]*forward($|[^[:alnum:]_]) ]] && ruling=""

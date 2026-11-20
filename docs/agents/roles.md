@@ -429,7 +429,7 @@ never harder posture on quiet ones.
   consumed:** findings that filed nothing but carry a `remediation_would`, on an island's alert or a
   ride of an island's issue, reach that island's intake sitting as one input per alert + namespace
   once they recur — the rule and its floor live in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh)'s header (`--source dig`, FU-320);
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh)'s header (`--source dig`, FU-320);
   the responder itself still files nothing for them.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
@@ -477,7 +477,7 @@ never harder posture on quiet ones.
   surfacing them on the board is the next step, not built here. **Island findings are consumed:**
   a `cause-found` finding whose text names an island (`gateway/`) is a `text:` input to that
   island's intake sitting — [`island-intake-argo.yaml`](../../agents/coordinator/island-intake-argo.yaml),
-  daily 05:00Z, brief [`gateway/intake.md`](../../gateway/intake.md) — which folds, files and queues
+  daily 05:00Z, brief [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — which folds, files and queues
   it (FU-320); the dig itself still files nothing.
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
   MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =

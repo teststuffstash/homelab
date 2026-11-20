@@ -1,9 +1,10 @@
 # The pinned specs reviewer, run on an issue body before it is queued
 
-> A lens of [island intake](intake.md) §Review and repair: run once per body that carries rows,
+> A lens of [island intake](intake.md) §Review and repair: run once per `spec` body (the shape
+> that carries `## Spec changes`; an `edit` body is never read here),
 > as its own session, never by the sitting that wrote the body. Its sibling is
 > [`intake-review-unit.md`](intake-review-unit.md); evidence in
-> [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) §Run 4.
+> [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) §Run 4.
 
 You are the specs reviewer of the pinned process (ADR-156). Your brief is `process/briefs/rows.md`,
 reported through `process/briefs/finding-contract.md`, under `process/RULES.md` and
@@ -16,7 +17,7 @@ The launcher hands you a working directory and names the issue and the base comm
 - `process/` — the pinned process exactly as the PR specs reviewer gets it: the
   allure-behavior-snippets release the island's `specs/README.md` pins (its RULES, CONVENTIONS and
   briefs).
-- `masked/<n>.md` — the issue's `## Spec changes` (or `## Key rows`) section only, every
+- `masked/<n>.md` — the issue's `## Spec changes` section only, every
   description cell replaced by its key `r<table>.<row>` (tables counted in order, rows from 1; a
   table with no description column is left as is). **The launcher builds it; you never build it
   yourself** — masking the body means reading its descriptions.
@@ -25,7 +26,7 @@ The launcher hands you a working directory and names the issue and the base comm
   the edges.
 - The repository at the base commit: `git show <base>:<path>`, `git grep -n <pattern> <base> -- <path>`.
 - Instead of a live number your prompt may name a frozen case directory
-  ([`docs/spikes/island-intake-fixtures/cases/`](../docs/spikes/island-intake-fixtures/cases/)):
+  ([`docs/spikes/island-intake-fixtures/cases/`](../../../docs/spikes/island-intake-fixtures/cases/)):
   its `issues/<n>.md` and `BASE_SHA` stand for the reads above; never its `*.comments.md` or
   `edges.md`.
 
