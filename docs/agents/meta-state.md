@@ -25,17 +25,32 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   NEXT BUILDS: the replay runner + the edit-PR leg (cases in `islands/intake/tests/fixtures/wait-cases/`); cron
   sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
   launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.
-- **⚑ PICKUP (2026-11-20 — intake becomes its own island; TICK-LOG 11-20 second entry; FU-320).** Operator: "cleanup
-  time — intake becomes its own thing and we give the contract to oracle". ADMITTED 11-20, BUILT BY SEAT SUBAGENTS (operator), one child at a time in edge order, each a PR into the goal
-  branch with the bot reviewers gating; a fresh session resumes from the children's open/closed state. Goal #3574 (branch
-  `goal/3574-intake-island` cut; goal-lint 0 FAIL) with children #3575 A the move → #3576 B rules un-gatewayed / #3577 C
-  own SA + agent-base + devbox → #3579 E sittings for every island / #3578 D facts `## Sources` + ride reach → #3580 F
-  stack source from the claim (NOT queue-ready: the seat designs pin 9 first) → #3581 G `CONTRACT.md`. None is `agent/queued` (the loop must not ride them).
-  A MERGED (#3583), B MERGED (#3584), C MERGED (#3585, 14:16Z — the four cluster-scoped names went onto the sentinel baseline direct, `6af828ae`; the caller entry narrowed to `coordinator`/no bind and the island devbox trimmed to promtool + yq, both amended on #3577), all into the goal branch; E MERGED (#3589 — one run lists the islands and walks nine in sequence, 23 h workflow deadline; Argo's runtime fan-out behaviour is linted only), D MERGED (#3591 — `## Sources` + `## What a ride can do` in all nine facts files; three reads marked seat-only from the manifests, unprobed); F (#3580) body REWRITTEN with the pin-9 design (existing `coordinator-git` token, claim read live via one rule on `island-intake-read`, no dig source for stack islands, platform pays, name `<stack>/<repo>`) and dispatched 11-20 ~16:45Z (clone `/workspace/homelab-clones/intake-3580`); then G. OWED AT THE FIRST DRY-RUN SITTING: the in-pod `devbox install` cost (the 3Gi limit is a jail number — lower it from the pod's), the island lock's nixpkgs rev differs from the image's, the lock has no update lane, and nothing bumps the agent-base tag in `agents/coordinator/kustomization.yaml` (agent-runtime deploy-pin needs one sed). NEXT GOAL DRAFTED, NOT QUEUED, NO BRANCH: #3586 — intake writes one `## Experiment` block (the oracle stack's format unchanged, no added key — `kpi.control` considered and dropped 11-20; silence is told by an `and on()` term), a deterministic scheduled read decides it from Prometheus, a fail reopens to intake; children A–E named in its body, filed after #3574 assembles; first live proof = #3563's block (seat writes it; window ends 2026-11-27T13:09Z). Operator ruled 11-20: not Kargo (a verification holds its Stage and belongs to a version), take the block unchanged. RESIDUE for the assembly read / a last cleanup child: `.claude/skills/intake/SKILL.md`
-  step 4 still says the gateway uses its own block (operator-direct path); `docs/README.md:28` lists five facts files;
-  the wait ledger's alias does not cover lines that moved from `intake.md` to `docs/intake/gateway.md`; the `spec`
-  template still shows `GW-` examples; the reviewer's CODEOWNERS suggestion for `islands/intake/scripts/sitting.sh`. THEN: assembly PR goal → master (operator's codeowner read). AFTER THE ASSEMBLY, the seat's: live `can-i` read of `island-intake`, one hand-submitted dry-run
-  sitting, the handoff to oracle with the contract. #3563 (homelab scratch 40Gi → 100Gi) MERGED as #3573 on the operator's word (13:09Z; one Sonnet round; live quota reads 100Gi). scan-specs site is live (#3568/#3569; CI publishes it).
+- **⚑ PICKUP (2026-11-20 evening — intake IS its own island; outcome experiments in build; TICK-LOG 11-20 third entry; FU-320).**
+  Goal #3574 BUILT BY SEAT SUBAGENTS AND ON MASTER (assembly #3598, 18:37Z; children #3575–#3581 closed; the operator said
+  "finish this" for the codeowner merge). LIVE-PROVEN 11-20: `can-i` as `island-intake` (reads yes; pods/exec/configmaps/
+  secrets no), one dry-run sitting `island-intake-cpsr9` (gateway island, 21 min, Succeeded: base image, install 14 s,
+  gateway admitted the caller on Fable, two lens runs, uploads, metrics; peak 360 MiB → limit 3Gi → 1Gi in PR #3609, CHECK IT
+  MERGED). NOT YET SEEN: the first FULL WALK (05:00Z 11-21, nine islands in sequence under `parallelism: 1` — read that every
+  island got a step, that one failing does not stop the rest, the `island_intake_listed_timestamp_seconds` push, the 23 h
+  deadline); anything for a stack island (no stack declares `repos[].intake.facts`; oracle was told via
+  `/workspace/.handoff/oracle/done/20261120-1915-platform-island-intake-contract-ready.md`). Verdict on #3574 is the
+  operator's (human authority) — it stays open, post-launch.
+  RESIDUE: intake's own items still ride the GATEWAY's sitting (no membership row or facts file for `islands/intake/`);
+  `docs/intake/{launch,retro}.md` say no tests root is declared while both hold labelled tests (unchecked against the
+  claim); the wait ledger double-counts 22 lines moved into `docs/intake/gateway.md` (ages out in 30 d);
+  `.claude/skills/intake/SKILL.md` step 4 stale (operator-direct path); nothing bumps the agent-base tag in
+  `agents/coordinator/kustomization.yaml` (agent-runtime deploy-pin needs one sed); the island devbox lock has no update lane
+  and pins a newer nixpkgs than the image (harmless in the dry run); three facts-file reads are seat-only.
+  GOAL #3586 LAUNCHED (operator: "launch the next goal while I am gone"): intake writes one `## Experiment` block (the oracle
+  stack's format unchanged, no added key — `kpi.control` dropped on oracle's read), a deterministic read in the intake
+  workflow decides it from Prometheus, a fail reopens to intake, nothing rolls back; NOT Kargo (ruled 11-20). Branch
+  `goal/3586-intake-experiments` cut; children #3602 A loader → #3603 B verdict + read → #3604 C the scheduled step and its
+  writes; #3605 D rules (after A); #3606 E contract section (after C, D). None `agent/queued`; seat subagents build them in
+  that order, each a PR into the goal branch (clones under `/workspace/homelab-clones/exp-<n>`). A's PR is #3608.
+  #3563 CARRIES THE FIRST LIVE EXPERIMENT (`homelab-rides-not-pending`, baseline 5 of 91 ride pods Pending > 15 min in 10 d;
+  window 7 d from the #3573 merge → decided 2026-11-27T13:09Z); the label `experiment/open` does not exist yet (child C says
+  where labels are declared). oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
+  `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
   window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
   on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.

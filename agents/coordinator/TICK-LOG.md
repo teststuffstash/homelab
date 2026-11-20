@@ -15636,3 +15636,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Direction:** the 11-14 trial already ruled the review model (seat asked again — corrected); intake becomes its own
   island, the contract goes to oracle. Goal #3574 + children #3575–#3581 drafted, bound, edged, goal-lint 0 FAIL;
   none queued; the operator admits.
+
+## 2026-11-20 (third entry) — Goal #3574 built by seat subagents and proven live; #3573 merged; Goal #3586 launched
+
+- **Condition:** operator admitted #3574 ("build it with seat subagents"), later "finish this and launch the next goal
+  while I am gone". **Done:** seven children, one subagent each, serial, PR into `goal/3574-intake-island` with the bot
+  reviewers gating: #3583 #3584 #3585 #3589 #3591 #3595 #3597; assembly #3598 merged 18:37Z.
+- **Seat acts along the way:** four cluster-scoped names onto the sentinel baseline direct (`6af828ae` — the sentinel
+  reads exceptions from master only; `iac-sentinel` status is per head, an empty commit re-evaluates it). Child C: the
+  island devbox trimmed from eight packages to two (the image pre-bakes the rest; the operator asked why 3Gi) and the
+  gateway caller narrowed to `coordinator`/no bind — both amended on #3577. Child F's design (pin 9) written into
+  #3580 before it was built. Assembly review blocked once: per-island `IslandIntakeStale` fired for ever for an island
+  that left the list (the Pushgateway serves a last push for good) — gated on a listed-islands gauge the list step
+  pushes (`listed-push.sh`, fixture cases f, f2).
+- **Live:** `kubectl auth can-i … --as=…:island-intake` as designed; dry-run `island-intake-cpsr9` Succeeded in 21 min
+  (install 14 s, 360 MiB peak → #3609 lowers 3Gi to 1Gi).
+- **#3573** (scratch 40Gi → 100Gi, the ride of #3563) merged on the operator's word; live quota read 100Gi.
+- **Outcome checks:** operator asked how a fix is checked against its reason. Three web prior-art searches (rollout
+  tools, Prometheus-side, flag/experiment platforms): Kargo holds its Stage during a verification and binds it to a
+  version — ruled out; oracle's `experiment` block read and taken unchanged; `kpi.control` proposed, dropped on
+  oracle's read. Goal #3586 filed, branch cut, children #3602–#3606; #3563 carries the first block.
+- **Two heredoc accidents** (a subagent's and the seat's): a nested heredoc ended early and the remainder ran as shell
+  with empty variables; nothing was changed either time. Briefs now say: write such fragments with a file tool.

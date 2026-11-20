@@ -674,8 +674,8 @@ the block needs pruning, not more headings.
       **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),
       `gap` + `escape` sources; islands scan/launch/retro are intake islands (`docs/intake/`, Goals #3389 #3390 #3384).
       **Learning loop 2026-11-19** (ADR-164): step 3 = a closed list (#3547/#3549), responder classes as a dig-source input (#3544), the WAIT read (#3555), weekly rules digest (#3552).
-      **Intake as its own island 2026-11-20:** rules — intake reads every deciding fact, checks the ride's recipe and reach (#3570); Goal #3574 drafted (move to `islands/intake/`, own SA + toolchain, sittings for every island, stack source, `CONTRACT.md` for oracle).
-      **Next:** the operator admits #3574; the replay runner + the edit-PR leg (wait cases recorded); meta-state pickup.
+      **Intake as its own island 2026-11-20:** rules — intake reads every deciding fact, checks the ride's recipe and reach (#3570); Goal #3574 BUILT and on master (#3598, 18:37Z: `islands/intake/`, SA `island-intake` read-only, agent-base + island devbox, one run walking nine islands, stack islands from the claim, [`CONTRACT.md`](../islands/intake/CONTRACT.md)); first sitting under it proven by a dry run; oracle told.
+      **Next:** read the first 05:00Z full walk (2026-11-21); Goal #3586 (outcome experiments) in build; the replay runner + the edit-PR leg; meta-state pickup.
       oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
       ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
