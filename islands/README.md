@@ -38,6 +38,13 @@ intake, the deep dig, the responder) — the spike drafted both; they wait.
   root, and a worker whose `Touches:` reaches it gets the pinned spec process mounted, versioned by
   that root's `README.md`. No tests root is declared and the pack carries no evidence, so an
   unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark.
+- **A browsable site, for an island that opts in.** [`scripts/specs-site.sh`](scripts/specs-site.sh)
+  renders an island's README + `specs/` the way the gateway's site does — each rule's tables joined
+  to the island's own suite run, linking into that run's Allure report — and publishes it to
+  `https://<island>-specs.homelab.teststuff.net` (LAN/VPN; PR previews at `/pr-<N>/`). Opting in is
+  a `mkdocs.yml` beside `specs/`, a bucket and a route; scan is the first
+  ([scan-specs.homelab.teststuff.net](https://scan-specs.homelab.teststuff.net)). The site is for
+  readers: the specs reviewer's pack still carries no evidence for these roots.
 - **No spec gate / join ratchet** over these roots (`gateway/scripts/spec_gate.py` resolves its
   root from its own location — `gateway/specs` only).
 - **Write tier:** `classify_touches islands/…` = `machine-merge` (verified 2026-11-14).

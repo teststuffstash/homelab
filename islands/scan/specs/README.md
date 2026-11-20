@@ -12,6 +12,11 @@ grammar converges on ADR-122 (3)'s one machine block. Where the code has not got
 says so (`⚑ gap`, `🚧 WIP`, "unverified — expected …"). Terms: [glossary.md](glossary.md) and
 the platform's [docs/glossary.md](../../../docs/glossary.md).
 
+> Browsable, with the suite's evidence joined into the decision tables of the rules that have tests:
+> **[scan-specs.homelab.teststuff.net](https://scan-specs.homelab.teststuff.net)** (LAN/VPN;
+> built by [`islands/scripts/specs-site.sh`](../../scripts/specs-site.sh)); the run's Allure report
+> is at [`report/index.html`](https://scan-specs.homelab.teststuff.net/report/index.html).
+
 > **Contract for a fresh build** ([../README.md](../README.md)): these pages specify the component
 > to be written under `islands/scan/`; the "code" a row cites is the OLD member it replaces, read
 > to explain a difference, never as the source ([Built from the specs](../../README.md#built-from-the-specs-never-copied)). Line citations (`file:<n>`) are against the spike's base `c34535a5`

@@ -1,0 +1,10 @@
+# The scan island's browsable specs site — the gateway island's config (theme, extensions, the
+# mermaid init), inherited so there is one home for it. Built and published by
+# islands/scripts/specs-site.sh → https://scan-specs.homelab.teststuff.net (LAN/VPN-only);
+# per-PR previews at …/pr-<N>/.
+INHERIT: ../../gateway/mkdocs.yml
+site_name: scan island specs
+docs_dir: .site-src
+site_dir: specs-site
+theme:
+  custom_dir: ../../gateway/site-overrides

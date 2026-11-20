@@ -111,7 +111,7 @@ MAP=(
   # via docker: every spec page's Mermaid diagrams render, every flowchart node link lands on its
   # requirement heading — the oracle-fleet e2e-specs-site shape). Inputs: the site config, the
   # staged renderer init, any spec page, the build and the leg itself. Docker pull + WAN → PUSH_HEAVY.
-  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/e2e/test_specs_site\.py$)"
+  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/lib/site-build\.sh$|scripts/e2e/test_specs_site\.py$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
@@ -155,6 +155,12 @@ MAP=(
   # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
   # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
   "-- bash islands/scan/scripts/ci.sh:^(islands/scan/|agents/replay/(fixtures/(major-handoff|updater)/|stubs/|run\.sh$)|agents/(major-handoff|update-pr-branch|renovate-currency|machine-comment)\.sh$)"
+  # the scan island's browsable specs site (islands/scripts/specs-site.sh: the suite for its evidence,
+  # the mkdocs build, the mirror to the scan-specs bucket; soft-skips the upload without
+  # GATEWAY_SPECS_S3_* creds, so locally it is the dogfood build). Inputs: the island, the script, and
+  # the gateway pieces it shares (config, assets, the build/upload/evidence libs). WAN-bound and
+  # minutes long → kept off the pre-push hook by PUSH_HEAVY_CMDS below.
+  "-- bash islands/scripts/specs-site.sh publish scan:^(islands/(scan|scripts)/|gateway/(mkdocs\.yml$|site-assets/|site-overrides/|scripts/allure-report\.sh$|scripts/lib/(site-build|s3-publish|snippets)\.sh$))"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
@@ -230,6 +236,8 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
+# The same exclusion for `-- <cmd>` rows, which have no task name to list above: a prefix per line.
+PUSH_HEAVY_CMDS="-- bash islands/scripts/specs-site.sh "
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
@@ -326,6 +334,7 @@ if [ "${1:-}" = "--push-gates" ]; then
   for entry in "${MAP[@]}"; do
     task="${entry%%:*}"; regex="${entry#*:}"
     case " $PUSH_HEAVY " in *" ${task%% *} "*) continue ;; esac
+    case "$task" in "$PUSH_HEAVY_CMDS"*) continue ;; esac
     if $all || grep -qE "$regex" "$list"; then printf '%s\n' "$task"; fi
   done
   exit 0

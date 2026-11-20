@@ -41,29 +41,8 @@ bash scripts/specs-build.sh
 
 echo "== upload =="
 s3_publish_remote specs "$ENDPOINT" "$GATEWAY_SPECS_S3_ACCESS_KEY_ID" "$GATEWAY_SPECS_S3_SECRET_ACCESS_KEY"
-# report/ stays out of the mirror (never uploaded without its headers) and is put below; rclone
-# sync never deletes dest keys its filters exclude, and the put after the mirror lands the report
-# either way. Filters are anchored ('/…/**') so they match only the top-level directories.
-if [ -n "$PREFIX" ]; then
-  # A PR prefix is wholly owned by its PR: --remove keeps it an exact mirror of this build.
-  s3_publish_mirror --remove --exclude '/report/**' specs-site/ "$DEST"
-else
-  # NEVER --remove on the root: we own the root, not the pr-*/ directories PR runs write.
-  s3_publish_mirror --exclude '/pr-*/**' --exclude '/report/**' specs-site/ "$DEST"
-fi
-if [ -f specs-site/report/index.html ]; then
-  echo "== upload: the run's Allure report (gzipped single-file) → report/index.html =="
-  scratch=$(mktemp -d)
-  trap 'rm -rf "$scratch"' EXIT
-  mkdir -p "$scratch/report"
-  gzip -9 -c specs-site/report/index.html > "$scratch/report/index.html"
-  echo "   $(stat --format=%s specs-site/report/index.html) bytes → $(stat --format=%s "$scratch/report/index.html") bytes gzipped"
-  # Plain "gzip": the "aws-chunked,gzip" prefix (oracle-fleet PR #551) was an mc artefact — mc
-  # signed with Garage's STREAMING signature, which required it. rclone sends a plain signed PUT,
-  # and Garage stores + serves Content-Encoding: gzip as given (live round-trip, 2026-10-28).
-  s3_publish_put --header "Content-Encoding: gzip" --header "Content-Type: text/html" \
-    "$scratch/report/index.html" "$DEST/report/index.html"
-else
-  echo "specs-publish: no Allure report in this build (no allure-results/) — report/ left as is"
-fi
+# The mirror, then the gzipped report apart from it (site_upload, scripts/lib/site-build.sh).
+# shellcheck disable=SC1091
+source scripts/lib/site-build.sh
+site_upload "$DEST" "$PREFIX"
 echo "published: $SITE_BASE_URL/  (bucket $BUCKET${PREFIX:+/$PREFIX} via $ENDPOINT; report: $REPORT_URL)"
