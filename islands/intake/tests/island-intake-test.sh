@@ -1348,7 +1348,7 @@ kill "$EXP_PID" 2>/dev/null; wait "$EXP_PID" 2>/dev/null
 exp_stub two-samples
 got2=$(python3 -I "$EXPPY" at --prometheus "$EXP_URL" --query 'errors_total[$window]' --window 1h --at 2026-01-02T00:00:00Z 2>&1) && rc=0 || rc=$?
 kill "$EXP_PID" 2>/dev/null; wait "$EXP_PID" 2>/dev/null
-[ "$rc" = 2 ] && echo "$got2" | grep -q "one sample expected" && ok "experiment.py at: two samples is a failed read (exit 2)" || bad "experiment at (two samples)" "exit $rc: $got2"
+[ "$rc" = 2 ] && grep -q "one sample expected" <<< "$got2" && ok "experiment.py at: two samples is a failed read (exit 2)" || bad "experiment at (two samples)" "exit $rc: $got2"
 
 # ── the facts files name their island's body shape (intake.md §A queue-ready body) ────────────────────────
 # Expected from homelab#3576 acceptance 5: `spec` for gateway, scan, launch, retro; `edit` for agent-loop,
