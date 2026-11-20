@@ -38,7 +38,7 @@ spec:
   monitoring:
     enablePodMonitor: true
   storage:
-    size: 2Gi
+    size: 5Gi # was 2Gi: primary hit "no free disk space for WALs" (homelab#3596); CNPG expands the PVC online (longhorn allowVolumeExpansion)
     storageClass: longhorn-local-std # replica-1 node-local std (tofu/longhorn.tf) — Postgres replicates itself
   bootstrap:
     initdb:
