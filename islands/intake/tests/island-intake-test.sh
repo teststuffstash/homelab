@@ -553,7 +553,7 @@ n="$(for f in "$CDIR"/*.yaml; do yq -r 'select(.kind == "ClusterRole" and (.meta
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.image')" = registry.teststuff.net/agent-base ] \
   && ok "the sitting's image is agent-base, with no tag in the manifest" || bad "image" "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.image')"
 BASE_TAG="$(yq -r '.images[] | select(.name == "registry.teststuff.net/agent-base") | .newTag' "$KZ")"
-{ printf '%s' "$BASE_TAG" | grep -qE '^[0-9]{4}\.[0-9]+\.[0-9]+-g[0-9a-f]{12}(\.[0-9]+)?$' \
+{ grep -qE '^[0-9]{4}\.[0-9]+\.[0-9]+-g[0-9a-f]{12}(\.[0-9]+)?$' <<< "$BASE_TAG" \
     && grep -qxF "  - { name: registry.teststuff.net/agent-base, newTag: $BASE_TAG }" "$KZ" \
     && [ "$(grep -cE '^[[:space:]]+newTag:' "$KZ")" = 1 ] \
     && [ "$(yq -r '.images[] | select(.name == "registry.teststuff.net/agent-coordinator") | .newTag' "$KZ")" != "$BASE_TAG" ]; } \
@@ -654,6 +654,8 @@ run_script apply; rc=$?
     && [ "$(sed -n 2p "$TMP/devbox.calls")" = "devbox run --config islands/intake -- bash $TMP/run/island-intake-launch.sh (cwd $TMP/work/homelab)" ] \
     && [ "$(grep -c . "$TMP/devbox.calls")" = 2 ]; } \
   && ok "the bootstrap installs the island's devbox and runs the launcher through \`devbox run\` in islands/intake/" || bad "devbox run" "$(cat "$TMP/devbox.calls")"
+[ "$(jq -c '.projects | to_entries | map([.key, .value.hasTrustDialogAccepted])' "$TMP/home/.claude.json" 2>/dev/null)" = "[[\"$TMP/work/homelab\",true]]" ] \
+  && ok "…and seeds claude's workdir trust for the clone (the base image seeds a worker's /work/repo only)" || bad "trust seed" "$(cat "$TMP/home/.claude.json" 2>&1 | head -2)"
 [ -s "$TMP/claude.calls" ] && grep -q -- "--model opus" "$TMP/claude.calls" && ok "one sitting, on the resolved model" || bad "session" "$(cat "$TMP/claude.calls")"
 grep -q "Read islands/intake/rules/intake.md IN FULL" "$TMP/up/brief.md" 2>/dev/null && grep -q "mode: apply" "$TMP/up/brief.md" \
   && jq -e '.inputs | length == 2' "$TMP/up/inputs.json" >/dev/null 2>&1 \

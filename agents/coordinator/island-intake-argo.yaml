@@ -265,6 +265,10 @@ spec:
               _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
               git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || _dead "clone failed"
               cd /work/homelab || _dead "clone failed (no /work/homelab)"
+              # The image seeds claude's trust for a worker's /work/repo and its entrypoint re-seeds it for the
+              # real workdir; that entrypoint does not run here, so this is its line, for this clone.
+              { mkdir -p "$HOME" && jq -n --arg d /work/homelab '{hasCompletedOnboarding: true, projects: {($d): {hasTrustDialogAccepted: true}}}' > "$HOME/.claude.json"; } \
+                || echo "island-intake: could not write $HOME/.claude.json (the workdir trust seed) — continuing"
               # The island's toolchain (islands/intake/devbox.json + its lock). Bounded: the script's
               # deadline arithmetic (RUN_DEADLINE_S, _fits) starts when the script does and keeps 600 s
               # of slack against this pod's activeDeadlineSeconds — the install must fit inside it.
