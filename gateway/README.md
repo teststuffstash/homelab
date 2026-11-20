@@ -27,8 +27,8 @@ four live **rails** — `anthropic` (the operator's Claude subscription OAuth to
 | `POST /openai/v1/responses` — the codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) and its scoped four-boundary capture, `GET /sessions/{id}/capture` (`GW-CODEX-CAPTURE`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
 | `GET /catalog/openrouter` — the OpenRouter catalog leg: the weekly ranking ∩ AA-benched, each candidate's endpoints, the cells' entry states, the floors' verdict per harness (`pinnable` / `floor`) and the budget-capped entry canary (`GW-CATALOG-OR`; the jail launcher `scripts/canary-entrants.sh` walks the pinnable candidate cells cheapest-first) | [`specs/endpoints/catalog.md#gw-catalog-or`](specs/endpoints/catalog.md#gw-catalog-or) |
-| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, ordered by cost per clean ride (the openrouter model's selected endpoint, the Go plan's discounted price), the committed snapshot and its staleness alert, the manual benchmark rows for a model the feed lacks (`benchmarks-manual.json`, self-retiring), the equality check; the admission's rail choice between a model's twin cells (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
-| `GET /catalog/tiers` — the runtime derivation: after every good catalog refresh the gateway derives the per-(rail, tier) lists from its own store (the benched rows, the Go price, the selected endpoints, the manual rows in the optional `GATEWAY_BENCHMARKS_MANUAL` file, the policy's `tiers`), keeps the last good one across restarts, and shows it with the evidence behind each id and whether it equals the list the admission walks — shadow only, the admission still walks the policy's lists (`GW-MODEL-TIERS`) | [`specs/endpoints/catalog.md#the-derivation-at-a-refresh`](specs/endpoints/catalog.md#the-derivation-at-a-refresh) |
+| The tier evidence — the per-(rail, tier) model lists the admission walks, derived by the gateway at every good catalog refresh from the evidence in its own store, ordered by cost per clean ride (the openrouter model's selected endpoint, the Go plan's discounted price), the manual benchmark rows for a model the feed lacks (the optional `GATEWAY_BENCHMARKS_MANUAL` file, self-retiring), the evidence-age gauge `TierEvidenceStale` reads; git keeps only the policy's `tiers` block; the admission's rail choice between a model's twin cells (`GW-MODEL-TIERS`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
+| `GET /catalog/tiers` — the runtime derivation: after every good catalog refresh the gateway derives the per-(rail, tier) lists from its own store (the benched rows, the Go price, the selected endpoints, the manual rows in the optional `GATEWAY_BENCHMARKS_MANUAL` file, the policy's `tiers`), keeps the last good one across restarts, and shows it with the evidence behind each id and whether it equals the list the admission walks — the admission walks the derivation itself (`GW-MODEL-TIERS`) | [`specs/endpoints/catalog.md#the-derivation-at-a-refresh`](specs/endpoints/catalog.md#the-derivation-at-a-refresh) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -50,7 +50,7 @@ tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mo
 `GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_CONFIG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's three
 reads — models.dev, the console overlay, the Go page — overridable for tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
 MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule),
-`GATEWAY_BENCHMARKS` (the committed tier-evidence snapshot mounted beside the policy; its age is a gauge),
+`GATEWAY_BENCHMARKS_MANUAL` (the optional manual benchmark rows the tier derivation reads; unset = none),
 `GATEWAY_PORT` (8080) and `GATEWAY_LOG_LEVEL` (INFO).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
@@ -109,9 +109,11 @@ ConfigMap by a hash-suffixed configMapGenerator, so an edit rolls the pod) carri
 is deployed** — the ConfigMap rolls on sync, the image only after the deploy auto-bump (~10 min
 behind), and the loader refuses unknown keys by design (`_keys`): #2810 shipped `canary.backoff_s`
 beside its parser and the old image crash-looped the single Recreate replica for the whole gap
-(2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its four rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
-from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
-policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
+(2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its rails' tier LISTS order nothing: `GW-MODEL-TIERS` derives the lists the admission walks at
+every good catalog refresh from the gateway's own store under the policy's `tiers` block (git keeps
+only those numbers); the `anthropic` and `codex` lists declare those rails' candidates, and the
+priced rails' lists are left for the post-launch policy edit (homelab#3305) — no snapshot is
+committed or mounted for the derivation.
 
 ## Implementation notes the specs do not state
 
