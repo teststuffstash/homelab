@@ -32,8 +32,10 @@ skips and takes).
 
 Every policy world also carries the `tiers` block of the deployed policy (`score: intelligence`,
 bands 0.9 / 0.75 / 0.5, cap 3 — [GW-MODEL-TIERS](../endpoints/catalog.md#gw-model-tiers)) so one
-loader shape holds everywhere, but its LISTS stay the fixture ids above: the derivation applies to
-the deployed policy only ⚖.
+loader shape holds everywhere, but its LISTS stay the fixture ids above and order nothing on the priced
+rails: each policy world's store starts with the derivation the fixture seeds — the fixture ids above, stood in
+for the gateway's derivation on every rail (`opencode`, `openrouter`, and the declared `anthropic` / `codex`
+candidates) — and a row's `derivation` / `store_state` cell overrides it ⚖.
 
 ## Upstream behaviours (fake upstreams)
 

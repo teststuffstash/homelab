@@ -702,6 +702,9 @@ class Policy:
                         or any(not isinstance(m, str) or not m for m in ids) or len(set(ids)) != len(ids)):
                     raise PolicyError(f"policy: rails.{name}.models.{tier} must name a model (or a non-empty list of distinct models) for a known tier")
                 models[tier] = tuple(ids)
+            if name in ("anthropic", "codex") and not models:
+                # the subscription rails' lists DECLARE the candidates the derivation orders (GW-SESSIONS-ADMIT)
+                raise PolicyError(f"policy: rails.{name}.models is required — the candidates the tier derivation orders")
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")

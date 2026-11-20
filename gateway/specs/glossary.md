@@ -102,18 +102,19 @@ test row.
 ## tier
 
 A size label on a session — `light` | `standard` | `heavy` — that selects the model within the
-chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
+chosen rail: an ORDERED list — the rail's last good derivation's list for the tier (the policy's `rails.<rail>.models`
+no longer order the walk; they declare the subscription rails' candidates) — the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
 [§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
 may override it, and may ask for the list to be walked from its END (`prefer: strongest` —
 [§The preferred end of the list](endpoints/sessions.md#the-preferred-end-of-the-list)). Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
-deployed policy's lists are derived from the [tier evidence](#tier-evidence).
+derived lists come from the [tier evidence](#tier-evidence).
 
 ## defer
 
 The admission answer "not now": HTTP 200 `{decision: "defer", reason, retry_after_s}` — never
 an HTTP error. Typed reasons: `rail-capacity`, `rail-window`, `rail-latched`, `cell-cooled`, `not-in-catalog` (a Go model the [Go catalog](#go-catalog) does not cover), `role-rail-denied`,
-`stack-unknown`, `credential-unresolved`, `credential-rejected`, `no-eligible-provider` (the
+`stack-unknown`, `credential-unresolved`, `credential-rejected`, `tiers-underived` (the rail holds no derivation — [sessions.md](endpoints/sessions.md#gw-sessions-admit)), `no-eligible-provider` (the
 openrouter model's endpoint snapshot has no provider that clears the policy floors —
 [sessions.md §The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)), the
 [entry canary](#canary)'s `canary-not-due` and `canary-budget`

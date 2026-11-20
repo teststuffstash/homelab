@@ -1442,9 +1442,10 @@ their rule** ⚖ ([§Manual benchmark rows](#manual-benchmark-rows)): the option
 a row the feed carries is reported `retired` on the view; a file `parse_manual` refuses is refused
 whole, the derivation runs without it, and the view carries the reason.
 
-**This is the SHADOW step**: the admission still walks the policy's lists; `GET /catalog/tiers`
-(`tiers_output`) shows the derivation beside them, and `equals_walked` says per tier whether the two
-are the same ids in the same order.
+**The admission walks the derivation** ⚖ ([GW-SESSIONS-ADMIT §Where a tier's list comes from](sessions.md#where-a-tiers-list-comes-from)):
+`GET /catalog/tiers` (`tiers_output`) shows the derivation, and `equals_walked` says per tier whether
+it is the same ids in the same order as the list the admission walks — true wherever the rail is derived,
+because the walk reads the derivation; the policy's `rails.<rail>.models` lists order nothing.
 
 **World:** `policy-default` · `openrouter-endpoints` with the Go catalog (`catalog-ok` + `docs-ok`),
 the [tier derivation's world](../worlds/README.md#the-tier-derivation-world) (a hand-written benched
@@ -1469,7 +1470,7 @@ Legend (the [tier derivation's world](../worlds/README.md#the-tier-derivation-wo
 `V4` = `deepseek/deepseek-v4-flash` (intelligence 50, out $0.3/M), `V41` = `deepseek/deepseek-v4.1-flash`
 (40, $0.2), `GLM` = `z-ai/glm-5.3-flash` (30, $0.1), each one selected endpoint, uptime 100; the
 anthropic aliases `FXA` … `FXD` = `claude/fxa` … `claude/fxd` (20, 40, 60, 80). The policy's lists
-the admission walks: `openrouter` heavy `V41`, standard `V41, V4`, light `V4, V41`; with four aliases
+(they order nothing since the cut-over; the table's legend only): `openrouter` heavy `V41`, standard `V41, V4`, light `V4, V41`; with four aliases
 declared (`store_before`) `anthropic` light `FXA, FXB`, standard `FXC`, heavy `FXD`. `refresh` = the
 leg's good refresh at T0 + 21600 s over the store after the change it names (`ok` = no change;
 `GLM intelligence 30 → 48`; `every openrouter price null`; `GLM intelligence null` = its row keeps
@@ -1478,11 +1479,17 @@ coding 70); `rail` = the rail the expected cells read; `lists?` = the rail's der
 
 | description | store_before | refresh | rail | derived_at? | lists? | undecided? | unscored? | equals_walked? |
 |---|---|---|---|---|---|---|---|---|
-| a good refresh derives every rail's tiers ⚖ | catalogs and benched rows at T0, no derivation | ok | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | none | none | heavy false · standard true · light false |
-| the feed moves, the lists move with no commit ⚖ | a derivation at T0 | GLM intelligence 30 → 48 | openrouter | T0 + 21600 s | heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4 | none | none | heavy false · standard false · light false |
-| a tier with no priced candidate is undecided and keeps its last derived list ⚖ | a derivation at T0: heavy V4 · standard V41, V4 · light GLM, V41, V4 | every openrouter price null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | heavy, standard, light | none | heavy false · standard true · light false |
-| a benched candidate with no value on the score axis is in no list and is named ⚖ | catalogs at T0 | GLM intelligence null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light V41, V4 | none | GLM | heavy false · standard true · light false |
-| a subscription rail's candidates are the policy's ids ⚖ | policy rails.anthropic.models naming four aliases | ok | anthropic | T0 + 21600 s | heavy FXD · standard FXC, FXD · light FXB, FXC, FXD | none | none | heavy true · standard false · light false |
+| a good refresh derives every rail's tiers ⚖ | catalogs and benched rows at T0, no derivation | ok | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | none | none | heavy true · standard true · light true |
+| the feed moves, the lists move with no commit ⚖ | a derivation at T0 | GLM intelligence 30 → 48 | openrouter | T0 + 21600 s | heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4 | none | none | heavy true · standard true · light true |
+| a tier with no priced candidate is undecided and keeps its last derived list ⚖ | a derivation at T0: heavy V4 · standard V41, V4 · light GLM, V41, V4 | every openrouter price null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | heavy, standard, light | none | heavy true · standard true · light true |
+| a benched candidate with no value on the score axis is in no list and is named ⚖ | catalogs at T0 | GLM intelligence null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light V41, V4 | none | GLM | heavy true · standard true · light true |
+| a subscription rail's candidates are the policy's ids ⚖ | policy rails.anthropic.models naming four aliases | ok | anthropic | T0 + 21600 s | heavy FXD · standard FXC, FXD · light FXB, FXC, FXD | none | none | heavy true · standard true · light true |
+
+#### The walked list is the derived one
+
+| description | store_state | equals_walked? |
+|---|---|---|
+| after the cut-over every tier equals what the admission walks ⚖ | a derivation at T0 | true on every tier |
 
 #### What a failed input leaves
 

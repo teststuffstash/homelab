@@ -158,7 +158,7 @@ def create_app(
         m.bind_extra(orcatalog.render)
     # GW-MODEL-TIERS: the committed tier-evidence snapshot rides beside the policy; its age is the
     # staleness alert's signal (a comparison on a month-old price is a wrong answer — #2718 item 3).
-    # GW-MODEL-TIERS §The derivation at a refresh (the SHADOW step: the admission still walks the policy's lists):
+    # GW-MODEL-TIERS §The derivation at a refresh (the cut-over: the admission walks the derived lists):
     # every good refresh of either catalog leg re-derives the lists from the store's own evidence.
     def _go_view() -> dict:
         return catalog.view(sessions.capacity.go_pricing("opencode", clock()) if "opencode" in policy.rails else None)
@@ -166,8 +166,10 @@ def create_app(
     tier_derivation = TierDerivation(policy, store, _go_view,
                                      (lambda: _openrouter_view(sessions, orcatalog)) if orcatalog.enabled else None,
                                      clock, settings.benchmarks_manual_path)
+    sessions.tier_derivation = tier_derivation
     catalog.on_refresh = tier_derivation.run
     orcatalog.on_refresh = tier_derivation.run
+    orcatalog.derivation_pending = tier_derivation.pending  # the OpenRouter leg carries the benchmark rows: it refreshes at once when none is stored
     m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when
