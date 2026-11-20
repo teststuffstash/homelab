@@ -26,12 +26,12 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
   launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.
 - **⚑ PICKUP (2026-11-20 — intake becomes its own island; TICK-LOG 11-20 second entry; FU-320).** Operator: "cleanup
-  time — intake becomes its own thing and we give the contract to oracle". DRAFTED, NOT ADMITTED: Goal #3574 (branch
+  time — intake becomes its own thing and we give the contract to oracle". ADMITTED 11-20, BUILT BY SEAT SUBAGENTS (operator), one child at a time in edge order, each a PR into the goal
+  branch with the bot reviewers gating; a fresh session resumes from the children's open/closed state. Goal #3574 (branch
   `goal/3574-intake-island` cut; goal-lint 0 FAIL) with children #3575 A the move → #3576 B rules un-gatewayed / #3577 C
   own SA + agent-base + devbox → #3579 E sittings for every island / #3578 D facts `## Sources` + ride reach → #3580 F
-  stack source from the claim (NOT queue-ready: the seat designs pin 9 first) → #3581 G `CONTRACT.md`. None queued.
-  OPERATOR: admit the Goal and name the builder (the loop's workers are flash-tier; #3490 was built by seat subagents
-  overnight). AFTER THE ASSEMBLY, the seat's: live `can-i` read of `island-intake`, one hand-submitted dry-run
+  stack source from the claim (NOT queue-ready: the seat designs pin 9 first) → #3581 G `CONTRACT.md`. None is `agent/queued` (the loop must not ride them).
+  Child A dispatched 11-20 ~10:15Z. THEN: assembly PR goal → master (operator's codeowner read). AFTER THE ASSEMBLY, the seat's: live `can-i` read of `island-intake`, one hand-submitted dry-run
   sitting, the handoff to oracle with the contract. #3563 (homelab scratch 40Gi → 100Gi) was queued from a seat-run
   agent-loop sitting — read its ride and the seat-read PR. scan-specs site is live (#3568/#3569; CI publishes it).
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
