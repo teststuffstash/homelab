@@ -15581,3 +15581,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Anthropic guidance looked up** (skills best practices, skill-creator, writing tools for agents): evaluation-first,
   writer/user split, held-out selection; nothing on an agent widening its own authority.
 - **Wind-down 22:05Z:** six PRs merged (#3544 #3546 #3547 #3549 #3552 #3555); nothing of the session's open; first live results are 11-20's (meta-state pickup); FU-199 gained #3553; worktrees removed.
+
+## 2026-11-19 ~21:20Z → 11-20 ~01:10Z — seat: scan island Goal #3490 built to master by subagents, unattended (island read only)
+
+- **Ask:** read #3550, plan the scan island; then (operator, evening) "start the build when #3555 merges, work unattended,
+  end state the scan first version merged to master, opus-or-lesser subagents do the work". The 11-16 gate was lifted
+  for scan by that instruction only.
+- **Done:** branch `goal/3490-scan-island-worlds` cut by the seat at `d9e4da9f` (the intake identity's 422). Children as
+  PRs to the goal branch, one Opus subagent each in a scratch clone: #3491 → #3557 (2 rounds), #3492 → #3558 (1),
+  #3493 → #3559 (3), #3494 → #3560 (2); assembly #3561 (2) merged 00:59Z as `a715541b`. Island gate on master, by hand:
+  324 passed, 3 skipped. Comparison: major-handoff 15/15 equal; updater 28 equal + 15 ruled `old` (raw strict rollup
+  reads vs the old `--jq` defaults).
+- **What the reviewers caught:** code — a double snapshot fetch, a fault hook that logged but did nothing, a legend word
+  that sat in the shared output prefix (a pin that could not go red). Specs — a missing `## Spec changes:` section twice
+  (#3559 and, the seat's own miss, #3561), one row distinguished only by its description (#3560).
+- **#3550 read:** not one ride (six deliverables in the "first cut"); split A–F and three unpinned points on the issue.
+- **#3553 (FU-199) traced read-only:** suppression reachable on three paths (the in-scan rail re-probe is the unnamed
+  third), no occurrence in the 11-15 records; comment on the issue.
+- **Left:** the ⚖ choices and open spec questions (#3561 body, #3490); #3448/#3550 await a scan sitting; #3391, #3461
+  untouched; `docs/intake/scan.md` one-line fix only.
+

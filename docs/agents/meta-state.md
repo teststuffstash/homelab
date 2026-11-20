@@ -43,8 +43,19 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `mgmt-tf.sh`, `mgmt-bmc.sh`, `mgmt-human-plan.sh` (default `known_hosts`, not the pinned file). JAIL: the running
   image has no `ssh` (the Dockerfile lists openssh-client — rebuild the container); `~/.ssh/known_hosts` starts empty.
 
+- **⚑ PICKUP (2026-11-20 — scan island Goal #3490 on master, built overnight by seat subagents; TICK-LOG 11-19/20).**
+  Operator instruction 11-19 evening: build unattended, "I can redo decisions in the morning". DONE: #3561 merged
+  (`a715541b`; island gate 324 passed on master, run by hand — required `ci` still does not run it, #3391). OPERATOR
+  READS: the ⚖ choices + the reviewer's open spec questions, both in #3561's body and on #3490. NEXT, none started:
+  (a) #3550 is not one ride — the split into cuts A–F is on the issue; its `blocked-on: issue=3491` is now a closed
+  target, so the next scan sitting re-decides it (no scan sitting is scheduled); (b) #3448's wait fact (#3490's assembly
+  on master) is true — next sitting cuts it into a Goal; (c) #3553 trace is on the issue (FU-199), ruling unmade;
+  (d) `docs/intake/scan.md` got a one-line currency fix only — the 13 unowned index rows and the ADR-164 wording are
+  still owed (FU-320); (e) the intake identity still cannot cut a `goal/**` branch (422, IL-G02) — untracked class.
+
 - **⚑ PICKUP (2026-11-16 — the gateway becomes self-sufficient before any new island leg; TICK-LOG 11-16; FU-320).**
-  OPERATOR GATE: retro #3482, launch #3480, scan #3490 are written and their goal branches UNCUT on purpose. Order when it
+  OPERATOR GATE: retro #3482 and launch #3480 are written and their goal branches UNCUT on purpose (scan #3490 was
+  lifted for one night by the operator and is on master — the 11-20 bullet below). Order when it
   lifts: gateway first, then retro — with retro's own intake doing the work on the schedule. The bar: the island defines and
   ships its OWN metrics, monitors and improves them (the oracle-fleet#1082 shape: a claim per change — PromQL + pass
   threshold + baseline — judged on prod). RULED the same evening: (1) Kargo for the gateway POSTPONED — metric claims first,
