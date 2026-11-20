@@ -17,7 +17,8 @@ section — not on master) measured as separable pieces of the agent loop. They 
 (§Interfaces — gateway `POST /sessions`, ADR-122's one machine block); every old-contract site is a
 `⚑ gap` row, every unbuilt one `🚧 WIP`. What an island is: [docs/glossary.md](../docs/glossary.md)
 ("island"). Intake facts per island: [`docs/intake/`](../docs/intake/) — each a row in
-`islands/intake/scripts/intake-select.sh`.
+`islands/intake/scripts/intake-select.sh`. A stack that wants island intake on its own repo reads
+[`intake/CONTRACT.md`](intake/CONTRACT.md).
 
 | Island | Prefix | Specs | Intake facts | What it will own |
 |---|---|---|---|---|

@@ -333,7 +333,7 @@ prose to avoid being wrong — a row the reviewer bounces costs one round, a vag
 2. …
 
 ## Spec changes
-Requirement: `GW-<REQ>` on `specs/endpoints/<page>.md` — world `<world>`.
+Requirement: `<RULE-ID>` on `<the spec page>` — world `<world>`.
 | description | <input cols> || <expected cols> |
 |---|---||---|
 | "<the happy path>" | … || … |
@@ -385,7 +385,7 @@ The bullets that name rows (`Touches` naming the `rule(…)` test file, "you sta
   gate `python3 agents/issue_body.py json < final` (exit 2 ⇒ fix, never post) — README §Authoring
   an issue body. Keep the prose free of machine lines; a hand-typed `Touches:` survives beside the
   block and misleads every human reader.
-- `Touches` names the test file that will carry the `rule("GW-…")` label, so the footprint hold
+- `Touches` names the test file that will carry the `rule("<RULE-ID>")` label, so the footprint hold
   serialises two issues on the same requirement instead of letting their PRs collide.
 - You state the rows, never the process: the worker's recipe (`.agents/fix.yaml`) carries the
   `Spec changes:` heading (rule 1) and the ratchets.
@@ -432,8 +432,8 @@ Follow the consumer card's three acts exactly, with these pins:
 - `Base: goal/<n>-<slug>` — fill `<n>` after filing and cut the branch from the default branch
   yourself (`gh api -X POST repos/<slug>/git/refs -f ref=refs/heads/goal/<n>-<slug> -f sha=<master
   sha>`); `goal-lint` fails on a missing branch. `Base: master` is not yours to choose.
-- `Verdict-authority: human`; `Production-leg:` the deploy surface (the image bump
-  `argocd/resources/agent-gateway/` rolls, a named gauge or row reads the new behaviour).
+- `Verdict-authority: human`; `Production-leg:` the deploy surface (the image bump the island's
+  deploy path rolls, a named gauge or row reads the new behaviour).
 - `## Goal` states the intent, the acid test and the design pins; `## Acceptance` numbered;
   `## Out of scope` names what the children must not drift into; a line `Authored by island
   intake from <inputs>`.

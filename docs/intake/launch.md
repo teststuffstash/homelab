@@ -35,7 +35,11 @@ Body shape: spec
   and the new component, and every difference gets a ruling (`spec` / `old` / `new`); equality is not
   required and is not the acceptance. A build item never edits a fixture (an existing
   assertion changed is a red flag, `agents/jail-subagent-card.md`). The supplier contract is the gateway's ([`gateway/specs/endpoints/sessions.md`](../../gateway/specs/endpoints/sessions.md)) — consumed, never re-declared; `agents/ground-rules.md` and the `.agents/` recipes are read in place.
-- **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first
+- **Evidence first**: no requirement is proven. Of the 31 in the spec index
+  ([`islands/launch/specs/README.md`](../../islands/launch/specs/README.md)), 29 carry `🚧 WIP` on
+  their page's Status cell — 26 as `no evidence pipeline yet`, 3 as `→ #3390` / `→ #3408` with rows
+  that pass locally and nothing published — and 2 (`LAUNCH-ADMIT-NO-MODEL`, `LAUNCH-BUDGET-CR`)
+  carry `⚑ gap` alone (counted 2026-11-20). The first
   deliverable is a tests root under `islands/launch/` whose `rule("LAUNCH-…")`-labelled tests take
   their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
