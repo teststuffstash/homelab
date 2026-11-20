@@ -5,6 +5,9 @@ hopping to the lane's next member when an update fails (homelab#2203). Leg 2 (un
 armed, BEHIND, CHANGES_REQUESTED PR only when content landed after the reviewer's verdict.
 Leg 1b (the Renovate hand-back sweep) runs over the PRs outside legs 1 and 2; leg 3 labels armed ∧ DIRTY PRs
 `merge-conflict` over REST. Renovate authorship and currency live in `renovate.py`.
+
+Every read is strict (goal #3490 pin 5, updater.schema.json): a snapshot entry lacking a field `pr` requires
+holds the WHOLE pass (exit 4, nothing written); a probe answer lacking one holds that PR.
 """
 
 import json
@@ -12,33 +15,62 @@ import os
 import sys
 
 from . import gh, renovate
+from .renovate import COMMIT_PROBE, COMMIT_REVIEW_PROBE
+from .strict import Nullable, lacking
 
 LIST_FIELDS = "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName"
 MERGE_PREFIX = "Merge branch "
+UNREADABLE = 4  # the snapshot answered without a field the schema requires: nothing written
+
+# The fields of one snapshot entry updater.schema.json requires (`/properties/pr`): every field the pass reads.
+PR = {
+    "number": int,
+    "createdAt": str,
+    "mergeStateStatus": str,
+    "autoMergeRequest": Nullable(dict),
+    "reviewDecision": str,
+    "baseRefName": str,
+    "labels": [{"name": str}],
+    "headRefOid": str,
+    "latestReviews": [{"author": Nullable({"login": str}), "state": str}],
+    "reviews": [{"author": Nullable({"login": str}), "state": str, "submittedAt": str}],
+    "author": Nullable({"login": str}),
+}
 
 
-def _login(review: dict) -> str:
-    return ((review.get("author") or {}).get("login")) or ""
+def _login(review: dict) -> str | None:
+    """The review's author login; None for a deleted account (`author` null) — no one's verdict."""
+    return None if review["author"] is None else review["author"]["login"]
+
+
+def _is_bot(review: dict, bot: str) -> bool:
+    login = _login(review)
+    return login is not None and login.removesuffix("[bot]") == bot
+
+
+def _reviewer(review: dict) -> bool:
+    login = _login(review)
+    return login is not None and login.startswith("homelab-reviewer")
 
 
 def _names(pr: dict) -> list[str]:
-    return [label.get("name") for label in pr.get("labels") or []]
+    return [label["name"] for label in pr["labels"]]
 
 
 def _behind(pr: dict) -> bool:
-    return pr.get("autoMergeRequest") is not None and pr.get("mergeStateStatus") == "BEHIND"
+    return pr["autoMergeRequest"] is not None and pr["mergeStateStatus"] == "BEHIND"
 
 
 def leg1_cand(pr: dict) -> bool:
-    if not _behind(pr) or pr.get("reviewDecision") == "CHANGES_REQUESTED":
+    if not _behind(pr) or pr["reviewDecision"] == "CHANGES_REQUESTED":
         return False
-    if pr.get("reviewDecision") != "REVIEW_REQUIRED":
+    if pr["reviewDecision"] != "REVIEW_REQUIRED":
         return True
-    return not any(_login(r).startswith("homelab-reviewer") and r.get("state") == "APPROVED" for r in pr.get("latestReviews") or [])
+    return not any(_reviewer(r) and r["state"] == "APPROVED" for r in pr["latestReviews"])
 
 
 def leg2_domain(pr: dict) -> bool:
-    return _behind(pr) and pr.get("reviewDecision") == "CHANGES_REQUESTED"
+    return _behind(pr) and pr["reviewDecision"] == "CHANGES_REQUESTED"
 
 
 def breakered(pr: dict) -> bool:
@@ -47,29 +79,22 @@ def breakered(pr: dict) -> bool:
 
 
 def _probe(slug: str, n: int, fields: str) -> dict | None:
-    """The per-candidate `gh pr view` probe; None when the call failed or the body is not the JSON asked for."""
-    result = gh.run("pr", "view", str(n), "--repo", slug, "--json", fields)
-    if result.returncode:
-        return None
-    try:
-        data = json.loads(result.stdout)
-    except ValueError:
-        return None
-    if not isinstance(data, dict) or not isinstance(data.get("commits"), list):
-        return None
-    return data
+    """The per-candidate `gh pr view` probe; None when the call failed, the body is not JSON, or the answer lacks
+    a field the schema requires of it (`commit_probe` / `commit_review_probe`)."""
+    shape = COMMIT_REVIEW_PROBE if fields == "commits,reviews" else COMMIT_PROBE
+    return renovate.read("pr", "view", str(n), "--repo", slug, "--json", fields, shape=shape)
 
 
 def _newest_content(commits: list) -> str:
-    return max((c.get("committedDate") or "" for c in commits if not (c.get("messageHeadline") or "").startswith(MERGE_PREFIX)), default="")
+    return max((c["committedDate"] for c in commits if not c["messageHeadline"].startswith(MERGE_PREFIX)), default="")
 
 
 def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
     n = pr["number"]
-    decision = pr.get("reviewDecision")
+    decision = pr["reviewDecision"]
     cj = None
     if renovate.author(pr):
-        cj = renovate.probe(slug, n, pr.get("headRefOid") or "")
+        cj = renovate.probe(slug, n, pr["headRefOid"])
         if cj is None:
             print(f"updater[{slug}]: #{n} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
             return False
@@ -86,7 +111,7 @@ def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
         return False
     if decision == "" and "automerge" in _names(pr):
         return True
-    approved = [r.get("submittedAt") or "" for r in pr.get("reviews") or [] if _login(r).removesuffix("[bot]") == bot and r.get("state") == "APPROVED"]
+    approved = [r["submittedAt"] for r in pr["reviews"] if _is_bot(r, bot) and r["state"] == "APPROVED"]
     if not approved:
         return False
     approved_at = max(approved)
@@ -113,19 +138,19 @@ def leg1(slug: str, prs: list[dict], bot: str, ready_only: bool) -> None:
     lanes: dict[str, list[dict]] = {}
     for pr in prs:
         if pr in ready:
-            lanes.setdefault(pr.get("baseRefName") or "", []).append(pr)
+            lanes.setdefault(pr["baseRefName"], []).append(pr)
     if not lanes:
         print(f"updater[{slug}]: no armed+BEHIND PR to update")
         return
     for _, members in sorted(lanes.items()):  # jq group_by orders lanes by base name
         first = True
-        for pr in sorted(members, key=lambda p: p.get("createdAt") or ""):
+        for pr in sorted(members, key=lambda p: p["createdAt"]):
             n = pr["number"]
             if first:
                 print(f"updater[{slug}]: updating #{n} (oldest armed+BEHIND, FIFO)")
             else:
                 print(f"updater[{slug}]: updating #{n} (lane hop — the lane's older member did not clear)")
-            if _update(slug, n, pr.get("headRefOid")):
+            if _update(slug, n, pr["headRefOid"]):
                 break  # one update LANDS per lane per pass
             print(f"updater[{slug}]: update of #{n} failed (422) — skipping; next pass retries")
             first = False
@@ -134,26 +159,25 @@ def leg1(slug: str, prs: list[dict], bot: str, ready_only: bool) -> None:
 def sweep(slug: str, prs: list[dict]) -> None:
     """Leg 1b: hand back an armed, unbreakered Renovate PR outside legs 1 and 2 (a concluded red, or CHANGES_REQUESTED) the updater merged into."""
     for pr in prs:
-        if pr.get("autoMergeRequest") is None or leg1_cand(pr) or leg2_domain(pr) or breakered(pr) or not renovate.author(pr):
+        if pr["autoMergeRequest"] is None or leg1_cand(pr) or leg2_domain(pr) or breakered(pr) or not renovate.author(pr):
             continue
         n = pr["number"]
-        sj = renovate.probe(slug, n, pr.get("headRefOid") or "")
+        sj = renovate.probe(slug, n, pr["headRefOid"])
         if sj is None:
             print(f"handback[{slug}]: #{n} commit probe unreadable — HOLDING (rule #6; the */15 cron retries)")
             continue
         if not (renovate.untouched(sj) and renovate.merged_into(sj)):
             continue
-        if renovate.red(sj) or pr.get("reviewDecision") == "CHANGES_REQUESTED":
+        if renovate.red(sj) or pr["reviewDecision"] == "CHANGES_REQUESTED":
             renovate.handback(slug, n, f"handback[{slug}]:")
 
 
 def _verdict_ok(probe: dict | None) -> str:
     """"yes" when the newest non-merge commit post-dates the newest reviewer verdict, "no" when not, "" when unreadable."""
-    if probe is None or not isinstance(probe.get("reviews"), list):
+    if probe is None:
         return ""
-    commits = [c.get("committedDate") for c in probe["commits"] if not (c.get("messageHeadline") or "").startswith(MERGE_PREFIX)]
-    verdicts = [r.get("submittedAt") for r in probe["reviews"] if _login(r).startswith("homelab-reviewer") and r.get("state") in ("APPROVED", "CHANGES_REQUESTED")]
-    commits, verdicts = [c for c in commits if c], [v for v in verdicts if v]
+    commits = [c["committedDate"] for c in probe["commits"] if not c["messageHeadline"].startswith(MERGE_PREFIX)]
+    verdicts = [r["submittedAt"] for r in probe["reviews"] if _reviewer(r) and r["state"] in ("APPROVED", "CHANGES_REQUESTED")]
     return "yes" if commits and verdicts and max(commits) > max(verdicts) else "no"
 
 
@@ -173,7 +197,7 @@ def leg2(slug: str, prs: list[dict]) -> None:
         verdict = _verdict_ok(pj)
         if verdict == "yes":
             print(f"unstrand: updating CR-and-behind PR #{n} (new content since verdict)")
-            if not _update(slug, n, pr.get("headRefOid")):
+            if not _update(slug, n, pr["headRefOid"]):
                 print(f"unstrand: update of #{n} failed (422) — skipping; next pass retries")
         elif verdict == "no":
             print(f"unstrand: #{n} CR-and-behind but NO new content since the verdict — nothing to re-review, not updating (2026-08-17 narrowing)")
@@ -202,11 +226,16 @@ def leg3(slug: str, prs: list[dict]) -> None:
     for pr in prs:
         n = pr["number"]
         has = "merge-conflict" in _names(pr)
-        if pr.get("autoMergeRequest") is not None and pr.get("mergeStateStatus") == "DIRTY":
+        if pr["autoMergeRequest"] is not None and pr["mergeStateStatus"] == "DIRTY":
             if not has:
                 _label_conflict(slug, n)
         elif has:
             gh.run("api", "-X", "DELETE", f"repos/{slug}/issues/{n}/labels/merge-conflict", token=_label_token())
+
+
+def _unreadable(slug: str, why: str) -> int:
+    print(f"updater[{slug}]: snapshot unreadable — gh pr list answered {why} — HOLDING the whole pass, nothing written (rule #6)")
+    return UNREADABLE
 
 
 def main(slug: str) -> int:
@@ -216,7 +245,13 @@ def main(slug: str) -> int:
     if listing.returncode:
         sys.stderr.write(listing.stderr)
         return listing.returncode
-    prs = json.loads(listing.stdout)
+    try:
+        prs = json.loads(listing.stdout)
+    except ValueError:
+        return _unreadable(slug, "no parseable JSON")
+    missing = lacking(prs, [PR])
+    if missing:
+        return _unreadable(slug, missing)
     leg1(slug, prs, bot, ready_only)
     sweep(slug, prs)
     leg2(slug, prs)

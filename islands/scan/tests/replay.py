@@ -205,16 +205,17 @@ def run_row(fam: Family, row: Row, subject: Sequence[str]) -> tuple[bytes, bytes
         )
         # restore_signals=False: run.sh runs with SIGPIPE ignored, inherited by every clause.
         p = subprocess.run(list(subject), cwd=synth, env=env, capture_output=True, restore_signals=False)
-        stream = (
-            actions.read_bytes()
-            + _lines_prefixed(b"OUT ", p.stdout)
-            + _lines_prefixed(b"ERR ", p.stderr)
-            + f"RC {p.returncode}\n".encode()
-        )
-        stream = stream.replace(str(tmp).encode(), b"$TMP").replace(str(ROOT).encode(), b"$ROOT")
-        for sed in fam.lists.get("scrub", []):
-            stream = subprocess.run(["sed", sed], input=stream, capture_output=True, check=True).stdout
-        return stream, expected
+        return build_stream(fam, actions.read_bytes(), p.stdout, p.stderr, p.returncode, tmp), expected
+
+
+def build_stream(fam: Family, calls: bytes, stdout: bytes, stderr: bytes, rc: int, tmp: Path) -> bytes:
+    """The row's stream: CALL lines, `OUT ` stdout, `ERR ` stderr, `RC <n>`, then the temp dir, the repo
+    root and the family's `scrub:` seds scrubbed — the one builder for any subject (the comparison too)."""
+    stream = calls + _lines_prefixed(b"OUT ", stdout) + _lines_prefixed(b"ERR ", stderr) + f"RC {rc}\n".encode()
+    stream = stream.replace(str(tmp).encode(), b"$TMP").replace(str(ROOT).encode(), b"$ROOT")
+    for sed in fam.lists.get("scrub", []):
+        stream = subprocess.run(["sed", sed], input=stream, capture_output=True, check=True).stdout
+    return stream
 
 
 def row_verdict(fam: Family, row: Row, subject: Sequence[str]) -> str | None:

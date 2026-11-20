@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "issues/create-label 422 — extracted from github/rest-api-description@c9c95fe34ced05fe076001f5c55704742bc8e7f8 descriptions-next/api.github.com/api.github.com.2022-11-28.json",
+  "$ref": "#/$defs/validation-error",
+  "$defs": {
+    "validation-error": {
+      "title": "Validation Error",
+      "description": "Validation Error",
+      "type": "object",
+      "required": [
+        "message",
+        "documentation_url"
+      ],
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "documentation_url": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "resource": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer"
+              },
+              "value": {
+                "oneOf": [
+                  {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

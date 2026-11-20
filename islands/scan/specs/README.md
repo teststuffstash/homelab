@@ -43,7 +43,10 @@ What this island adds, by rule:
   published, and no `git.commit` stamp is attached.
   A requirement with rule-labelled tests says `🚧 WIP → #3389 — rule-labelled tests in <file>;
   no evidence publisher for this root (fixture: <dir>)` in its Status. A requirement whose
-  fixture exists but has no tests yet keeps `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`.
+  rule-labelled cases are sourced from its page over a recorded world says `🚧 WIP → #3490 —
+  rule-labelled tests in <file> over recorded world <world>; no evidence publisher for this root
+  (comparison: <dir>)`.
+  A requirement whose fixture exists but has no tests yet keeps `🚧 WIP — no evidence pipeline yet (fixture: <dir>)`.
   A requirement with no fixture keeps the unverified marker.
   Verified-ness is derived, never declared: nothing on these pages is verified in rule 5's sense
   until an evidence publisher exists for this root.
@@ -55,7 +58,10 @@ What this island adds, by rule:
   expected column is the fixture's `expect?` template (the row's action stream,
   `expected/<expect>.txt`). That is the header-is-the-parameter-list rule mapped onto the
   harness's own argnames (`id · world · patch · env · expect · params`); the join itself is
-  unbuilt.
+  unbuilt. That binding stays for a requirement not yet re-sourced. For a re-sourced requirement
+  the header is the parameter list (CONVENTIONS § The intent column), the world is a recorded
+  world, no cell names a patch file or a stub variable, and the description stays the replay row
+  id where a replay row exists.
 - **Rule 9 (external facts):** GitHub REST/GraphQL behaviour (update-branch merge commits,
   `reviewDecision`, review `commit_id` re-pointing, label endpoints, the 500k-node cap) and Argo
   Events/Workflows semantics (Sensor parameter defaults, mutex, CronWorkflow labels) are linked
@@ -66,8 +72,10 @@ What this island adds, by rule:
   `/router-status` and `/report/latest` reads against the old proxy; the non-platform stacks'
   coordinator still on `resolve-model.sh` → `/route`; the labels-and-body-keys soup not yet one
   block; no detector + revert drill (P4 (c)).
-- **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a replay world
-  (recorded or constructed GitHub/kubectl answers) plus, where it matters, an env condition.
+- **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)). For a requirement
+  whose cases are sourced from its page the world is a recorded world (`worlds/<name>/`, the whole
+  answers of the surface). Until a requirement is re-sourced its world is a replay world of the
+  harness. A row adds its condition in its own cells.
 - **Table shape:** expected columns end in `?`; one question per table; the rows brief's
   checklist is advisory. Mermaid flow overviews are omitted (no site build).
 
@@ -124,17 +132,17 @@ Start here: **[use-cases/uc-1-queued-issue.md](use-cases/uc-1-queued-issue.md)**
 | [SCAN-GH-BODY](github-grammar.md#scan-gh-body) | github-grammar | every body read goes through the one parser; a malformed block holds the issue | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `body-block-malformed`, `queued-body-tsv`, `touches-malformed`, `issue-body`, `depends-on-retired-format`) |
 | [SCAN-GH-MARKERS](github-grammar.md#scan-gh-markers) | github-grammar | the machine comments the scan writes or reads: `state-fp:`, `agent-event`, `blocked-on`, `AGENT_*` lines | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `blocked-on-anchor`, `c4c5-infeasible`, `state-fp`) |
 | [SCAN-GH-ONE-BLOCK](github-grammar.md#scan-gh-one-block) | github-grammar | the redrawn grammar: five facts in one machine block | 🚧 WIP → #3461 — ADR-122 (3) / P3, not built |
-| [SCAN-UPDATER-PICK](updater.md#scan-updater-pick) | updater | leg 1: one merge-ready, armed, BEHIND PR per lane, oldest first, a wedged oldest skipped | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-UNSTRAND](updater.md#scan-updater-unstrand) | updater | leg 2: a CHANGES_REQUESTED ∧ BEHIND PR with new content is brought current | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-CONFLICT](updater.md#scan-updater-conflict) | updater | leg 3: armed ∧ DIRTY carries `merge-conflict`, and only while it is | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py; no evidence publisher for this root (fixture: `updater`) |
-| [SCAN-UPDATER-RENOVATE](updater.md#scan-updater-renovate) | updater | Renovate owns its own currency; the merge-ready exception; the hand-back | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_updater.py (updater family); the `fu124-nudge` half is the scan clause's, not built (fixture: `updater`, `fu124-nudge`) |
+| [SCAN-UPDATER-PICK](updater.md#scan-updater-pick) | updater | leg 1: one merge-ready, armed, BEHIND PR per lane, oldest first, a wedged oldest skipped | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
+| [SCAN-UPDATER-UNSTRAND](updater.md#scan-updater-unstrand) | updater | leg 2: a CHANGES_REQUESTED ∧ BEHIND PR with new content is brought current | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
+| [SCAN-UPDATER-CONFLICT](updater.md#scan-updater-conflict) | updater | leg 3: armed ∧ DIRTY carries `merge-conflict`, and only while it is | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
+| [SCAN-UPDATER-RENOVATE](updater.md#scan-updater-renovate) | updater | Renovate owns its own currency; the merge-ready exception; the hand-back | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; the `fu124-nudge` half is the scan clause's, not built (comparison: `updater`, `fu124-nudge`) |
 | [SCAN-REFLEX-GATE](review-reflex.md#scan-reflex-gate) | review-reflex | the tick runs only when a rail is clear and only over repos not parked by slo-teeth or opt-out · `⚑ gap`: the rail probe is self-routing | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-tick`, `slo-teeth`, `reviewer-optout`) |
 | [SCAN-REFLEX-PICK](review-reflex.md#scan-reflex-pick) | review-reflex | armed ∧ green ∧ ¬DIRTY ∧ reviewable, one per lane, oldest; ARMED PRs only | 🚧 WIP — no evidence pipeline yet (fixture: `review-pick`, `assembly-review-dispatch`) |
 | [SCAN-REFLEX-BREAKER](review-reflex.md#scan-reflex-breaker) | review-reflex | an impossible verdict count trips `agent/error`; the round cap escalates to `agent/arbitrate` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-breaker`) |
 | [SCAN-REFLEX-REARM](review-reflex.md#scan-reflex-rearm) | review-reflex | a worker PR that arrived un-armed is armed (C9), never a major or a stacked PR | 🚧 WIP — no evidence pipeline yet (fixture: `c9-rearm`) |
 | [SCAN-REFLEX-DECORRELATE](review-reflex.md#scan-reflex-decorrelate) | review-reflex | the reviewer is told the model the fix rode on · `⚑ gap`: read from the old proxy's `/report/latest` | 🚧 WIP — no evidence pipeline yet (fixture: `decorrelate-resolution`) |
-| [SCAN-HANDOFF-GATE](major-handoff.md#scan-handoff-gate) | major-handoff | `major/awaiting-human` only with the bot's APPROVED at head carrying the four headings; exit 0/3/4/5 | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
-| [SCAN-HANDOFF-ARM](major-handoff.md#scan-handoff-arm) | major-handoff | a packaging-only chart major arms instead of parking | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-GATE](major-handoff.md#scan-handoff-gate) | major-handoff | `major/awaiting-human` only with the bot's APPROVED at head carrying the four headings; exit 0/3/4/5 | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_major_handoff.py over recorded world `pr-handoff`; no evidence publisher for this root (comparison: `major-handoff`) |
+| [SCAN-HANDOFF-ARM](major-handoff.md#scan-handoff-arm) | major-handoff | a packaging-only chart major arms instead of parking | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_major_handoff.py over recorded world `pr-handoff`; no evidence publisher for this root (comparison: `major-handoff`) |
 | [SCAN-SIGNAL-PHASE](signals.md#scan-signal-phase) | signals | the scan's phase marker, and the wedge alert's two branches | 🚧 WIP — no evidence pipeline yet (fixture: `scan-phase-marker`, `scan-wedge-alert`) |
 | [SCAN-SIGNAL-DISPATCH](signals.md#scan-signal-dispatch) | signals | dispatch latency rows and the edge/cron wake gauges | 🚧 WIP — no evidence pipeline yet (fixture: `dispatch-phase`) |
 | [SCAN-SIGNAL-CLASS](signals.md#scan-signal-class) | signals | one `agent_item_class` row per item per pass, its since-timestamp carried | 🚧 WIP — no evidence pipeline yet (fixture: `item-class`, `item-class-batch`) |
