@@ -416,7 +416,7 @@ grep -oE '^ *INTAKE-HOLD: [^ ]+ add=[^ ]+' /tmp/intake.log | sed 's/^ *INTAKE-HO
       | [ split("\n")[] | select(length > 0) | capture("^(?<ref>[^ ]+) add=(?<add>[^ ]+)$")
           | select(.ref | test($re)) | . as $h
           | ([ $refs[] | select(.ref == $h.ref) | .outcome ] | first) as $o | select($o != null)
-          | .add |= (split(",") | map(select(IN("agent-fix","task/fix","task/build","agent/queued"))))
+          | .add |= (split(",") | map(select(IN("agent-fix","task/fix","task/build","agent/queued","experiment/open"))))
           | select(.add | length > 0) | . + {key: (.ref | sub(".*#"; "")), outcome: $o} ] | unique_by(.ref)' \
   > /tmp/holds.json 2>/dev/null || echo '[]' > /tmp/holds.json
 # the review units: kind, issue keys (the first is the unit's head — a Goal, or the one issue), base
@@ -474,6 +474,8 @@ _case_issue() { # <key> <dest dir> [comments] → <dest>/issues/<key>.md (+ .com
          --jq '.comments[] | select((.body | startswith("intake:")) | not) | "### \(.author.login) — \(.createdAt)\n\n\(.body)\n"' \
          > "$d/issues/$k.comments.md" 2>/dev/null || echo "(comments unreadable — the read failed)" > "$d/issues/$k.comments.md";;
   esac
+  # the loader's answer on the body (intake.md §Experiment): the unit lens runs no python, so it reads this — the loader's one line, then its exit
+  python3 -I islands/intake/scripts/experiment.py load "$d/issues/$k.md" > /dev/null 2> "$d/issues/$k.experiment.txt"; echo "exit $?" >> "$d/issues/$k.experiment.txt"
 }
 _lens_record() { # <kind> <unit index> <status> <output file|""> <runs> — the rail/model of an ADMITTED lens only
   local _r="" _m=""; [ "$5" -gt 0 ] && { _r="${rail:-}"; _m="${TS_MODEL:-}"; }
@@ -552,7 +554,7 @@ if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
       if ! _admit "-lens-unit-$ui"; then _lens_record unit "$ui" "deferred: $ADMIT_WHY" "" 0; continue; fi
       while [ "$runs" -lt 2 ]; do
         runs=$((runs + 1)); rm -f "$out"
-        _lens_run "$case" islands/intake/rules/intake-review-unit.md "Unit review (islands/intake/rules/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at $WORK, read ONLY as \`git -C $WORK show ${base}:<path>\` / \`git -C $WORK grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out. Your wall clock is ${LENS_TIMEOUT_S} s: write the file well before it with what you can support — an unwritten file is a failed run." \
+        _lens_run "$case" islands/intake/rules/intake-review-unit.md "Unit review (islands/intake/rules/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, issues/<n>.experiment.txt, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at $WORK, read ONLY as \`git -C $WORK show ${base}:<path>\` / \`git -C $WORK grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out. Your wall clock is ${LENS_TIMEOUT_S} s: write the file well before it with what you can support — an unwritten file is a failed run." \
           "$LENS_TIMEOUT_S" "unit-$ui" "Read(/${case}/**)" "Glob" "Bash(git -C $WORK show:*)" "Bash(git -C $WORK grep:*)" "Edit(/${out})" || true
         [ -s "$out" ] && break
       done
@@ -665,7 +667,8 @@ while IFS=$'\t' read -r ref key add outcome; do
         '{labels: [.labels[].name], review: any(.comments[]; .createdAt >= $t and (.body | startswith("intake: review"))),
           ruling: any(.comments[]; .createdAt >= $t and (.body | startswith("intake:")) and ((.body | startswith("intake: review")) | not))}' 2>/dev/null)" \
     || { echo "⚠ island-intake: cannot read $ref back — not touched by the belt"; continue; }
-  if printf '%s' "$st" | jq -e '.labels | index("agent/queued")' >/dev/null; then NL=$((NL + 1)); continue; fi
+  # labelled = queued AND every held label is on it (a repair that queued but left `experiment/open` off is finished here)
+  if printf '%s' "$st" | jq -e --arg add "$add" '.labels as $l | ($l | index("agent/queued")) and (($add | split(",")) - $l == [])' >/dev/null; then NL=$((NL + 1)); continue; fi
   if [ "$REVIEW" = review-repair ] && ! printf '%s' "$st" | jq -e '.review' >/dev/null; then
     _belt_review_comment > "/tmp/review/belt-$key.md"
     gh issue comment "$key" --repo "$REPO_SLUG" --body-file "/tmp/review/belt-$key.md" >/dev/null || echo "⚠ island-intake: the review comment on $ref FAILED"
