@@ -1729,7 +1729,8 @@ row holds exactly: `system:serviceaccount:platform-agents:agentstack-loop` (stac
 openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop`
 (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review`
 (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator`
-(`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`) and
+(`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`),
+`system:serviceaccount:agent-coordinator:island-intake` (`[platform]`, `[coordinator]`, `[]`, `own`) and
 `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**).
 The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -1753,8 +1754,8 @@ responder, the deep dig and the fix-debounce set-pass run as it
 (`agents/coordinator/{responder,deep-dig,fix-debounce}-argo.yaml`) and will admit
 ONE unbound session each, the specs reviewer's shape. ⚖ **Island intake** runs as its own SA,
 `agent-coordinator:island-intake` (`agents/coordinator/island-intake-argo.yaml`; a read-only
-kube identity, homelab#3577): its entry is the shared SA's, copied — the sitting admits
-`coordinator` sessions only, one at a time (the author, each lens, the repair), no bind. ⚖ It also holds `retro`, bound into
+kube identity, homelab#3577): its entry holds `coordinator` only, no bind — the sitting admits
+`coordinator` sessions, one at a time (the author, each lens, the repair). ⚖ The shared SA also holds `retro`, bound into
 `openrouter-operator`: the retro cron's cells (`agents/coordinator/retro-argo.yaml`) run as this SA
 and hand each cell to the worker launcher, whose ride pod lives in the platform retro's ride
 namespace (`agents/retro-project.sh`) — so the shared grant now reaches a bind there too. Being shared, the grant reaches every

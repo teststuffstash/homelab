@@ -66,8 +66,8 @@
 #                verb. The gateway admits it by that name (policy.json `callers`).
 #   toolchain  = the worker base image (agent-base — its tag is the one kustomization.yaml line)
 #                + the island's own devbox (islands/intake/devbox.json): the bootstrap installs it
-#                and runs the launcher through `devbox run` there, so a sitting has the island's
-#                jq/gh/kubectl/s5cmd/python3/uv/promtool/yq and can run a repo gate. `command:` is
+#                and runs the launcher through `devbox run` there. The devbox adds only promtool and
+#                yq; jq/gh/kubectl/s5cmd/python3/uv are the image's own pre-baked copies. `command:` is
 #                set, so the image's entrypoint (agent-entrypoint: a worker's clone/branch/finalize,
 #                which needs REPO_URL) does NOT run — what it would have exported for nix is env here.
 #   review     = parameter `review` (default review-repair; operator 2026-11-14, islands/intake/rules/intake.md

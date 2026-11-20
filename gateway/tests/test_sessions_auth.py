@@ -41,7 +41,7 @@ LOOP = "system:serviceaccount:platform-agents:agentstack-loop"
 SPECS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the fixture world's specs reviewer
 DEPLOYED_SPECS = "system:serviceaccount:agent-coordinator:specs-review"   # the deployed tick's own SA (#2685)
 COORDINATOR_NS = "system:serviceaccount:agent-coordinator:agent-coordinator"   # the coordinator namespace's shared SA
-INTAKE = "system:serviceaccount:agent-coordinator:island-intake"   # the island intake sitting's own SA (homelab#3577): the shared SA's grant, copied
+INTAKE = "system:serviceaccount:agent-coordinator:island-intake"   # the island intake sitting's own SA (homelab#3577): `coordinator` only, no bind
 JUDGE = "system:serviceaccount:agent-coordinator:outcome-judge"   # the fixture AND deployed judge (`outcome: any`, admits nothing)
 ORACLE_LOOP = "system:serviceaccount:oracle-agents:agentstack-loop"   # not a fixture caller: an oracle session's recorded admitter
 UNLISTED = "system:serviceaccount:platform-agents:default"
@@ -410,7 +410,7 @@ DEPLOYED_CALLERS = {
     ORACLE_LOOP: {"stacks": ["oracle"], "roles": ["prober"], "bind_namespaces": [], "outcome": "own"},
     DEPLOYED_SPECS: {"stacks": ["platform"], "roles": ["reviewer", "worker"], "bind_namespaces": [], "outcome": "own"},
     COORDINATOR_NS: {"stacks": ["platform"], "roles": ["coordinator", "responder", "retro"], "bind_namespaces": ["openrouter-operator"], "outcome": "own"},
-    INTAKE: {"stacks": ["platform"], "roles": ["coordinator", "responder", "retro"], "bind_namespaces": ["openrouter-operator"], "outcome": "own"},
+    INTAKE: {"stacks": ["platform"], "roles": ["coordinator"], "bind_namespaces": [], "outcome": "own"},
     JUDGE: {"stacks": ["platform"], "roles": [], "bind_namespaces": [], "outcome": "any"},
 }
 

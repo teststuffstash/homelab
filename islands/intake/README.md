@@ -17,7 +17,7 @@ and evidence: [docs/spikes/island-intake.md](../../docs/spikes/island-intake.md)
 | [`scripts/intake-select.sh`](scripts/intake-select.sh) | the selector — the deterministic half; it also holds the island table (which island an issue, a path or a dig finding belongs to) |
 | [`scripts/sitting.sh`](scripts/sitting.sh) | the launcher script: select → admit → the author session → rulings → lenses and repair → the label belt → receipt → the `/coordinate` ring |
 | [`scripts/intake-wait-ledger.py`](scripts/intake-wait-ledger.py), [`scripts/intake-wait-cases.py`](scripts/intake-wait-cases.py) | the wait read's tally (which rule line is at the bar) and the recorded wait cases' validator |
-| `devbox.json`, `devbox.lock` | the sitting's toolchain — jq, gh, kubectl, s5cmd, python3, uv, promtool, yq — which the manifest's bootstrap installs and runs the launcher in (`devbox run`); the pod image (the worker base image, agent-base) brings claude, git, curl and devbox itself |
+| `devbox.json`, `devbox.lock` | the two tools the pod image lacks — promtool, yq — which the manifest's bootstrap installs and runs the launcher with (`devbox run`); the pod image (the worker base image, agent-base) pre-bakes claude, git, curl, jq, gh, kubectl, s5cmd, python3, uv and devbox itself |
 | [`tests/island-intake-test.sh`](tests/island-intake-test.sh), `tests/fixtures/` | the hermetic harness and its recorded inputs (real dig and responder findings, the wait cases) |
 
 The per-island facts stay in [`docs/intake/`](../../docs/intake/) (ADR-160): one rules home here,

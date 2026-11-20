@@ -561,17 +561,17 @@ BASE_TAG="$(yq -r '.images[] | select(.name == "registry.teststuff.net/agent-bas
   || bad "agent-base pin" "newTag='$BASE_TAG'; newTag-led lines: $(grep -cE '^[[:space:]]+newTag:' "$KZ")"
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.env[] | select(.name == "HOME") | .value')" = /home/devbox ] \
   && ok "HOME is the base image's user's (/home/devbox)" || bad "HOME" "not /home/devbox"
-# the island's devbox: the eight tools of acceptance 3, each one locked for the pod's platform
+# the island's devbox: the two tools the pod image does not pre-bake, each locked for the pod's platform
 DJ="$REPO/islands/intake/devbox.json"; DL="$REPO/islands/intake/devbox.lock"
-{ [ "$(jq -r '.packages | keys | sort | join(" ")' "$DJ" 2>/dev/null)" = "gh jq kubectl prometheus python3 s5cmd uv yq-go" ] \
+{ [ "$(jq -r '.packages | keys | sort | join(" ")' "$DJ" 2>/dev/null)" = "prometheus yq-go" ] \
     && [ "$(jq -r '.packages.prometheus.outputs | join(",")' "$DJ" 2>/dev/null)" = cli ]; } \
-  && ok "islands/intake/devbox.json: jq, gh, kubectl, s5cmd, python3, uv, prometheus (its cli output = promtool), yq-go" || bad "devbox.json" "$(jq -c '.packages' "$DJ" 2>/dev/null)"
+  && ok "islands/intake/devbox.json: only what the image lacks — prometheus (its cli output = promtool), yq-go" || bad "devbox.json" "$(jq -c '.packages' "$DJ" 2>/dev/null)"
 got="$(jq -rn --slurpfile d "$DJ" --slurpfile l "$DL" '[$d[0].packages | keys[] | select(($l[0].packages[. + "@latest"].systems["x86_64-linux"].outputs // []) | length == 0)] | join(" ")' 2>/dev/null)" || got="unreadable"
 [ -z "$got" ] && ok "…and devbox.lock resolves every one for x86_64-linux" || bad "devbox.lock" "unlocked: $got"
 # versions: the repo-root lock's entry, whole, wherever the root carries the package (acceptance 3)
 got="$(jq -rn --slurpfile i "$DL" --slurpfile r "$REPO/devbox.lock" '[$i[0].packages | to_entries[] | select($r[0].packages[.key] != null and $r[0].packages[.key] != .value) | .key] | join(" ")' 2>/dev/null)" || got="unreadable"
 n="$(jq -rn --slurpfile i "$DL" --slurpfile r "$REPO/devbox.lock" '[$i[0].packages | keys[] | select($r[0].packages[.] != null)] | length' 2>/dev/null)" || n=0
-{ [ -z "$got" ] && [ "$n" -ge 6 ]; } && ok "the lock's entries are the repo-root devbox.lock's wherever the root has the package ($n of them)" || bad "lock vs root" "differs: $got (shared: $n)"
+{ [ -z "$got" ] && [ "$n" -ge 3 ]; } && ok "the lock's entries are the repo-root devbox.lock's wherever the root has the package ($n of them)" || bad "lock vs root" "differs: $got (shared: $n)"
 
 # ── the workflow's own script, end to end, stubbed ──────────────────────────────────────────────
 section "island-intake-argo.yaml — the script, run"
