@@ -23,7 +23,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   unattended merge (#3565) all worked. STILL OWED: #3533 and #3538 were not offered (parked <3 d, `INTAKE_REREAD_AGE_D`)
   — read #3533's release on the 11-21/22 05:00Z sitting; #3563 (scratch quota, forwarded to agent-loop) carries no
   labels and no agent-loop sitting is scheduled; `TierEvidenceStale` re-cut is due (dig: seat; intake folded it).
-  NEXT BUILDS: the replay runner + the edit-PR leg (cases in `agents/island-intake-fixtures/wait-cases/`); cron
+  NEXT BUILDS: the replay runner + the edit-PR leg (cases in `islands/intake/tests/fixtures/wait-cases/`); cron
   sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
   launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
@@ -64,7 +64,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `/healthz`, a synthetic-traffic label, outcome alerts, its dashboard as code (it has none), the claims file + judge, loop
   self-metrics; and the open question from 11-16: the gateway path dropped the per-session OpenRouter budget key with no
   ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: adopt the nameable-split size test (handoff
-  `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `gateway/intake.md`; the specs-reviewer rule tally, THEN
+  `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `islands/intake/rules/intake.md`; the specs-reviewer rule tally, THEN
   rule #3495 (the escape read's first filing against intake's own rules); a `wait: stalled` re-read kind in `intake-select.sh`.
   OVERNIGHT TRIAL (operator: "lets see in the morning how it went"): five operator-origin gateway inputs filed 11-16
   ~21:00Z — #3501 (release on /healthz), #3502 (real vs synthetic traffic), #3503 (dashboard as code), #3504 (outcome
@@ -131,7 +131,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ HANDOFF INBOX (2026-11-16; oracle ×2, circles empty).** Grafana plugin handoff CLOSED (the chart already defaulted
   `preinstall_auto_update` off; #3499 states it explicitly). NEW, unread: `20261116-2130-intake-size-test-nameable-split.md`.
   `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
-  `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `gateway/intake.md` or oracle-only;
+  `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `islands/intake/rules/intake.md` or oracle-only;
   (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.
 - **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** On/after **2026-11-21**: re-run the burst-pickup table
   (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) — PR job pickup should flatten toward ~3 s after #3348

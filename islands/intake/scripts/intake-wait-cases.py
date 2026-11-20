@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""intake-wait-cases — list and validate the recorded wait cases the replay gate reads (gateway/intake-wait.md).
+"""intake-wait-cases — list and validate the recorded wait cases the replay gate reads (islands/intake/rules/intake-wait.md).
 
 A case is one PARKING comment, recorded as the sitting could have read it, so a candidate rules file can be
-replayed against it later. One directory per case under agents/island-intake-fixtures/wait-cases/:
+replayed against it later. One directory per case under islands/intake/tests/fixtures/wait-cases/:
 
   case.json            schema intake-wait-case/v1: item, parked_at, parking_comment_id, parked_by, writer
                        (intake|lane|human), as_of (the instant the replay rules at: the parking comment for an
@@ -19,8 +19,8 @@ replayed against it later. One directory per case under agents/island-intake-fix
                        (outcome + `blocked-on` target, never wording), its wait class (H|R|O|U — U is not scored),
                        train|heldout, one line of basis
 
-  python3 gateway/scripts/intake-wait-cases.py [--dir <cases dir>] [--git] [list | validate]
-  python3 gateway/scripts/intake-wait-cases.py --self-test
+  python3 islands/intake/scripts/intake-wait-cases.py [--dir <cases dir>] [--git] [list | validate]
+  python3 islands/intake/scripts/intake-wait-cases.py --self-test
 
 `validate` (the default) is strict: a missing or unknown file or key, a comment on the wrong side of as_of,
 a malformed target, or a held-out set without one H and two R/O cases fails (exit 1). --git also checks that
@@ -36,8 +36,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-DEFAULT_DIR = os.path.join(ROOT, "agents", "island-intake-fixtures", "wait-cases")
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+DEFAULT_DIR = os.path.join(ROOT, "islands", "intake", "tests", "fixtures", "wait-cases")
 
 FILES = {"case.json", "input.json", "issue.json", "edits.json", "comments.json", "comments-after.json",
          "events.json", "events-after.json", "expected.json"}
@@ -221,7 +221,7 @@ def self_test():
         item = f"o/r#{n}"
         files = {
             "case.json": {"schema": "intake-wait-case/v1", "item": item, "parked_at": P, "parking_comment_id": 7,
-                          "parked_by": "bot", "writer": writer, "as_of": A, "rules": {"path": "gateway/intake.md", "commit": "a" * 40},
+                          "parked_by": "bot", "writer": writer, "as_of": A, "rules": {"path": "islands/intake/rules/intake.md", "commit": "a" * 40},
                           "island": "gateway", "recorded_at": "2026-11-19T00:00:00Z"},
             "input.json": {"id": item, "kind": "member", "number": n, "title": "t"},
             "issue.json": {"number": n},

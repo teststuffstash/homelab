@@ -2,7 +2,7 @@
 name: intake
 description: >
   The seat's admission pass — nothing that needs no operator input may sit waiting for it. Fans
-  island intake out over every island: one sitting subagent per island (gateway/intake.md rules +
+  island intake out over every island: one sitting subagent per island (islands/intake/rules/intake.md rules +
   docs/intake/<island>.md facts) over every undecided issue and every tracker item whose next step is
   mechanical, so each leaves in exactly one loop-readable state (queued / Goal tree / closed with
   evidence / standing / `blocked-on: human` naming the ONE missing fact). Use on "/intake",
@@ -23,8 +23,8 @@ was designed — the PR read, the Goal's verdict, and the assembly read where it
 the pile.
 
 No new mechanism: [island intake](../../../docs/glossary.md) is the sitting
-([`gateway/intake.md`](../../../gateway/intake.md) — outcomes, procedure, hard limits), its
-selector is [`intake-select.sh --island`](../../../gateway/scripts/intake-select.sh), each island's
+([`islands/intake/rules/intake.md`](../../../islands/intake/rules/intake.md) — outcomes, procedure, hard limits), its
+selector is [`intake-select.sh --island`](../../../islands/intake/scripts/intake-select.sh), each island's
 facts are in [`docs/intake/`](../../../docs/intake/). This skill fans the sitting out across the
 islands and feeds it the inputs the selector cannot see. Design + evidence:
 [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) (FU-320).
@@ -52,7 +52,7 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
 1. **Board truth** — run [`board-sweep`](../board-sweep/SKILL.md) (or reuse today's report). Its
    do-nows on bot-filed items (superseded digests, empty post-launch buckets of validated Goals,
    latches whose cause has reset) are the seat's to execute now, each with an evidence comment.
-2. **Select per island** — `bash gateway/scripts/intake-select.sh --island <i> --json` for every
+2. **Select per island** — `bash islands/intake/scripts/intake-select.sh --island <i> --json` for every
    island `island_members` knows (exit 2 = a failed probe, never "nothing to do"). The
    board-sweep's ISLAND column is the positive control: an island issue the selector misses
    either carries a lifecycle label / an `intake:` outcome, or the table has a hole — fix the table
@@ -65,7 +65,7 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
    sitting, which `file`s and decides them; the seat then points the FU line at the issue (the
    tracker's single writer). Meta-state bullets of the same shape likewise.
 4. **Dispatch** — one `mode: apply` sitting per island/part, in parallel, background. The dispatch
-   prompt carries only: read `agents/jail-subagent-card.md`, then `gateway/intake.md` in full, then
+   prompt carries only: read `agents/jail-subagent-card.md`, then `islands/intake/rules/intake.md` in full, then
    `docs/intake/<island>.md` (in place of §Island facts; the gateway uses its own block); the
    inputs; the board-sweep report path as a DRAFT to re-verify, never to replay; the report path
    (scratchpad, island-named).

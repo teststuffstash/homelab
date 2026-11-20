@@ -5,7 +5,7 @@ rules digest"). Two verbs, both read-only:
   python3 agents/island_rules.py set [--json]
       The "island rules" set: every repo .md file a launcher hands a session as its brief or rules,
       attributed to an island. DERIVED, never enumerated (the four rules below); an island is the
-      one gateway/scripts/intake-select.sh's own island table names (that table is called, never
+      one islands/intake/scripts/intake-select.sh's own island table names (that table is called, never
       copied: its function block is evaluated from the selector file itself).
 
   python3 agents/island_rules.py changes --since YYYY-MM-DD --until YYYY-MM-DD [--ref master]
@@ -19,8 +19,9 @@ rules digest"). Two verbs, both read-only:
       A fixture git repo built in a temp dir; asserts the derivation and the change record.
 
 THE DERIVATION — a file is in the set when one of these holds (each is mechanical; none is a list):
-  R1 launcher feed. A repo .md path on a NON-comment line of agents/coordinator/*-argo.yaml or
-     agents/*-session.sh, in one of three FEED shapes:
+  R1 launcher feed. A repo .md path on a NON-comment line of agents/coordinator/*-argo.yaml,
+     agents/*-session.sh, or the repo script such a manifest's bootstrap execs (`exec bash <path>.sh` —
+     islands/intake/scripts/sitting.sh), in one of three FEED shapes:
        assign  — a shell assignment whose value starts with the path (BRIEF=…, RUBRIC=…, a
                  ${VAR:-default} default): the launcher holds the file as the session's brief/rules;
        read    — the path is the operand of a verb that hands file content over (it stands AFTER the
@@ -33,7 +34,7 @@ THE DERIVATION — a file is in the set when one of these holds (each is mechani
      report paths out without an exclude list. `$HERE/` resolves to agents/, a same-file `NAME=`
      directory assignment resolves one level (the retro's $RETROS, the reviewer's $LENS_BASE raw URL),
      and any remaining `$var` in the file name is a glob over files that exist (docs/intake/$ISLAND.md).
-  R2 rules closure. A rules file's own "Read/Follow [x](x)" directive pulls x in (gateway/intake.md
+  R2 rules closure. A rules file's own "Read/Follow [x](x)" directive pulls x in (islands/intake/rules/intake.md
      → intake-escape.md), transitively, with the same direct shape as R1.
   R3 facts. docs/intake/*.md — the per-island facts files intake-select.sh names.
   R4 README declaration. A `Rules files:` line in islands/*/README.md or gateway/README.md listing
@@ -54,7 +55,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
-SELECTOR = "gateway/scripts/intake-select.sh"
+SELECTOR = "islands/intake/scripts/intake-select.sh"
 TABLE_BEGIN = "# ── the island table"
 TABLE_END = "# ── --source dig"
 RAW_PREFIX = "https://raw.githubusercontent.com/teststuffstash/homelab/master/"
@@ -110,9 +111,23 @@ def island_table(root, paths):
 
 
 # ── R1: launcher feeds ───────────────────────────────────────────────────────────────────────────
+EXEC_RE = re.compile(r"^\s*exec bash ([A-Za-z0-9_./-]+\.sh)\s*$", re.M)
+
+
 def launchers(root):
-    return sorted(glob.glob(os.path.join(root, "agents/coordinator/*-argo.yaml"))
-                  + glob.glob(os.path.join(root, "agents/*-session.sh")))
+    """The manifests and session scripts, plus the repo script a manifest's bootstrap hands over to
+    (`exec bash <path>.sh` — island intake's manifest keeps a bootstrap only, homelab#3575)."""
+    found = (glob.glob(os.path.join(root, "agents/coordinator/*-argo.yaml"))
+             + glob.glob(os.path.join(root, "agents/*-session.sh")))
+    for lp in list(found):
+        if not lp.endswith(".yaml"):
+            continue
+        with open(lp, encoding="utf-8") as fh:
+            for tgt in EXEC_RE.findall(fh.read()):
+                p = norm(tgt)
+                if p and os.path.isfile(os.path.join(root, p)):
+                    found.append(os.path.join(root, p))
+    return sorted(set(found))
 
 
 def norm(path):
@@ -338,8 +353,8 @@ def self_test():
 
     # 1. the LIVE derivation pins what the operator named: the four gateway intake files + the facts.
     live = {f["path"]: f for f in rules_set(real)["files"]}
-    for p in ("gateway/intake.md", "gateway/intake-escape.md", "gateway/intake-review-rows.md",
-              "gateway/intake-review-unit.md"):
+    for p in ("islands/intake/rules/intake.md", "islands/intake/rules/intake-escape.md", "islands/intake/rules/intake-review-rows.md",
+              "islands/intake/rules/intake-review-unit.md"):
         check(f"live set holds {p} (island gateway)", live.get(p, {}).get("island") == "gateway", live.get(p))
     for p in sorted(glob.glob(os.path.join(real, "docs/intake/*.md"))):
         rel = os.path.relpath(p, real)
@@ -370,9 +385,9 @@ def self_test():
         # the selector's table section, copied from the REAL file (the code under test reads it there)
         with open(os.path.join(real, SELECTOR), encoding="utf-8") as fh:
             w(SELECTOR, fh.read())
-        w("gateway/intake.md", "# brief\nStep E: Follow [`intake-escape.md`](intake-escape.md).\nSee [roles](../docs/agents/roles.md).\n")
-        w("gateway/intake-escape.md", "# escape\n")
-        w("gateway/intake-review-unit.md", "# unit\n")
+        w("islands/intake/rules/intake.md", "# brief\nStep E: Follow [`intake-escape.md`](intake-escape.md).\nSee [roles](../docs/agents/roles.md).\n")
+        w("islands/intake/rules/intake-escape.md", "# escape\n")
+        w("islands/intake/rules/intake-review-unit.md", "# unit\n")
         w("docs/agents/roles.md", "# design doc\n")
         w("docs/intake/scan.md", "# scan facts\n")
         w("docs/intake/notanisland.md", "# orphan facts\n")
@@ -383,9 +398,9 @@ def self_test():
         w("agents/coordinator/x-argo.yaml",
           "# comment: Read docs/agents/roles.md\n"
           "args:\n  - |\n"
-          "    cat <<BRIEF\n    Read gateway/intake.md IN FULL. Context (docs/agents/roles.md §x).\n"
+          "    cat <<BRIEF\n    Read islands/intake/rules/intake.md IN FULL. Context (docs/agents/roles.md §x).\n"
           "    Follow misc/rules.md.\n    (3) Loki (docs/agents/roles.md): curl -sG http://loki\n    BRIEF\n"
-          "    _lens_run \"$case\" gateway/intake-review-unit.md \"Unit review\"\n"
+          "    _lens_run \"$case\" islands/intake/rules/intake-review-unit.md \"Unit review\"\n"
           "    FACTS=\"docs/intake/$ISLAND.md (in place)\"\n"
           "    cp /tmp/r.md \"docs/agents/retros/${DATE}-x.md\"\n")
         w("agents/x-session.sh",
@@ -397,9 +412,9 @@ def self_test():
         git("commit", "-q", "-m", "base", date="2026-01-01T12:00:00Z")
         fset = {f["path"]: f for f in rules_set(tmp)["files"]}
         expect = {
-            "gateway/intake.md": "gateway",          # R1 direct
-            "gateway/intake-escape.md": "gateway",   # R2 closure
-            "gateway/intake-review-unit.md": "gateway",  # R1 read (_lens_run)
+            "islands/intake/rules/intake.md": "gateway",          # R1 direct
+            "islands/intake/rules/intake-escape.md": "gateway",   # R2 closure
+            "islands/intake/rules/intake-review-unit.md": "gateway",  # R1 read (_lens_run)
             "docs/intake/scan.md": "scan",           # R1 assign glob + R3, attributed by stem
             "docs/intake/notanisland.md": "commons",  # R3, stem is no island, no prefix owns it
             "agents/ground-rules.md": "agent-loop",  # R1 assign via $HERE default
@@ -413,14 +428,14 @@ def self_test():
 
         # the change record: two commits in the window on intake.md (one operator, one bot, the bot's
         # carrying a PR number), one before it (excluded), one on a non-set file (excluded).
-        w("gateway/intake.md", open(os.path.join(tmp, "gateway/intake.md")).read() + "line a\n")
+        w("islands/intake/rules/intake.md", open(os.path.join(tmp, "islands/intake/rules/intake.md")).read() + "line a\n")
         git("commit", "-qam", "before the window", date="2026-01-04T23:59:00Z")
-        w("gateway/intake.md", open(os.path.join(tmp, "gateway/intake.md")).read() + "line b\nline c\n")
+        w("islands/intake/rules/intake.md", open(os.path.join(tmp, "islands/intake/rules/intake.md")).read() + "line b\nline c\n")
         git("commit", "-qam", "intake: add two lines", date="2026-01-06T10:00:00Z")
         w("README.md", "not in the set\n")
         git("add", "-A")
         git("commit", "-qm", "unrelated", date="2026-01-07T10:00:00Z")
-        w("gateway/intake.md", open(os.path.join(tmp, "gateway/intake.md")).read().replace("line b\n", ""))
+        w("islands/intake/rules/intake.md", open(os.path.join(tmp, "islands/intake/rules/intake.md")).read().replace("line b\n", ""))
         git("commit", "-qam", "intake: drop a line (#42)", date="2026-01-08T10:00:00Z",
             author=("homelab-agents-1234[bot]", "1+homelab-agents-1234[bot]@users.noreply.github.com"))
         # a commit AFTER the window: the window's end is then not HEAD, so the set is derived from an
@@ -431,7 +446,7 @@ def self_test():
         check("changes: the window's end revision is not HEAD",
               rec["window"]["rev_end"] != sh(["git", "rev-parse", "HEAD"], tmp).strip(), rec["window"])
         byp = {f["path"]: f for f in rec["files"]}
-        ci = byp["gateway/intake.md"]["commits"]
+        ci = byp["islands/intake/rules/intake.md"]["commits"]
         check("changes: schema", rec["schema"] == "island-rules-changes/v1")
         check("changes: two window commits on intake.md, oldest first",
               [c["subject"] for c in ci] == ["intake: add two lines", "intake: drop a line (#42)"], ci)
@@ -440,7 +455,7 @@ def self_test():
         check("changes: identity classes", [c["identity"] for c in ci] == ["operator", "bot:homelab-agents-1234[bot]"], ci)
         check("changes: PR number from the subject", [c["pr"] for c in ci] == [None, 42], ci)
         # sizes: start = after "line a" was added; end = start + "line c\n" (7 bytes)
-        s0, s1 = byp["gateway/intake.md"]["size_start"], byp["gateway/intake.md"]["size_end"]
+        s0, s1 = byp["islands/intake/rules/intake.md"]["size_start"], byp["islands/intake/rules/intake.md"]["size_end"]
         check("changes: size end - start = +7 bytes", s0 is not None and s1 - s0 == 7, (s0, s1))
         check("changes: counts", rec["counts"]["files_changed"] == 1 and rec["counts"]["commits"] == 2
               and rec["counts"]["net_bytes"] == 7, rec["counts"])

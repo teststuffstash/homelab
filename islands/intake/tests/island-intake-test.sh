@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # island-intake-test — behavioural harness for the WIRED island intake (FU-320): the selector's
-# `--source dig` and `--source pile` modes (gateway/scripts/intake-select.sh) and the CronWorkflow
+# `--source dig` and `--source pile` modes (islands/intake/scripts/intake-select.sh) and the CronWorkflow
 # that runs them (agents/coordinator/island-intake-argo.yaml), plus the island table every selector
 # mode reads (island_members / island_alert_rules / island_pattern — one island per item).
-# agents/island-intake-fixtures/ holds REAL dig findings (full wire, bucket-shaped).
+# islands/intake/tests/fixtures/ holds REAL dig findings (full wire, bucket-shaped).
 #
-#   bash agents/island-intake-test.sh        (run by `devbox run deep-dig-test` — the dig's gate,
+#   bash islands/intake/tests/island-intake-test.sh        (run by `devbox run deep-dig-test` — the dig's gate,
 #                                              because intake is the dig's consumer)
 #
-# Hermetic: the selector reads a bucket-shaped directory (INTAKE_TS_DIR), the workflow's own script
-# is extracted from the manifest and run with PATH stubs for claude / s5cmd / git / curl, the clock
-# pinned. No network, no cluster.
+# Hermetic: the selector reads a bucket-shaped directory (INTAKE_TS_DIR); the workflow's bootstrap is
+# extracted from the manifest and the launcher script read from its file (islands/intake/scripts/sitting.sh),
+# and the two run as the pod runs them — the bootstrap clones, then execs the script — with PATH stubs
+# for claude / s5cmd / git / curl, the clock pinned. No network, no cluster.
 set -u
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SEL="$REPO/gateway/scripts/intake-select.sh"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SEL="$REPO/islands/intake/scripts/intake-select.sh"
 YAML="${YAML:-$REPO/agents/coordinator/island-intake-argo.yaml}"
+SITTING="${SITTING:-$REPO/islands/intake/scripts/sitting.sh}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 command -v jq >/dev/null 2>&1 || { echo "island-intake-test: needs jq (devbox run -- bash $0)"; exit 2; }
 command -v yq >/dev/null 2>&1 || { echo "island-intake-test: needs yq (devbox run -- bash $0)"; exit 2; }
@@ -232,7 +234,7 @@ for row in "gateway:2 6" "router-pair:1" "mgmt-box:3" "substrate:4" "agent-loop:
     || bad "dig precedence $isl" "want '$want' got '$got'"
 done
 
-# ── real findings (agents/island-intake-fixtures — the bucket's own objects, full wire) ─────────
+# ── real findings (islands/intake/tests/fixtures — the bucket's own objects, full wire) ─────────
 # 2026-11-11: the text match put homelab#3162 (dig-2026-11-03 finding-1, AgentRunPhaseSlow — kata node
 # memory) and homelab#3166 (dig-2026-11-04 finding-1, RetroReportOverdue) into the GATEWAY sitting: both
 # cite argocd/resources/pushgateway/prometheusrule.yaml, which contains "gateway/". Neither alert is
@@ -240,7 +242,7 @@ done
 # contract they are not the gateway's; the three on GoCatalogParseFailed / GoCatalogStale /
 # TierEvidenceStale (all defined in argocd/resources/agent-gateway/prometheusrule.yaml) are.
 section "selector --source dig — real findings"
-FX="$REPO/agents/island-intake-fixtures"; FXNOW=1794286800   # 2026-11-10T05:00:00Z; lookback 14 d reaches 10-29
+FX="$REPO/islands/intake/tests/fixtures"; FXNOW=1794286800   # 2026-11-10T05:00:00Z; lookback 14 d reaches 10-29
 realsel() { INTAKE_TS_DIR="$FX" INTAKE_NOW="$FXNOW" INTAKE_DIG_LOOKBACK_D=14 bash "$SEL" --source dig --island "$1" --out "$TMP/sel3.json" 2>/dev/null
             jq -r '[.inputs[].id | sub("/dig-r1-[^/]*"; "")] | sort | join(" ")' "$TMP/sel3.json"; }
 [ "$(find "$FX" -name 'finding-*.json' | wc -l)" = 5 ] && ok "five real findings on disk (a missing fixture is not a pass)" || bad "fixtures" "expected 5 under $FX"
@@ -254,7 +256,7 @@ got="$(realsel agent-loop)"
   && ok "…they stay selectable — by the loop's own island (text fallback), once" || bad "real leaks' owner" "got: $got"
 
 # ── --source dig: recurring report-only RESPONDER findings (FU-320) ─────────────────────────────
-# agents/island-intake-fixtures/homelab/alert-*/ holds the responder's REAL finding.json objects of
+# islands/intake/tests/fixtures/homelab/alert-*/ holds the responder's REAL finding.json objects of
 # 2026-11-12..17 (full wire); ride-issues.json the `gh issue view --json number,title,body` answers
 # for the issues their ride subjects served (#3302 #3303 #3307 #3308 #3420 — all titled `gateway: …`).
 # Expected values from the selector header's responder contract: finding = responder-finding/v1 ∧
@@ -481,7 +483,7 @@ INTAKE_PRS_JSON="$PPRS" INTAKE_REREAD_EVERY_D=2 pile
 [ "$(pk reread)" = "102 103 107 109 115" ] && ok "without INTAKE_PR_HOLDS the pile is the label/ruling waits only (the default)" || bad "pile pr-hold default" "got '$(pk reread)'"
 INTAKE_PR_HOLDS=1 INTAKE_PRS_JSON="$TMP/nowhere.json" pile; rc=$?
 [ "$rc" = 2 ] && ok "INTAKE_PR_HOLDS=1 with an unreadable PR list is a probe failure (exit 2), never \"no holds\"" || bad "pile rule #6 (prs)" "rc=$rc"
-# forward (gateway/intake.md step 0): an issue whose LATEST intake ruling is `forward` is unruled —
+# forward (islands/intake/rules/intake.md step 0): an issue whose LATEST intake ruling is `forward` is unruled —
 # a member of whichever island its (retitled) title names now, its row carrying the hop count.
 FISS="$TMP/fwd.json"
 fiss() { jq -nc --argjson n "$1" --arg t "$2" --argjson c "$3" \
@@ -523,8 +525,12 @@ grep -qx '  - island-intake-argo.yaml' "$REPO/agents/coordinator/kustomization.y
 
 # ── the workflow's own script, end to end, stubbed ──────────────────────────────────────────────
 section "island-intake-argo.yaml — the script, run"
+# the launcher script, from its FILE; the manifest's bootstrap (clone → exec the script) runs it, its exec
+# pointed at this redirected copy (the clone stub's tree holds the unredirected one)
+sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" "$SITTING" > "$TMP/sitting.sh"   # /tmp/ FIRST: $TMP is under /tmp
 yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"intake\") | .container.args[0]" "$YAML" \
-  | sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" > "$TMP/script.sh"   # /tmp/ FIRST: $TMP is under /tmp
+  | sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" \
+        -e "s#exec bash islands/intake/scripts/sitting.sh#exec bash $TMP/sitting.sh#" > "$TMP/script.sh"
 BIN="$TMP/bin"; mkdir -p "$BIN" "$TMP/run" "$TMP/up"
 cat > "$BIN/git" <<EOF
 #!/bin/bash
@@ -578,7 +584,7 @@ EOF
 run_script apply; rc=$?
 [ "$rc" = 0 ] && ok "apply run exits 0" || bad "apply run" "rc=$rc; $(tail -5 "$TMP/run.log")"
 [ -s "$TMP/claude.calls" ] && grep -q -- "--model opus" "$TMP/claude.calls" && ok "one sitting, on the resolved model" || bad "session" "$(cat "$TMP/claude.calls")"
-grep -q "Read gateway/intake.md IN FULL" "$TMP/up/brief.md" 2>/dev/null && grep -q "mode: apply" "$TMP/up/brief.md" \
+grep -q "Read islands/intake/rules/intake.md IN FULL" "$TMP/up/brief.md" 2>/dev/null && grep -q "mode: apply" "$TMP/up/brief.md" \
   && jq -e '.inputs | length == 2' "$TMP/up/inputs.json" >/dev/null 2>&1 \
   && ok "brief names the island brief + mode; the inputs ride beside it" || bad "brief" "$(head -3 "$TMP/up/brief.md" 2>/dev/null)"
 [ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"dig-2026-10-25/$R1/finding-2\",\"queue\"],[\"dig-2026-10-26/$R2/finding-2\",\"fold\"]]" ] \
@@ -612,7 +618,7 @@ run_script apply
 for k in 4 5 6; do
   d="$TS/homelab/alert-dd0000000000000$k/responder-r1-2026102${k}T010000Z"; mkdir -p "$d"
   jq --arg fp "dd0000000000000$k" '.alertname = "GoCatalogStale" | .fingerprint = $fp | .subject = "workload:agent-egress/agent-gateway"' \
-    "$REPO/agents/island-intake-fixtures/homelab/alert-3c86aab4bb369c2d/responder-r1-20261113T021803Z/finding.json" > "$d/finding.json"
+    "$REPO/islands/intake/tests/fixtures/homelab/alert-3c86aab4bb369c2d/responder-r1-20261113T021803Z/finding.json" > "$d/finding.json"
 done
 printf 'INTAKE-RULED: responder/GoCatalogStale/agent-egress standing -\n' > "$TMP/claude.out"
 run_script apply; rc=$?
@@ -791,8 +797,8 @@ got="$(for i in scan agent-loop; do INTAKE_TS_DIR="$TS3" INTAKE_NOW="$NOW" bash 
 # cell is `[REQ](page#…)`, minus APPLY-ruled ids and rows an open issue names (REQ in its
 # title/body at a word boundary, or the row's own `#<n>` open), first INTAKE_GAP_MAX in index order.
 section "selector --source gaps"
-GT="$TMP/gtree"; mkdir -p "$GT/gateway/scripts" "$GT/gateway/specs" "$GT/agents"
-cp "$SEL" "$GT/gateway/scripts/"; cp "$REPO/agents/issue_body.py" "$GT/agents/"
+GT="$TMP/gtree"; mkdir -p "$GT/islands/intake/scripts" "$GT/gateway/specs" "$GT/agents"
+cp "$SEL" "$GT/islands/intake/scripts/"; cp "$REPO/agents/issue_body.py" "$GT/agents/"
 cat > "$GT/gateway/specs/README.md" <<'EOF'
 # specs — fixture index
 A prose line naming `⚑ gap` rows is not a row.
@@ -815,7 +821,7 @@ jq -n '{schema:"island-intake-receipt/v1", island:"gateway", mode:"apply", ts:"2
   ruled:[{input:"gateway/specs/endpoints/f.md#GW-F", outcome:"standing", refs:[]}]}' > "$TSG/homelab/intake-gateway-2026-10-20/a/receipt.json"
 jq -n '{schema:"island-intake-receipt/v1", island:"gateway", mode:"dry-run", ts:"2026-10-21T05:00:00Z", session_ran:true,
   ruled:[{input:"gateway/specs/endpoints/g.md#GW-G", outcome:"standing", refs:[]}]}' > "$TSG/homelab/intake-gateway-2026-10-21/b/receipt.json"
-gaps() { INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" env "$@" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island gateway --out "$TMP/gsel.json" 2>"$TMP/gsel.err"; }
+gaps() { INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" env "$@" bash "$GT/islands/intake/scripts/intake-select.sh" --source gaps --island gateway --out "$TMP/gsel.json" 2>"$TMP/gsel.err"; }
 gaps; rc=$?
 got="$(jq -r '[.inputs[].requirement] | join(" ")' "$TMP/gsel.json" 2>/dev/null)"
 { [ "$rc" = 0 ] && [ "$got" = "GW-A GW-B GW-EF GW-G" ]; } && ok "fires on GW-A (⚑) GW-B (🚧) GW-EF GW-G; not C (no mark), D (#77 open), E (named), F (apply-ruled)" \
@@ -825,9 +831,9 @@ got="$(jq -r '[.inputs[].requirement] | join(" ")' "$TMP/gsel.json" 2>/dev/null)
   && ok "an input is <specs page>#<REQ>, kind gap, its marks and the row verbatim" || bad "gap input shape" "$(jq -c '.inputs[0]' "$TMP/gsel.json")"
 gaps INTAKE_GAP_MAX=2; [ "$(jq -r '[.inputs[].requirement] | join(" ")' "$TMP/gsel.json"):$(jq '.counts.over_cap' "$TMP/gsel.json")" = "GW-A GW-B:2" ] \
   && ok "INTAKE_GAP_MAX=2 → the first two in index order, over_cap 2 (they re-present tomorrow)" || bad "gap cap" "$(jq -c .counts "$TMP/gsel.json")"
-INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island router-pair --out "$TMP/gsel.json" 2>/dev/null; rc=$?
+INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/islands/intake/scripts/intake-select.sh" --source gaps --island router-pair --out "$TMP/gsel.json" 2>/dev/null; rc=$?
 { [ "$rc" = 1 ] && jq -e '.specs_root == null and .counts.inputs == 0' "$TMP/gsel.json" >/dev/null; } && ok "an island with no specs root: a valid empty selection (exit 1)" || bad "gaps no root" "rc=$rc"
-INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/gateway/scripts/intake-select.sh" --source gaps --island scan --out "$TMP/gsel.json" 2>/dev/null; rc=$?
+INTAKE_ISSUES_JSON="$GISS" INTAKE_TS_DIR="$TSG" INTAKE_NOW="$NOW" bash "$GT/islands/intake/scripts/intake-select.sh" --source gaps --island scan --out "$TMP/gsel.json" 2>/dev/null; rc=$?
 [ "$rc" = 2 ] && ok "a declared specs root whose index is missing (islands/scan/specs here) is a probe failure (exit 2)" || bad "gaps missing index" "rc=$rc"
 gaps INTAKE_ISSUES_JSON="$TMP/nowhere.json"; rc=$?
 [ "$rc" = 2 ] && ok "an unreadable issue list is exit 2 (it could not see which rows are named)" || bad "gaps issues rule #6" "rc=$rc"
@@ -1009,19 +1015,19 @@ cat > "$TMP/claude.out" <<EOF
 ## Wait records
 ### wait $H#301 @ 2026-10-10T00:00:00Z  writer: intake
 class: R
-INTAKE-WAIT: {"wait": "$H#301@2026-10-10T00:00:00Z/released", "class": "R", "rules": [{"file": "gateway/intake.md", "mark": "caused", "words": "$KEY_WORDS"}], "direction": "narrow-stall", "widens": true, "fact": "on the page"}
-INTAKE-WAIT: {"wait": "$H#302@2026-10-05T00:00:00Z/released", "class": "R", "rules": [{"file": "gateway/intake.md", "mark": "caused", "words": "3. Does it need a human fact? The body"}], "direction": "narrow-stall", "widens": false}
-INTAKE-WAIT: {"wait": "$H#305@2026-10-10T00:00:00Z/released", "class": "R", "rules": [{"file": "gateway/intake.md", "mark": "caused", "words": "$KEY_WORDS"}], "direction": "none", "widens": false}
-INTAKE-WAIT: {"wait": "$H#312@2026-10-10T00:00:00Z/released", "class": "H", "rules": [{"file": "gateway/intake.md", "mark": "caused", "words": "- Operator-only, not yours to reason around:"}], "direction": "none", "widens": false}
+INTAKE-WAIT: {"wait": "$H#301@2026-10-10T00:00:00Z/released", "class": "R", "rules": [{"file": "islands/intake/rules/intake.md", "mark": "caused", "words": "$KEY_WORDS"}], "direction": "narrow-stall", "widens": true, "fact": "on the page"}
+INTAKE-WAIT: {"wait": "$H#302@2026-10-05T00:00:00Z/released", "class": "R", "rules": [{"file": "islands/intake/rules/intake.md", "mark": "caused", "words": "3. Does it need a human fact? The body"}], "direction": "narrow-stall", "widens": false}
+INTAKE-WAIT: {"wait": "$H#305@2026-10-10T00:00:00Z/released", "class": "R", "rules": [{"file": "islands/intake/rules/intake.md", "mark": "caused", "words": "$KEY_WORDS"}], "direction": "none", "widens": false}
+INTAKE-WAIT: {"wait": "$H#312@2026-10-10T00:00:00Z/released", "class": "H", "rules": [{"file": "islands/intake/rules/intake.md", "mark": "caused", "words": "- Operator-only, not yours to reason around:"}], "direction": "none", "widens": false}
 INTAKE-WAIT: {"wait": "$H#999@2026-10-10T00:00:00Z/released", "class": "R", "rules": []}
 INTAKE-WAIT: {"wait": "$H#309@2026-10-10T00:00:00Z/standing", "class": "Q", "rules": []}
 INTAKE-WAIT: {"wait": "$H#310@2026-10-10T00:00:00Z/standing", "class": "R" BROKEN
 INTAKE-WAIT: not json at all
 INTAKE-WAIT: {"wait": "$H#311@2026-10-15T00:00:00Z/standing", "class": "U", "rules": ["a string, not an object"]}
 ## Wait proposals
-INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "mark": "caused", "words": "$KEY_WORDS", "diff": "-old\n+new", "widens_authority": false}
-INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "mark": "missing", "words": "## Hard limits", "diff": "+x"}
-INTAKE-WAIT-PROPOSAL: {"file": "gateway/intake.md", "diff": "+y" BROKEN
+INTAKE-WAIT-PROPOSAL: {"file": "islands/intake/rules/intake.md", "mark": "caused", "words": "$KEY_WORDS", "diff": "-old\n+new", "widens_authority": false}
+INTAKE-WAIT-PROPOSAL: {"file": "islands/intake/rules/intake.md", "mark": "missing", "words": "## Hard limits", "diff": "+x"}
+INTAKE-WAIT-PROPOSAL: {"file": "islands/intake/rules/intake.md", "diff": "+y" BROKEN
 ## Facts I lacked
 INTAKE-RULED: $H#301@2026-10-10T00:00:00Z/released read -
 INTAKE-RULED: $H#302@2026-10-05T00:00:00Z/released read -
@@ -1053,9 +1059,9 @@ WAIT_MAX=6 PILE_JSON="$WISS" PRS_JSON="$TMP/wait-prs.json" REFS_JSON="$WREFS" TS
   || bad "wait receipt" "$(jq -c '.waits' "$TMP/up/receipt.json" 2>/dev/null)"
 # the bar: #301 and #302 (intake, R) name the same line → 2 distinct items; #305 is a ride's wait (not tallied)
 # (the key: file|mark|first eight words, markdown and punctuation stripped — intake-wait-ledger.py's norm_words)
-{ jq -e '.wait_ledger.at_bar == ["gateway/intake.md|caused|3 does it need a human fact the"] and .wait_ledger.false_waits == {records: 2, items: 2}' "$TMP/up/receipt.json" >/dev/null \
+{ jq -e '.wait_ledger.at_bar == ["islands/intake/rules/intake.md|caused|3 does it need a human fact the"] and .wait_ledger.false_waits == {records: 2, items: 2}' "$TMP/up/receipt.json" >/dev/null \
     && jq -e '.wait_proposals | length == 1 and .[0].items == ["'"$H"'#301", "'"$H"'#302"] and .[0].widens_authority == true' "$TMP/up/receipt.json" >/dev/null \
-    && jq -e '.wait_proposals_dropped[0] == {key: "gateway/intake.md|missing|hard limits", reason: "not at the bar"} and .wait_proposals_dropped[1].reason == "unparseable"' "$TMP/up/receipt.json" >/dev/null; } \
+    && jq -e '.wait_proposals_dropped[0] == {key: "islands/intake/rules/intake.md|missing|hard limits", reason: "not at the bar"} and .wait_proposals_dropped[1].reason == "unparseable"' "$TMP/up/receipt.json" >/dev/null; } \
   && ok "the ledger: the key at the bar (two intake items; the ride's #305 not counted), its proposal kept with the ledger's items and widens; one below the bar dropped" \
   || bad "wait ledger in receipt" "$(jq -c '{wait_ledger, wait_proposals, wait_proposals_dropped}' "$TMP/up/receipt.json" 2>/dev/null)"
 grep -q '^## Wait records' <(jq -r '.wait_records' "$TMP/up/receipt.json" 2>/dev/null) && [ -s "$TMP/up/wait-ledger.json" ] \
@@ -1077,15 +1083,15 @@ rm -rf "$TSW2/homelab/intake-gateway-2026-10-27"
 # the ledger and the recorded wait cases: each script's own self-test (planted defects through its real
 # functions), then the committed cases validated strictly, rules commits included
 section "the wait ledger and the recorded wait cases"
-python3 -I "$REPO/gateway/scripts/intake-wait-ledger.py" --self-test > "$TMP/ledger-st.log" 2>&1 \
+python3 -I "$REPO/islands/intake/scripts/intake-wait-ledger.py" --self-test > "$TMP/ledger-st.log" 2>&1 \
   && ok "intake-wait-ledger.py --self-test" || bad "ledger self-test" "$(grep -e FAIL "$TMP/ledger-st.log" | head -5)"
-python3 -I "$REPO/gateway/scripts/intake-wait-cases.py" --self-test > "$TMP/cases-st.log" 2>&1 \
+python3 -I "$REPO/islands/intake/scripts/intake-wait-cases.py" --self-test > "$TMP/cases-st.log" 2>&1 \
   && ok "intake-wait-cases.py --self-test" || bad "cases self-test" "$(grep -e FAIL "$TMP/cases-st.log" | head -5)"
-python3 -I "$REPO/gateway/scripts/intake-wait-cases.py" --git validate > "$TMP/cases.log" 2>&1 \
+python3 -I "$REPO/islands/intake/scripts/intake-wait-cases.py" --git validate > "$TMP/cases.log" 2>&1 \
   && grep -q '10 case(s) valid (train 7, heldout 3), 0 error' "$TMP/cases.log" \
   && ok "the ten recorded wait cases validate (train 7, held out 3; rules commits checked unless the checkout is shallow)" || bad "wait cases" "$(tail -5 "$TMP/cases.log")"
 
-# ── the workflow's review stage, run (gateway/intake.md §Review and repair) ─────────────────────
+# ── the workflow's review stage, run (islands/intake/rules/intake.md §Review and repair) ─────────────────────
 # Stubs: `claude` answers per session (author / unit lens / rows pass 1 / rows pass 2 / repair, told
 # apart by the prompt) and writes each lens's ONE file where its prompt says; `gh` records. The
 # expectations come from the launcher's contract in the manifest header + §Review and repair:

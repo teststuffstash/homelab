@@ -2,7 +2,7 @@
 
 > The §Island facts block for the **retro** island — a component to be BUILT FRESH under
 > [`islands/retro/`](../../islands/retro/README.md) beside the old code it replaces; nothing live
-> reads that directory. The rules are ONE home — [`gateway/intake.md`](../../gateway/intake.md); this
+> reads that directory. The rules are ONE home — [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md); this
 > file replaces only its §Island facts and the island rows of its §What you read table. Island index:
 > [`islands/README.md`](../../islands/README.md).
 
@@ -13,7 +13,7 @@
 - **Membership** — every `Touches` entry under `islands/retro/`, or a title starting
   `retro island:`. An item on the OLD retro (`retro_*.py`, `retro-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
-- **Selectable**: `gateway/scripts/intake-select.sh` has the row — `--island retro` selects on the
+- **Selectable**: `islands/intake/scripts/intake-select.sh` has the row — `--island retro` selects on the
   title and the `islands/retro/` prefix, ahead of agent-loop in precedence.
 - **Read set** = [`islands/retro/README.md`](../../islands/retro/README.md) +
   [`islands/retro/specs/README.md`](../../islands/retro/specs/README.md) + the page an item names

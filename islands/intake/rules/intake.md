@@ -2,16 +2,16 @@
 
 > **Brief, v0 (spike, 2026-10-27).** The gateway is the first island to run it. **The rules here
 > are island-agnostic and live only here;** the §Island facts block at the end is the gateway's,
-> every other PLATFORM island's lives in [`docs/intake/<island>.md`](../docs/intake/), and a STACK
+> every other PLATFORM island's lives in [`docs/intake/<island>.md`](../../../docs/intake/), and a STACK
 > island's lives in its own repo (ADR-160) —
-> [agent-loop](../docs/intake/agent-loop.md), [substrate](../docs/intake/substrate.md),
-> [dependency-upgrades](../docs/intake/dependency-upgrades.md), [mgmt-box](../docs/intake/mgmt-box.md),
-> [router-pair](../docs/intake/router-pair.md), [scan](../docs/intake/scan.md), [launch](../docs/intake/launch.md), [retro](../docs/intake/retro.md). A sitting for another island reads this brief, then
+> [agent-loop](../../../docs/intake/agent-loop.md), [substrate](../../../docs/intake/substrate.md),
+> [dependency-upgrades](../../../docs/intake/dependency-upgrades.md), [mgmt-box](../../../docs/intake/mgmt-box.md),
+> [router-pair](../../../docs/intake/router-pair.md), [scan](../../../docs/intake/scan.md), [launch](../../../docs/intake/launch.md), [retro](../../../docs/intake/retro.md). A sitting for another island reads this brief, then
 > that file IN PLACE OF §Island facts and the gateway rows of §What you read (`README.md`,
 > `specs/`, `src/`); membership is `intake-select.sh --island <island>`. Design, evidence and the open
-> questions: [`docs/spikes/island-intake.md`](../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
+> questions: [`docs/spikes/island-intake.md`](../../../docs/spikes/island-intake.md) (tracked by FU-320). The ancestor is
 > the coordinator's `goal-decompose` clause
-> ([`agents/coordinator/README.md`](../agents/coordinator/README.md) §The `goal-decompose` clause):
+> ([`agents/coordinator/README.md`](../../../agents/coordinator/README.md) §The `goal-decompose` clause):
 > same authoring rules, one level earlier — a decompose starts from a Goal a human admitted; this
 > sitting starts from a pile nobody has read.
 
@@ -32,7 +32,7 @@ You author issues and labels; you never author code, never open a PR, never edit
 
 The dispatch prompt names them:
 
-- `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](scripts/intake-select.sh)
+- `issues:` `<owner/repo>#<n>` …, selected by [`scripts/intake-select.sh`](../scripts/intake-select.sh)
   (island membership + no `agent/*` lifecycle label + no earlier `intake:` outcome). Trigger: ≥ 3 such
   issues, or the oldest ≥ 24 h — one sitting per trigger, never per issue. Membership is the
   FILER's naming (a title cue, or its `Touches`) — a hint: step 0 tests it. A row
@@ -43,8 +43,8 @@ The dispatch prompt names them:
   naming its island(s) (step 0 of §The procedure).
 - `text:` blocks, each with a `source:` line (`FU-NNN`, `meta-state`, `handoff`, `operator`,
   `dig`) — prose someone wrote instead of an issue. **`dig` is the wired source:**
-  [`agents/coordinator/island-intake-argo.yaml`](../agents/coordinator/island-intake-argo.yaml)
-  runs this sitting unattended each morning over the [deep dig](../docs/agents/roles.md)'s `cause-found` findings on
+  [`agents/coordinator/island-intake-argo.yaml`](../../../agents/coordinator/island-intake-argo.yaml)
+  runs this sitting unattended each morning over the [deep dig](../../../docs/agents/roles.md)'s `cause-found` findings on
   the island's alerts (`scripts/intake-select.sh --source dig`); its prompt adds the receipt protocol. A text input becomes an issue (`file`) only when its
   outcome would be `queue`, `goal` or `seat`; a `standing` or `close` on text is
   report-only — the source record keeps it (one home per fact), the report says why.
@@ -79,12 +79,12 @@ The dispatch prompt names them:
 
 ## What you read, and what you do not
 
-Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autonomy.md#c7-the-platform-outside-the-loop-is-growing-islands-too-operator-2026-10-10)):
+Bounded on purpose ([`islands-no-corpus-read`](../../../docs/spikes/context-and-autonomy.md#c7-the-platform-outside-the-loop-is-growing-islands-too-operator-2026-10-10)):
 
 | Read | Why |
 |---|---|
 | The item: body, every comment, linked PR **bodies** (never diffs) | the claim and its history |
-| [`README.md`](README.md) + [`specs/README.md`](specs/README.md) + the pinned `RULES.md` it names (a `gh api` GET of the pinned tag) | the island and its process (the pinned rules) |
+| [`README.md`](../../../gateway/README.md) + [`specs/README.md`](../../../gateway/specs/README.md) + the pinned `RULES.md` it names (a `gh api` GET of the pinned tag) | the island and its process (the pinned rules) |
 | The spec page(s) the item names — the requirement section + the page's index row, nothing more | live-verify the claim (is the flag still there? does the row still say that?) |
 | Open issues of the repo whose title or `Touches` name the same requirement/page; PRs merged since the item was filed that touch the same page | dedup, supersession |
 | Open `task/goal` issues whose `## Acceptance` names the item's surface | a covering Goal (ADR-122 (4): a sprout binds INTO its container) |
@@ -92,7 +92,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
 | The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` outcome's own trigger |
-| What the ride can do: the repo's recipe (`.agents/fix.yaml`, `.agents/build.yaml` — the paths it may not touch, the gates it runs, its stop markers) and the pod's reach ([`docs/agents/agentstack.md`](../docs/agents/agentstack.md) §The egress dial, with the repo's `fixer:` block in its claim) | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
+| What the ride can do: the repo's recipe (`.agents/fix.yaml`, `.agents/build.yaml` — the paths it may not touch, the gates it runs, its stop markers) and the pod's reach ([`docs/agents/agentstack.md`](../../../docs/agents/agentstack.md) §The egress dial, with the repo's `fixer:` block in its claim) | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
 | For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
 | For a `wait:` input: the item's comments (its events when they show the release), and the lines the wait cites at the default-branch commit before its parking comment | step W — whether the rules made the wait necessary |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
@@ -138,7 +138,7 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
 0. **Whose is it?** (every `issues:` input — a member's island was named by its filer, an
    attribution input's by nobody.) Name the island(s) that own what its fix would change — the
    gate that went red, the rule that produced the wait, the path — from the facts files'
-   membership lines ([`docs/intake/`](../docs/intake/), one file per island; you read those
+   membership lines ([`docs/intake/`](../../../docs/intake/), one file per island; you read those
    lines, never another island's owning docs). All yours → continue. All one OTHER island's →
    `forward`. Two or more islands → `split`. You never decide another island's part — its
    sitting does.
@@ -167,7 +167,7 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
    - **(a) access or money** — a credential or login the island does not hold (a key mint, a
      subscription login), or spend beyond what is granted (a paid tier, hardware);
    - **(b) attended or irreversible** — the surface is `attended` or `manual` in the box's
-     [capability ledger](../docs/management-box.md) (an `unattended` one is the box's window and
+     [capability ledger](../../../docs/management-box.md) (an `unattended` one is the box's window and
      queues), the act needs hands on a box, or no revert PR undoes it;
    - **(c) direction** — admitting a Goal above the ceiling (step 4), or what the island is for:
      its location, who consumes it, a switch-over or retirement, machinery its facts reserve;

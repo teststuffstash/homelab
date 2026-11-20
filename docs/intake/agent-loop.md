@@ -1,7 +1,7 @@
 # Island facts — the agent loop
 
 > The §Island facts block for the **agent-loop** island. The rules are ONE home —
-> [`gateway/intake.md`](../../gateway/intake.md); this file replaces only its §Island facts and the
+> [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md); this file replaces only its §Island facts and the
 > island rows of its §What you read table. Island list + owning docs:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
@@ -10,14 +10,14 @@
   repos (`agent-runtime`, `openrouter-operator`) are outside the selector's reach — a sitting on
   them is the seat's.
 - **Membership** — `island_members agent-loop` in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh): title `scan:` / `coordinator` /
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh): title `scan:` / `coordinator` /
   `reviewer:` / `ride:` / `arbitrate` / `responder` / `dig` / `fixer` / `epic dispositions` /
   `agent-session` / `model scout` / `ADR-103` …, or every `Touches` entry under the prefixes. Last
   in precedence: a `garage:` title touching `agents/` is the substrate's.
 - **Attribution inputs** (`kind: attribution`): this sitting also receives every bot-filed issue no
   island claims (the loop's own filings leave component attribution to intake) — name its
   island(s) first, then rule your part and `split` the rest out to their islands
-  ([`intake.md`](../../gateway/intake.md) step 0, outcome `split`).
+  ([`intake.md`](../../islands/intake/rules/intake.md) step 0, outcome `split`).
 - **Read set = the item's SLICE**: the owning doc SECTION the item names + the script it changes —
   never `docs/agents/` as a corpus (the design-agents read is operator-typed only;
   [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Design questions). A fact outside the

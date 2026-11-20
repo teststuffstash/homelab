@@ -102,7 +102,7 @@ spec:
             triage: none
           annotations:
             summary: "Island intake has not run in >2 days — the dig's island findings are not being admitted"
-            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig."
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: islands/intake/rules/intake.md; selector: islands/intake/scripts/intake-select.sh --source dig."
         # ── the island rules digest's own belt (FU-320) ─────────────────────────────────────────
         # agents/coordinator/island-rules-digest-argo.yaml pushes
         # island_rules_digest_last_success_timestamp_seconds only when the week's outcome LANDED (the

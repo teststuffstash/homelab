@@ -1,7 +1,7 @@
 # Island facts — the cluster substrate
 
 > The §Island facts block for the **substrate** island (3 CPs, disks, Garage, Longhorn, CNPG,
-> services, the public edge). Rules: [`gateway/intake.md`](../../gateway/intake.md) — this file
+> services, the public edge). Rules: [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — this file
 > replaces only its §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
@@ -14,7 +14,7 @@
   [`garage.md`](../garage.md), [`longhorn-backup.md`](../longhorn-backup.md),
   [`SERVICES.md`](../../SERVICES.md).
 - **Membership** — `island_members substrate` in
-  [`intake-select.sh`](../../gateway/scripts/intake-select.sh). `tofu/` is the substrate's, but the
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh). `tofu/` is the substrate's, but the
   router files under it (`tofu/opnsense-*.tf`) go to the router pair (longest prefix wins) and
   `tofu/github/` to the agent loop.
 - **Write tier** (`classify_touches`, run 2026-10-31): every path above = `machine-merge` (the
