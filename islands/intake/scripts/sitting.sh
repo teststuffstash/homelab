@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # sitting.sh — the island intake sitting's launcher script (FU-320; islands/intake/README.md). Run by the
 # `intake` template of agents/coordinator/island-intake-argo.yaml, whose bootstrap clones homelab master to
-# /work/homelab and execs this file from there; the machinery inventory (predicate, key, capacity, belts)
-# is that manifest's header. Inputs are the container's environment — MODE, ISLAND, REVIEW (the workflow's
+# /work/homelab and execs this file from there inside the island's devbox (`devbox run` in islands/intake/ —
+# its devbox.json is this script's toolchain; claude, git and curl are the pod image's); the machinery
+# inventory (predicate, key, capacity, belts, identity) is that manifest's header. Inputs are the container's environment — MODE, ISLAND, REVIEW (the workflow's
 # parameters), the INTAKE_* knobs, the transcripts-bucket keys, PUSHGATEWAY — never an Argo template tag.
 # Harness: islands/intake/tests/island-intake-test.sh (run by `devbox run deep-dig-test`).
 set -uo pipefail
@@ -188,6 +189,15 @@ records are in /tmp/wait/prior.json.
 LIVE READS (the brief's read set; every one is a GET, from this pod):
 - Alertmanager: curl -s http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts
 - Prometheus: curl -sG http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode 'query=<promql>'
+- Loki (logs; MULTI-TENANT — the tenant is the NAMESPACE and the header is required, docs/loki-tenancy.md):
+  control first: curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/labels
+  (\`"status":"success"\` with a non-empty \`data\` = that tenant has streams; an empty \`data\` is a wrong tenant or a quiet namespace, not "no such log line")
+  curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/query_range --data-urlencode 'query={namespace="<ns>",pod=~"<pod>.*"}' --data-urlencode 'start=<unix-ns>' --data-urlencode 'limit=500'
+  Node kernel logs are {container="kmsg-reader", node="<node>"} under tenant \`loki\`.
+- the kube API, READ-ONLY (this pod's own ServiceAccount; no Secret, no ConfigMap, no write verb):
+  control first: kubectl auth can-i get <kind> -n <ns>
+  kubectl get <kind> -n <ns> -o json
+  A \`Forbidden\` (or a \`no\` from the control) is a FACT to report — name the kind and the namespace — never an empty answer.
 - ride records (the transcripts bucket, READER key):
   AWS_ACCESS_KEY_ID="\$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="\$AGENT_TS_READER_SECRET" s5cmd --endpoint-url "\$AGENT_TS_ENDPOINT" ls "s3://\$AGENT_TS_BUCKET/homelab/issue-<n>/*"
   (then the same with \`cat\` on a run's run.log / manifest.json)

@@ -1567,9 +1567,11 @@ Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gatew
 `system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
 username, says what the caller may ask for: its admissions' `stacks` and `roles`, and the
 `bind_namespaces` a [`bind`](../glossary.md#bind) may name. Exact values only, every key required, a
-key that is not a ServiceAccount username refuses the policy load. So a wildcard can never be
+key that is not a ServiceAccount username refuses the policy load, and so does an entry whose
+`stacks` names a stack the policy does not define. So a wildcard can never be
 written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
-belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
+belong to that caller. ⚖ A row stored with no caller (admitted with no bearer under `observe`) has no
+owner to check against: any listed caller may read it and may release it. The env pull is NOT caller-checked here: its caller is the bound pod, which
 GW-SESSIONS-PULL checks against the bind.
 
 **`GET /sessions?task=<exact task key>`** (route `list`, FU-270 (b)) is the [judge](../glossary.md#judge)'s
@@ -1721,7 +1723,7 @@ Legend: `policy` = the one change to `policy-default`'s control-plane keys, or t
 | a caller entry missing a key refuses the load | policy-default | the platform loop without bind_namespaces | PolicyError |
 | a policy without control_plane_auth refuses the load ⚖ | policy-default | control_plane_auth absent | PolicyError |
 | a policy without callers refuses the load ⚖ | policy-default | callers absent | PolicyError |
-| the deployed callers are today's four dispatchers and the judge, under enforce ⚖ | policy-default | argocd/resources/agent-gateway/policy.json | loads: control_plane_auth enforce; callers = the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's shared SA, the outcome judge |
+| the deployed callers are today's five dispatchers and the judge, under enforce ⚖ | policy-default | argocd/resources/agent-gateway/policy.json | loads: control_plane_auth enforce; callers = the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's shared SA, the island intake sitting, the outcome judge |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as, and the deployed
 row holds exactly: `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles
@@ -1729,7 +1731,8 @@ row holds exactly: `system:serviceaccount:platform-agents:agentstack-loop` (stac
 openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:oracle-agents:agentstack-loop`
 (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review`
 (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator`
-(`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`) and
+(`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`),
+`system:serviceaccount:agent-coordinator:island-intake` (`[platform]`, `[coordinator]`, `[]`, `own`) and
 `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**).
 The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -1749,9 +1752,12 @@ that will use it; until they do, the grant admits nothing new. ⚖ It also holds
 jail's `agents/research-fanout.sh` mints this SA's token (the entry canary's impersonation) and each
 platform arm is a worker-launcher ride bound into a platform repo namespace, as `researcher`. ⚖ **The coordinator namespace's
 shared SA** `agent-coordinator:agent-coordinator` holds `coordinator` + `responder`, no bind: the
-responder, the deep dig, island intake and the fix-debounce set-pass run as it
-(`agents/coordinator/{responder,deep-dig,island-intake,fix-debounce}-argo.yaml`) and will admit
-ONE unbound session each, the specs reviewer's shape. ⚖ It also holds `retro`, bound into
+responder, the deep dig and the fix-debounce set-pass run as it
+(`agents/coordinator/{responder,deep-dig,fix-debounce}-argo.yaml`) and will admit
+ONE unbound session each, the specs reviewer's shape. ⚖ **Island intake** runs as its own SA,
+`agent-coordinator:island-intake` (`agents/coordinator/island-intake-argo.yaml`; a read-only
+kube identity, homelab#3577): its entry holds `coordinator` only, no bind — the sitting admits
+`coordinator` sessions, one at a time (the author, each lens, the repair). ⚖ The shared SA also holds `retro`, bound into
 `openrouter-operator`: the retro cron's cells (`agents/coordinator/retro-argo.yaml`) run as this SA
 and hand each cell to the worker launcher, whose ride pod lives in the platform retro's ride
 namespace (`agents/retro-project.sh`) — so the shared grant now reaches a bind there too. Being shared, the grant reaches every

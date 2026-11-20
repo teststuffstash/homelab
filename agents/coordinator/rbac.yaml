@@ -167,6 +167,76 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows
 subjects:
   - { kind: ServiceAccount, name: outcome-judge, namespace: agent-coordinator }
 ---
+# The island intake sitting's OWN identity (homelab#3577, Goal #3574 pin 6): READ-ONLY. Until this
+# SA the sitting (island-intake-argo.yaml) ran as `agent-coordinator` and so held that SA's pod
+# create/delete, pods/exec create, configmap create/delete/patch and openrouterkeys writes — none
+# of which a sitting uses: it reads, and writes only to GitHub (its token), the transcripts bucket
+# (its key) and the Pushgateway (HTTP). Its kube grant is three reads and the executor's write:
+#   - `agent-read-infra` + `agent-read-app` (agent-read-rbac.yaml), cluster-wide: what the
+#     coordinator's lanes already read (pods and their logs, events, workloads, PVCs, nodes,
+#     Longhorn, ArgoCD apps, workflows, network policies, ESO specs, claims). `agents/
+#     subscription-latch.sh`'s belt (`kubectl get pods -A -l …subscription-session`) rides it;
+#   - `island-intake-read` below: the four kinds a ruling needed and could not read;
+#   - the chart-rendered `argo-workflows-workflow` Role (`workflowtaskresults` create/patch — the
+#     Argo executor's own write), the `specs-review` pattern above.
+# NOT bound to ClusterRole `agent-coordinator`, to `responder-ledger` or to
+# `coordinator-scan-workflows`. No Secret and no ConfigMap read (agent-read-rbac.yaml §NEVER
+# GRANTED). The gateway admits it by name (argocd/resources/agent-gateway/policy.json `callers`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: island-intake
+  namespace: agent-coordinator
+---
+# What the read roles lack and an intake ruling stands on: a namespace's quota (is the ride
+# starved or the quota wrong), the alert rule as deployed (not as the repo has it), and the
+# schedules and templates of the loop's own workflows. get/list, nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: island-intake-read
+rules:
+  - apiGroups: [""]
+    resources: [resourcequotas]
+    verbs: [get, list]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    verbs: [get, list]
+  - apiGroups: [argoproj.io]
+    resources: [cronworkflows, workflowtemplates]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: island-intake-read }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read-infra
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read-app
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-app }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-island-intake, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
 # Responder fingerprint ledger (responder-argo.yaml): one triage per alert fp per 24h + the
 # daily cap live in the responder-seen ConfigMap — NAMESPACED on purpose (a cluster-wide cm
 # patch grant could touch other namespaces' config; the pods grant above is cluster-wide only

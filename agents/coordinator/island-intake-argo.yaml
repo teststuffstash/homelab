@@ -55,11 +55,21 @@
 #                + IslandIntakeStale
 #                (argocd/resources/pushgateway/prometheusrule.yaml).
 #   live reads = the brief's read set, every one a GET, addressed in the prompt: Alertmanager and
-#                Prometheus (ns monitoring), the ride records in the transcripts bucket (READER key),
-#                the gateway's own views with the pod's projected caller token. The caller
-#                (`agent-coordinator:agent-coordinator`) lists only the sessions it admitted
-#                (GW-SESSIONS-AUTH), so a worker ride is read from its ride record, never from an
-#                empty `/sessions?task=` answer.
+#                Prometheus (ns monitoring), Loki (ns loki, tenant header = the namespace), the kube
+#                API (`kubectl get`, read-only — the identity below), the ride records in the
+#                transcripts bucket (READER key), the gateway's own views with the pod's projected
+#                caller token. The caller (`agent-coordinator:island-intake`) lists only the sessions
+#                it admitted (GW-SESSIONS-AUTH), so a worker ride is read from its ride record, never
+#                from an empty `/sessions?task=` answer.
+#   identity   = ServiceAccount `island-intake` (rbac.yaml): the read roles + `island-intake-read`
+#                + the Argo executor's task-result write; no pod, exec, configmap or openrouterkeys
+#                verb. The gateway admits it by that name (policy.json `callers`).
+#   toolchain  = the worker base image (agent-base — its tag is the one kustomization.yaml line)
+#                + the island's own devbox (islands/intake/devbox.json): the bootstrap installs it
+#                and runs the launcher through `devbox run` there. The devbox adds only promtool and
+#                yq; jq/gh/kubectl/s5cmd/python3/uv are the image's own pre-baked copies. `command:` is
+#                set, so the image's entrypoint (agent-entrypoint: a worker's clone/branch/finalize,
+#                which needs REPO_URL) does NOT run — what it would have exported for nix is env here.
 #   review     = parameter `review` (default review-repair; operator 2026-11-14, islands/intake/rules/intake.md
 #                §Review and repair): the author writes queue/goal bodies with no label and no ruling
 #                comment, lists `## Review units` and INTAKE-HOLD lines; per `unit:` line one
@@ -87,7 +97,8 @@
 #                the sitting writes nothing to GitHub and its receipt consumes nothing (the lenses and
 #                the repair still run, on the bodies the author wrote to /tmp/review/issues/).
 # Launcher: islands/intake/scripts/sitting.sh — everything above is that script; the `intake` template
-#   below keeps a bootstrap only (clone, the "clone failed" metric push, exec the script).
+#   below keeps a bootstrap only (clone, the island's devbox, the "did not start" metric push, exec
+#   the script inside `devbox run`).
 # Harness: islands/intake/tests/island-intake-test.sh (run by `devbox run deep-dig-test`, the dig's own gate).
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -101,7 +112,7 @@ spec:
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   workflowSpec:
-    serviceAccountName: agent-coordinator
+    serviceAccountName: island-intake
     # the review stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (3) lenses × two
     # runs × (PASS1 240 + LENS 1200 s) + the repair (1200 s); the script's _fits keeps it inside
     # RUN_DEADLINE_S (= this, 14400) so the pod is never killed mid-review. A real unit lens explored
@@ -161,9 +172,25 @@ spec:
           semaphores:
             - configMapKeyRef: { name: subscription-capacity, key: claude }
         container:
-          image: registry.teststuff.net/agent-coordinator
+          # NO tag: kustomization.yaml `images:` supplies it (the agent-base entry there).
+          image: registry.teststuff.net/agent-base
           env:
-            - { name: HOME, value: "/home/node" }
+            # agent-base runs as uid 1000 `devbox`; its claude settings (the bypass-permissions
+            # prompt skipped) and its nix profile live under this HOME.
+            - { name: HOME, value: "/home/devbox" }
+            # The island's devbox, with the image's entrypoint out of the path (`command:` below).
+            # NIX_CONFIG is what a worker pod carries: the launcher's two lines (agents/agent-session.sh
+            # NIX_ENV — flakes on FIRST, then the empty global registry, which the egress policy would
+            # otherwise see as channels.nixos.org fetches) + the entrypoint's two (agent-runtime
+            # agent-base/entrypoint.sh NIX-CACHE-CONFIG — the in-cluster pull-through mirror as the
+            # ONLY substituter). The three DEVBOX/telemetry switches and the launcher-version TTL are
+            # that launcher's too (releases.jetify.com is not on the egress policy).
+            - name: NIX_CONFIG
+              value: "experimental-features = nix-command flakes\nflake-registry =\nsubstituters = http://nixcache.nix-cache.svc.cluster.local?priority=10\nextra-trusted-substituters = http://nixcache.nix-cache.svc.cluster.local"
+            - { name: DEVBOX_NO_UPDATE_CHECK, value: "1" }
+            - { name: DEVBOX_DISABLE_TELEMETRY, value: "1" }
+            - { name: DO_NOT_TRACK, value: "1" }
+            - { name: VERSION_CACHE_TTL, value: "31536000" }
             - { name: ORG, value: "teststuffstash" }
             - { name: MODE, value: "{{workflow.parameters.mode}}" }
             - { name: ISLAND, value: "{{workflow.parameters.island}}" }
@@ -211,14 +238,14 @@ spec:
           args:
             - |
               set -uo pipefail
-              # BOOTSTRAP ONLY (Goal #3574 pin 3): clone, the "clone failed" metric push, exec the island's
-              # launcher script from the clone. Everything a sitting does is islands/intake/scripts/sitting.sh;
-              # it reads MODE / ISLAND / REVIEW and every knob from this container's env (above) — exec keeps it.
-              rm -rf /work/homelab
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              if ! git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab; then
-                # the script's own `_push 0 0 0 0 0` (every island_intake_* gauge at 0, probe_ok 0) — the script is
-                # not on disk when the clone fails, so the same series are written here
+              # BOOTSTRAP ONLY (Goal #3574 pin 3): clone, install the island's devbox, exec the island's
+              # launcher script from the clone inside it; a clone or an install that fails pushes the
+              # "did not start" metrics. Everything a sitting does is islands/intake/scripts/sitting.sh;
+              # it reads MODE / ISLAND / REVIEW and every knob from this container's env (above) —
+              # `devbox run` and exec keep it.
+              _dead() { # <why> — the sitting never started: the script's own `_push 0 0 0 0 0` (every
+                # island_intake_* gauge at 0, probe_ok 0), written here because the script is not on
+                # disk (or not runnable) yet; then exit 1, Argo retries
                 if [ -n "${PUSHGATEWAY:-}" ]; then
                   {
                     printf '# TYPE island_intake_last_run_timestamp_seconds gauge\nisland_intake_last_run_timestamp_seconds %s\n' "$(date -u +%s)"
@@ -232,10 +259,30 @@ spec:
                   } | curl -fsS --max-time 5 --data-binary @- "$PUSHGATEWAY/metrics/job/island_intake/island/$ISLAND" >/dev/null 2>&1 \
                     || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
                 fi
-                echo "island-intake: clone failed"; exit 1
-              fi
-              cd /work/homelab
+                echo "island-intake: $1"; exit 1
+              }
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || _dead "clone failed"
+              cd /work/homelab || _dead "clone failed (no /work/homelab)"
+              # The image seeds claude's trust for a worker's /work/repo and its entrypoint re-seeds it for the
+              # real workdir; that entrypoint does not run here, so this is its line, for this clone.
+              { mkdir -p "$HOME" && jq -n --arg d /work/homelab '{hasCompletedOnboarding: true, projects: {($d): {hasTrustDialogAccepted: true}}}' > "$HOME/.claude.json"; } \
+                || echo "island-intake: could not write $HOME/.claude.json (the workdir trust seed) — continuing"
+              # The island's toolchain (islands/intake/devbox.json + its lock). Bounded: the script's
+              # deadline arithmetic (RUN_DEADLINE_S, _fits) starts when the script does and keeps 600 s
+              # of slack against this pod's activeDeadlineSeconds — the install must fit inside it.
+              timeout 540 devbox install --config islands/intake || _dead "the island's devbox did not install (islands/intake/devbox.json)"
+              # `devbox run` starts its command in the devbox's own directory and re-quotes an inline
+              # script, so the launch is a two-line file: back to the clone root, then the script.
+              cat > /tmp/island-intake-launch.sh <<'LAUNCH'
+              cd /work/homelab || exit 1
               exec bash islands/intake/scripts/sitting.sh
+              LAUNCH
+              exec devbox run --config islands/intake -- bash /tmp/island-intake-launch.sh
           resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "1Gi" }
+            # 3Gi: `devbox install` evaluates the devbox's nix environment in this container (single-
+            # user nix, no daemon) — 1.2 GB peak measured for this lock on a cold eval cache
+            # (homelab#3577); the sessions that follow stay well under it.
+            requests: { cpu: "100m", memory: "512Mi" }
+            limits: { memory: "3Gi" }

@@ -523,6 +523,56 @@ yqw() { yq -r "$CW | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
 grep -qx '  - island-intake-argo.yaml' "$REPO/agents/coordinator/kustomization.yaml" \
   && ok "kustomization ships it" || bad "kustomization" "island-intake-argo.yaml not listed"
 
+# ── its identity, its image, its toolchain (homelab#3577) ───────────────────────────────────────
+section "island-intake-argo.yaml — identity, image, toolchain"
+CDIR="$REPO/agents/coordinator"; KZ="$CDIR/kustomization.yaml"; SA=island-intake
+nb() { grep -v -e '^---$' -e '^$' || true; }
+[ "$(yqw '.spec.workflowSpec.serviceAccountName')" = "$SA" ] && ok "the workflow runs as ServiceAccount $SA" || bad "service account" "$(yqw '.spec.workflowSpec.serviceAccountName')"
+# every binding in the app that names the SA, as "<Kind>/<name> → <roleRef kind>/<roleRef name>". Expected, from the
+# issue's acceptance 1: the two read roles, the one new read role, the Argo executor's Role — and nothing else
+got="$(for f in "$CDIR"/*.yaml; do yq -r 'select(.kind == "ClusterRoleBinding" or .kind == "RoleBinding")
+        | select([.subjects[]? | select(.kind == "ServiceAccount" and .name == "'"$SA"'" and .namespace == "agent-coordinator")] | length > 0)
+        | .kind + "/" + .metadata.name + " → " + .roleRef.kind + "/" + .roleRef.name' "$f"; done | nb | sort | tr '\n' ';')"
+want="ClusterRoleBinding/island-intake-read → ClusterRole/island-intake-read;ClusterRoleBinding/island-intake-read-app → ClusterRole/agent-read-app;ClusterRoleBinding/island-intake-read-infra → ClusterRole/agent-read-infra;RoleBinding/argo-workflows-workflow-island-intake → Role/argo-workflows-workflow;"
+[ "$got" = "$want" ] && ok "$SA is bound to the two read roles, island-intake-read and the Argo executor's Role — to nothing else (not ClusterRole agent-coordinator)" \
+  || bad "bindings" "$got"
+[ "$(yq -r 'select(.kind == "ServiceAccount" and .metadata.name == "'"$SA"'") | .metadata.namespace' "$CDIR/rbac.yaml" | nb)" = agent-coordinator ] \
+  && ok "…and the ServiceAccount is declared in agent-coordinator" || bad "service account object" "not in rbac.yaml"
+# island-intake-read: get/list only, on exactly the four kinds (acceptance 1)
+got="$(yq -r 'select(.kind == "ClusterRole" and .metadata.name == "island-intake-read") | .rules[]
+        | (.apiGroups | join(",")) + ":" + (.resources | sort | join(",")) + ":" + (.verbs | sort | join(","))' "$CDIR/rbac.yaml" | nb | sort | tr '\n' ';')"
+[ "$got" = ":resourcequotas:get,list;argoproj.io:cronworkflows,workflowtemplates:get,list;monitoring.coreos.com:prometheusrules:get,list;" ] \
+  && ok "island-intake-read = get, list on resourcequotas, prometheusrules, cronworkflows, workflowtemplates" || bad "island-intake-read" "$got"
+# no ClusterRole the SA holds carries a write verb (the executor's task-result Role is the chart's, not this app's)
+got="$(for f in "$CDIR"/*.yaml; do yq -r 'select(.kind == "ClusterRole" and (.metadata.name == "island-intake-read" or .metadata.name == "agent-read-infra" or .metadata.name == "agent-read-app"))
+        | .metadata.name as $n | .rules[] | .verbs[] | select(. != "get" and . != "list" and . != "watch") | $n + ":" + .' "$f"; done | nb | sort -u | tr '\n' ' ')"
+n="$(for f in "$CDIR"/*.yaml; do yq -r 'select(.kind == "ClusterRole" and (.metadata.name == "island-intake-read" or .metadata.name == "agent-read-infra" or .metadata.name == "agent-read-app")) | .metadata.name' "$f"; done | nb | grep -c .)"
+{ [ -z "$got" ] && [ "$n" = 3 ]; } && ok "the three ClusterRoles it holds carry get/list/watch only" || bad "a write verb" "roles read: $n; $got"
+# the image: agent-base, untagged in the manifest; ONE kustomization entry carries the tag, as a one-line flow
+# mapping — a line that STARTS with `newTag:` is rewritten by the agent-coordinator deploy-pin with a coordinator tag
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.image')" = registry.teststuff.net/agent-base ] \
+  && ok "the sitting's image is agent-base, with no tag in the manifest" || bad "image" "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.image')"
+BASE_TAG="$(yq -r '.images[] | select(.name == "registry.teststuff.net/agent-base") | .newTag' "$KZ")"
+{ grep -qE '^[0-9]{4}\.[0-9]+\.[0-9]+-g[0-9a-f]{12}(\.[0-9]+)?$' <<< "$BASE_TAG" \
+    && grep -qxF "  - { name: registry.teststuff.net/agent-base, newTag: $BASE_TAG }" "$KZ" \
+    && [ "$(grep -cE '^[[:space:]]+newTag:' "$KZ")" = 1 ] \
+    && [ "$(yq -r '.images[] | select(.name == "registry.teststuff.net/agent-coordinator") | .newTag' "$KZ")" != "$BASE_TAG" ]; } \
+  && ok "kustomization pins agent-base on ONE flow-style line ($BASE_TAG); the only \`newTag:\`-led line stays the coordinator's" \
+  || bad "agent-base pin" "newTag='$BASE_TAG'; newTag-led lines: $(grep -cE '^[[:space:]]+newTag:' "$KZ")"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.env[] | select(.name == "HOME") | .value')" = /home/devbox ] \
+  && ok "HOME is the base image's user's (/home/devbox)" || bad "HOME" "not /home/devbox"
+# the island's devbox: the two tools the pod image does not pre-bake, each locked for the pod's platform
+DJ="$REPO/islands/intake/devbox.json"; DL="$REPO/islands/intake/devbox.lock"
+{ [ "$(jq -r '.packages | keys | sort | join(" ")' "$DJ" 2>/dev/null)" = "prometheus yq-go" ] \
+    && [ "$(jq -r '.packages.prometheus.outputs | join(",")' "$DJ" 2>/dev/null)" = cli ]; } \
+  && ok "islands/intake/devbox.json: only what the image lacks — prometheus (its cli output = promtool), yq-go" || bad "devbox.json" "$(jq -c '.packages' "$DJ" 2>/dev/null)"
+got="$(jq -rn --slurpfile d "$DJ" --slurpfile l "$DL" '[$d[0].packages | keys[] | select(($l[0].packages[. + "@latest"].systems["x86_64-linux"].outputs // []) | length == 0)] | join(" ")' 2>/dev/null)" || got="unreadable"
+[ -z "$got" ] && ok "…and devbox.lock resolves every one for x86_64-linux" || bad "devbox.lock" "unlocked: $got"
+# versions: the repo-root lock's entry, whole, wherever the root carries the package (acceptance 3)
+got="$(jq -rn --slurpfile i "$DL" --slurpfile r "$REPO/devbox.lock" '[$i[0].packages | to_entries[] | select($r[0].packages[.key] != null and $r[0].packages[.key] != .value) | .key] | join(" ")' 2>/dev/null)" || got="unreadable"
+n="$(jq -rn --slurpfile i "$DL" --slurpfile r "$REPO/devbox.lock" '[$i[0].packages | keys[] | select($r[0].packages[.] != null)] | length' 2>/dev/null)" || n=0
+{ [ -z "$got" ] && [ "$n" -ge 3 ]; } && ok "the lock's entries are the repo-root devbox.lock's wherever the root has the package ($n of them)" || bad "lock vs root" "differs: $got (shared: $n)"
+
 # ── the workflow's own script, end to end, stubbed ──────────────────────────────────────────────
 section "island-intake-argo.yaml — the script, run"
 # the launcher script, from its FILE; the manifest's bootstrap (clone → exec the script) runs it, its exec
@@ -560,13 +610,28 @@ echo "curl $*" >> "$H/curl.calls"
 # a pushgateway write (`--data-binary @-`): keep the exposition text the launcher piped in
 case " $* " in *" --data-binary @- "*) cat >> "$H/pgw.body";; esac
 EOF
+cat > "$BIN/devbox" <<'EOF'
+#!/bin/bash
+# devbox stub: the bootstrap's two calls, recorded with the directory they were made from.
+# `install` answers STUB_DEVBOX_INSTALL_RC; `run … -- <command>` starts the command where the real one does —
+# in the devbox's own directory (--config), NOT the caller's — so a launch that leans on the caller's cwd fails here too
+echo "devbox $* (cwd $PWD)" >> "$H/devbox.calls"
+cfg=""; args=("$@"); for i in "${!args[@]}"; do [ "${args[$i]}" = --config ] && cfg="${args[$((i + 1))]}"; done
+case "$1" in
+  install) exit "${STUB_DEVBOX_INSTALL_RC:-0}";;
+  run) while [ $# -gt 0 ] && [ "$1" != -- ]; do shift; done; shift
+       [ -n "$cfg" ] && { cd "$cfg" || exit 96; }
+       exec "$@";;
+esac
+exit 95
+EOF
 chmod +x "$BIN"/*
 echo '[]' > "$TMP/pile-empty.json"   # the pile source's seam: an empty pile unless a row sets PILE_JSON
 echo '{}' > "$TMP/refs-empty.json"   # the target-state seam: a row that needs a target sets REFS_JSON (a lookup here fails loud, never reaches gh)
 # the wait source reads the same pile seam; its cap is 0 unless a row sets WAIT_MAX, so the dig/pile/review rows
 # below see exactly the sittings they always saw (the gap source's specs-index default, the same move)
 run_script() { # <mode>
-  rm -rf "$TMP/work" "$TMP/up"/* "$TMP/run"/*; : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
+  rm -rf "$TMP/work" "$TMP/up"/* "$TMP/run"/*; : > "$TMP/claude.calls"; : > "$TMP/curl.calls"; : > "$TMP/devbox.calls"; mkdir -p "$TMP/work"
   ( cd "$TMP" && H="$TMP" PATH="${RUN_PATH:-$BIN}:$PATH" HOME="$TMP/home" MODE="$1" ISLAND=gateway \
       INTAKE_WAIT_MAX="${WAIT_MAX:-0}" INTAKE_REFS_JSON="${REFS_JSON:-$TMP/refs-empty.json}" \
       INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" INTAKE_PRS_JSON="${PRS_JSON:-$TMP/pile-empty.json}" \
@@ -583,6 +648,14 @@ INTAKE-RULED: dig-2026-10-25/$R1/finding-2 close -
 EOF
 run_script apply; rc=$?
 [ "$rc" = 0 ] && ok "apply run exits 0" || bad "apply run" "rc=$rc; $(tail -5 "$TMP/run.log")"
+# the bootstrap's two devbox calls: install, then the launcher THROUGH `devbox run` in islands/intake/ — the stub
+# starts the command in that directory, as devbox does, so the sitting ran only because the launch returns to the clone root
+{ [ "$(sed -n 1p "$TMP/devbox.calls")" = "devbox install --config islands/intake (cwd $TMP/work/homelab)" ] \
+    && [ "$(sed -n 2p "$TMP/devbox.calls")" = "devbox run --config islands/intake -- bash $TMP/run/island-intake-launch.sh (cwd $TMP/work/homelab)" ] \
+    && [ "$(grep -c . "$TMP/devbox.calls")" = 2 ]; } \
+  && ok "the bootstrap installs the island's devbox and runs the launcher through \`devbox run\` in islands/intake/" || bad "devbox run" "$(cat "$TMP/devbox.calls")"
+[ "$(jq -c '.projects | to_entries | map([.key, .value.hasTrustDialogAccepted])' "$TMP/home/.claude.json" 2>/dev/null)" = "[[\"$TMP/work/homelab\",true]]" ] \
+  && ok "…and seeds claude's workdir trust for the clone (the base image seeds a worker's /work/repo only)" || bad "trust seed" "$(cat "$TMP/home/.claude.json" 2>&1 | head -2)"
 [ -s "$TMP/claude.calls" ] && grep -q -- "--model opus" "$TMP/claude.calls" && ok "one sitting, on the resolved model" || bad "session" "$(cat "$TMP/claude.calls")"
 grep -q "Read islands/intake/rules/intake.md IN FULL" "$TMP/up/brief.md" 2>/dev/null && grep -q "mode: apply" "$TMP/up/brief.md" \
   && jq -e '.inputs | length == 2' "$TMP/up/inputs.json" >/dev/null 2>&1 \
@@ -614,6 +687,19 @@ RUN_ENV="INTAKE_NOW=garbage" run_script apply; rc=$?   # `date -d @garbage` in a
 { [ "$rc" = 1 ] && [ ! -s "$TMP/claude.calls" ] && grep -q "selection failed" "$TMP/run.log"; } \
   && ok "a selector that dies (exit 1, no selection written) is a failure for Argo to retry — never read as a hold" \
   || bad "fail-open hold" "rc=$rc $(tail -2 "$TMP/run.log")"
+
+rm -f "$TMP/pgw.body"; RUN_ENV="STUB_DEVBOX_INSTALL_RC=1 PUSHGATEWAY=http://pgw" run_script apply; rc=$?
+{ [ "$rc" = 1 ] && [ ! -s "$TMP/claude.calls" ] && [ "$(grep -c . "$TMP/devbox.calls")" = 1 ] && grep -q "the island's devbox did not install" "$TMP/run.log" \
+    && grep -qx 'island_intake_probe_ok 0' "$TMP/pgw.body" && grep -qx 'island_intake_session_ran 0' "$TMP/pgw.body" \
+    && grep -q '/metrics/job/island_intake/island/gateway' "$TMP/curl.calls"; } 2>/dev/null \
+  && ok "the island's devbox does not install → exit 1 for Argo to retry, no session, no \`devbox run\`, the gauges say probe_ok 0" \
+  || bad "devbox install failed" "rc=$rc calls=$(grep -c . "$TMP/devbox.calls") $(tail -2 "$TMP/run.log")"
+# the "did not start" push carries every series the script's own _push does (a gauge added to one and not the other goes stale silently)
+RUN_ENV="PUSHGATEWAY=http://pgw" run_script apply
+sed -n 's/^\(island_intake_[a-z_]*\({[^}]*}\)\{0,1\}\) .*/\1/p' "$TMP/pgw.body" | sort | uniq -c | awk '{print $1}' | sort -u > "$TMP/pgw.counts"
+[ "$(cat "$TMP/pgw.counts")" = 2 ] && ok "…and its series are exactly the script's own \`_push\` series" \
+  || bad "did-not-start series" "$(sed -n 's/^\(island_intake_[a-z_]*\({[^}]*}\)\{0,1\}\) .*/\1/p' "$TMP/pgw.body" | sort | uniq -c | awk '$1 != 2' | tr '\n' ' ')"
+rm -f "$TMP/pgw.body"
 
 receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
   "[{\"input\":\"dig-2026-10-25/$R1/finding-2\",\"outcome\":\"close\",\"refs\":[]},{\"input\":\"dig-2026-10-26/$R2/finding-2\",\"outcome\":\"fold\",\"refs\":[]}]"
@@ -664,6 +750,18 @@ PILE_JSON="$PISS" run_script apply; rc=$?
     && grep -qF 'http://agent-gateway.agent-egress.svc.cluster.local:8080/' "$TMP/up/brief.md" \
     && grep -qF '/var/run/secrets/agent-gateway/token' "$TMP/up/brief.md"; } \
   && ok "…and the in-cluster addresses of the live reads (Prometheus, Alertmanager, the gateway + its caller token)" || bad "brief live reads" "missing an address"
+# the two reads of homelab#3577, each with its control line, for EVERY island (the launcher holds no island branch)
+{ grep -qF "curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/query_range" "$TMP/up/brief.md" \
+    && grep -qF "control first: curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/labels" "$TMP/up/brief.md" \
+    && grep -qF 'kubectl get <kind> -n <ns> -o json' "$TMP/up/brief.md" \
+    && grep -qF 'control first: kubectl auth can-i get <kind> -n <ns>' "$TMP/up/brief.md" \
+    && grep -q 'A `Forbidden` .* is a FACT to report .* never an empty answer' "$TMP/up/brief.md"; } \
+  && ok "…plus Loki (tenant header = the namespace) and the read-only kube API, each with a control line; a Forbidden is a fact, never an empty answer" \
+  || bad "brief live reads (loki, kube)" "$(grep -n -e loki -e kubectl "$TMP/up/brief.md" | head -4)"
+# the Loki query is the deep dig's own line (one home is a later cleanup): same host, path, tenant header and parameters
+LOKI_Q="curl -sG -H 'X-Scope-OrgID: <namespace>' http://loki.loki.svc:3100/loki/api/v1/query_range --data-urlencode 'query={namespace=\"<ns>\",pod=~\"<pod>.*\"}' --data-urlencode 'start=<unix-ns>' --data-urlencode 'limit=500'"
+{ grep -qF "$LOKI_Q" "$REPO/agents/coordinator/deep-dig-argo.yaml" && grep -qF "$LOKI_Q" "$TMP/up/brief.md"; } \
+  && ok "…the Loki query is the deep dig's line, verbatim" || bad "loki line" "the brief's and deep-dig-argo.yaml's differ"
 grep -qF 'AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID"' "$TMP/up/brief.md" \
   && ok "…the bucket read names the READER key by VARIABLE — no key value is rendered into the uploaded brief" || bad "brief reader key" "$(grep -n AWS_ACCESS "$TMP/up/brief.md")"
 [ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"$H#101\",\"seat\"],[\"$H#102\",\"requeue\"],[\"$H#103\",\"unchanged\"],[\"$H#107\",\"split\"],[\"$H#115\",\"forward\"]]" ] \

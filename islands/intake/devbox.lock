@@ -1,0 +1,109 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2026-11-14T08:26:23Z",
+      "resolved": "github:NixOS/nixpkgs/5d2b81a7a3be3e2f832879028e4d60abbf58e9a0?lastModified=1794644783&narHash=sha256-3GnIGIy15bMduoS9RnWqKTmsJLWThla42UFtm0S7%2Bus%3D"
+    },
+    "prometheus@latest": {
+      "last_modified": "2026-11-13T07:26:56Z",
+      "resolved": "github:NixOS/nixpkgs/e126e9e73c335158ff8279ac14d5f4afec153716#prometheus",
+      "source": "devbox-search",
+      "version": "3.16.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/m4ajc8wmgf3hfs66pdhd16cr3986zsa7-prometheus-3.16.0",
+              "default": true
+            },
+            {
+              "name": "cli",
+              "path": "/nix/store/72cb5p1gkgss4zcn09y502zdr8ij9mxm-prometheus-3.16.0-cli"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/0ih0y0jyzhyl8c9468n7fp4zs7gxkp9v-prometheus-3.16.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/m4ajc8wmgf3hfs66pdhd16cr3986zsa7-prometheus-3.16.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2pxmvzl7ji56rnxnx76v63gg275aprn6-prometheus-3.16.0",
+              "default": true
+            },
+            {
+              "name": "cli",
+              "path": "/nix/store/xwgh0rslk3l25hn55jwb72qasjc9l2x3-prometheus-3.16.0-cli"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/y99krh1j5fcn6pgxjrlclvhdh1lkd2jx-prometheus-3.16.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/2pxmvzl7ji56rnxnx76v63gg275aprn6-prometheus-3.16.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xd2q7ix36b4p0nq8bd5x3hp1hp3fyg4n-prometheus-3.16.0",
+              "default": true
+            },
+            {
+              "name": "cli",
+              "path": "/nix/store/n95jn68h5g49dvxh0n0f5qniv3n5vf1h-prometheus-3.16.0-cli"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/h3zr1y32vhdhfr1j9dilh2mhca8kxyl2-prometheus-3.16.0-doc"
+            }
+          ],
+          "store_path": "/nix/store/xd2q7ix36b4p0nq8bd5x3hp1hp3fyg4n-prometheus-3.16.0"
+        }
+      }
+    },
+    "yq-go@latest": {
+      "last_modified": "2026-11-13T07:26:56Z",
+      "resolved": "github:NixOS/nixpkgs/e126e9e73c335158ff8279ac14d5f4afec153716#yq-go",
+      "source": "devbox-search",
+      "version": "4.54.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/mmywmks0m2cyp000h5y3gs5yf17fq8gg-yq-go-4.54.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/mmywmks0m2cyp000h5y3gs5yf17fq8gg-yq-go-4.54.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/kafld15aw9rx89xwk2g0w9nwnnlwg70a-yq-go-4.54.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/kafld15aw9rx89xwk2g0w9nwnnlwg70a-yq-go-4.54.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pr67v9v2kahjbkyv3b3gw00aacbf697h-yq-go-4.54.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pr67v9v2kahjbkyv3b3gw00aacbf697h-yq-go-4.54.1"
+        }
+      }
+    }
+  }
+}
