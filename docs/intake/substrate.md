@@ -5,6 +5,8 @@
 > replaces only its §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
+Body shape: edit
+
 - **Repo** `teststuffstash/homelab`; no single root — `tofu/` (main root + `cloudflare/`,
   `provisioning/`), `machines/`, `SERVICES.md`, the substrate `argocd/resources/` dirs (`garage-*`,
   `longhorn-*`, `talos-substrate`, `postgres`, `pg-backup`, `node-fstrim`, `smartctl-exporter`,

@@ -5,6 +5,8 @@
 > island rows of its §What you read table. Island list + owning docs:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
+Body shape: edit
+
 - **Repo** `teststuffstash/homelab`; island root `agents/` (+ `docs/agents/`, `.agents/`,
   `tofu/github/`, `argocd/resources/openrouter-proxy/`, `argocd/resources/agentstack/`). Its sibling
   repos (`agent-runtime`, `openrouter-operator`) are outside the selector's reach — a sitting on

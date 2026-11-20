@@ -6,6 +6,8 @@
 > file replaces only its §Island facts and the island rows of its §What you read table. Island index:
 > [`islands/README.md`](../../islands/README.md).
 
+Body shape: spec
+
 - **Repo** `teststuffstash/homelab`; island root `islands/retro/` (provisional location — the
   operator picks the final home); specs `islands/retro/specs/` (`RETRO-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
@@ -38,7 +40,7 @@
 - **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first
   deliverable is a tests root under `islands/retro/` whose `rule("RETRO-…")`-labelled tests take
   their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
-  can exist. Rows are COPIED from the page into the issue (`## Key rows`), never re-authored.
+  can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
 - **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
   `islands/retro/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
   this root. No tests root is declared and no evidence exists, so the review sees none: an

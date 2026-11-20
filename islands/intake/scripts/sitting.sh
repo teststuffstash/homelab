@@ -134,8 +134,7 @@ if ! _admit ""; then
 fi
 A_RAIL="$rail"; A_MODEL="$TS_MODEL"
 
-FACTS="§Island facts at the end of islands/intake/rules/intake.md"
-[ "$ISLAND" = gateway ] || FACTS="docs/intake/$ISLAND.md (in place of intake.md's §Island facts — the gateway's)"
+FACTS="docs/intake/$ISLAND.md"   # every island's facts file, the gateway's included (ADR-160; intake.md §Island facts)
 rm -rf /tmp/review; mkdir -p /tmp/review/issues
 {
 cat <<BRIEF
@@ -143,7 +142,7 @@ You are the ISLAND INTAKE sitting for the \`$ISLAND\` island, running unattended
 (agents/coordinator/island-intake-argo.yaml). Your working tree is a fresh clone of homelab
 master at /work/homelab (cwd). Read islands/intake/rules/intake.md IN FULL first and follow it exactly —
 it is your brief; this prompt only adds the inputs, the mode and the receipt protocol.
-Your island's facts: $FACTS.
+Your island's facts file (intake.md §Island facts): $FACTS — read it IN FULL after the brief.
 
 mode: $MODE
 review: $REVIEW
@@ -320,7 +319,8 @@ NFWI="$(jq -r '.false_waits.items // 0' /tmp/wait-ledger.json 2>/dev/null)" || N
 # ── 4. REVIEW AND REPAIR (REVIEW=review-repair; islands/intake/rules/intake.md §Review and repair) ─────────
 # The author's `## Review units` lines (`unit: <owner/repo>#<n> [#<child> …] base=<sha>`,
 # `rows: <owner/repo>#<n> base=<sha>`) of THIS repo whose issues a queue/goal ruling of this run
-# names: one unit-lens session per `unit:` line, one rows-lens session per `rows:` line — each admitted
+# names: one unit-lens session per `unit:` line, one rows-lens session per `rows:` line (the author
+# writes one for a `spec` body only: an `edit` body has no `rows:` line, so no rows lens) — each admitted
 # on its own (_admit) and CONFINED (env -i, no token; Read scoped to its case directory, Write to its
 # one output file, `git show` / `git grep` for the base — the lens briefs' frozen-case form). The rows
 # lens is the specs reviewer's staged read (agents/specs-reviewer-session.sh review_run): pass 1 sees
@@ -432,13 +432,13 @@ _snippets_process() { # → SNIP = an extracted wheel of the release the island'
      && python3 -m zipfile -e "${SNIPPETS_WHEEL_LOCAL#file://}" /tmp/review/snippets; then SNIP=/tmp/review/snippets; return 0; fi
   PIN_NOTE="the pinned snippets wheel v$pin could not be fetched/verified"; return 1
 }
-_mask() { # <body file> → stdout: its `## Spec changes` / `## Key rows` section, every description cell keyed (the pinned mask_page); rc 3 = nothing to mask
+_mask() { # <body file> → stdout: its `## Spec changes` section, every description cell keyed (the pinned mask_page); rc 3 = nothing to mask (an `edit` body)
   python3 -c '
 import re, sys
 sys.path.insert(0, sys.argv[1])
 from allure_behavior_snippets.evidence import mask_page
 body = open(sys.argv[2], encoding="utf-8").read().split("\n")
-start = next((i for i, l in enumerate(body) if re.match(r"##\s+(Spec changes|Key rows)\b", l)), None)
+start = next((i for i, l in enumerate(body) if re.match(r"##\s+Spec changes\b", l)), None)
 if start is None:
     sys.exit(3)
 end = next((i for i in range(start + 1, len(body)) if re.match(r"##\s+\S", body[i])), len(body))

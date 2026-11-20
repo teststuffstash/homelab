@@ -5,6 +5,8 @@
 > §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
+Body shape: edit
+
 - **Repo** `teststuffstash/homelab`; paths `.github/renovate-global.json`, `version-sets/`,
   `argocd/resources/version-sets/`, `scripts/{renovate-*,lock-intake-lint*,dependency-coverage*}`,
   and the owning docs.

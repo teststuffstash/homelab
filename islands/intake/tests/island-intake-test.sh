@@ -587,6 +587,14 @@ run_script apply; rc=$?
 grep -q "Read islands/intake/rules/intake.md IN FULL" "$TMP/up/brief.md" 2>/dev/null && grep -q "mode: apply" "$TMP/up/brief.md" \
   && jq -e '.inputs | length == 2' "$TMP/up/inputs.json" >/dev/null 2>&1 \
   && ok "brief names the island brief + mode; the inputs ride beside it" || bad "brief" "$(head -3 "$TMP/up/brief.md" 2>/dev/null)"
+# the facts file: the launcher names docs/intake/<island>.md for EVERY island — the gateway's is a file like the
+# others (intake.md §Island facts is a pointer, it holds no island's facts), and no branch on the island's name picks it
+{ grep -qF "Your island's facts file (intake.md §Island facts): docs/intake/gateway.md" "$TMP/up/brief.md" \
+    && [ -s "$TMP/work/homelab/docs/intake/gateway.md" ] && ! grep -q 'Island facts at the end' "$TMP/up/brief.md" \
+    && ! grep -qE '"?\$\{?ISLAND\}?"? *(=|==|!=) *"?gateway' "$REPO/islands/intake/scripts/sitting.sh" \
+    && ! grep -q '^## Island facts — ' "$REPO/islands/intake/rules/intake.md"; } \
+  && ok "the gateway sitting is handed docs/intake/gateway.md like every island its file — no \`if gateway\` branch, no facts block in the brief" \
+  || bad "facts hand-over" "$(grep -n 'facts' "$TMP/up/brief.md" 2>/dev/null | head -3)"
 [ "$(jq -c '[.ruled[] | [.input, .outcome]]' "$TMP/up/receipt.json" 2>/dev/null)" = "[[\"dig-2026-10-25/$R1/finding-2\",\"queue\"],[\"dig-2026-10-26/$R2/finding-2\",\"fold\"]]" ] \
   && ok "receipt keeps only THIS run's ids, known outcomes, first line per id" || bad "receipt" "$(jq -c .ruled "$TMP/up/receipt.json" 2>/dev/null)"
 jq -e '.schema == "island-intake-receipt/v1" and .mode == "apply" and .session_ran == true' "$TMP/up/receipt.json" >/dev/null 2>&1 \
@@ -1091,6 +1099,20 @@ python3 -I "$REPO/islands/intake/scripts/intake-wait-cases.py" --git validate > 
   && grep -q '10 case(s) valid (train 7, heldout 3), 0 error' "$TMP/cases.log" \
   && ok "the ten recorded wait cases validate (train 7, held out 3; rules commits checked unless the checkout is shallow)" || bad "wait cases" "$(tail -5 "$TMP/cases.log")"
 
+# ── the facts files name their island's body shape (intake.md §A queue-ready body) ────────────────────────
+# Expected from homelab#3576 acceptance 5: `spec` for gateway, scan, launch, retro; `edit` for agent-loop,
+# substrate, mgmt-box, router-pair, dependency-upgrades — and every docs/intake/*.md carries exactly ONE
+# such line, so a new facts file without it fails here.
+section "facts files — one \`Body shape:\` line each"
+shape_of() { grep -E '^Body shape: ' "$REPO/docs/intake/$1.md" 2>/dev/null | sed 's/^Body shape: //' | tr '\n' ' '; }
+for row in "gateway:spec" "scan:spec" "launch:spec" "retro:spec" "agent-loop:edit" "substrate:edit" "mgmt-box:edit" "router-pair:edit" "dependency-upgrades:edit"; do
+  isl="${row%%:*}"; want="${row#*:}"; got="$(shape_of "$isl")"
+  [ "$got" = "$want " ] && ok "docs/intake/$isl.md: Body shape: $want" || bad "body shape $isl" "want '$want' got '$got'"
+done
+nofile=""; for f in "$REPO"/docs/intake/*.md; do
+  { [ "$(grep -cE '^Body shape: (spec|edit)$' "$f")" = 1 ] && [ "$(grep -c '^Body shape:' "$f")" = 1 ]; } || nofile="$nofile $(basename "$f")"; done
+[ -z "$nofile" ] && ok "every docs/intake/*.md carries exactly one \`Body shape: spec|edit\` line" || bad "body shape line" "missing or malformed in:$nofile"
+
 # ── the workflow's review stage, run (islands/intake/rules/intake.md §Review and repair) ─────────────────────
 # Stubs: `claude` answers per session (author / unit lens / rows pass 1 / rows pass 2 / repair, told
 # apart by the prompt) and writes each lens's ONE file where its prompt says; `gh` records. The
@@ -1280,6 +1302,46 @@ cp "$TMP/r-author.keep" "$TMP/r-author.out"
 review_run dry-run
 { ! grep -qE 'issue comment|/labels' "$TMP/gh.calls" 2>/dev/null && grep -q 'would carry +agent-fix,task/fix,agent/queued' "$TMP/run.log" && grep -q '^repair ' "$TMP/r.calls"; } \
   && ok "dry-run: lenses and repair run, nothing is written to GitHub" || bad "review dry-run" "$(cat "$TMP/gh.calls" 2>/dev/null)"
+
+# an `edit` body (intake.md §A queue-ready body: exact replacements + check commands, `## Decision`, no rows
+# table) goes through the unit lens ONLY. The fixture is homelab#3563's queued body with its `## Key rows`
+# section rewritten as `## Decision` (homelab#3576 acceptance 6). §Review and repair step 1: the author writes
+# a `rows:` line for a `spec` body only — so the units are one `unit:` line, and the launcher, which runs the
+# rows lens per `rows:` line, starts no rows session (no pass 1, no pass 2).
+cp "$TMP/body-9.md" "$TMP/body-9.spec"; cp "$TMP/r-author.out" "$TMP/r-author.spec"
+cp "$REPO/islands/intake/tests/fixtures/edit-body-3563.md" "$TMP/body-9.md"
+{ grep -q '^## Decision' "$TMP/body-9.md" && ! grep -qE '^## (Spec changes|Key rows)' "$TMP/body-9.md" && ! grep -q '^| *description *|' "$TMP/body-9.md"; } \
+  && ok "the edit fixture: \`## Decision\`, no \`## Spec changes\` / \`## Key rows\`, no rows table" || bad "edit fixture shape" "$(grep -n '^## ' "$TMP/body-9.md" | tr '\n' ' ')"
+cat > "$TMP/r-author.out" <<EOF
+… the first pass, an edit body …
+## Review units
+- unit: $H#9 base=$(git -C "$REPO" rev-parse HEAD)
+INTAKE-RULED: dig-2026-10-26/$R2/finding-2 queue $H#9
+INTAKE-HOLD: $H#9 add=agent-fix,task/fix,agent/queued
+EOF
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+{ [ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit repair " ] \
+    && [ "$(jq -c '[.review.lenses[] | [.lens, .status, .runs]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["unit","ran",1]]' ] \
+    && [ "$(jq -c '[.review.units[].kind]' "$TMP/up/receipt.json" 2>/dev/null)" = '["unit"]' ] \
+    && grep -q '^## Decision' "$TMP/run/review/case-unit-0/issues/9.md" && [ -z "$(find "$TMP/run/review" -maxdepth 1 -name 'rows-pass1*' -o -maxdepth 1 -name 'case-rows*')" ] \
+    && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
+  && ok "an \`edit\` body: sessions author → unit lens → repair; the unit lens read the body, NO rows lens ran (no pass 1, no pass 2), still labelled" \
+  || bad "edit body review" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ') | $(jq -c .review "$TMP/up/receipt.json" 2>/dev/null)"
+# …and a `rows:` line an author wrote for it by mistake starts no rows session either: the body has no
+# `## Spec changes` section to mask, so the launcher records the lens as skipped and the queue is not held
+printf -- '- rows: %s base=%s\n' "$H#9" "$(git -C "$REPO" rev-parse HEAD)" >> "$TMP/r-author.out"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+{ [ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit repair " ] \
+    && [ "$(jq -c '[.review.lenses[] | [.lens, .status, .runs]]' "$TMP/up/receipt.json" 2>/dev/null)" = '[["unit","ran",1],["rows","skipped: #9 carries no description-keyed spec table (nothing to mask)",0]]' ] \
+    && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
+  && ok "…a mistaken \`rows:\` line on an \`edit\` body: recorded skipped (nothing to mask), no rows session, still labelled" \
+  || bad "edit body, stray rows line" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ') | $(jq -c .review.lenses "$TMP/up/receipt.json" 2>/dev/null)"
+# a body that still says `## Key rows` over a description table is not a `spec` body: nothing is masked
+printf '## Deliverable\nx\n## Key rows\n| description | a || b |\n|---|---||---|\n| "old heading" | 1 || 2 |\n' > "$TMP/body-9.md"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+[ "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')" = "author unit repair " ] \
+  && ok "\`## Key rows\` is no longer a rows-lens heading: only \`## Spec changes\` is masked and read" || bad "key rows heading" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ')"
+cp "$TMP/body-9.spec" "$TMP/body-9.md"; cp "$TMP/r-author.spec" "$TMP/r-author.out"
 
 rm -f "$TMP/r.calls" "$TMP"/prompt-*.txt; RUN_PATH="$RBIN:$BIN" RUN_ENV="REVIEW=off" run_script apply
 { [ "$(grep -c . "$TMP/r.calls")" = 1 ] && grep -q 'REVIEW: off' "$TMP/prompt-author.txt" && ! grep -q 'INTAKE-HOLD:' "$TMP/prompt-author.txt"; } 2>/dev/null \

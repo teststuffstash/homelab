@@ -5,6 +5,8 @@
 > [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — this file replaces only its §Island facts and
 > island read rows. Island list: [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
+Body shape: edit
+
 - **Repo** `teststuffstash/homelab`; paths `ansible/opnsense-*` + `ansible/roles/opnsense-*` +
   `ansible/group_vars/opnsense.yml`, `ansible/router-nodes/`, `ansible/test-vm/`,
   `ansible/{,roles/}pve-router-killswitch*`, `opnsense/`, `tofu/opnsense-{router,test}.tf`,

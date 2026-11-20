@@ -5,6 +5,8 @@
 > replaces only its §Island facts and island read rows. Island list:
 > [`spikes/context-and-autonomy.md`](../spikes/context-and-autonomy.md) §C7.
 
+Body shape: edit
+
 - **Repo** `teststuffstash/homelab`; island root `mgmt/` (`mgmt/nixos/`, `mgmt/scripts/`), plus
   `argocd/resources/{mgmt-metrics,upgrade-lease-reader,kube-prometheus-stack-lease}/` (the [upgrade lease](../dependency-upgrades.md), ADR-150) and the box
   verbs `scripts/{node,host,runner}-maintenance*`, `scripts/maintenance-window.sh`,
