@@ -1885,7 +1885,8 @@ provider the ride failed over from keeps its strike. `gateway_strikes_total{clas
 them ([GW-METRICS](metrics.md#gw-metrics)).
 
 **Worlds** (the `world` column): `policy-enforce` for the caller rows, `policy-default` with the fake
-upstream's behaviour after the `·` for the rest. Legend, every table of this rule: `the worker session` =
+upstream's behaviour after the `·` for the rest (there a report the row gives to the judge presents the
+judge's token; every other call presents none). Legend, every table of this rule: `the worker session` =
 the platform loop admitted `{platform, worker, task homelab-2700, round 1}` on the policy walk
 (opencode, `opencode-go/deepseek-v4.1-flash`, harness opencode); a strike cell reads
 `{rail, model, harness, class, scope, source}`, `none` = no counted strike on the task; `series?` =
@@ -1958,15 +1959,18 @@ Legend: `answered` = what the fake upstream answers the session's request (`× 3
 
 #### After a relayed 429
 
-Legend: `sequence` = the session's requests and the consumer's report, in order; `strikes?` = the
+Legend: `sequence` = the session's requests and the reports, in order (the consumer's, sent with no
+caller token, unless the cell names the judge, who presents its own token); `strikes?` = the
 task's counted strikes afterwards; `outcome?` = the class `GET /sessions/{id}` shows stored; `series?`
-= the reported class's `gateway_strikes_total` series.
+= the reported class's `gateway_strikes_total` series (each reported class's, where two reporters report).
 
 | description | world | sequence | strikes? | outcome? | series? |
 |---|---|---|---|---|---|
 | a consumer outcome after a relayed 429 strikes nothing ⚖ | policy-default · upstream-429 | upstream-429, then the consumer reports unknown | none | unknown | {class="unknown",source="outcome"} 0 |
 | a harness that gave up on a 429 strikes nothing ⚖ | policy-default · upstream-429 | upstream-429, then the consumer reports harness-gave-up | none | harness-gave-up | {class="harness-gave-up",source="outcome"} 0 |
 | a 429 followed by a 2xx is no capacity death ⚖ | policy-default · upstream-429 | upstream-429, then upstream-ok on the same session, then the consumer reports unknown | {opencode, opencode-go/deepseek-v4.1-flash, opencode, unknown, model, outcome} | unknown | {class="unknown",source="outcome"} 1 |
+| a judge's wrong-verdict after a relayed 429 still strikes ⚖ | policy-default · upstream-429 | upstream-429, then the judge reports wrong-verdict | {opencode, opencode-go/deepseek-v4.1-flash, opencode, wrong-verdict, model, outcome} | wrong-verdict | {class="wrong-verdict",source="outcome"} 1 |
+| two reporters on one 429'd session: the consumer's unknown strikes nothing, the judge's wrong-verdict counts ⚖ | policy-default · upstream-429 | upstream-429, then the consumer reports unknown, then the judge reports wrong-verdict | {opencode, opencode-go/deepseek-v4.1-flash, opencode, wrong-verdict, model, outcome} | wrong-verdict | {class="wrong-verdict",source="outcome"} 1 · {class="unknown",source="outcome"} 0 |
 
 #### Refutation
 
