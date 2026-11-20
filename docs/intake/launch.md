@@ -66,6 +66,8 @@ Body shape: spec
 | What the old member does on the same case | the replay family the requirement's index row names: `bash agents/replay/run.sh agents/replay/fixtures/<family>` (families: [`agents/replay/families.tsv`](../../agents/replay/families.tsv)) | read-only; the old member is `agents/agent-session.sh` and the members the README lists |
 | The island's limits, their live values, its alert rules, a capacity or grants ledger | none of its own — nothing under `islands/launch/` is deployed, read or scheduled. The old member's are the agent loop's: [agent-loop.md §Sources](agent-loop.md#sources) | an item that turns on a live value is about the old member, and is the agent-loop island's |
 
+No row here is a series an experiment may read: a body on this island carries `Experiment: none` ([intake rules](../../islands/intake/rules/intake.md) §Experiment).
+
 Never: `docs/agents/` as a corpus; an edit under `agents/**`.
 
 ## What a ride can do

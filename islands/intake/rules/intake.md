@@ -127,8 +127,8 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
 
 | Outcome | When | Writes (apply mode) |
 |---|---|---|
-| **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths — paths the island's facts file adds to every issue, its bookkeeping files, do not count), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body); then §Review and repair; then labels `agent-fix` + `task/fix` or `task/build` + `agent/queued`; one `intake: queue — <reason>` comment |
-| **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; then §Review and repair; then `agent/queued` on the CHILDREN only; one `intake: goal — <reason>` comment on each absorbed input |
+| **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths — paths the island's facts file adds to every issue, its bookkeeping files, do not count), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body); then §Review and repair; then labels `agent-fix` + `task/fix` or `task/build` + `agent/queued` (+ `experiment/open` when the body carries a block — §Experiment); one `intake: queue — <reason>` comment |
+| **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; then §Review and repair; then `agent/queued` on the CHILDREN only (+ `experiment/open` on a child that carries a block — §Experiment); one `intake: goal — <reason>` comment on each absorbed input |
 | **seat** (the operator) | an entry of step 3's closed list holds — or the item waits only on an open issue or PR (step 3) | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <the entry: the one fact needed>` and, on its own line, `blocked-on: human` — or `blocked-on: issue=<n>` / `pr=<n>` when no entry holds and the wait is that item (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
 | **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate (§Hard limits — whose issue it is) |
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; §Hard limits — whose issue it is) |
@@ -261,6 +261,46 @@ deciding: decide EVERY input. Only an input whose outcome would be `queue` and a
 left for the next sitting with no write at all (the selector re-offers it) — the report lists it as
 `deferred (cap)`.
 
+## Experiment — the ruling's own check, written before the result
+
+A `queue` or `goal` ruling claims that its means removes the problem. Where a series can show the
+problem, the body says how that claim is read after the merge: a scheduled read decides it from the
+series, with no session in its path, and a failed one comes back to you as an input. You write it
+once the means is decided (steps 3–4), into every queue-ready body — a Goal's children; the Goal's
+own body carries none.
+
+- **One of two, always.** A body whose problem is visible in a Prometheus series carries one
+  `## Experiment` section; any other body carries the one line
+  `Experiment: none — <why no series can show it>`. Never both, never neither. Under a Goal the
+  section is on the child whose merge the claim is about; the other children carry the line.
+- **Shape.** One prose line, then one fenced `experiment` block. The body passes
+  `python3 -I islands/intake/scripts/experiment.py load --check <body file>` (exit 0; 3 with the
+  `none` line) before you post it; that script's header is the format, and no key is added to it.
+  `requirement` names the spec rule on a `spec` body, the alert or the `## Sources` row the decision
+  stood on on an `edit` body.
+- **Series.** The claim is read from a row of the facts file's `## Sources` whose note says
+  `experiment`. A facts file that marks no row gives `Experiment: none`.
+- **Baseline.** `baseline` is the `query`'s value over the baseline range, read by you:
+  `python3 -I islands/intake/scripts/experiment.py at --prometheus <the Prometheus of your live reads> --query '<the query, with $window>' --window <the baseline range> --at <its end, RFC3339>`.
+  The prose line gives that range and the count behind the number.
+- **Threshold.** `pass` is fixed before the result. Once the ruling comment is posted nobody edits
+  the section — not a re-read, not the worker.
+- **Window.** Long enough that the baseline rate expects at least three events in it, and at most
+  `7d`. When `7d` expects fewer: `Experiment: none — baseline too thin (<n> in <range>)`.
+- **"Stays at zero".** A claim that a count stays at zero sets `min_window` = `max_window` and
+  joins one `and on() (<the source was observable over $window>)` term to its `query` (the
+  exporter was scraped, the series existed), so that silence answers nothing instead of zero. The
+  prose line names each `and on()` term in plain words.
+- **A fix that changes its own measure** — the series, or the alert rule it would be judged by —
+  gets `Experiment: none — the fix changes its own measure`, or a query on a series the fix leaves
+  unchanged.
+- **The label.** A body that carries a block gets `experiment/open`, set with its queue labels in
+  the same write. A body with the `none` line never gets it.
+- **A failed experiment comes back.** A reopened issue whose comments carry the scheduled read's
+  experiment verdict is an undecided input, whatever earlier `intake:` outcome it carries: decide it
+  afresh through steps 1–5 with the verdict as a fact. Its new body carries a new block with a new
+  `id` in place of the old section — or the `none` line.
+
 ## Review and repair — before any label
 
 A `queue` or `goal` outcome (a parity issue you `file` and decide `queue` included) is reviewed once
@@ -309,6 +349,8 @@ A body has one of two named shapes. The island's facts file names its default in
 - **`edit`** — the item has no spec page: exact edits and check commands, a `## Decision`, no rows
   table.
 
+Both carry `## Experiment`, or its `none` line, after the part that decides the means (§Experiment).
+
 An item with no spec page on a `spec` island uses `edit`. No body carries a table written to fill
 a heading.
 
@@ -319,7 +361,7 @@ modes worth a conversation)"; the worker grows the boundary rows and the specs r
 them. **You write the key rows.** Trust the reviewer to catch a wrong row; do not hedge a row into
 prose to avoid being wrong — a row the reviewer bounces costs one round, a vague issue costs a ride.
 
-```markdown
+````markdown
 <machine block — written by issue_body.py set, never by hand:
  Touches=<the spec page, the test file, the src module — exact paths>
  Origin=<kept verbatim when the input already has one; else owner/repo#<the input, or the survivor>>
@@ -341,13 +383,22 @@ Requirement: `<RULE-ID>` on `<the spec page>` — world `<world>`.
 Index row: delete `⚑ gap (<date>, PR #N → work #M): …` verbatim / trim it to `<the remaining text>`.
 Unverified: <what you did not read on the wire — "verify during implementation">; never a fact the fix depends on.
 
+## Experiment
+<ONE line — the claim in plain words, the series, each `and on()` term in plain words, the baseline's range and the count behind it. For instance:> No widget job fails in the 7 d after the merge, while the widget exporter was scraped for over 95 % of the window — series `widget_job_failures_total`; baseline: 6 failed jobs of 41 over the 14 d to <the read's instant, RFC3339>.
+Written at intake, before the result. Not the ride's to change: no PR and no comment edits this section.
+
+```experiment
+{"id": "<island>-widget-jobs-not-failing", "requirement": "<the rule id, as in Requirement above>", "cases": [], "kpi": {"query": "(sum(increase(widget_job_failures_total[$window])) or vector(0)) and on() (min(avg_over_time(up{job=\"widget-exporter\"}[$window])) > 0.95)", "pass": "<= 0", "baseline": 6, "min_window": "7d", "max_window": "7d", "min_samples_query": "sum(increase(widget_jobs_total[$window]))", "min_samples": 20}}
+```
+<When no series can show the problem, the one line "Experiment: none — <why>" stands in place of this whole section (§Experiment).>
+
 ## Out of scope
 <the sibling gap on the same row that stays; what step 3 left to the operator>
-```
+````
 
 ### The `edit` shape — exact edits, no rows
 
-```markdown
+````markdown
 <machine block — written by issue_body.py set, never by hand:
  Touches=<the files the acceptance lines edit — exact paths>
  Origin=<as in the `spec` shape>
@@ -369,9 +420,13 @@ Options not taken, each with the reason it lost:
 - **<option>** — <the reason>
 Unverified: <as in the `spec` shape>; never a fact the fix depends on.
 
+## Experiment
+<As in the `spec` shape: the claim line, the line for the ride, one `experiment` block — its `requirement` names the alert or the `## Sources` row the decision stood on. Or the one line in its place.>
+Written at intake, before the result. Not the ride's to change: no PR and no comment edits this section.
+
 ## Out of scope
 <what stays as it is; what step 3 left to the operator>
-```
+````
 
 Every acceptance line is an exact replacement (the old text, the new text, the file) or a command
 with its expected output. The body carries no rows table.
@@ -465,7 +520,8 @@ Follow the consumer card's three acts exactly, with these pins:
   leaves the input open (nothing of its text is lost or closed).
 - **Idempotent writes.** Re-read labels and the last `intake:` comment immediately before writing;
   an item carrying any `agent/*` label or an earlier outcome is not yours this sitting — unless it
-  came as a `reread:` input, where `agent/blocked` or the `seat` outcome is exactly what you test.
+  came as a `reread:` input, where `agent/blocked` or the `seat` outcome is exactly what you test,
+  or was reopened by an experiment verdict (§Experiment).
 - **One comment per outcome**, first line `intake: <outcome> — <reason, one line>`; a `seat` adds
   `blocked-on: human` — or `blocked-on: issue=<n>` / `pr=<n>` (step 3) — on its own line. A reviewed outcome
   adds exactly one `intake: review` comment before it (§Review and repair). No second comment to "clarify".

@@ -1386,6 +1386,33 @@ python3 -I "$EXP" at --prometheus "$PROM/down" --window 1h --at 2026-11-02T09:20
   && ok "at: HTTP 500 exits 2 — nothing on stdout, the reason on stderr" || bad "at HTTP 500" "rc=$rc $(cat "$TMP/exp.out" "$TMP/exp.err" | head -3)"
 kill "$PROM_PID" 2>/dev/null; wait "$PROM_PID" 2>/dev/null
 
+# ── the rules write the experiment (homelab#3605; intake.md §Experiment) ─────────────────────────────────
+# Expected, from the issue's acceptance 2, 4 and 6: BOTH body templates of intake.md show `## Experiment` in
+# place — after the part that decides the means (`## Spec changes` / `## Decision`), before `## Out of scope` —
+# each with the one line telling the ride the section is not its to change; the `spec` template's example is a
+# section the loader accepts (exit 0, experiment.py's header). The `edit` template points at it and holds no block.
+section "intake.md — both body templates carry \`## Experiment\`"
+EXPY="$REPO/islands/intake/scripts/experiment.py"; RULES="$REPO/islands/intake/rules/intake.md"
+tpl() { # <shape> → stdout: that shape's template (the fenced block under its `### The `<shape>` shape` heading)
+  awk -v h="### The \`$1\` shape" 'index($0, h) == 1 {on = 1; next} on && /^### / {exit} on && /^````markdown$/ {inb = 1; next} inb && /^````$/ {exit} inb' "$RULES"; }
+for shp in "spec:## Spec changes" "edit:## Decision"; do
+  shape="${shp%%:*}"; means="${shp#*:}"; tpl "$shape" > "$TMP/tpl-$shape.md"
+  order="$(grep -nxE "$means|## Experiment|## Out of scope" "$TMP/tpl-$shape.md" | cut -d: -f2 | tr '\n' '|')"
+  [ "$order" = "$means|## Experiment|## Out of scope|" ] \
+    && ok "the \`$shape\` template: \`## Experiment\` after \`$means\`, before \`## Out of scope\`" || bad "template $shape" "headings: '$order'"
+  [ "$(awk '/^## Experiment$/{on=1; next} on && /^## /{exit} on' "$TMP/tpl-$shape.md" | grep -c "Not the ride's to change")" = 1 ] \
+    && ok "…and its section says, in one line, that it is not the ride's to change" || bad "template $shape worker line" "$(grep -c "Not the ride's to change" "$TMP/tpl-$shape.md")"
+done
+python3 -I "$EXPY" load --check "$TMP/tpl-spec.md"; rc=$?
+[ "$rc" = 0 ] && ok "the \`spec\` template's example section passes experiment.py load --check (exit 0)" || bad "template example" "exit $rc: $(python3 -I "$EXPY" load "$TMP/tpl-spec.md" 2>&1 >/dev/null)"
+# the fixture bodies of the body-shape rows (the `edit` one here; the `spec` one is built in the review section
+# below and checked there). The check can fail: the same body without its section is `absent` (exit 4).
+python3 -I "$EXPY" load --check "$REPO/islands/intake/tests/fixtures/edit-body-3563.md"; rc=$?
+[ "$rc" = 0 ] && ok "the \`edit\` fixture body passes experiment.py load --check" || bad "edit fixture experiment" "exit $rc"
+awk '/^## Experiment$/{skip=1; next} skip && /^## /{skip=0} !skip' "$REPO/islands/intake/tests/fixtures/edit-body-3563.md" > "$TMP/edit-no-exp.md"
+python3 -I "$EXPY" load --check "$TMP/edit-no-exp.md"; rc=$?
+[ "$rc" = 4 ] && ok "…and the same body without its section is absent (exit 4): the check can fail" || bad "edit fixture without a section" "exit $rc"
+
 # ── the facts files name their island's body shape (intake.md §A queue-ready body) ────────────────────────
 # Expected from homelab#3576 acceptance 5: `spec` for gateway, scan, launch, retro; `edit` for agent-loop,
 # substrate, mgmt-box, router-pair, dependency-upgrades — and every docs/intake/*.md carries exactly ONE
@@ -1416,6 +1443,29 @@ for isl in $FACTS_ISLANDS; do
   miss="$(facts_sections "$REPO/docs/intake/$isl.md" | tr '\n' ';')"
   [ -z "$miss" ] && ok "docs/intake/$isl.md: both sections, a Sources row" || bad "facts sections $isl" "$miss"
 done
+# the series an experiment may read (homelab#3605 acceptance 5): a `## Sources` row is marked by the word
+# `experiment` in its note cell. Expected: an island whose Sources has a row reading Prometheus marks at least
+# one, and a marked row's read is a Prometheus one; an island with no Prometheus row says so in one line under
+# the table and marks none. Which islands have no Prometheus row, read from the files at the issue's base:
+# launch, retro, scan (their one live-value row points at the agent loop's).
+src_rows() { # <facts file> → the Sources table's data rows as `read<TAB>note`
+  awk -F'|' '/^## /{sec=$0} sec=="## Sources" && /^\|/ && NF >= 5 && $2 !~ /^ *(question|-+) *$/ {print $3 "\t" $4}' "$1"; }
+exp_none=""
+for isl in $FACTS_ISLANDS; do
+  f="$REPO/docs/intake/$isl.md"
+  prom="$(src_rows "$f" | cut -f1 | grep -c 'Prometheus' || true)"; marked="$(src_rows "$f" | cut -f2 | grep -c '\*\*experiment\*\*' || true)"
+  stray="$(src_rows "$f" | awk -F'\t' '$2 ~ /\*\*experiment\*\*/ && $1 !~ /Prometheus/' | grep -c . || true)"
+  line="$(awk '/^## /{sec=$0} sec=="## Sources"' "$f" | grep -c '^No row here is a series an experiment may read' || true)"
+  if [ "$prom" -gt 0 ]; then
+    { [ "$marked" -ge 1 ] && [ "$stray" = 0 ] && [ "$line" = 0 ]; } && ok "docs/intake/$isl.md: $marked of its $prom Prometheus row(s) marked \`experiment\`, no other row" \
+      || bad "experiment marks $isl" "prometheus rows=$prom marked=$marked marked-non-prometheus=$stray none-line=$line"
+  else
+    exp_none="$exp_none$isl "
+    { [ "$marked" = 0 ] && [ "$line" = 1 ]; } && ok "docs/intake/$isl.md: no Prometheus row — says so in one line under the table, marks none" \
+      || bad "experiment none-line $isl" "marked=$marked none-line=$line"
+  fi
+done
+[ "$(printf '%s' "$exp_none" | tr ' ' '\n' | grep . | sort | tr '\n' ' ')" = "launch retro scan " ] && ok "the islands with no series to read are launch, retro, scan" || bad "experiment none islands" "got '$exp_none'"
 # the check can fail: one file per shortfall, built here (never a copy of a real facts file)
 FX="$TMP/facts-fx"; mkdir -p "$FX"
 printf '# x\n\nBody shape: edit\n\n- a fact\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| where is the cap | `a.yaml`, `storage:` | — |\n\n## What a ride can do\n\n- **Recipe**: x\n' > "$FX/good.md"
@@ -1511,6 +1561,13 @@ the thing
 | description | world | input || expected? |
 |---|---|---||---|
 | "SECRET-DESCRIPTION the happy path" | w | a || b |
+## Experiment
+No widget job fails in the 7 d after the merge, while the widget exporter was scraped — series `widget_job_failures_total`; baseline: 6 failed jobs over the 14 d to 2026-01-15T00:00:00Z.
+Written at intake, before the result. Not the ride's to change: no PR and no comment edits this section.
+
+```experiment
+{"id": "gateway-widget-jobs-not-failing", "requirement": "GW-X", "cases": [], "kpi": {"query": "(sum(increase(widget_job_failures_total[$window])) or vector(0)) and on() (min(avg_over_time(up{job=\"widget-exporter\"}[$window])) > 0.95)", "pass": "<= 0", "baseline": 6, "min_window": "7d", "max_window": "7d", "min_samples_query": "sum(increase(widget_jobs_total[$window]))", "min_samples": 20}}
+```
 ## Out of scope
 none
 EOF
@@ -1571,6 +1628,13 @@ grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LEN
 grep -qF "gh api -X POST repos/$H/issues/9/labels -f labels[]=agent-fix -f labels[]=task/fix -f labels[]=agent/queued" "$TMP/gh.calls" && ! grep -q 'agent/approved' "$TMP/gh.calls" && ! grep -q 'issues/999' "$TMP/gh.calls" \
   && ok "the belt labels #9 the repair left unlabelled — brief labels only (agent/approved dropped), no forged ref" || bad "belt labels" "$(grep labels "$TMP/gh.calls")"
 [ ! -s "$TMP/gh.comments" ] && ok "…and posts no comment the repair already posted in this run" || bad "belt comments" "$(cat "$TMP/gh.comments")"
+# the `spec` fixture body carries a valid `## Experiment` (homelab#3605 acceptance 6): the loader accepts it, and the
+# launcher hands the unit lens — which runs no python — the loader's answer beside the body (`exit 0`, nothing else)
+python3 -I "$REPO/islands/intake/scripts/experiment.py" load --check "$TMP/body-9.md"; rc=$?
+[ "$rc" = 0 ] && ok "the \`spec\` fixture body passes experiment.py load --check" || bad "spec fixture experiment" "exit $rc"
+[ "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>/dev/null)" = "exit 0" ] \
+  && ok "the unit lens's case carries the loader's answer on the body (issues/9.experiment.txt: exit 0)" || bad "case experiment.txt" "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>&1)"
+[ -z "$(find "$TMP/run/review" -path '*rows*' -name '*.experiment.txt')" ] && ok "…the rows lens's worlds get none (pass 1 sees masked/ + process/ only)" || bad "rows experiment.txt" "$(find "$TMP/run/review" -name '*.experiment.txt')"
 grep -q '/coordinate' "$TMP/curl.calls" && ok "the queue rings /coordinate after the labels" || bad "review ring" "$(cat "$TMP/curl.calls")"
 
 gview '["agent-fix","task/fix","agent/queued"]' "intake: review — x" "intake: queue — y"
@@ -1662,6 +1726,25 @@ gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
     && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
   && ok "…a mistaken \`rows:\` line on an \`edit\` body: recorded skipped (nothing to mask), no rows session, still labelled" \
   || bad "edit body, stray rows line" "$(cut -d' ' -f1 "$TMP/r.calls" | tr '\n' ' ') | $(jq -c .review.lenses "$TMP/up/receipt.json" 2>/dev/null)"
+# `experiment/open` (intake.md §Experiment: set with the queue labels) is a label the belt applies — and a repair
+# that queued the issue but left it off is finished by the belt: the POST carries it, no comment is repeated
+cp "$TMP/r-author.out" "$TMP/r-author.noexp"
+sed -i "s|^INTAKE-HOLD: $H#9 add=agent-fix,task/fix,agent/queued\$|INTAKE-HOLD: $H#9 add=agent-fix,task/fix,agent/queued,experiment/open|" "$TMP/r-author.out"
+gview '["agent-fix","task/fix","agent/queued"]' "intake: review — x" "intake: queue — y"; review_run apply
+{ grep -qF "gh api -X POST repos/$H/issues/9/labels -f labels[]=agent-fix -f labels[]=task/fix -f labels[]=agent/queued -f labels[]=experiment/open" "$TMP/gh.calls" && [ ! -s "$TMP/gh.comments" ]; } \
+  && ok "a held \`experiment/open\` the repair left off a queued issue: the belt adds it, no second comment" || bad "belt experiment/open" "$(grep labels "$TMP/gh.calls"; cat "$TMP/gh.comments" 2>/dev/null)"
+gview '["agent-fix","task/fix","agent/queued","experiment/open"]' "intake: review — x" "intake: queue — y"; review_run apply
+! grep -q '/labels' "$TMP/gh.calls" && ok "…and an issue that already carries it is left alone" || bad "belt experiment/open idempotent" "$(grep labels "$TMP/gh.calls")"
+[ "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>/dev/null)" = "exit 0" ] && ok "the \`edit\` body's case carries the loader's answer too (exit 0)" || bad "edit case experiment.txt" "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>&1)"
+# a body whose section is malformed: the lens reads the loader's own line and exit 2. The body is the loader's
+# fixture malformed-no-block.md; the expected line is its hand-written `fault` in fixtures/experiment/expected.json
+cp "$TMP/body-9.md" "$TMP/body-9.edit"; cp "$REPO/islands/intake/tests/fixtures/experiment/malformed-no-block.md" "$TMP/body-9.md"
+gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
+want="experiment: malformed — $(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["malformed-no-block.md"]["fault"])' "$REPO/islands/intake/tests/fixtures/experiment/expected.json")
+exit 2"
+{ [ "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>/dev/null)" = "$want" ] && grep -qF "gh api -X POST repos/$H/issues/9/labels" "$TMP/gh.calls"; } \
+  && ok "a malformed section: the case carries the loader's fault line and exit 2 — and the queue is not held" || bad "malformed experiment.txt" "$(cat "$TMP/run/review/case-unit-0/issues/9.experiment.txt" 2>&1)"
+cp "$TMP/body-9.edit" "$TMP/body-9.md"; cp "$TMP/r-author.noexp" "$TMP/r-author.out"
 # a body that still says `## Key rows` over a description table is not a `spec` body: nothing is masked
 printf '## Deliverable\nx\n## Key rows\n| description | a || b |\n|---|---||---|\n| "old heading" | 1 || 2 |\n' > "$TMP/body-9.md"
 gview '[]' "intake: review — x" "intake: queue — y"; review_run apply
