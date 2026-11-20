@@ -21,6 +21,7 @@ and evidence: [docs/spikes/island-intake.md](../../docs/spikes/island-intake.md)
 | [`scripts/listed-push.sh`](scripts/listed-push.sh) | the list step's gauge of which islands the full walk holds — the gate that keeps `IslandIntakeStale` quiet for an island that left the list |
 | [`scripts/facts-check.sh`](scripts/facts-check.sh) | the one test of "this facts file can carry a sitting", run by the launcher before any session and by the harness |
 | [`scripts/intake-wait-ledger.py`](scripts/intake-wait-ledger.py), [`scripts/intake-wait-cases.py`](scripts/intake-wait-cases.py) | the wait read's tally (which rule line is at the bar) and the recorded wait cases' validator |
+| [`scripts/experiment.py`](scripts/experiment.py) | the experiment block's loader: `load <file\|->` reads an issue body's `## Experiment` section and prints it as validated JSON, or exits with the first fault (`2` malformed, `3` `Experiment: none — <why>`, `4` neither) |
 | `devbox.json`, `devbox.lock` | the two tools the pod image lacks — promtool, yq — which the manifest's bootstrap installs and runs the launcher with (`devbox run`); the pod image (the worker base image, agent-base) pre-bakes claude, git, curl, jq, gh, kubectl, s5cmd, python3, uv and devbox itself |
 | [`tests/island-intake-test.sh`](tests/island-intake-test.sh), `tests/fixtures/` | the hermetic harness and its recorded inputs (real dig and responder findings, the wait cases) |
 
