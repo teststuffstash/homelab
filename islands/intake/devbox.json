@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "intake island toolchain (homelab#3577): what a sitting reads with and can run a repo gate with — jq, gh, kubectl, s5cmd, python3, uv, promtool (package prometheus), yq (package yq-go). The sitting's pod is the worker base image (agent-base), which already carries claude, git and curl; the bootstrap in agents/coordinator/island-intake-argo.yaml runs the launcher through `devbox run` in THIS directory. Versions: the repo-root devbox.lock's entries, copied (s5cmd and uv, which the root does not carry, are agent-base's own lock entries — already in the image's /nix store). The repo-root devbox.json/devbox.lock are never touched.",
+  "packages": {
+    "jq": "latest",
+    "gh": "latest",
+    "kubectl": "latest",
+    "s5cmd": "latest",
+    "python3": "latest",
+    "uv": "latest",
+    "prometheus": {
+      "version": "latest",
+      "outputs": [
+        "cli"
+      ]
+    },
+    "yq-go": "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE": "only-system"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {}
+  }
+}

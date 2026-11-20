@@ -75,6 +75,15 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: monitoring
+    # loki — the in-cluster log read (tenant header = the namespace, docs/loki-tenancy.md): the deep
+    # dig's read (3) and the island intake sitting's LIVE READS (homelab#3577). Named for the day
+    # this policy enforces; in monitor mode the read already passes.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: loki
+      toPorts:
+        - ports:
+            - { port: "3100", protocol: TCP }
     # Baseline FQDNs — git over TLS + nix upstream fallback
     - toFQDNs:
         - { matchName: github.com }
