@@ -195,7 +195,11 @@ again. A Renovate PR that is armed, current (not BEHIND, so outside legs 1 and 2
 updater-merged is swept by leg 1b (`update-pr-branch.sh` hand-back sweep): a concluded red (or
 CHANGES_REQUESTED) is handed back; a pending, absent or green rollup is left silent — pending waits
 for the next pass. A worker-pushed Renovate PR (the FU-046 `deps-review` shape) is no longer Renovate's and
-rides the ordinary legs. A CANCELLED check that a same-named sibling outlives is not red (#2754);
+rides the ordinary legs. A Renovate-authored PR with any non-merge commit by a login other than
+Renovate's is worker-pushed even when it also carries updater merge commits: it is neither
+untouched nor updater-merged, so it has no green requirement and is never handed back. Leg 1 and
+the sweep read a Renovate-authored PR's commits and its rollup (check-runs, status) in one probe,
+before its class is known; for a worker-pushed PR the rollup is read but not required green. A CANCELLED check that a same-named sibling outlives is not red (#2754);
 an unreadable rollup holds. A rollup that reports no check runs is not green
 (`renovate_green` requires at least one concluded check, `agents/renovate-currency.sh:54`). The island's predicate functions live in `islands/scan/src/scan_island/renovate.py` (the shell
 original, `agents/renovate-currency.sh`, remains for the scan's FU-124 nudge until retired).
