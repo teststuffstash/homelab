@@ -1,0 +1,27 @@
+# scan-specs.homelab.teststuff.net → the scan island's browsable specs site (islands/scan/mkdocs.yml,
+# built and published by islands/scripts/specs-site.sh; ADR-092 delegation). Same shape as
+# httproute-gateway-specs.yaml: a Garage website-enabled bucket (alias `scan-specs`, declared in
+# argocd/resources/agent-gateway/garage-workspace.yaml), Host rewritten to the alias under Garage's
+# rootDomain `.teststuff.net`; per-PR previews ride the same route by path (…/pr-<N>/). The
+# cross-namespace backend is permitted by argocd/platform/homelab-gateway-refgrant.yaml.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: scan-specs
+  namespace: homelab-gateway
+spec:
+  parentRefs:
+    - name: homelab-gateway
+  hostnames:
+    - scan-specs.homelab.teststuff.net
+  rules:
+    - filters:
+        - type: URLRewrite
+          urlRewrite:
+            hostname: scan-specs.teststuff.net
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: garage-s3
+          namespace: garage
+          port: 3902
