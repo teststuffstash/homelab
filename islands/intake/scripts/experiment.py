@@ -68,8 +68,9 @@ FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 SECTION_END = re.compile(r"^#{1,2}(\s|$)")
 NONE_LINE = re.compile(r"^Experiment:\s*none\b(.*)$")
 NONE_REASON = re.compile(r"^ — (\S.*)$")
-PASS = re.compile(r"^(<=|>=|<|>) (-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)$")
-DURATION = re.compile(r"^(\d+)([mhd])$")
+# matched with fullmatch, ASCII digits only: "7d\n" and a non-ASCII digit int() would convert are both refused
+PASS = re.compile(r"(<=|>=|<|>) (-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)", re.ASCII)
+DURATION = re.compile(r"([0-9]+)([mhd])", re.ASCII)
 ABSENT = 'no "## Experiment" section and no "Experiment: none — <why>" line'
 
 
@@ -80,7 +81,7 @@ class Malformed(Exception):
 # ── the block ────────────────────────────────────────────────────────────────────────────────────────
 def duration_s(value, where):
     """'7d' → 604800. A whole number of minutes, hours or days, greater than zero."""
-    m = DURATION.match(value) if isinstance(value, str) else None
+    m = DURATION.fullmatch(value) if isinstance(value, str) else None
     if not m or int(m.group(1)) == 0:
         raise Malformed(f"{where} {json.dumps(value)} is not a whole number followed by m, h or d")
     return int(m.group(1)) * UNIT_S[m.group(2)]
@@ -88,7 +89,7 @@ def duration_s(value, where):
 
 def split_pass(value, where):
     """'<= 0' → ('<=', 0.0)."""
-    m = PASS.match(value) if isinstance(value, str) else None
+    m = PASS.fullmatch(value) if isinstance(value, str) else None
     if not m:
         raise Malformed(f"{where} {json.dumps(value)} is not one of < <= > >=, a space, a number")
     return m.group(1), float(m.group(2))
@@ -191,7 +192,9 @@ def scan(text):
     headings  line indexes of `## Experiment`
     blocks    [(open line index, text, closed)] for every fence whose info string is `experiment`
     nones     [(line index, rest of the line after `Experiment: none`)]
-    sections  {heading index: [(line index, kind)]} with kind `prose` or `block`, to the next `#`/`##` heading
+    sections  {heading index: [(line index, kind)]} with kind `prose`, `block` (the experiment fence) or `fence`
+              (any other fenced block — it is not prose: a code fence alone before the block does not make
+              the claim), to the next `#`/`##` heading
     """
     headings, blocks, nones, sections = [], [], [], {}
     fence = None  # (marker char, length, is_experiment, open index, lines)
@@ -211,7 +214,7 @@ def scan(text):
             is_exp = m.group(2).strip() == INFO
             fence = (m.group(1)[0], len(m.group(1)), is_exp, i, [])
             if current is not None:
-                sections[current].append((i, "block" if is_exp else "prose"))
+                sections[current].append((i, "block" if is_exp else "fence"))
             continue
         if SECTION_END.match(line):
             current = None

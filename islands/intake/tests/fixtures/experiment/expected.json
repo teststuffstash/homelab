@@ -3,6 +3,10 @@
   "exit": 2,
   "fault": "kpi.baseline is not a number"
  },
+ "malformed-block-after-fence-only.md": {
+  "exit": 2,
+  "fault": "the experiment block comes before any prose line"
+ },
  "malformed-block-and-none.md": {
   "exit": 2,
   "fault": "both an experiment block and an \"Experiment: none\" line"
@@ -42,6 +46,10 @@
  "malformed-guard-key-missing.md": {
   "exit": 2,
   "fault": "missing key kpi.guards[0].pass"
+ },
+ "malformed-guard-pass-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].pass \">= \\u0661\\u0660\" is not one of < <= > >=, a space, a number"
  },
  "malformed-guard-pass.md": {
   "exit": 2,
@@ -87,9 +95,17 @@
   "exit": 2,
   "fault": "kpi.min_samples is not a positive integer"
  },
+ "malformed-min-window-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.min_window \"\\u0661m\" is not a whole number followed by m, h or d"
+ },
  "malformed-min-window-over-max.md": {
   "exit": 2,
   "fault": "kpi.min_window 2d is longer than kpi.max_window 36h"
+ },
+ "malformed-min-window-trailing-newline.md": {
+  "exit": 2,
+  "fault": "kpi.min_window \"7d\\n\" is not a whole number followed by m, h or d"
  },
  "malformed-min-window-unit.md": {
   "exit": 2,
@@ -107,6 +123,10 @@
   "exit": 2,
   "fault": "kpi.pass \"<=0\" is not one of < <= > >=, a space, a number"
  },
+ "malformed-pass-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"< \\u0665\" is not one of < <= > >=, a space, a number"
+ },
  "malformed-pass-not-number.md": {
   "exit": 2,
   "fault": "kpi.pass \"< few\" is not one of < <= > >=, a space, a number"
@@ -114,6 +134,10 @@
  "malformed-pass-operator.md": {
   "exit": 2,
   "fault": "kpi.pass \"== 0\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-trailing-newline.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"<= 0.5\\n\" is not one of < <= > >=, a space, a number"
  },
  "malformed-query-without-window.md": {
   "exit": 2,
