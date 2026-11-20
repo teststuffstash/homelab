@@ -1315,6 +1315,12 @@ python3 -I "$REPO/islands/intake/scripts/intake-wait-cases.py" --git validate > 
   && grep -q '10 case(s) valid (train 7, heldout 3), 0 error' "$TMP/cases.log" \
   && ok "the ten recorded wait cases validate (train 7, held out 3; rules commits checked unless the checkout is shallow)" || bad "wait cases" "$(tail -5 "$TMP/cases.log")"
 
+# the experiment block's loader (homelab#3602): its own self-test — the real command over the fixture bodies
+# in fixtures/experiment/, every expected exit, object and fault written by hand in expected.json
+section "the experiment block's loader"
+python3 -I "$REPO/islands/intake/scripts/experiment.py" --self-test > "$TMP/experiment-st.log" 2>&1 \
+  && ok "experiment.py --self-test" || bad "experiment self-test" "$(grep -e FAIL "$TMP/experiment-st.log" | head -5)"
+
 # ── the facts files name their island's body shape (intake.md §A queue-ready body) ────────────────────────
 # Expected from homelab#3576 acceptance 5: `spec` for gateway, scan, launch, retro; `edit` for agent-loop,
 # substrate, mgmt-box, router-pair, dependency-upgrades — and every docs/intake/*.md carries exactly ONE
