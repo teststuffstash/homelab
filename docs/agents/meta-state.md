@@ -29,8 +29,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   Goal #3574 BUILT BY SEAT SUBAGENTS AND ON MASTER (assembly #3598, 18:37Z; children #3575–#3581 closed; the operator said
   "finish this" for the codeowner merge). LIVE-PROVEN 11-20: `can-i` as `island-intake` (reads yes; pods/exec/configmaps/
   secrets no), one dry-run sitting `island-intake-cpsr9` (gateway island, 21 min, Succeeded: base image, install 14 s,
-  gateway admitted the caller on Fable, two lens runs, uploads, metrics; peak 360 MiB → limit 3Gi → 1Gi in PR #3609, CHECK IT
-  MERGED). NOT YET SEEN: the first FULL WALK (05:00Z 11-21, nine islands in sequence under `parallelism: 1` — read that every
+  gateway admitted the caller on Fable, two lens runs, uploads, metrics; peak 360 MiB → limit 3Gi → 1Gi, #3609
+  merged). NOT YET SEEN: the first FULL WALK (05:00Z 11-21, nine islands in sequence under `parallelism: 1` — read that every
   island got a step, that one failing does not stop the rest, the `island_intake_listed_timestamp_seconds` push, the 23 h
   deadline); anything for a stack island (no stack declares `repos[].intake.facts`; oracle was told via
   `/workspace/.handoff/oracle/done/20261120-1915-platform-island-intake-contract-ready.md`). Verdict on #3574 is the
