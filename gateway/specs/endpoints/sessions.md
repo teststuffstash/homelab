@@ -274,6 +274,13 @@ once, even on an OpenRouter snapshot younger than `refresh_s` (the leg that carr
 | a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖ | policy-default | a young snapshot, no derivation | 0 |
 | a restart with a derivation and a young OpenRouter snapshot waits out the interval | policy-default | a young snapshot, a derivation | the rest of the interval |
 
+A boot refresh that does not come back `ok` still derives from the stored snapshots, and while no derivation exists the loop retries after a short wait (60 s), not `refresh_s`.
+
+| description | world | store_state | boot_refresh | derivation? | next_sleep_s? |
+|---|---|---|---|---|---|
+| a failed boot refresh derives from the stored snapshot, then waits the interval ⚖ | policy-default | no derivation, stored snapshots that derive | fetch-failed | exists | 21600 |
+| a failed boot refresh that cannot derive retries on the short wait ⚖ | policy-default | no derivation, stored snapshots that cannot derive | fetch-failed | none | 60 |
+
 #### The policy without the priced rails' lists
 
 | description | policy | load? |

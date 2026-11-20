@@ -507,6 +507,58 @@ async def test_a_restart_without_a_derivation_refreshes_at_once(gw, app, setting
     expect({"openrouter_delay_s": kind(got_or)}, openrouter_delay_s=expected_openrouter_delay_s)
 
 
+# ── A failed boot refresh still derives, and retries soon ─────────────────────────────────────
+BOOT_FAIL_ROWS = [
+    pytest.param("policy-default", "no derivation, stored snapshots that derive", "fetch-failed", "exists", "21600",
+                 id="a failed boot refresh derives from the stored snapshot, then waits the interval ⚖"),
+    pytest.param("policy-default", "no derivation, stored snapshots that cannot derive", "fetch-failed", "none", "60",
+                 id="a failed boot refresh that cannot derive retries on the short wait ⚖"),
+]
+
+
+@pytest.mark.real_walk
+@pytest.mark.parametrize(("world", "store_state", "boot_refresh", "expected_derivation", "expected_next_sleep_s"), BOOT_FAIL_ROWS,
+                         ids=[p.id for p in BOOT_FAIL_ROWS])
+async def test_a_failed_boot_refresh_still_derives(app, monkeypatch, world, store_state, boot_refresh, expected_derivation,
+                                                   expected_next_sleep_s):
+    from agent_gateway import orcatalog as orc
+
+    enter_world(world)
+    inputs(store_state=store_state)
+    cat = app.state.orcatalog
+    td = app.state.tier_derivation
+    can_derive = "that derive" in store_state
+    td.derived_at = None
+    sleeps: list[float] = []
+
+    async def failed_refresh() -> str:
+        return boot_refresh
+
+    def derive() -> bool:
+        if can_derive:
+            td.derived_at = 1.0
+        return can_derive
+
+    class Stop(Exception):
+        pass
+
+    async def fake_sleep(s: float) -> None:
+        sleeps.append(s)
+        raise Stop
+
+    with given(f"store_state = {store_state}; the boot refresh returns {boot_refresh}"):
+        monkeypatch.setattr(cat, "refresh", failed_refresh)
+        monkeypatch.setattr(cat, "on_refresh", derive)
+        monkeypatch.setattr(cat, "startup_delay", lambda now: 0.0)
+        monkeypatch.setattr(orc.asyncio, "sleep", fake_sleep)
+        assert cat.refresh_s > 60
+    with when("the catalog loop runs its first iteration"):
+        with pytest.raises(Stop):
+            await cat.run()
+    expect({"derivation": "exists" if td.derived_at is not None else "none", "next_sleep_s": str(int(sleeps[0]))},
+           derivation=expected_derivation, next_sleep_s=expected_next_sleep_s)
+
+
 # ── The policy without the priced rails' lists ───────────────────────────────────────────────
 LOAD_ROWS = [
     pytest.param("policy-default", "ok", id="a policy with the lists loads; they order nothing"),

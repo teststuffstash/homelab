@@ -64,6 +64,7 @@ MCP_URL = "https://mcp.openrouter.ai/mcp"
 USER_AGENT = f"agent-gateway/{__version__} (openrouter-catalog)"
 FETCH_TIMEOUT_S = 30.0
 MIN_KEPT_SHARE = 0.5  # ⚖ the Go catalog's plausibility rule, kept
+PENDING_RETRY_S = 60.0  # ⚖ while no derivation exists, a failed refresh retries on this short wait, not refresh_s (GW-SESSIONS-ADMIT)
 DAY_S = 86400.0
 _STAMP = re.compile(r"-\d{8}(?=:|$)")  # a dated permaslug → the model id (the old proxy's _CAP_ID_RE)
 _VARIANT = re.compile(r":[a-z0-9-]+$")
@@ -297,11 +298,19 @@ class OpenRouterCatalog:
         if delay > 0:
             await asyncio.sleep(delay)
         while True:
+            outcome = "fetch-failed"
             try:
-                await self.refresh()
+                outcome = await self.refresh()
             except Exception:  # noqa: BLE001
                 log.exception("orcatalog: refresh raised — retrying on the next tick")
-            await asyncio.sleep(self.refresh_s)
+            pending = self.derivation_pending is not None and self.derivation_pending()
+            if outcome != "ok" and pending and self.on_refresh is not None:
+                try:  # a failed refresh still derives from the STORED snapshots (the last good one stands when it cannot)
+                    self.on_refresh()
+                except Exception:  # noqa: BLE001 — a hook never fails the loop
+                    log.exception("orcatalog: the post-refresh hook raised")
+                pending = self.derivation_pending()
+            await asyncio.sleep(min(self.refresh_s, PENDING_RETRY_S) if pending else self.refresh_s)
 
     def retry_at(self, now: float, fallback_s: float) -> float:
         """The next scheduled refresh: `refresh_s` after this process's last attempt — or, before it
