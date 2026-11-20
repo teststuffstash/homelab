@@ -12,7 +12,7 @@ Body shape: spec
 - **Repo** `teststuffstash/homelab`; island root `islands/launch/` (provisional location — the
   operator picks the final home); specs `islands/launch/specs/` (`LAUNCH-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
-  `specs/use-cases/`). No code, tests root or deploy surface exists yet — creating them is the work.
+  `specs/use-cases/`). A tests root (`tests/`), its suite (`scripts/ci.sh`) and a first library file (`lib/`) exist; no deploy surface exists — what is there today is the third row of `## Sources` below.
 - **Membership** — every `Touches` entry under `islands/launch/`, or a title starting
   `launch island:`. An item on the OLD launcher (`agent-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.

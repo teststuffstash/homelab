@@ -12,7 +12,7 @@ Body shape: spec
 - **Repo** `teststuffstash/homelab`; island root `islands/retro/` (provisional location — the
   operator picks the final home); specs `islands/retro/specs/` (`RETRO-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
-  `specs/use-cases/`). No code, tests root or deploy surface exists yet — creating them is the work.
+  `specs/use-cases/`). A tests root (`tests/`), its suite (`scripts/ci.sh`, `scripts/evidence.sh`) and first code (`src/retro_island/`) exist; no deploy surface exists — what is there today is the third row of `## Sources` below.
 - **Membership** — every `Touches` entry under `islands/retro/`, or a title starting
   `retro island:`. An item on the OLD retro (`retro_*.py`, `retro-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
