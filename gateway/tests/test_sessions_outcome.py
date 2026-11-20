@@ -329,29 +329,31 @@ async def test_an_outcome_after_a_relayed_429(gw, upstreams, store, world, seque
     enter_world(world)
     inputs(sequence=sequence)
     steps = AFTER_429[sequence]
+    two_reporters = steps[-1][0] == "judge-report" and len(steps) == 3
     with given(f"sequence = {sequence}: a worker session (opencode, opencode-go/deepseek-v4.1-flash) and its requests, in order"):
         doc = await open_session(gw, **WORKER)
         with quiet():
-            for kind, what in steps[:-1]:
+            for kind, what in (steps[:-2] if two_reporters else steps[:-1]):
                 await _act(gw, upstreams, doc, kind, what)
     kind, klass = steps[-1]
-    if kind == "judge-report" and len(steps) == 3:
-        with when("the consumer reports unknown (no caller token) on the 429'd session"):
-            r = await _act(gw, upstreams, doc, "report", "unknown")
+    if two_reporters:
+        ckind, cclass = steps[-2]
+        with when(f"the consumer reports {cclass} (no caller token) on the 429'd session"):
+            r = await _act(gw, upstreams, doc, ckind, cclass)
         with quiet():
             mid = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
         with then("the consumer's report was stored and counted no strike"):
             check("the consumer's report answered", r.status_code, 200)
-            check("GET shows the consumer's class stored", mid["class"] if mid else "not stored", "unknown")
+            check("GET shows the consumer's class stored", mid["class"] if mid else "not stored", cclass)
             check("no counted strike before the judge reports", _strike_cell(_strikes(store)), "none")
     with when(f"POST /sessions/{{id}}/outcome {{class: {klass}}}" + (" presenting the judge" if kind == "judge-report" else "")):
         r = await _act(gw, upstreams, doc, kind, klass)
         assert r.status_code == 200, r.text
     with quiet():
         stored = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
-    if len(steps) == 3 and kind == "judge-report":
+    if two_reporters:
         series = " · ".join([_series_cell(klass, "outcome", await _series(gw, klass, "outcome")),
-                             _series_cell("unknown", "outcome", await _series(gw, "unknown", "outcome"))])
+                             _series_cell(cclass, "outcome", await _series(gw, cclass, "outcome"))])
     else:
         series = _series_cell(klass, "outcome", await _series(gw, klass, "outcome"))
     expect({"strikes": _strike_cell(_strikes(store)), "outcome": stored["class"] if stored else "not stored", "series": series},
