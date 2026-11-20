@@ -1567,9 +1567,11 @@ Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gatew
 `system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
 username, says what the caller may ask for: its admissions' `stacks` and `roles`, and the
 `bind_namespaces` a [`bind`](../glossary.md#bind) may name. Exact values only, every key required, a
-key that is not a ServiceAccount username refuses the policy load. So a wildcard can never be
+key that is not a ServiceAccount username refuses the policy load, and so does an entry whose
+`stacks` names a stack the policy does not define. So a wildcard can never be
 written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
-belong to that caller. The env pull is NOT caller-checked here: its caller is the bound pod, which
+belong to that caller. ⚖ A row stored with no caller (admitted with no bearer under `observe`) has no
+owner to check against: any listed caller may read it and may release it. The env pull is NOT caller-checked here: its caller is the bound pod, which
 GW-SESSIONS-PULL checks against the bind.
 
 **`GET /sessions?task=<exact task key>`** (route `list`, FU-270 (b)) is the [judge](../glossary.md#judge)'s
