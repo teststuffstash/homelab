@@ -7,6 +7,7 @@ import sys
 from urllib.parse import quote
 
 from . import gh
+from .strict import lacking
 
 # The fields of the PR read (`gh pr view --json state,labels,reviews,commits`) that
 # major-handoff.schema.json requires (`/properties/pr_read`, SCAN-HANDOFF-GATE): a list stands for each
@@ -17,26 +18,6 @@ PR_READ = {
     "reviews": [{"author": {"login": str}, "state": str, "submittedAt": str, "body": str}],
     "commits": [{"messageHeadline": str, "committedDate": str}],
 }
-
-
-def lacking(value: object, shape: object, where: str = "") -> str | None:
-    """The first required field `value` lacks — `without `<path>`` — or holds as null or the wrong type —
-    `with `<path>` not a <type>`; None when every required field is there."""
-    if isinstance(shape, dict):
-        if not isinstance(value, dict):
-            return f"with `{where.lstrip('.') or '(the answer)'}` not an object"
-        for key, sub in shape.items():
-            if key not in value:
-                return f"without `{f'{where}.{key}'.lstrip('.')}`"
-            found = lacking(value[key], sub, f"{where}.{key}")
-            if found:
-                return found
-        return None
-    if isinstance(shape, list):
-        if not isinstance(value, list):
-            return f"with `{where.lstrip('.')}` not a list"
-        return next((f for i, item in enumerate(value) if (f := lacking(item, shape[0], f"{where}[{i}]"))), None)
-    return None if isinstance(value, shape) else f"with `{where.lstrip('.')}` not a {shape.__name__}"  # type: ignore[union-attr]
 
 
 def main(slug: str, pr: str) -> int:
