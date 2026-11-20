@@ -15,12 +15,12 @@ groups:
   - name: agent-runs
     rules:
       - alert: IslandIntakeStale
-        expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+        expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
         for: 6h
         labels:
           severity: warning
           platform_machinery: "true"
           triage: none
         annotations:
-          summary: Island intake has not run in >2 days — the dig's island findings are not being admitted
-          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig''s cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: islands/intake/rules/intake.md; selector: islands/intake/scripts/intake-select.sh --source dig.'
+          summary: Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted
+          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island''s has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands.'

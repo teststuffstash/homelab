@@ -89,20 +89,24 @@ spec:
             description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."
         # ── island intake's own belt (FU-320, 2026-10-28) ─────────────────────────────────────
         # agents/coordinator/island-intake-argo.yaml pushes island_intake_last_run_timestamp_seconds
-        # on EVERY exit path (hold, cap, probe failure, session done) — the DeepDigStale shape for the
-        # lane that admits the dig's island findings. Same 8d bridge + `or vector(0)`, same 2 d on a
-        # daily schedule. triage: none + platform_machinery — the remedy is reading the cron in Argo.
+        # on EVERY exit path (no inputs, hold, cap, probe failure, session done), one series per island
+        # (grouping label `island`) — the scheduled run walks every island (homelab#3579). PER ISLAND
+        # (`max by (island)`): one island's run never hides another's silence. Same 8d bridge and 2 d on
+        # a daily schedule as DeepDigStale, but NO `or vector(0)`: an island that never pushed the series
+        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires —
+        # and stops firing when its last push leaves the 8d window (an island removed from the list).
+        # triage: none + platform_machinery — the remedy is reading the cron in Argo.
         # Fixture: island-intake.promtool-test.
         - alert: IslandIntakeStale
-          expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+          expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
           for: 6h
           labels:
             severity: warning
             platform_machinery: "true"
             triage: none
           annotations:
-            summary: "Island intake has not run in >2 days — the dig's island findings are not being admitted"
-            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: islands/intake/rules/intake.md; selector: islands/intake/scripts/intake-select.sh --source dig."
+            summary: "Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted"
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
         # ── the island rules digest's own belt (FU-320) ─────────────────────────────────────────
         # agents/coordinator/island-rules-digest-argo.yaml pushes
         # island_rules_digest_last_success_timestamp_seconds only when the week's outcome LANDED (the

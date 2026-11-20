@@ -187,10 +187,17 @@
 # (the normalized item array: comments[].author.is_bot, events[]) + INTAKE_REFS_JSON ({"<n>": {state,
 # closed_at}}) + INTAKE_TS_DIR + INTAKE_NOW. The pile's re-read ledger uses the same target read: a receipt
 # that ruled a wait `unchanged` BEFORE a target its parking names closed does not hide it.
+#
+# --list-islands (homelab#3579): the islands the scheduled run holds a sitting for — one name per line,
+# every ISLANDS row that has an island_members row AND a facts file (docs/intake/<island>.md), in ISLANDS
+# order (gateway first). An island without a facts file is named on stderr and left out: a sitting with
+# no facts would improvise. No read but the checkout (no gh, no bucket, no kube); exit 0.
+#
+#   bash islands/intake/scripts/intake-select.sh --list-islands
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
-REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""
+REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""; LIST=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) SOURCE="$2"; shift 2;;
@@ -200,6 +207,7 @@ while [ $# -gt 0 ]; do
     --min)   MIN="$2"; shift 2;;
     --age-h) AGE_H="$2"; shift 2;;
     --json)  JSON=1; shift;;
+    --list-islands) LIST=1; shift;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0;;
     *) echo "intake-select: unknown arg $1" >&2; exit 2;;
   esac
@@ -966,6 +974,16 @@ cmd_wait() {
     else "\(.id)\tstale\t\(.stale.why) #\(.stale.target) \(.stale.target_state)" end' >&2
   emit_sel "$sel" "waits to read or stale waits"
 }
+
+# ── --list-islands ───────────────────────────────────────────────────────────────────────────────
+if [ "$LIST" = 1 ]; then
+  for _isl in $ISLANDS; do
+    island_members "$_isl" >/dev/null 2>&1 || { echo "intake-select: '$_isl' is in ISLANDS without an island_members row — not listed" >&2; continue; }
+    [ -f "$ROOT/docs/intake/$_isl.md" ] || { echo "intake-select: '$_isl' has no facts file (docs/intake/$_isl.md) — not listed" >&2; continue; }
+    printf '%s\n' "$_isl"
+  done
+  exit 0
+fi
 
 case "$SOURCE" in
   issues|pile) ;;

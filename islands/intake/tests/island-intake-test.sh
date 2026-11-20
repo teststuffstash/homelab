@@ -516,8 +516,31 @@ yqw() { yq -r "$CW | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
   && ok "the semaphore sits on the intake LEAF" || bad "FU-198" "semaphore not on the leaf"
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .retryStrategy // "none"')" = none ] \
   && ok "the leaf carries no retryStrategy" || bad "FU-198" "leaf retries"
-[ "$(yqw '.spec.workflowSpec.entrypoint')" = intake-retry ] && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-retry") | .steps[][] | .template')" = intake ] \
-  && ok "entrypoint = the retry wrapper, which calls the leaf" || bad "caller edge" "entrypoint/steps"
+# homelab#3579: the entrypoint is the WALK (the island list, then the retry wrapper once per name); the retry
+# wrapper still calls the leaf, once per invocation
+[ "$(yqw '.spec.workflowSpec.entrypoint')" = intake-islands ] \
+  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-islands") | [.steps[][] | .name + "=" + .template] | join(" ")')" = "islands=list-islands sitting=intake-retry" ] \
+  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-retry") | .steps[][] | .template')" = intake ] \
+  && ok "entrypoint = the walk (the island list, then the retry wrapper per island), and the retry wrapper calls the leaf" || bad "caller edge" "entrypoint/steps"
+WALK='.spec.workflowSpec.templates[] | select(.name == "intake-islands") | .steps[][] | select(.name == "sitting")'
+{ [ "$(yqw "$WALK | .withParam")" = '{{steps.islands.outputs.parameters.islands}}' ] \
+    && [ "$(yqw "$WALK | .arguments.parameters[] | select(.name == \"island\") | .value")" = '{{item}}' ] \
+    && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-retry") | .steps[][] | .arguments.parameters[] | select(.name == "island") | .value')" = '{{inputs.parameters.island}}' ] \
+    && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.env[] | select(.name == "ISLAND") | .value')" = '{{inputs.parameters.island}}' ]; } \
+  && ok "the walk fans out over the list step's output; each name reaches the leaf's ISLAND env as an input parameter" || bad "fan-out" "$(yqw "$WALK")"
+[ "$(yqw '.spec.workflowSpec.arguments.parameters[] | select(.name == "island") | .value')" = all ] \
+  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .container.env[] | select(.name == "ISLAND") | .value')" = '{{workflow.parameters.island}}' ] \
+  && ok "island defaults to all, read by the list step (submit -p island=<name> for one island)" || bad "island param" "$(yqw '.spec.workflowSpec.arguments.parameters')"
+[ "$(yqw '.spec.workflowSpec.parallelism')" = 1 ] && ok "one pod of the workflow at a time: the sittings run in sequence" || bad "sequence" "workflowSpec.parallelism = $(yqw '.spec.workflowSpec.parallelism')"
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-retry") | .retryStrategy.limit')" = 3 ] \
+  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-islands") | .retryStrategy // "none"')" = none ] \
+  && ok "the retry stays on the retry wrapper (per island); the walk itself does not retry" || bad "retry home" "moved"
+# deadlines: ONE sitting's is the leaf's and equals the script's RUN_DEADLINE_S default (its _fits arithmetic is
+# against the pod's deadline); the walk's holds more than one sitting and ends before the next daily run (86400 s)
+RDS="$(sed -n 's/^RUN_DEADLINE_S="${RUN_DEADLINE_S:-\([0-9]*\)}"$/\1/p' "$SITTING")"
+LEAF_DL="$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .activeDeadlineSeconds')"; WF_DL="$(yqw '.spec.workflowSpec.activeDeadlineSeconds')"
+{ [ -n "$RDS" ] && [ "$LEAF_DL" = "$RDS" ] && [ "$WF_DL" -gt "$LEAF_DL" ] && [ "$WF_DL" -lt 86400 ]; } 2>/dev/null \
+  && ok "the leaf's deadline is the script's RUN_DEADLINE_S ($RDS s); the walk's ($WF_DL s) is longer and under a day" || bad "deadlines" "script=$RDS leaf=$LEAF_DL workflow=$WF_DL"
 [ "$(yqw '.spec.workflowSpec.arguments.parameters[] | select(.name == "mode") | .value')" = apply ] \
   && ok "mode defaults to apply (submit -p mode=dry-run for a no-write sitting)" || bad "mode param" "missing"
 grep -qx '  - island-intake-argo.yaml' "$REPO/agents/coordinator/kustomization.yaml" \
@@ -602,7 +625,7 @@ EOF
 cat > "$BIN/s5cmd" <<'EOF'
 #!/bin/bash
 # writer stub: `s5cmd --endpoint-url E cp <local> s3://…/<key>` → $H/up/<basename>
-[ "$3" = cp ] && cp "$4" "$H/up/$(basename "$5")"
+[ "$3" = cp ] && { echo "$5" >> "$H/s5.dest"; cp "$4" "$H/up/$(basename "$5")"; }
 EOF
 cat > "$BIN/curl" <<'EOF'
 #!/bin/bash
@@ -705,6 +728,94 @@ receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
   "[{\"input\":\"dig-2026-10-25/$R1/finding-2\",\"outcome\":\"close\",\"refs\":[]},{\"input\":\"dig-2026-10-26/$R2/finding-2\",\"outcome\":\"fold\",\"refs\":[]}]"
 run_script apply
 [ ! -s "$TMP/claude.calls" ] && grep -q "hold" "$TMP/run.log" && ok "hold: no session, exit 0" || bad "hold" "$(tail -3 "$TMP/run.log")"
+
+# ── every island (homelab#3579) ─────────────────────────────────────────────────────────────────
+# State here: the gateway's two dig findings are ruled (receipt intake-r1-e), the pile seam is empty → the
+# gateway's selection is EMPTY (counts.inputs == 0). Acceptance 3: no session, the line below, metrics, exit 0.
+rm -f "$TMP/pgw.body"; RUN_ENV="PUSHGATEWAY=http://pgw" run_script apply; rc=$?
+{ [ "$rc" = 0 ] && [ ! -s "$TMP/claude.calls" ] && grep -qx 'island-intake: gateway — no inputs' "$TMP/run.log"; } \
+  && ok "an empty selection: no claude call, \`island-intake: gateway — no inputs\`, exit 0" || bad "no inputs" "rc=$rc $(tail -3 "$TMP/run.log")"
+{ grep -qE '^island_intake_last_run_timestamp_seconds [0-9]+$' "$TMP/pgw.body" && grep -qx 'island_intake_probe_ok 1' "$TMP/pgw.body" \
+    && grep -qx 'island_intake_inputs 0' "$TMP/pgw.body" && grep -qx 'island_intake_session_ran 0' "$TMP/pgw.body" \
+    && [ "$(grep -c -- '--data-binary @-' "$TMP/curl.calls")" = 1 ] && grep -q '/metrics/job/island_intake/island/gateway$' "$TMP/curl.calls"; } 2>/dev/null \
+  && ok "…and it pushes its metrics once (last-run timestamp, probe_ok 1, inputs 0) — a quiet island stays fresh" || bad "no-inputs metrics" "$(cat "$TMP/curl.calls" 2>/dev/null | tail -2)"
+# another island, empty: the same step under its own name and its own `island` grouping label
+rm -f "$TMP/pgw.body"; RUN_ENV="ISLAND=mgmt-box PUSHGATEWAY=http://pgw" run_script apply; rc=$?
+{ [ "$rc" = 0 ] && [ ! -s "$TMP/claude.calls" ] && grep -qx 'island-intake: mgmt-box — no inputs' "$TMP/run.log" \
+    && grep -q '/metrics/job/island_intake/island/mgmt-box$' "$TMP/curl.calls" && ! grep -q '/island/gateway' "$TMP/curl.calls" \
+    && [ "$(grep -c . "$TMP/devbox.calls")" = 2 ]; } \
+  && ok "an empty selection on another island (mgmt-box): its own line, its own \`island\` label, no session" || bad "no inputs, mgmt-box" "rc=$rc $(tail -3 "$TMP/run.log")"
+# inputs waiting behind the daily cap are NOT an empty selection: the hold line, never "no inputs"
+receipt 2026-10-27 intake-r1-cap1 apply 2026-10-27T01:00:00Z '[]'; receipt 2026-10-27 intake-r1-cap2 apply 2026-10-27T02:00:00Z '[]'
+echo '[{"number":301,"title":"gateway: unruled, behind the cap","body":"free text","labels":[],"createdAt":"2026-10-01T00:00:00Z","updatedAt":"2026-10-01T00:00:00Z","author":{"login":"rsoot","is_bot":false},"comments":[]}]' > "$TMP/pile-cap.json"
+PILE_JSON="$TMP/pile-cap.json" run_script apply; rc=$?
+{ [ "$rc" = 0 ] && [ ! -s "$TMP/claude.calls" ] && grep -q 'hold: daily cap' "$TMP/run.log" && grep -qx 'island-intake: hold — no sitting today' "$TMP/run.log" \
+    && ! grep -q 'no inputs$' "$TMP/run.log"; } \
+  && ok "inputs held by the daily cap stay a hold (\`hold — no sitting today\`), not \`no inputs\`" || bad "cap hold" "rc=$rc $(tail -3 "$TMP/run.log")"
+rm -rf "$TS/homelab/intake-gateway-2026-10-27"
+# another island WITH an input: its own sitting — facts file, receipt prefix, receipt island, metrics label (acceptance 4).
+# The cap is per island: two gateway sittings today (the receipts above, re-made) do not hold the router pair's.
+receipt 2026-10-27 intake-r1-cap1 apply 2026-10-27T01:00:00Z '[]'; receipt 2026-10-27 intake-r1-cap2 apply 2026-10-27T02:00:00Z '[]'
+echo '[{"number":302,"title":"opnsense: unruled","body":"free text","labels":[],"createdAt":"2026-10-01T00:00:00Z","updatedAt":"2026-10-01T00:00:00Z","author":{"login":"rsoot","is_bot":false},"comments":[]}]' > "$TMP/pile-rp.json"
+cp "$TMP/claude.out" "$TMP/claude.out.keep"; printf 'INTAKE-RULED: teststuffstash/homelab#302 standing -\n' > "$TMP/claude.out"
+rm -f "$TMP/pgw.body" "$TMP/s5.dest"; PILE_JSON="$TMP/pile-rp.json" RUN_ENV="ISLAND=router-pair PUSHGATEWAY=http://pgw" run_script apply; rc=$?
+{ [ "$rc" = 0 ] && [ "$(grep -c '^claude' "$TMP/claude.calls")" = 1 ] \
+    && grep -qF "Your island's facts file (intake.md §Island facts): docs/intake/router-pair.md" "$TMP/up/brief.md" \
+    && [ "$(jq -c '[.island, (.ruled | map([.input, .outcome]))]' "$TMP/up/receipt.json" 2>/dev/null)" = '["router-pair",[["teststuffstash/homelab#302","standing"]]]' ]; } \
+  && ok "a named island with an input (router-pair) holds its own sitting — its facts file, its receipt — while the gateway is at its daily cap" \
+  || bad "router-pair sitting" "rc=$rc $(tail -3 "$TMP/run.log") $(jq -c '[.island, .ruled]' "$TMP/up/receipt.json" 2>/dev/null)"
+{ [ -s "$TMP/s5.dest" ] && grep -q '/receipt\.json$' "$TMP/s5.dest" \
+    && [ -z "$(grep -vE '^s3://b/homelab/intake-router-pair-[0-9]{4}-[0-9]{2}-[0-9]{2}/intake-r1-[0-9TZ]+/' "$TMP/s5.dest")" ]; } \
+  && ok "…every record of it lands under s3://<bucket>/homelab/intake-router-pair-<day>/" || bad "receipt prefix" "$(sort -u "$TMP/s5.dest" 2>/dev/null | head -3)"
+{ grep -q '/metrics/job/island_intake/island/router-pair$' "$TMP/curl.calls" && ! grep -q '/island/gateway' "$TMP/curl.calls" \
+    && grep -qx 'island_intake_session_ran 1' "$TMP/pgw.body" && grep -qx 'island_intake_inputs 1' "$TMP/pgw.body"; } 2>/dev/null \
+  && ok "…and its metrics carry \`island=router-pair\` (session_ran 1, inputs 1)" || bad "router-pair metrics" "$(grep metrics "$TMP/curl.calls" 2>/dev/null)"
+cp "$TMP/claude.out.keep" "$TMP/claude.out"; rm -rf "$TS/homelab/intake-gateway-2026-10-27" "$TMP/s5.dest"; rm -f "$TMP/pgw.body"
+
+# the island LIST: the selector's --list-islands, and the workflow's list step that turns it into the walk's withParam
+section "island-intake-argo.yaml — the island list (homelab#3579)"
+# expected = the selector's ISLANDS row (gateway first) — every one of the nine has a membership row and docs/intake/<island>.md
+ALL_ISLANDS='gateway scan launch retro router-pair mgmt-box dependency-upgrades substrate agent-loop'
+got="$(env -u GH_TOKEN -u INTAKE_TS_DIR -u INTAKE_ISSUES_JSON bash "$SEL" --list-islands 2>"$TMP/list.err")"; rc=$?
+{ [ "$rc" = 0 ] && [ "$(printf '%s' "$got" | tr '\n' ' ')" = "$ALL_ISLANDS" ] && [ ! -s "$TMP/list.err" ]; } \
+  && ok "--list-islands: one name per line, the table's order, gateway first — no gh, bucket or issue read" || bad "--list-islands" "rc=$rc got '$(printf '%s' "$got" | tr '\n' ' ')' $(cat "$TMP/list.err")"
+# membership row AND facts file: a tree where only gateway and retro have a facts file, plus a facts file no row names
+LT="$TMP/ltree"; mkdir -p "$LT/islands/intake/scripts" "$LT/docs/intake"; cp "$SEL" "$LT/islands/intake/scripts/"
+: > "$LT/docs/intake/retro.md"; : > "$LT/docs/intake/gateway.md"; : > "$LT/docs/intake/commons.md"
+got="$(bash "$LT/islands/intake/scripts/intake-select.sh" --list-islands 2>"$TMP/list.err")"; rc=$?
+{ [ "$rc" = 0 ] && [ "$(printf '%s' "$got" | tr '\n' ' ')" = "gateway retro" ] && grep -q "'scan' has no facts file (docs/intake/scan.md)" "$TMP/list.err"; } \
+  && ok "…an island without a facts file is left out (named on stderr); a facts file without a membership row lists nothing" || bad "--list-islands facts" "got '$(printf '%s' "$got" | tr '\n' ' ')'"
+# the list step's script, from the manifest, with the clone stubbed (the same redirects as the bootstrap's)
+yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"list-islands\") | .container.args[0]" "$YAML" \
+  | sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" > "$TMP/list.sh"
+LIST_OUT="$(yqw '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .outputs.parameters[] | select(.name == "islands") | .valueFrom.path' | sed -e "s#/tmp/#$TMP/run/#")"
+run_list() { # <island> [PATH prefix]
+  rm -rf "$TMP/work" "$TMP/run"/*; : > "$TMP/devbox.calls"; mkdir -p "$TMP/work"
+  ( cd "$TMP" && H="$TMP" PATH="${2:-$BIN}:$PATH" HOME="$TMP/home" ISLAND="$1" GH_TOKEN=x bash "$TMP/list.sh" ) > "$TMP/list.log" 2>&1
+}
+run_list all; rc=$?
+{ [ "$rc" = 0 ] && [ -n "$LIST_OUT" ] && [ "$(jq -c . "$LIST_OUT" 2>/dev/null)" = '["gateway","scan","launch","retro","router-pair","mgmt-box","dependency-upgrades","substrate","agent-loop"]' ]; } \
+  && ok "island=all: the list step clones and writes the selector's list as a JSON array to its output parameter's path" || bad "list step, all" "rc=$rc out=$LIST_OUT $(tail -2 "$TMP/list.log")"
+[ ! -s "$TMP/devbox.calls" ] && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .synchronization // "none"')" = none ] \
+  && ok "…with no devbox and no semaphore slot (it starts no session)" || bad "list step cost" "$(cat "$TMP/devbox.calls")"
+run_list scan; rc=$?
+{ [ "$rc" = 0 ] && [ "$(jq -c . "$LIST_OUT" 2>/dev/null)" = '["scan"]' ] && [ ! -e "$TMP/work/homelab" ]; } \
+  && ok "island=scan: that one name, no clone (\`-p island=scan\` keeps working)" || bad "list step, named" "rc=$rc $(cat "$LIST_OUT" 2>/dev/null) $(tail -2 "$TMP/list.log")"
+run_list 'a"b'; rc=$?
+{ [ "$rc" = 0 ] && jq -e '. == ["a\"b"]' "$LIST_OUT" >/dev/null 2>&1; } \
+  && ok "…a name is written as JSON data, never spliced into the array" || bad "list step, quoting" "rc=$rc $(cat "$LIST_OUT" 2>/dev/null)"
+mkdir -p "$TMP/badbin"; printf '#!/bin/bash\nexit 1\n' > "$TMP/badbin/git"; chmod +x "$TMP/badbin/git"
+run_list all "$TMP/badbin:$BIN"; rc=$?
+{ [ "$rc" = 1 ] && [ ! -s "$LIST_OUT" ] && grep -q 'clone failed (the island list)' "$TMP/list.log"; } \
+  && ok "island=all with a failed clone: exit 1 and no list — never an empty walk that passes" || bad "list step, clone failed" "rc=$rc $(tail -2 "$TMP/list.log")"
+# a selector that lists nothing (no facts file in the clone): exit 1
+cat > "$TMP/badbin/git" <<EOF
+#!/bin/bash
+dest="\${@: -1}"; mkdir -p "\$dest/islands/intake/scripts"; cp "$SEL" "\$dest/islands/intake/scripts/"
+EOF
+run_list all "$TMP/badbin:$BIN"; rc=$?
+{ [ "$rc" = 1 ] && grep -q 'the island list is empty' "$TMP/list.log"; } \
+  && ok "…and an empty list fails the step (zero sittings is never a pass)" || bad "list step, empty" "rc=$rc $(tail -2 "$TMP/list.log")"
 
 # a recurring responder class rides the dig source into the SAME sitting (selector header: an alert
 # the island's rule file defines owns the finding — no ride issue is read); three real-wire records
