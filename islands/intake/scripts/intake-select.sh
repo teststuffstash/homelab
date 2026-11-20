@@ -274,7 +274,7 @@ STACK_REPO=""; STACK_FACTS=""
 if [ "$STACK_ISLAND" = 1 ] && [ "$LIST" = 0 ]; then
   [ -n "$CLAIMS" ] || { echo "intake-select: island '$ISLAND' is a stack island — it needs --claims <file>" >&2; exit 2; }
   _rows="$(claims_islands "$CLAIMS")" || exit 2
-  _row="$(printf '%s\n' "$_rows" | awk -F'\t' -v i="$ISLAND" '$1 == i' | head -1)"
+  _row="$(awk -F'\t' -v i="$ISLAND" '$1 == i && !seen { print; seen = 1 }' <<< "$_rows")"
   [ -n "$_row" ] || { echo "intake-select: island '$ISLAND' resolves to nothing — no claim declares repos[].intake.facts under that stack/repo name" >&2; exit 2; }
   STACK_REPO="$(printf '%s' "$_row" | cut -f2)"; STACK_FACTS="$(printf '%s' "$_row" | cut -f3)"
   REPO="${ORG:-teststuffstash}/$STACK_REPO"
