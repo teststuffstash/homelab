@@ -275,7 +275,10 @@ once, even on an OpenRouter snapshot younger than `refresh_s` (the leg that carr
 | description | world | store_state | openrouter_delay_s? |
 |---|---|---|---|
 | a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖ | policy-default | a young snapshot, no derivation | 0 |
-| a restart with a derivation and a young OpenRouter snapshot waits out the interval | policy-default | a young snapshot, a derivation | the rest of the interval |
+| a restart with a derivation and a young OpenRouter snapshot waits out the interval | policy-default | a young snapshot, a derivation | more than 0 and at most 21600 (`refresh_s`) |
+
+The verdict step and attachment of each row carry the seconds compared: the delay the second gateway returned and the
+bound it is checked against.
 
 A boot refresh that does not come back `ok` still derives from the stored snapshots, and while no derivation exists the loop retries after a short wait (60 s), not `refresh_s`.
 

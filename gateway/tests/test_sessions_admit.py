@@ -479,7 +479,7 @@ async def test_a_restart_keeps_the_derivation(gw, app, settings, policy, secrets
 # ── A restart with no derivation refreshes at once ────────────────────────────────────────────
 FIRST_ROWS = [
     pytest.param("policy-default", "a young snapshot, no derivation", "0", id="a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖"),
-    pytest.param("policy-default", "a young snapshot, a derivation", "the rest of the interval",
+    pytest.param("policy-default", "a young snapshot, a derivation", "more than 0 and at most 21600 (`refresh_s`)",
                  id="a restart with a derivation and a young OpenRouter snapshot waits out the interval"),
 ]
 
@@ -503,8 +503,14 @@ async def test_a_restart_without_a_derivation_refreshes_at_once(gw, app, setting
         second = SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
         got_or = second.or_delay
         await second.close()
-    kind = lambda d: "0" if d == 0 else "the rest of the interval" if d > 0 else str(d)  # noqa: E731
-    expect({"openrouter_delay_s": kind(got_or)}, openrouter_delay_s=expected_openrouter_delay_s)
+    refresh_s = app.state.orcatalog.refresh_s
+    if expected_openrouter_delay_s == "0":
+        holds, bound = got_or == 0, "= 0"
+    else:
+        holds, bound = 0 < got_or <= refresh_s, f"> 0 and <= {refresh_s:g}"
+    claim = f"expected openrouter_delay_s = {expected_openrouter_delay_s}"
+    with then(claim, expected_openrouter_delay_s={"expected": bound, "actual": got_or, "refresh_s": refresh_s}):
+        assert holds, f"openrouter_delay_s: got {got_or!r} s, bound {bound}"
 
 
 # ── A failed boot refresh still derives, and retries soon ─────────────────────────────────────
