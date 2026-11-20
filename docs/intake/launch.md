@@ -3,7 +3,8 @@
 > The §Island facts block for the **launch** island — a component to be BUILT FRESH under
 > [`islands/launch/`](../../islands/launch/README.md) beside the old code it replaces; nothing live
 > reads that directory. The rules are ONE home — [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md); this
-> file replaces only its §Island facts and the island rows of its §What you read table. Island index:
+> file holds only the island's facts, under `## Sources` the island's own rows of its §What you read
+> table, and under `## What a ride can do` the recipe, write tier, gates and reach. Island index:
 > [`islands/README.md`](../../islands/README.md).
 
 Body shape: spec
@@ -11,7 +12,7 @@ Body shape: spec
 - **Repo** `teststuffstash/homelab`; island root `islands/launch/` (provisional location — the
   operator picks the final home); specs `islands/launch/specs/` (`LAUNCH-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
-  `specs/use-cases/`). No code, tests root or deploy surface exists yet — creating them is the work.
+  `specs/use-cases/`). A tests root (`tests/`), its suite (`scripts/ci.sh`) and a first library file (`lib/`) exist; no deploy surface exists — what is there today is the third row of `## Sources` below.
 - **Membership** — every `Touches` entry under `islands/launch/`, or a title starting
   `launch island:`. An item on the OLD launcher (`agent-session.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
@@ -25,9 +26,6 @@ Body shape: spec
   doc a page links on first use is read at that section only. A fact outside this set that the
   decision stands on is read with the narrowest GET (intake.md §What you read); any other goes
   under `Unverified`, never a wider read.
-- **Write tier** (`classify_touches`, run 2026-11-14): `islands/**` = `machine-merge`;
-  `docs/intake/**` = `machine-merge`. Anything under `agents/**` is `codeowner-merge` and **out of
-  this island's scope** — the old members are never edited from an island item.
 - **Built from the specs, never copied** — the four rules are [islands/README.md §Built from the specs](../../islands/README.md#built-from-the-specs-never-copied):
   the page's rows are the test source, worlds are recorded whole, new components are Python, and
   replay is a comparison. A `queue`/`goal` body that asks a worker to match, port or carry over an
@@ -53,3 +51,37 @@ Body shape: spec
 - **Operator-only**: the island's final location; the switch-over decision; Goal admission
   (breaker #1); credential/App-permission changes; model/rail rulings; anything `.agents/**`,
   `.github/**`, `tofu/github/**` or CODEOWNERS.
+
+## Sources
+
+| question | read | note |
+|---|---|---|
+| What a requirement says, and its mark (`🚧 WIP → #<issue>`, `⚑ gap`) | [`islands/launch/specs/README.md`](../../islands/launch/specs/README.md) §Index, then the page it links at the requirement's heading (+ its sibling `*.schema.json`) | rows are copied from the page, never re-authored |
+| Which worlds are recorded | `ls islands/launch/specs/worlds/` and [`worlds/README.md`](../../islands/launch/specs/worlds/README.md) | a row names its world; a world nobody recorded is recorder work, never a hand-written one |
+| What exists of the island's code and tests | `ls islands/launch/ islands/launch/tests/` and [`islands/launch/README.md`](../../islands/launch/README.md) §Open; the suite is `islands/launch/scripts/ci.sh` | a component row is queue-ready only once the evidence it would turn green can exist |
+| What the old member does on the same case | the replay family the requirement's index row names: `bash agents/replay/run.sh agents/replay/fixtures/<family>` (families: [`agents/replay/families.tsv`](../../agents/replay/families.tsv)) | read-only; the old member is `agents/agent-session.sh` and the members the README lists |
+| The island's limits, their live values, its alert rules, a capacity or grants ledger | none of its own — nothing under `islands/launch/` is deployed, read or scheduled. The old member's are the agent loop's: [agent-loop.md §Sources](agent-loop.md#sources) | an item that turns on a live value is about the old member, and is the agent-loop island's |
+
+Never: `docs/agents/` as a corpus; an edit under `agents/**`.
+
+## What a ride can do
+
+- **Recipe**: [`.agents/fix.yaml`](../../.agents/fix.yaml) (a `task/build` item: [`.agents/build.yaml`](../../.agents/build.yaml)).
+  A `Touches` reaching `islands/launch/specs` gets the pinned spec process mounted (the claim's
+  `extraSpecs`).
+- **Write tier** (`classify_touches` in [`agents/footprint.sh`](../../agents/footprint.sh), run 2026-11-20):
+  `islands/launch/**` and `docs/intake/**` = `machine-merge`. Anything under `agents/**` is
+  `codeowner-merge` and **out of this island's scope** — the old members are never edited from
+  an island item.
+- **Gates**: `pr-open` runs `devbox run pr-gate` — the CI gates the diff selects plus `scan-secrets`; the map is
+  [`scripts/diff-ci.sh`](../../scripts/diff-ci.sh).
+  `islands/launch/**` selects the island's own suite (`islands/launch/scripts/ci.sh`, in the island's
+  devbox), `py-compile-lint`, `docs-graph-lint` and `mermaid-lint`. Then CI, the code reviewer
+  and the specs reviewer's rows review.
+- **Reach**: the repo's one claim block — the list is [agent-loop.md §What a ride can do](agent-loop.md#what-a-ride-can-do).
+  The island's `uv.lock` installs through `profile: python`; a `Touches` under `islands/launch/` is
+  not a docker ride.
+- **Not reachable, so intake reads it and writes it into the body**: anything live outside
+  namespace `homelab`. A ride on this island works from the pages, the recorded worlds and the
+  replay fixtures in its checkout; a cluster object or a wire answer the item needs is read by
+  intake, or recording it is the item's own work.
