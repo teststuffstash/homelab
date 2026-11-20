@@ -35,7 +35,10 @@ Body shape: spec
   and the new component, and every difference gets a ruling (`spec` / `old` / `new`); equality is not
   required and is not the acceptance. A build item never edits a fixture (an existing
   assertion changed is a red flag, `agents/jail-subagent-card.md`). The runtime-read templates `docs/agents/retros/{BRIEF,CROSS-REVIEW,SERIES-BRIEF}.md` stay in place; reports under `docs/agents/retros/` are historical.
-- **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first
+- **Evidence first**: no requirement is proven. Of the 28 in the spec index
+  ([`islands/retro/specs/README.md`](../../islands/retro/specs/README.md)), 26 carry
+  `🚧 WIP — no evidence pipeline yet` on their page's Status cell (4 of them `→ #3384`) and 2
+  (`RETRO-KPI-BUCKET-A`, `RETRO-RANK-LEGACY`) carry `⚑ gap` alone (counted 2026-11-20). The first
   deliverable is a tests root under `islands/retro/` whose `rule("RETRO-…")`-labelled tests take
   their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.

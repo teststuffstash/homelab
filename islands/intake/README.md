@@ -11,6 +11,7 @@ and evidence: [docs/spikes/island-intake.md](../../docs/spikes/island-intake.md)
 
 | Path | What it is |
 |---|---|
+| [`CONTRACT.md`](CONTRACT.md) | the one page a stack reads to turn island intake on for its repo — what it provides, what the platform provides, what a sitting writes and never does |
 | [`rules/intake.md`](rules/intake.md) | the brief every sitting reads in full — outcomes, procedure, hard limits |
 | [`rules/intake-escape.md`](rules/intake-escape.md), [`rules/intake-wait.md`](rules/intake-wait.md) | step E (the escape read) and step W (the wait read) of the brief |
 | [`rules/intake-review-unit.md`](rules/intake-review-unit.md), [`rules/intake-review-rows.md`](rules/intake-review-rows.md) | the two lenses of the brief's §Review and repair, each its own session |
@@ -58,6 +59,7 @@ argo -n agent-coordinator submit --from cronworkflow/island-intake              
 
 ## Stack islands
 
+What a stack reads to turn this on is [`CONTRACT.md`](CONTRACT.md); this section is the mechanism.
 A stack turns island intake on for one of its repos **in its AgentStack claim** — no homelab
 commit, and no stack or stack repo named in `scripts/`, the selector or the manifest:
 
