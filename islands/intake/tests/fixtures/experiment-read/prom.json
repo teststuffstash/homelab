@@ -1,0 +1,82 @@
+{
+  "about": "Answers of the stub Prometheus (islands/intake/tests/prom_stub.py), one scenario per path prefix. 1793491205 is 2026-11-01T00:00:05Z (t0 of the rows); 1793611205 is t0 + 2000m = 2026-11-02T09:20:05Z, the instant the single-question scenarios are asked at. The first four scenarios answer body.md's three series for the `read` rows; `baseline` answers the `at` rows.",
+  "scenarios": {
+    "pass": [
+      {"has": "fx_samples", "from": 1793611205, "value": "20"},
+      {"has": "fx_samples", "value": "3"},
+      {"has": "fx_value", "value": "2"},
+      {"has": "fx_errors", "value": "0"}
+    ],
+    "fail": [
+      {"has": "fx_samples", "from": 1793611205, "value": "20"},
+      {"has": "fx_samples", "value": "3"},
+      {"has": "fx_value", "value": "7"},
+      {"has": "fx_errors", "value": "0"}
+    ],
+    "pending": [
+      {"has": "fx_samples", "value": "3"}
+    ],
+    "two-samples": [
+      {"has": "fx_samples", "from": 1793611205, "value": "20"},
+      {"has": "fx_samples", "value": "3"},
+      {"has": "fx_value", "values": ["2", "2"]},
+      {"has": "fx_errors", "value": "0"}
+    ],
+    "down": [
+      {"status": 500, "text": "Internal Server Error\n"}
+    ],
+    "value-down": [
+      {"has": "fx_samples", "from": 1793611205, "value": "20"},
+      {"has": "fx_samples", "value": "3"},
+      {"has": "fx_value", "status": 503, "text": "Service Unavailable\n"},
+      {"has": "fx_errors", "value": "0"}
+    ],
+    "baseline": [
+      {"has": "max_over_time(fx_value[14400m]) and on() (avg_over_time(fx_up[14400m]) > 0.95)", "from": 1793611205, "to": 1793611205, "value": "5"},
+      {"has": "fx_fraction[30m]", "value": "0.25"},
+      {"has": "fx_gone", "values": []}
+    ],
+
+    "one": [{"value": "5"}],
+    "exponent": [{"value": "1.5e+03"}],
+    "negative": [{"value": "-0.5"}],
+    "empty": [{"values": []}],
+    "two": [{"values": ["1", "2"]}],
+    "nan": [{"value": "NaN"}],
+    "inf": [{"value": "+Inf"}],
+    "minus-inf": [{"value": "-Inf"}],
+    "word": [{"value": "abc"}],
+    "blank": [{"value": ""}],
+    "spaced": [{"value": " 5"}],
+    "newline": [{"value": "5\n"}],
+    "hex": [{"value": "0x10"}],
+    "overflow": [{"value": "1e999"}],
+    "other-digits": [{"value": "٥"}],
+    "long": [{"value": "1000000000000000000000000000000000000000000000000000000000000000000000000000"}],
+    "number-not-string": [{"json": {"status": "success", "data": {"resultType": "vector", "result": [{"metric": {}, "value": [1793611205, 5]}]}}}],
+    "nan-constant": [{"text": "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":[{\"metric\":{},\"value\":[1793611205,NaN]}]}}"}],
+    "scalar": [{"json": {"status": "success", "data": {"resultType": "scalar", "result": [1793611205, "5"]}}}],
+    "matrix": [{"json": {"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {}, "values": [[1793611205, "5"]]}]}}}],
+    "string": [{"json": {"status": "success", "data": {"resultType": "string", "result": [1793611205, "5"]}}}],
+    "histogram": [{"json": {"status": "success", "data": {"resultType": "vector", "result": [{"metric": {}, "histogram": [1793611205, {"count": "5", "sum": "5"}]}]}}}],
+    "pair-of-three": [{"json": {"status": "success", "data": {"resultType": "vector", "result": [{"metric": {}, "value": [1793611205, "5", "6"]}]}}}],
+    "sample-not-object": [{"json": {"status": "success", "data": {"resultType": "vector", "result": ["5"]}}}],
+    "result-not-list": [{"json": {"status": "success", "data": {"resultType": "vector", "result": {"value": [1793611205, "5"]}}}}],
+    "no-data-key": [{"json": {"status": "success"}}],
+    "status-error": [{"json": {"status": "error", "errorType": "timeout", "error": "query timed out in expression evaluation"}}],
+    "status-missing": [{"json": {"data": {"resultType": "vector", "result": [{"metric": {}, "value": [1793611205, "5"]}]}}}],
+    "list": [{"json": [1, 2]}],
+    "html": [{"text": "<html><body>sign in</body></html>"}],
+    "unclosed": [{"text": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["}],
+    "stale-stamp": [{"value": "5", "ts": 1793611145}],
+    "bad-request": [{"status": 400, "json": {"status": "error", "errorType": "bad_data", "error": "invalid parameter \"query\": 1:9: parse error: unexpected character: '$'"}}],
+    "http-204": [{"status": 204, "text": ""}],
+    "http-500": [{"status": 500, "text": "Internal Server Error\n"}],
+    "flaky": [{"fail_first": 1, "value": "5"}],
+    "flaky-twice": [{"fail_first": 2, "value": "5"}],
+    "truncated": [{"truncate": "5"}],
+    "redirect": [{"redirect": "/one/api/v1/query?query=fx_x%5B5m%5D&time=1793611205"}],
+    "slow": [{"hang": 1.5}],
+    "oversized": [{"pad": 1100000}]
+  }
+}
