@@ -198,8 +198,10 @@ spec:
               EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
               R0="$(jq -r '.window.rev_start // empty' /tmp/digest/changes.json)"; R0="${R0:-$EMPTY_TREE}"
               R1="$(jq -r '.window.rev_end' /tmp/digest/changes.json)"
-              jq -r '.files[] | select(.commits | length > 0) | .path' /tmp/digest/changes.json | while read -r p; do
-                git diff "$R0" "$R1" -- "$p" > "/tmp/digest/diffs/$(printf '%s' "$p" | tr '/' '_').diff"
+              # a file moved inside the window is diffed across the rename (path_start, island_rules.py changes)
+              jq -r '.files[] | select(.commits | length > 0) | [.path, (.path_start // .path)] | @tsv' /tmp/digest/changes.json | while IFS=$'\t' read -r p ps; do
+                if [ "$ps" = "$p" ]; then git diff "$R0" "$R1" -- "$p"; else git diff -M "$R0" "$R1" -- "$ps" "$p"; fi \
+                  > "/tmp/digest/diffs/$(printf '%s' "$p" | tr '/' '_').diff"
               done
               jq -r '[.files[].commits[].sha] | unique | .[]' /tmp/digest/changes.json | while read -r s; do
                 git log -1 --format='%H%n%an <%ae>%n%cI%n%n%B' "$s" > "/tmp/digest/commits/$s.txt"

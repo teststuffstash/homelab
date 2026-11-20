@@ -13,7 +13,8 @@ rules digest"). Two verbs, both read-only:
       the set stands at the window's END), every first-parent commit on <ref> inside the half-open
       window [since 00:00Z, until 00:00Z) — sha, committer date, author identity class, subject, PR
       number when the subject carries one, numstat lines added/removed — and the file's size at the
-      window's start and end.
+      window's start and end. A file moved inside the window is followed across the rename:
+      `path_start` is its path at the window's start (== `path` when it did not move).
 
   python3 agents/island_rules.py self-test
       A fixture git repo built in a temp dir; asserts the derivation and the change record.
@@ -304,10 +305,32 @@ def changes(root, since, until, ref):
     else:
         rset = rules_set(root)
     sep = "\x1f"
+    # A file MOVED inside the window is the same rules file: its history, its start size and its window
+    # diff are read across the rename (path_start = its path at the window's start), never as a new file.
+    renamed = {}  # new path → the path it was moved from, per first-parent commit of the window
+    rng = [f"{rev0}..{rev1}"] if rev0 else [rev1]
+    if rev1:
+        for ln in sh(["git", "log", "--first-parent", "-M", "--diff-filter=R", "--name-status", "--format=", *rng], root).split("\n"):
+            parts = ln.split("\t")
+            if len(parts) == 3:
+                renamed.setdefault(parts[2], parts[1])
+
+    def earlier_paths(path):  # the path's earlier names inside the window, nearest first
+        out = []
+        while path in renamed and renamed[path] not in out:
+            path = renamed[path]
+            out.append(path)
+        return out
+
     out_files = []
     for f in rset["files"]:
-        log = sh(["git", "log", "--first-parent", f"--since={t0}", f"--until={t1}", "--numstat",
-                  f"--format=@@{sep}%H{sep}%cI{sep}%an{sep}%ae{sep}%s", ref, "--", f["path"]], root)
+        names = earlier_paths(f["path"])
+        # its path at the window's start: the earliest name that exists there (a file created AND moved
+        # inside the window has none — it is new this window, and its history still spans both names)
+        path_start = next((n for n in reversed(names) if blob_size(root, rev0, n) is not None), f["path"])
+        log = sh(["git", "log", "--first-parent", "-M", f"--since={t0}", f"--until={t1}", "--numstat",
+                  f"--format=@@{sep}%H{sep}%cI{sep}%an{sep}%ae{sep}%s", ref, "--",
+                  *names, f["path"]], root)
         commits = []
         for block in log.split("@@" + sep)[1:]:
             head_line, _, rest = block.partition("\n")
@@ -323,8 +346,8 @@ def changes(root, since, until, ref):
             commits.append({"sha": sha, "date": date, "identity": identity_class(an, ae), "subject": subj,
                             "pr": int(pr.group(1)) if pr else None, "added": added, "removed": removed})
         commits.reverse()  # oldest first
-        out_files.append({"path": f["path"], "island": f["island"],
-                          "size_start": blob_size(root, rev0, f["path"]), "size_end": blob_size(root, rev1, f["path"]),
+        out_files.append({"path": f["path"], "path_start": path_start, "island": f["island"],
+                          "size_start": blob_size(root, rev0, path_start), "size_end": blob_size(root, rev1, f["path"]),
                           "commits": commits})
     changed = [f for f in out_files if f["commits"]]
     return {
@@ -461,6 +484,28 @@ def self_test():
               and rec["counts"]["net_bytes"] == 7, rec["counts"])
         empty = changes(tmp, "2026-02-01", "2026-02-08", "master")
         check("changes: an empty window has no commits", empty["counts"]["commits"] == 0, empty["counts"])
+        # a rule file MOVED inside a window (homelab#3575 moved five): one commit renames intake-escape.md →
+        # escape.md (and repoints the brief's directive), a later one appends "x\n" to it. Expected from the
+        # contract: the record follows the rename — path_start is the old path, size_start is the old
+        # file's size ("# escape\n" = 9 bytes), size_end 11, and the commits are the move (a pure rename:
+        # +0/-0) then the edit (+1/-0) — never size_start null and a whole-file add.
+        old_p, new_p = "islands/intake/rules/intake-escape.md", "islands/intake/rules/escape.md"
+        git("mv", old_p, new_p)
+        brief = os.path.join(tmp, "islands/intake/rules/intake.md")
+        w("islands/intake/rules/intake.md", open(brief).read().replace("[`intake-escape.md`](intake-escape.md)", "[`escape.md`](escape.md)"))
+        git("add", "-A")
+        git("commit", "-qm", "move the escape brief", date="2026-03-03T10:00:00Z")
+        w(new_p, open(os.path.join(tmp, new_p)).read() + "x\n")
+        git("commit", "-qam", "escape: one more line", date="2026-03-04T10:00:00Z")
+        mv = {f["path"]: f for f in changes(tmp, "2026-03-01", "2026-03-08", "master")["files"]}
+        m = mv.get(new_p, {})
+        check("changes: a file moved inside the window keeps its start (path_start = the old path, size_start 9 → size_end 11)",
+              m.get("path_start") == old_p and m.get("size_start") == 9 and m.get("size_end") == 11, m)
+        check("changes: …and its commits read across the rename (the move +0/-0, then the edit +1/-0)",
+              [(c["subject"], c["added"], c["removed"]) for c in m.get("commits", [])]
+              == [("move the escape brief", 0, 0), ("escape: one more line", 1, 0)], m.get("commits"))
+        check("changes: …and the old path is no longer a file of the set", old_p not in mv, sorted(mv))
+        check("changes: an unmoved file's path_start is its path", mv["islands/intake/rules/intake.md"]["path_start"] == "islands/intake/rules/intake.md")
     finally:
         subprocess.run(["rm", "-rf", tmp])
     print(f"island_rules self-test: {'FAIL' if fails else 'ok'} ({len(fails)} failed)")
