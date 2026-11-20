@@ -98,7 +98,8 @@ class UsagePoll:
 
     def _wire(self, status, body, headers, held, content_type: str = "", truncated: bool = False) -> None:
         if self.wire is not None:
-            self.wire.record("codex-usage", self.url, status, body, headers, content_type, truncated, secrets=held)
+            self.wire.record("codex-usage", self.url, status, body, headers, content_type, truncated, secrets=held,
+                              account_id=(headers or {}).get("chatgpt-account-id", ""))
 
     async def _poll(self) -> str:
         if not self.enabled:

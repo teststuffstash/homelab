@@ -137,6 +137,7 @@ answers; `stored?` = the record's bytes; `load?` = whether the declarations load
 | an allowlisted key is kept at any depth and in a list | `[slug]` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}` | loads |
 | no declarations file keeps no string ⚖ | `GATEWAY_WIRE` unset, source `codex-usage` | the observed usage shape | every string as its length | — |
 | an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE…"}` | the value as its length | loads |
+| an allowlisted value equal to the account id is kept as its length ⚖ | `[slug]` | `{"slug": "dummy-account"}` | the value as its length | loads |
 
 #### What an allowlist may not name
 
@@ -214,7 +215,7 @@ counts each probe (`ok`, `no-credential`, `fetch-failed`); `source` only takes n
 `wire` key in the policy refuses the load ⚖. A probe may not take the name of a source the gateway already registers ([GW-WIRE-RECORD](#gw-wire-record)'s list), and the loader refuses it naming that name ⚖. A malformed declarations file refuses to start, like a
 malformed policy ⚖. The same file holds the account class's allowlist (`keep_keys`): the string values
 under those keys are kept verbatim ⚖, every other string stays its length, and a value that matches a
-credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key. An allowlist
+credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key, and so does a value equal to the rail's account id ⚖. An allowlist
 can never name an identity key (`email`, `account_id`, `user_id`, anything token-, cookie-, secret-,
 password-, credential- or authorization-named — the floor ⚖).
 
