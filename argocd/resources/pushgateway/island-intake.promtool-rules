@@ -15,7 +15,12 @@ groups:
   - name: agent-runs
     rules:
       - alert: IslandIntakeStale
-        expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+        expr: |-
+          (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+          and on (island) (
+            group by (island) (last_over_time(island_intake_last_run_timestamp_seconds[10m]))
+            or group by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d])) and on () absent(last_over_time(island_intake_last_run_timestamp_seconds[10m]))
+          )
         for: 6h
         labels:
           severity: warning
@@ -23,7 +28,7 @@ groups:
           triage: none
         annotations:
           summary: Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted
-          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island''s has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands.'
+          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island''s has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. If the island has been removed from the list, the next daily run''s list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/{{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands.'
       - alert: IslandIntakeClaimsUnread
         expr: max(island_intake_claims_read_ok) == 0
         for: 2d

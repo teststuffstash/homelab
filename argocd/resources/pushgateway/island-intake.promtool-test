@@ -62,7 +62,7 @@ tests:
               island: gateway
             exp_annotations:
               summary: "Island intake has not run for the gateway island in >2 days — its findings, issues and waits are not being admitted"
-              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the gateway island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=gateway. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the gateway island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=gateway. If the island has been removed from the list, the next daily run's list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/gateway. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
 
   # ── (c) a run that genuinely stops — fires after 2 d + for:6h ────────────────────────────────
   - interval: 1h
@@ -88,7 +88,7 @@ tests:
               island: gateway
             exp_annotations:
               summary: "Island intake has not run for the gateway island in >2 days — its findings, issues and waits are not being admitted"
-              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the gateway island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=gateway. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the gateway island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=gateway. If the island has been removed from the list, the next daily run's list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/gateway. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
 
   # ── (d) PER ISLAND — a fresh island does not hide a silent one; a never-seen one is silent ───
   # gateway pushes every hour (value = the hour's epoch, so its age is always 0). scan ran once at
@@ -118,7 +118,34 @@ tests:
               island: scan
             exp_annotations:
               summary: "Island intake has not run for the scan island in >2 days — its findings, issues and waits are not being admitted"
-              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the scan island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the scan island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan. If the island has been removed from the list, the next daily run's list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/scan. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+
+  # ── (f) a REMOVED island — the list step deletes its group, the series stops, the alert resolves ──
+  # scan's last push is at hour 0 and the Pushgateway serves it (the 8d window never expires it): it
+  # fires from hour 54. The list step of the daily run at hour 60 deletes scan's group: from then no
+  # series exists, and the alert is gone at the next evaluation (hour 62). gateway keeps pushing.
+  - interval: 1h
+    name: "(f) a removed island fires while its group stands, resolves once the group is deleted"
+    input_series:
+      - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="gateway"}'
+        values: "0+3600x90"
+      - series: 'island_intake_last_run_timestamp_seconds{job="island_intake", island="scan"}'
+        values: "0+0x60 stale"
+    alert_rule_test:
+      - eval_time: 59h
+        alertname: IslandIntakeStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+              island: scan
+            exp_annotations:
+              summary: "Island intake has not run for the scan island in >2 days — its findings, issues and waits are not being admitted"
+              description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the scan island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan. If the island has been removed from the list, the next daily run's list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/scan. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+      - eval_time: 62h
+        alertname: IslandIntakeStale
+        exp_alerts: []
 
   # ── (e) IslandIntakeClaimsUnread (homelab#3580) — the stack islands' source went unread ───────
   # The list step pushes island_intake_claims_read_ok once per daily run (1 = the claims were read,

@@ -93,12 +93,24 @@ spec:
         # (grouping label `island`) — the scheduled run walks every island (homelab#3579). PER ISLAND
         # (`max by (island)`): one island's run never hides another's silence. Same 8d bridge and 2 d on
         # a daily schedule as DeepDigStale, but NO `or vector(0)`: an island that never pushed the series
-        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires —
-        # and stops firing when its last push leaves the 8d window (an island removed from the list).
+        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires.
+        # The 8d window does NOT expire a removed island, and neither does deleting its group by itself:
+        # the Pushgateway serves a group's last push until the group is deleted, and max_over_time still
+        # sees the old samples for 8d after the series stops. So the second clause reads an island only
+        # while its series is PRESENT (a scrape in the last 10m) — or while NO island's series is (a
+        # Pushgateway wipe: the 8d bridge then keeps the real age, a wiped <2d run never pages). The
+        # workflow's list step deletes the group of every island_intake group not in today's list (stack
+        # islands only when the claims were read), which is what takes a removed island out of the alert.
+        # A misspelled manual `-p island=` re-fire is pruned by the next daily run the same way.
         # triage: none + platform_machinery — the remedy is reading the cron in Argo.
         # Fixture: island-intake.promtool-test.
         - alert: IslandIntakeStale
-          expr: (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+          expr: |-
+            (time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400
+            and on (island) (
+              group by (island) (last_over_time(island_intake_last_run_timestamp_seconds[10m]))
+              or group by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d])) and on () absent(last_over_time(island_intake_last_run_timestamp_seconds[10m]))
+            )
           for: 6h
           labels:
             severity: warning
@@ -106,7 +118,7 @@ spec:
             triage: none
           annotations:
             summary: "Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted"
-            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. If the island has been removed from the list, the next daily run's list step deletes its Pushgateway group and this resolves; to do it now: curl -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/island_intake/island/{{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
         # ── island intake: the stack islands' source went unread (homelab#3580) ─────────────────
         # The workflow's list step reads the live AgentStack claims for the stack islands
         # (islands/intake/scripts/claims-read.sh) and pushes island_intake_claims_read_ok 1|0 on every

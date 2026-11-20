@@ -247,6 +247,31 @@ spec:
                 || { echo "island-intake: could not write the island list"; exit 1; }
               [ "$(jq 'length' "$OUT")" -gt 0 ] || { echo "island-intake: the island list is empty — no sitting would run"; exit 1; }
               echo "island-intake: islands $(cat "$OUT")"
+              # An island that has a Pushgateway group but is not in today's list leaves IslandIntakeStale
+              # by having its group DELETED here: the Pushgateway serves a group's last push until the
+              # group is deleted, so no window ever expires it. Only groups of exactly {job=island_intake,
+              # island}; a stack island (`<stack>/<repo>`) is only judged when the claims were read (a
+              # failed read lists the platform islands alone and must not wipe the stack islands'
+              # groups). A failed delete is logged, never fatal to the walk.
+              if curl -fsS --max-time 10 "$PUSHGATEWAY/api/v1/metrics" > /tmp/island-intake-groups.json 2>/dev/null; then
+                jq -r --slurpfile keep "$OUT" --argjson claims "${#CLAIMS_ARGS[@]}" '
+                  .data[]? | .labels // {} | select((keys | sort) == ["island","job"] and .job == "island_intake")
+                  | .island | select(. as $i | ($keep[0] | index($i)) == null)
+                  | select($claims > 0 or (contains("/") | not))' /tmp/island-intake-groups.json > /tmp/island-intake-gone.txt 2>/dev/null \
+                  || { echo "island-intake: could not read the Pushgateway groups — unlisted islands not pruned"; : > /tmp/island-intake-gone.txt; }
+                while IFS= read -r _gone; do
+                  [ -n "$_gone" ] || continue
+                  _grp="island/$_gone"
+                  case "$_gone" in */*) _grp="island@base64/$(printf '%s' "$_gone" | base64 | tr -d '\n=' | tr '+/' '-_')";; esac
+                  if curl -fsS --max-time 10 -X DELETE "$PUSHGATEWAY/metrics/job/island_intake/$_grp" >/dev/null 2>&1; then
+                    echo "island-intake: deleted the Pushgateway group of unlisted island $_gone"
+                  else
+                    echo "island-intake: could not delete the Pushgateway group of unlisted island $_gone (not fatal)"
+                  fi
+                done < /tmp/island-intake-gone.txt
+              else
+                echo "island-intake: Pushgateway groups unreadable — unlisted islands not pruned"
+              fi
           resources:
             requests: { cpu: "50m", memory: "128Mi" }
             limits: { memory: "512Mi" }
