@@ -51,6 +51,7 @@ spec:
             - alloy-logs-reader
             - crossplane-agentstack-composed
             - eso-transcripts-reader-ssrr
+            - island-intake-read # Goal #3574 pin 6 (homelab#3577): the intake sitting's own read-only identity — resourcequotas, prometheusrules, cronworkflows, workflowtemplates get/list (agents/coordinator/rbac.yaml)
             - kps-lease-crds # ADR-150: the kube-prometheus-stack PostSync hook reads the monitoring.coreos.com CRDs' operator version (get/list only)
             - loki-rbac-proxy-authn
             - loki-tenant-reader
@@ -78,6 +79,9 @@ spec:
             - eso-retro-git-reader-ssrr
             - eso-kargo-git-reader-ssrr # kargo git-token mirror (argocd/resources/kargo-prod/git-token.yaml) → the eso-transcripts-reader-ssrr role
             - eso-transcripts-reader-ssrr
+            - island-intake-read # homelab#3577 (see the ClusterRole above)
+            - island-intake-read-app # homelab#3577: the same SA on agent-read-app
+            - island-intake-read-infra # homelab#3577: the same SA on agent-read-infra
             - kps-lease-crds # ADR-150 (see the ClusterRole above)
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore

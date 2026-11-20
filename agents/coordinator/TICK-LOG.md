@@ -15614,3 +15614,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   proposals. #3533 / #3538 not offered — parked under 3 days.
 - **06:00Z digest:** #3565 opened un-armed 06:03Z, armed by the reflex's C9, both reviewers approved 06:17–06:18Z,
   merged 06:18Z with no seat act.
+
+## 2026-11-20 ~06:30–10:00Z — seat: scan specs site; intake decides on evidence; intake island Goal drafted (FU-320)
+
+- **scan-specs site (operator ask; no FU/ADR/issue planned one — every island Goal excluded a publisher):** #3568
+  (bucket `scan-specs` in the gateway-specs Workspace, same writer key; HTTPRoute) + #3569
+  (`islands/scripts/specs-site.sh`, shared `gateway/scripts/lib/site-build.sh`) merged; CI publish + PR-preview purge
+  steps direct to master (`85609e09`, workflow files). Hand publish from the seat, then the step green in master CI
+  (run 44698521863). https://scan-specs.homelab.teststuff.net — `updater` / `major-handoff` joined to the suite run.
+  Three master pushes lost the race to merges/auto-bumps during the 10-minute pre-push gate before one landed.
+- **Pretend agent-loop sitting on #3563 (dry-run, Fable subagent):** pinned 100Gi without reading disk room and wrote
+  "stop and report if not" for the worker. Operator: intake decides, research first, a flash-tier worker does not reason;
+  use subagents for gathering, not research issues. → #3570 (`gateway/intake.md`: deciding facts are read before a
+  body; decide on evidence; bodies for a worker that does not reason; the ride's recipe + reach in the read set; one
+  review round fixed two older lines that still deferred). Re-run under the new rules read quota/WIP/janitor/pool
+  room itself (found `REPO_MAX_WIP` 3 vs a 2-volume cap), wrote an exact-edit body; #3563 queued from it (no lens run).
+- **Intake pod audit (RBAC asked of the cluster as the SA; CNP read live; image from the Dockerfile):** runs as
+  `agent-coordinator` (pods create/delete/exec, configmaps write, openrouterkeys full); cannot read resourcequotas,
+  PrometheusRules, CronWorkflows; no devbox; egress CNP in monitor mode; no source map. A jail pretend run has MORE
+  access than the pod.
+- **Direction:** the 11-14 trial already ruled the review model (seat asked again — corrected); intake becomes its own
+  island, the contract goes to oracle. Goal #3574 + children #3575–#3581 drafted, bound, edged, goal-lint 0 FAIL;
+  none queued; the operator admits.
