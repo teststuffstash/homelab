@@ -245,6 +245,7 @@ STORED = {
     "both strings as lengths": {"slug": {"len": 13}, "note": {"len": 5}},
     '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}`': {"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]},
     "the value as its length": {"slug": {"len": 25}},
+    "the account id as its length": {"slug": {"len": 13}},
 }
 ALLOW_ROWS = [
     pytest.param("`[slug]`", SLUG, '`"slug": "fixture-model"`, `"note": {"len": 5}`', "loads", id="an allowlisted key keeps its string, every other string its length ⚖"),
@@ -254,6 +255,8 @@ ALLOW_ROWS = [
     pytest.param(UNSET, "the observed usage shape", "every string as its length", "—", id="no declarations file keeps no string ⚖"),
     pytest.param("`[slug]`", '`{"slug": "sk-ant-oat-FAKE…"}`', "the value as its length", "loads",
                  id="an allowlisted value that matches a credential pattern is still withheld ⚖"),
+    pytest.param("`[slug]`", '`{"slug": "dummy-account"}`', "the account id as its length", "loads",
+                 id="an allowlisted value equal to the account id is kept as its length ⚖"),
 ]
 
 

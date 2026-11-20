@@ -83,7 +83,7 @@ a recorder fault never takes a read down; the parsers, snapshots and views are u
 described.
 
 **World: [policy-codex](../worlds/README.md#policy-worlds)** — every world's gateway starts from the Go
-catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity).
+catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity — the codex credential's account id is `dummy-account`).
 
 #### A read's answer is kept
 
@@ -137,6 +137,7 @@ answers; `stored?` = the record's bytes; `load?` = whether the declarations load
 | an allowlisted key is kept at any depth and in a list | `[slug]` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}` | loads |
 | no declarations file keeps no string ⚖ | `GATEWAY_WIRE` unset, source `codex-usage` | the observed usage shape | every string as its length | — |
 | an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE…"}` | the value as its length | loads |
+| an allowlisted value equal to the account id is kept as its length ⚖ | `[slug]` | `{"slug": "dummy-account"}` | the account id as its length | loads |
 
 #### What an allowlist may not name
 
@@ -204,7 +205,7 @@ rail's own credential lifecycle — the bearer and the account header the rail's
 never a refresh of its own — and is recorded as an `account` source, so its answer is structure and
 lengths. The bytes are opaque to the probe: it assumes no shape. GET only, never an inference path, never
 a host the rail does not already reach: the loader refuses a rail the policy does not declare, an absolute
-URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …) and any key that is not
+URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …), a `path` that carries a query (`?`), an `interval_s` under 60 (seconds), a `query` whose values are not strings, and any key that is not
 `rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file (unset, or a path that does not exist), or an empty one, means no
 probe goes out and no account string is kept ⚖. A probe reads at start unless its record is younger than
 its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
@@ -214,7 +215,7 @@ counts each probe (`ok`, `no-credential`, `fetch-failed`); `source` only takes n
 `wire` key in the policy refuses the load ⚖. A probe may not take the name of a source the gateway already registers ([GW-WIRE-RECORD](#gw-wire-record)'s list), and the loader refuses it naming that name ⚖. A malformed declarations file refuses to start, like a
 malformed policy ⚖. The same file holds the account class's allowlist (`keep_keys`): the string values
 under those keys are kept verbatim ⚖, every other string stays its length, and a value that matches a
-credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key. An allowlist
+credential pattern ([GW-REDACT](sessions.md#gw-redact)'s) stays a length even under an allowlisted key, and so does a value equal to the rail's account id ⚖. An allowlist
 can never name an identity key (`email`, `account_id`, `user_id`, anything token-, cookie-, secret-,
 password-, credential- or authorization-named — the floor ⚖).
 

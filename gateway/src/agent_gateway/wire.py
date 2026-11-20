@@ -58,22 +58,23 @@ DEFAULT_MAX_BYTES = 1_048_576
 MAX_DEPTH = 64
 
 
-def sanitise(value, depth: int = 0, keep: frozenset[str] = frozenset(), key: str | None = None):
+def sanitise(value, depth: int = 0, keep: frozenset[str] = frozenset(), key: str | None = None,
+             identities: frozenset[str] = frozenset()):
     """Structure kept; every string becomes its length (a depth past the bound collapses to its type) —
     except a string directly under a key in `keep` (or in a list under one), kept verbatim unless it is
-    credential-shaped (GW-REDACT's patterns), which stays a length."""
+    credential-shaped (GW-REDACT's patterns) or equal to a held identity (the rail's account id), which stays a length."""
     if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
-        if key is not None and key in keep and redact(value) == value:
+        if key is not None and key in keep and value not in identities and redact(value) == value:
             return value
         return {"len": len(value)}
     if depth >= MAX_DEPTH:
         return {"len": 0}
     if isinstance(value, dict):
-        return {str(k): sanitise(v, depth + 1, keep, str(k)) for k, v in value.items()}
+        return {str(k): sanitise(v, depth + 1, keep, str(k), identities) for k, v in value.items()}
     if isinstance(value, list):
-        return [sanitise(v, depth + 1, keep, key) for v in value]
+        return [sanitise(v, depth + 1, keep, key, identities) for v in value]
     return {"len": 0}
 
 
@@ -97,14 +98,14 @@ class WireRecorder:
         return cls
 
     def record(self, source: str, url: str, status: int | None, body: bytes | None, sent_headers: Mapping[str, str] | None = None,
-               content_type: str = "", truncated: bool = False, secrets: Iterable[str] = ()) -> None:
+               content_type: str = "", truncated: bool = False, secrets: Iterable[str] = (), account_id: str = "") -> None:
         """One read's answer: `status` None = unreachable. Never raises."""
         try:
-            self._record(source, url, status, body, sent_headers, content_type, truncated, secrets)
+            self._record(source, url, status, body, sent_headers, content_type, truncated, secrets, account_id)
         except Exception:  # noqa: BLE001 — the recorder never takes a read down
             log.exception("wire: recording %s failed", source)
 
-    def _record(self, source, url, status, body, sent_headers, content_type, truncated, secrets) -> None:
+    def _record(self, source, url, status, body, sent_headers, content_type, truncated, secrets, account_id="") -> None:
         cls = self.class_of(source, sent_headers)
         now = self.clock()
         url = url.split("@", 1)[-1] if "@" in url.split("?", 1)[0] else url
@@ -128,7 +129,8 @@ class WireRecorder:
                 self.store.wire_fail(source, cls, url, "over-bound", now)  # a cut document has no structure to keep
                 return
             try:
-                stored = _json(sanitise(json.loads(body), keep=self.declarations.keep_keys.get(source, frozenset())))
+                stored = _json(sanitise(json.loads(body), keep=self.declarations.keep_keys.get(source, frozenset()),
+                                         identities=frozenset({account_id} if account_id else ())))
             except ValueError:
                 stored = _json({"len": len(body)})
             content_type = "application/json"
@@ -322,6 +324,7 @@ class WireProbe:
         headers = {"authorization": "Bearer " + credential.access_token, "chatgpt-account-id": credential.account_id,
                    "accept": "application/json", "user-agent": USER_AGENT}
         held = (credential.access_token,)
+        account_id = credential.account_id
         del credential
         url = upstream + probe.path
         try:
@@ -329,11 +332,11 @@ class WireProbe:
             full_url = str(req.url)
             resp = await self.client.send(req, stream=True)
         except httpx.HTTPError:
-            self.wire.record(probe.name, url, None, None, headers, secrets=held)
+            self.wire.record(probe.name, url, None, None, headers, secrets=held, account_id=account_id)
             return "fetch-failed"
         try:
             if resp.status_code != 200:
-                self.wire.record(probe.name, full_url, resp.status_code, None, headers, secrets=held)
+                self.wire.record(probe.name, full_url, resp.status_code, None, headers, secrets=held, account_id=account_id)
                 return "fetch-failed"
             body, truncated = bytearray(), False
             async for chunk in resp.aiter_bytes():
@@ -342,11 +345,11 @@ class WireProbe:
                     truncated = True
                     break
         except httpx.HTTPError:
-            self.wire.record(probe.name, full_url, None, None, headers, secrets=held)
+            self.wire.record(probe.name, full_url, None, None, headers, secrets=held, account_id=account_id)
             return "fetch-failed"
         finally:
             await resp.aclose()
-        self.wire.record(probe.name, full_url, 200, bytes(body), headers, resp.headers.get("content-type", ""), truncated, secrets=held)
+        self.wire.record(probe.name, full_url, 200, bytes(body), headers, resp.headers.get("content-type", ""), truncated, secrets=held, account_id=account_id)
         return "ok"
 
 
