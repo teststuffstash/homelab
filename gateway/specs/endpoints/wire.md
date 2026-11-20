@@ -83,7 +83,7 @@ a recorder fault never takes a read down; the parsers, snapshots and views are u
 described.
 
 **World: [policy-codex](../worlds/README.md#policy-worlds)** — every world's gateway starts from the Go
-catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity).
+catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity — the codex credential's account id is `dummy-account`).
 
 #### A read's answer is kept
 
@@ -205,7 +205,7 @@ rail's own credential lifecycle — the bearer and the account header the rail's
 never a refresh of its own — and is recorded as an `account` source, so its answer is structure and
 lengths. The bytes are opaque to the probe: it assumes no shape. GET only, never an inference path, never
 a host the rail does not already reach: the loader refuses a rail the policy does not declare, an absolute
-URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …) and any key that is not
+URL, an inference path (`/responses`, `/chat/completions`, `/messages`, …), a `path` that carries a query (`?`), an `interval_s` under 60 (seconds), a `query` whose values are not strings, and any key that is not
 `rail`, `path`, `query` or `interval_s` — a method is not a key ⚖. No file (unset, or a path that does not exist), or an empty one, means no
 probe goes out and no account string is kept ⚖. A probe reads at start unless its record is younger than
 its interval (then at the record's time + the interval), so a restart inside the interval reads nothing; a
