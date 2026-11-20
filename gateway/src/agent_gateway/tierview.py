@@ -87,6 +87,11 @@ class TierDerivation:
                     ids.append(pid)
         return ids
 
+    def pending(self) -> bool:
+        """True while no derivation is stored AND one could run (a `tiers` block, the OpenRouter leg):
+        the catalogs' startup_delay then refreshes at once — the walk defers until this first one."""
+        return self.derived_at is None and self.policy.tiers is not None and self.or_view is not None
+
     # -- the derivation ---------------------------------------------------------------------------
     def run(self) -> bool:
         """Derive now. False (the last good derivation stands) when it cannot run: no `tiers` block,

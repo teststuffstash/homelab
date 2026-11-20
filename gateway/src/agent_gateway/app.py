@@ -169,6 +169,7 @@ def create_app(
     sessions.tier_derivation = tier_derivation
     catalog.on_refresh = tier_derivation.run
     orcatalog.on_refresh = tier_derivation.run
+    orcatalog.derivation_pending = tier_derivation.pending  # the OpenRouter leg carries the benchmark rows: it refreshes at once when none is stored
     m.bind_tier_evidence(lambda: tier_evidence_age(settings.benchmarks_path, clock()))
     proxy = Proxy(sessions, m, settings.upstreams, client)
     # The codex rail exists only when the policy declares it; it has a credential backend only when

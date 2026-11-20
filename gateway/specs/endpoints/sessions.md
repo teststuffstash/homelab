@@ -266,6 +266,14 @@ new gateway starts on that file (a pod roll) before any refresh.
 | a restart on a file store dispatches from the stored derivation ⚖ | policy-default | a derivation at T0 | dispatch | opencode-go/claude-haiku-5-5 | — |
 | a restart on an empty store defers until the first derivation ⚖ | policy-default | empty | defer | — | tiers-underived |
 
+The first derivation does not wait out the snapshot's interval: a restart that holds no derivation refreshes at
+once, even on an OpenRouter snapshot younger than `refresh_s` (the leg that carries the benchmark rows) (else every session defers for up to `refresh_s`).
+
+| description | world | store_state | openrouter_delay_s? |
+|---|---|---|---|
+| a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖ | policy-default | a young snapshot, no derivation | 0 |
+| a restart with a derivation and a young OpenRouter snapshot waits out the interval | policy-default | a young snapshot, a derivation | the rest of the interval |
+
 #### The policy without the priced rails' lists
 
 | description | policy | load? |

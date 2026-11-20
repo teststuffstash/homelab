@@ -476,6 +476,37 @@ async def test_a_restart_keeps_the_derivation(gw, app, settings, policy, secrets
     expect(doc, decision=expected_decision, model=expected_model, reason=expected_reason)
 
 
+# ── A restart with no derivation refreshes at once ────────────────────────────────────────────
+FIRST_ROWS = [
+    pytest.param("policy-default", "a young snapshot, no derivation", "0", id="a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖"),
+    pytest.param("policy-default", "a young snapshot, a derivation", "the rest of the interval",
+                 id="a restart with a derivation and a young OpenRouter snapshot waits out the interval"),
+]
+
+
+@pytest.mark.real_walk
+@pytest.mark.parametrize(("world", "store_state", "expected_openrouter_delay_s"), FIRST_ROWS, ids=[p.id for p in FIRST_ROWS])
+async def test_a_restart_without_a_derivation_refreshes_at_once(gw, app, settings, policy, secrets, reviews, pods, clock, mcp_transport,
+                                                                world, store_state, expected_openrouter_delay_s):
+    from agent_gateway.tierview import SOURCE
+
+    from ._catalog_rows import SecondGateway
+
+    enter_world(world)
+    inputs(store_state=store_state)
+    with given(f"store_state = {store_state}"):
+        app.state.store.snapshot_save("openrouter-endpoints", clock(), {"models": {}, "sources": {}})
+        app.state.store._db.execute("DELETE FROM catalog_snapshots WHERE source = ?", (SOURCE,))
+        if "a derivation" in store_state and "no derivation" not in store_state:
+            app.state.store.snapshot_save(SOURCE, clock(), derived_body(opencode=FULL))
+    with when("a new gateway starts on the same store file"):
+        second = SecondGateway(settings, policy, secrets, mcp_transport, reviews, pods, clock)
+        got_or = second.or_delay
+        await second.close()
+    kind = lambda d: "0" if d == 0 else "the rest of the interval" if d > 0 else str(d)  # noqa: E731
+    expect({"openrouter_delay_s": kind(got_or)}, openrouter_delay_s=expected_openrouter_delay_s)
+
+
 # ── The policy without the priced rails' lists ───────────────────────────────────────────────
 LOAD_ROWS = [
     pytest.param("policy-default", "ok", id="a policy with the lists loads; they order nothing"),

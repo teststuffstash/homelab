@@ -169,6 +169,7 @@ class OpenRouterCatalog:
         self.clock = clock
         self.refresh_s = refresh_s
         self.on_refresh = None  # called after every good refresh (GW-MODEL-TIERS: the derivation runs)
+        self.derivation_pending = None  # () -> bool: no derivation is stored yet — a restart refreshes at once instead of serving the snapshot (GW-SESSIONS-ADMIT)
         rail = policy.rails.get("openrouter")
         self.catalog = rail.catalog if rail else None
         self.canary = rail.canary if rail else None
@@ -279,6 +280,8 @@ class OpenRouterCatalog:
         the timer). The Go leg's `GoCatalog.startup_delay` is the same rule."""
         row = self.store.snapshot_load(SNAPSHOT_SOURCE)
         if row is None or self.refresh_s <= 0:
+            return 0.0
+        if self.derivation_pending is not None and self.derivation_pending():
             return 0.0
         fetched_at = row[0]
         delay = fetched_at + self.refresh_s - now
