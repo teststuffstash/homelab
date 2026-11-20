@@ -1321,6 +1321,35 @@ section "the experiment block's loader"
 python3 -I "$REPO/islands/intake/scripts/experiment.py" --self-test > "$TMP/experiment-st.log" 2>&1 \
   && ok "experiment.py --self-test" || bad "experiment self-test" "$(grep -e FAIL "$TMP/experiment-st.log" | head -5)"
 
+# the verdict's read and the baseline replay (homelab#3603): the real command against a stub Prometheus that
+# answers from a fixture file — pass, fail, pending, two samples, HTTP 500
+EXPR="$REPO/islands/intake/tests/fixtures/experiment-read"
+EXPPY="$REPO/islands/intake/scripts/experiment.py"
+exp_stub() { # <fixture name> → starts the stub, sets EXP_URL and EXP_PID
+  rm -f "$TMP/exp-port"
+  python3 -I "$EXPR/stub-prometheus.py" "$EXPR/$1.json" "$TMP/exp-port" & EXP_PID=$!
+  for _ in $(seq 1 50); do [ -s "$TMP/exp-port" ] && break; sleep 0.1; done
+  EXP_URL="http://127.0.0.1:$(cat "$TMP/exp-port")"
+}
+for row in "pass:0:pass" "fail:1:fail" "pending:2:pending" "two-samples:2:one sample expected" "http-500:2:HTTP 500"; do
+  fx=${row%%:*}; rest=${row#*:}; want_rc=${rest%%:*}; want=${rest#*:}
+  exp_stub "$fx"
+  rc=0; python3 -I "$EXPPY" read --prometheus "$EXP_URL" --since 2026-01-01T00:00:00Z --now 2026-01-03T00:00:00Z \
+    "$EXPR/body.md" > "$TMP/exp-read.out" 2>&1 || rc=$?
+  kill "$EXP_PID" 2>/dev/null; wait "$EXP_PID" 2>/dev/null
+  [ "$rc" = "$want_rc" ] && grep -q "$want" "$TMP/exp-read.out" && [ "$(wc -l < "$TMP/exp-read.out")" = 1 ] \
+    && ok "experiment.py read against the stub: $fx → exit $want_rc, one JSON line saying '$want'" \
+    || bad "experiment read $fx" "exit $rc: $(head -c 300 "$TMP/exp-read.out")"
+done
+exp_stub pass
+got=$(python3 -I "$EXPPY" at --prometheus "$EXP_URL" --query 'sum(increase(errors_total[$window]))' --window 1h --at 2026-01-02T00:00:00Z 2>&1)
+[ "$got" = "0" ] && ok "experiment.py at prints the one number" || bad "experiment at (number)" "$got"
+kill "$EXP_PID" 2>/dev/null; wait "$EXP_PID" 2>/dev/null
+exp_stub two-samples
+got2=$(python3 -I "$EXPPY" at --prometheus "$EXP_URL" --query 'errors_total[$window]' --window 1h --at 2026-01-02T00:00:00Z 2>&1) && rc=0 || rc=$?
+kill "$EXP_PID" 2>/dev/null; wait "$EXP_PID" 2>/dev/null
+[ "$rc" = 2 ] && echo "$got2" | grep -q "one sample expected" && ok "experiment.py at: two samples is a failed read (exit 2)" || bad "experiment at (two samples)" "exit $rc: $got2"
+
 # ── the facts files name their island's body shape (intake.md §A queue-ready body) ────────────────────────
 # Expected from homelab#3576 acceptance 5: `spec` for gateway, scan, launch, retro; `edit` for agent-loop,
 # substrate, mgmt-box, router-pair, dependency-upgrades — and every docs/intake/*.md carries exactly ONE

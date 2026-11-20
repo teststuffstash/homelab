@@ -1,0 +1,30 @@
+{
+ "routes": [
+  {
+   "contains": "samples_total",
+   "status": 200,
+   "body": {
+    "status": "success",
+    "data": {
+     "resultType": "vector",
+     "result": [
+      {
+       "metric": {},
+       "value": [
+        1,
+        "12"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "contains": "errors_total",
+   "status": 500,
+   "body": {
+    "status": "error"
+   }
+  }
+ ]
+}

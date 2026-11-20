@@ -34,6 +34,20 @@ A body that states it has no experiment carries the one line `Experiment: none �
   1  the file cannot be read;  64  a usage error
 `--check` prints nothing on either stream and only exits.
 
+  python3 -I islands/intake/scripts/experiment.py read --prometheus <url> --since <RFC3339 t0> [--now <RFC3339>] <file|->
+  python3 -I islands/intake/scripts/experiment.py at --prometheus <url> --query <promql with $window> --window <dur> --at <RFC3339>
+
+`read` loads the block, decides it against Prometheus (`decide`) and prints the report as one JSON object; it
+exits 0 pass · 1 fail · 2 no verdict (pending, no data, a block that does not load, or a failed read — the
+report's `verdict` or `error` says which). `at` prints the one number the query answers at the instant (or
+`no sample`): the replay intake uses to read a baseline.
+
+`decide(experiment, t0, now, ask)` (homelab#3586 pins 3-5; child #3603) is pure: `ask(promql, at)` is the only
+way it learns a number (a float, None for an answer with no sample, an exception for a failed read, which
+propagates — no verdict is returned). t0 / now / at are epoch seconds. The deciding window is the shortest
+whole-minute W, min_window <= W <= min(now, t0 + max_window) - t0, whose `min_samples_query` over W, evaluated at
+t0 + W, reaches `min_samples` (bisection, assuming the count does not fall as W grows, confirmed at the W found).
+
 As a module (the read that decides a verdict imports it): `load_body(text)` → `(status, value)` with status
 `ok` (value: the output object), `none` (value: the reason), `absent` or `malformed` (value: the message);
 `EXIT[status]` is the exit code. `validate(block)` → the output object, raising `Malformed`.
@@ -46,6 +60,10 @@ import math
 import os
 import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -318,6 +336,183 @@ def load_body(text):
         return "malformed", str(e)
 
 
+# ── the verdict ──────────────────────────────────────────────────────────────────────────────────────
+OPS = {"<": lambda a, b: a < b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, ">=": lambda a, b: a >= b}
+
+
+def _subst(query, minutes):
+    return query.replace("$window", f"{minutes}m")
+
+
+def decide(experiment, t0, now, ask):
+    """The experiment (the loader's output object), t0 and now (epoch seconds), ask(promql, at) → the verdict.
+
+    {verdict, window_s, at, value, samples, guards:[{id,value,ok}], bound, reason}; verdict is pass, fail,
+    pending or no data. A failed read raises out of here."""
+    kpi = experiment["kpi"]
+    bound = t0 + kpi["max_window_s"]
+    horizon = min(now, bound)
+    lo = -(-kpi["min_window_s"] // 60)
+    hi = int((horizon - t0) // 60)
+    out = {"verdict": None, "window_s": None, "at": None, "value": None, "samples": None, "guards": [],
+           "bound": bound, "reason": None}
+
+    def count(w):
+        n = ask(_subst(kpi["min_samples_query"], w), t0 + w * 60)
+        return 0 if n is None else n
+
+    found = None
+    if hi >= lo:
+        top = count(hi)
+        out["samples"] = top
+        if top >= kpi["min_samples"]:
+            a, b = lo, hi  # the smallest W in [a, b] reaching min_samples; b is known to
+            while a < b:
+                mid = (a + b) // 2
+                if count(mid) >= kpi["min_samples"]:
+                    b = mid
+                else:
+                    a = mid + 1
+            n = count(a)
+            if n >= kpi["min_samples"]:
+                found, out["samples"] = a, n
+    if found is None:
+        if now < bound:
+            out["verdict"] = "pending"
+            out["reason"] = (f"fewer than {kpi['min_samples']} samples ({out['samples'] or 0}) over the window "
+                             f"read so far; the bound is not reached")
+        else:
+            out["verdict"] = "no data"
+            out["reason"] = f"fewer than {kpi['min_samples']} samples ({out['samples'] or 0}) at the bound"
+        return out
+    at = t0 + found * 60
+    out["window_s"], out["at"] = found * 60, at
+    value = ask(_subst(kpi["query"], found), at)
+    out["value"] = value
+    if value is None:
+        out["verdict"] = "no data"
+        out["reason"] = "the query answers no sample (a condition of it is not met, or its source is empty)"
+        return out
+    failed = None
+    for g in kpi.get("guards", []):
+        gv = ask(_subst(g["query"], found), at)
+        ok = gv is not None and OPS[g["pass_op"]](gv, g["pass_value"])
+        out["guards"].append({"id": g["id"], "value": gv, "ok": ok})
+        if not ok and failed is None:
+            failed = (g, gv)
+    if failed:
+        g, gv = failed
+        out["verdict"] = "fail"
+        out["reason"] = (f"guard {g['id']} answers no sample" if gv is None
+                         else f"guard {g['id']}: {gv:g} is not {g['pass']}")
+        return out
+    ok = OPS[kpi["pass_op"]](value, kpi["pass_value"])
+    out["verdict"] = "pass" if ok else "fail"
+    out["reason"] = f"{value:g} {'meets' if ok else 'does not meet'} {kpi['pass']}"
+    return out
+
+
+# ── the Prometheus read ──────────────────────────────────────────────────────────────────────────────
+class ReadFailed(Exception):
+    """A Prometheus read that did not answer cleanly; str() says why."""
+
+
+def parse_time(text):
+    """RFC3339 with an offset (Z allowed) → epoch seconds."""
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00") if text.endswith("Z") else text)
+    except ValueError:
+        raise ValueError(f"{text!r} is not an RFC3339 time") from None
+    if dt.tzinfo is None:
+        raise ValueError(f"{text!r} has no UTC offset")
+    return dt.timestamp()
+
+
+def rfc3339(epoch):
+    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _query_once(url, promql, at):
+    full = url.rstrip("/") + "/api/v1/query?" + urllib.parse.urlencode({"query": promql, "time": f"{at:.3f}"})
+    try:
+        with urllib.request.urlopen(full, timeout=20) as r:
+            body = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise ReadFailed(f"Prometheus answered HTTP {e.code}") from None
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise ReadFailed(f"Prometheus read failed: {getattr(e, 'reason', e)}") from None
+    if not isinstance(body, dict) or body.get("status") != "success" or not isinstance(body.get("data"), dict):
+        raise ReadFailed("Prometheus answered no success")
+    data = body["data"]
+    kind, result = data.get("resultType"), data.get("result")
+    if kind == "scalar":
+        sample = result
+    elif kind == "vector" and isinstance(result, list):
+        if not result:
+            return None
+        if len(result) > 1:
+            raise ReadFailed(f"one sample expected, the query answered {len(result)}")
+        sample = result[0].get("value") if isinstance(result[0], dict) else None
+    else:
+        raise ReadFailed(f"unexpected result type {kind!r}")
+    try:
+        number = float(sample[1])
+    except (TypeError, ValueError, IndexError):
+        raise ReadFailed("the sample holds no number") from None
+    return number if math.isfinite(number) else None
+
+
+def prom_ask(url):
+    """ask(promql, at) over `<url>/api/v1/query`: 20 s timeout, one retry. None = no sample."""
+    def ask(promql, at):
+        try:
+            return _query_once(url, promql, at)
+        except ReadFailed as first:
+            if "one sample expected" in str(first):
+                raise
+            return _query_once(url, promql, at)
+    return ask
+
+
+def cmd_read(a):
+    try:
+        t0 = parse_time(a.since)
+        now = parse_time(a.now) if a.now else datetime.now(timezone.utc).timestamp()
+        text = sys.stdin.read() if a.body == "-" else open(a.body, encoding="utf-8").read()
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        print(json.dumps({"error": str(e)}))
+        return 2
+    status, exp = load_body(text)
+    if status != "ok":
+        print(json.dumps({"error": f"the body's experiment is {status}: {exp}"}))
+        return 2
+    report = {"id": exp["id"], "t0": rfc3339(t0), "now": rfc3339(now), "query": exp["kpi"]["query"]}
+    try:
+        res = decide(exp, t0, now, prom_ask(a.prometheus))
+    except ReadFailed as e:
+        report["error"] = str(e)
+        print(json.dumps(report, sort_keys=True))
+        return 2
+    report.update(res, bound=rfc3339(res["bound"]), at=rfc3339(res["at"]) if res["at"] is not None else None,
+                  baseline=exp["kpi"]["baseline"])
+    if res["window_s"] is not None:
+        report["query"] = _subst(exp["kpi"]["query"], res["window_s"] // 60)
+    print(json.dumps(report, sort_keys=True))
+    return {"pass": 0, "fail": 1}.get(res["verdict"], 2)
+
+
+def cmd_at(a):
+    try:
+        w = duration_s(a.window, "--window") // 60
+        at = parse_time(a.at)
+        v = _query_once(a.prometheus, _subst(a.query, w), at)
+    except (Malformed, ValueError, ReadFailed) as e:
+        print(f"experiment: {e}", file=sys.stderr)
+        return 2
+    print("no sample" if v is None else f"{v:.12g}")
+    return 0
+
+
 # ── the command ──────────────────────────────────────────────────────────────────────────────────────
 class _Parser(argparse.ArgumentParser):
     def error(self, message):  # 2 means "malformed section" here; a usage error must not look like one
@@ -332,11 +527,25 @@ def main(argv=None):
     ld = sub.add_parser("load", help="print the body's experiment as validated JSON")
     ld.add_argument("--check", action="store_true", help="print nothing, only exit")
     ld.add_argument("body", help="a file holding an issue body, or - for stdin")
+    rd = sub.add_parser("read", help="decide the body's experiment against Prometheus")
+    rd.add_argument("--prometheus", required=True)
+    rd.add_argument("--since", required=True, help="t0, RFC3339")
+    rd.add_argument("--now", help="RFC3339; default the clock")
+    rd.add_argument("body", help="a file holding an issue body, or - for stdin")
+    at = sub.add_parser("at", help="replay a query at a past instant")
+    at.add_argument("--prometheus", required=True)
+    at.add_argument("--query", required=True)
+    at.add_argument("--window", required=True)
+    at.add_argument("--at", required=True, help="RFC3339")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.cmd == "read":
+        return cmd_read(a)
+    if a.cmd == "at":
+        return cmd_at(a)
     if a.cmd != "load":
-        ap.error("want: load [--check] <file|->, or --self-test")
+        ap.error("want: load [--check] <file|->, read, at, or --self-test")
     try:
         if a.body == "-":
             text = sys.stdin.read()
@@ -355,6 +564,100 @@ def main(argv=None):
     else:
         print(f"experiment: {status} — {value}", file=sys.stderr)
     return EXIT[status]
+
+
+def decision_table():
+    """One row per case of the verdict function: the answers are a table-driven fake `ask`."""
+    fails = []
+
+    def check(name, cond, got=""):
+        print(("ok    " if cond else "FAIL  ") + name + ("" if cond else f"  → {got}"))
+        if not cond:
+            fails.append(name)
+
+    def exp(min_w="1h", max_w="7d", n=5, guards=None, op="<= 0"):
+        kpi = {"query": "Q[$window]", "pass": op, "baseline": 3, "min_window": min_w, "max_window": max_w,
+               "min_samples_query": "S[$window]", "min_samples": n}
+        if guards:
+            kpi["guards"] = guards
+        return validate({"id": "x", "requirement": "r", "cases": [], "kpi": kpi})
+
+    def fake(samples_per_min=1.0, value=0.0, guard_values=None, fail_on=None):
+        """samples = floor(W * rate); the query answers `value` (None = nothing); guards by id suffix."""
+        calls = []
+
+        def ask(q, at):
+            calls.append((q, at))
+            if fail_on and fail_on in q:
+                raise ReadFailed("boom")
+            m = re.search(r"\[(\d+)m\]", q)
+            w = int(m.group(1))
+            if q.startswith("S["):
+                return float(int(w * samples_per_min))
+            if q.startswith("G"):
+                return (guard_values or {}).get(q[0:2])
+            return value
+        ask.calls = calls
+        return ask
+
+    t0, day = 1_000_000, 86400
+    d = decide(exp(), t0, t0 + 2 * day, fake(value=0.0))
+    check("pass: the shortest window reaching the samples is decided, the value meets pass",
+          d["verdict"] == "pass" and d["window_s"] == 3600 and d["at"] == t0 + 3600 and d["samples"] == 60
+          and d["value"] == 0.0 and d["bound"] == t0 + 7 * day, d)
+    d = decide(exp(n=90), t0, t0 + 2 * day, fake())
+    check("pass: the window is the shortest W with samples >= min_samples (90 at 1/min = 90 m)",
+          d["window_s"] == 90 * 60, d)
+    d = decide(exp(), t0, t0 + 2 * day, fake(value=4.0))
+    check("fail on the value", d["verdict"] == "fail" and d["value"] == 4.0, d)
+    d = decide(exp(n=100000), t0, t0 + 2 * day, fake())
+    check("pending: short of samples before the bound", d["verdict"] == "pending" and d["window_s"] is None, d)
+    d = decide(exp(n=100000), t0, t0 + 7 * day, fake())
+    check("no data: short of samples at the bound", d["verdict"] == "no data" and d["window_s"] is None, d)
+    d = decide(exp(n=100000), t0, t0 + 9 * day, fake())
+    check("no data: now past the bound reads the bound, not now", d["verdict"] == "no data", d)
+    d = decide(exp(), t0, t0 + 2 * day, fake(value=None))
+    check("query answering nothing (an and on() term not met) is no data, never pass",
+          d["verdict"] == "no data" and d["value"] is None and d["window_s"] == 3600, d)
+    g = [{"id": "G1", "query": "G1[$window]", "pass": ">= 0.95"}]
+    d = decide(exp(guards=g), t0, t0 + 2 * day, fake(guard_values={"G1": 0.5}))
+    check("a guard failing is fail, the guard named",
+          d["verdict"] == "fail" and "G1" in d["reason"] and d["guards"] == [{"id": "G1", "value": 0.5, "ok": False}], d)
+    d = decide(exp(guards=g), t0, t0 + 2 * day, fake(guard_values={"G1": 0.99}))
+    check("a guard passing leaves the value to decide", d["verdict"] == "pass" and d["guards"][0]["ok"], d)
+    d = decide(exp(guards=g), t0, t0 + 2 * day, fake(guard_values={}))
+    check("a guard answering nothing is fail, the guard named",
+          d["verdict"] == "fail" and "G1" in d["reason"] and d["guards"][0]["value"] is None, d)
+    e = exp(n=7 * 1440)
+    rate = lambda: fake(samples_per_min=1.0)
+    d = decide(e, t0, t0 + 7 * day - 60, rate())
+    check("samples reached only at max_window exactly: pending a minute before", d["verdict"] == "pending", d)
+    d = decide(e, t0, t0 + 7 * day, rate())
+    check("samples reached only at max_window exactly: decided at the bound",
+          d["verdict"] == "pass" and d["window_s"] == 7 * day, d)
+    e = exp(min_w="7d", max_w="7d", n=1)
+    d = decide(e, t0, t0 + 7 * day - 60, fake())
+    check("min_window = max_window read before the bound: pending", d["verdict"] == "pending", d)
+    d = decide(e, t0, t0 + 7 * day, fake())
+    check("min_window = max_window read at the bound: decided", d["verdict"] == "pass" and d["window_s"] == 7 * day, d)
+    e = exp()
+    a = decide(e, t0, t0 + 2 * day, fake())
+    b = decide(e, t0, t0 + 6 * day, fake())
+    check("decided, then read later: the same output", a == b and a["verdict"] == "pass", (a, b))
+    ask = fake(samples_per_min=1.0)
+    decide(exp(min_w="1m", n=5000), t0, t0 + 7 * day, ask)
+    check("bisection asks about log2(10080) questions, not 10080", len(ask.calls) < 25, len(ask.calls))
+    try:
+        decide(exp(), t0, t0 + 2 * day, fake(fail_on="Q["))
+        check("a failed read raises out of decide", False, "returned")
+    except ReadFailed:
+        check("a failed read raises out of decide", True)
+    try:
+        decide(exp(), t0, t0 + 2 * day, fake(fail_on="S["))
+        check("a failed samples read raises out of decide", False, "returned")
+    except ReadFailed:
+        check("a failed samples read raises out of decide", True)
+    return fails
 
 
 # ── self-test: the real command over the fixture bodies; expected.json is written by hand ────────────
@@ -420,6 +723,7 @@ def self_test(fixtures=FIXTURES):
     check("an unreadable file exits 1, not a verdict on the body", rc == EXIT_UNREADABLE and out == "", (rc, err))
     rc, out, err = run([])
     check("no subcommand is a usage error (64), never 2", rc == EXIT_USAGE and out == "", (rc, err))
+    fails += decision_table()
     print("experiment self-test: " + ("PASS" if not fails else f"FAIL ({len(fails)})"))
     return 1 if fails else 0
 
