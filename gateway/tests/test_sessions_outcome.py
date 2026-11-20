@@ -1,6 +1,7 @@
 """GW-SESSIONS-OUTCOME — the consumer's outcome and the strike store (specs/endpoints/sessions.md
 §Cross-cutting → GW-SESSIONS-OUTCOME). Worlds `policy-enforce` (the caller rows: every call presents a
-caller token, reviewed by the fake TokenReview) and `policy-default` (the rest). Fixture callers: the
+caller token, reviewed by the fake TokenReview) and `policy-default` (the rest; there a report the row gives
+to the judge presents the judge's token, every other call presents none). Fixture callers: the
 platform loop (admits platform workers), the specs reviewer (another listed caller) and the judge
 (`outcome: any`, admits nothing). "the worker session" = the platform loop admitted `{platform, worker,
 task homelab-2700, round 1}` on the policy walk (opencode, `opencode-go/deepseek-v4.1-flash`).
@@ -201,6 +202,8 @@ async def test_when(gw, store, clock, world, sequence, expected_status, expected
 async def _act(gw, upstreams, doc, kind: str, what: str, transport=None):
     if kind == "report":
         return await _report(gw, doc["session"]["id"], {"class": what}, None)
+    if kind == "judge-report":
+        return await _report(gw, doc["session"]["id"], {"class": what}, "the judge")
     if what in ("upstream-slow", "upstream-down"):  # the transport-level worlds (RailTransport)
         (transport.slow if what == "upstream-slow" else transport.unreachable).add("opencode")
     else:
@@ -299,6 +302,9 @@ AFTER_429 = {
     "upstream-429, then the consumer reports harness-gave-up": [("ride", "upstream-429"), ("report", "harness-gave-up")],
     "upstream-429, then upstream-ok on the same session, then the consumer reports unknown":
         [("ride", "upstream-429"), ("ride", "upstream-ok"), ("report", "unknown")],
+    "upstream-429, then the judge reports wrong-verdict": [("ride", "upstream-429"), ("judge-report", "wrong-verdict")],
+    "upstream-429, then the consumer reports unknown, then the judge reports wrong-verdict":
+        [("ride", "upstream-429"), ("report", "unknown"), ("judge-report", "wrong-verdict")],
 }
 AFTER_429_ROWS = [
     pytest.param("policy-default · upstream-429", "upstream-429, then the consumer reports unknown", "none", "unknown", '{class="unknown",source="outcome"} 0',
@@ -308,6 +314,13 @@ AFTER_429_ROWS = [
     pytest.param("policy-default · upstream-429", "upstream-429, then upstream-ok on the same session, then the consumer reports unknown",
                  "{opencode, opencode-go/deepseek-v4.1-flash, opencode, unknown, model, outcome}", "unknown", '{class="unknown",source="outcome"} 1',
                  id="a 429 followed by a 2xx is no capacity death ⚖"),
+    pytest.param("policy-default · upstream-429", "upstream-429, then the judge reports wrong-verdict",
+                 "{opencode, opencode-go/deepseek-v4.1-flash, opencode, wrong-verdict, model, outcome}", "wrong-verdict",
+                 '{class="wrong-verdict",source="outcome"} 1', id="a judge's wrong-verdict after a relayed 429 still strikes ⚖"),
+    pytest.param("policy-default · upstream-429", "upstream-429, then the consumer reports unknown, then the judge reports wrong-verdict",
+                 "{opencode, opencode-go/deepseek-v4.1-flash, opencode, wrong-verdict, model, outcome}", "wrong-verdict",
+                 '{class="wrong-verdict",source="outcome"} 1 · {class="unknown",source="outcome"} 0',
+                 id="two reporters on one 429'd session: the consumer's unknown strikes nothing, the judge's wrong-verdict counts ⚖"),
 ]
 
 
@@ -322,12 +335,25 @@ async def test_an_outcome_after_a_relayed_429(gw, upstreams, store, world, seque
             for kind, what in steps[:-1]:
                 await _act(gw, upstreams, doc, kind, what)
     kind, klass = steps[-1]
-    with when(f"POST /sessions/{{id}}/outcome {{class: {klass}}}"):
+    if kind == "judge-report" and len(steps) == 3:
+        with when("the consumer reports unknown (no caller token) on the 429'd session"):
+            r = await _act(gw, upstreams, doc, "report", "unknown")
+        with quiet():
+            mid = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
+        with then("the consumer's report was stored and counted no strike"):
+            check("the consumer's report answered", r.status_code, 200)
+            check("GET shows the consumer's class stored", mid["class"] if mid else "not stored", "unknown")
+            check("no counted strike before the judge reports", _strike_cell(_strikes(store)), "none")
+    with when(f"POST /sessions/{{id}}/outcome {{class: {klass}}}" + (" presenting the judge" if kind == "judge-report" else "")):
         r = await _act(gw, upstreams, doc, kind, klass)
         assert r.status_code == 200, r.text
     with quiet():
         stored = (await gw.get(f"/sessions/{doc['session']['id']}")).json()["outcome"]
-    series = _series_cell(klass, "outcome", await _series(gw, klass, "outcome"))
+    if len(steps) == 3 and kind == "judge-report":
+        series = " · ".join([_series_cell(klass, "outcome", await _series(gw, klass, "outcome")),
+                             _series_cell("unknown", "outcome", await _series(gw, "unknown", "outcome"))])
+    else:
+        series = _series_cell(klass, "outcome", await _series(gw, klass, "outcome"))
     expect({"strikes": _strike_cell(_strikes(store)), "outcome": stored["class"] if stored else "not stored", "series": series},
            strikes=expected_strikes, outcome=expected_outcome, series=expected_series)
 
