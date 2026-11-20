@@ -92,6 +92,7 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 | The ride record of an issue a worker touched: `s3://agent-transcripts/homelab/issue-<n>/<run>/run.log` + `manifest.json` (the run log's tail carries the worker's structured report). The session `.jsonl` only when the run log does not answer the question | what the ride built, what stopped it, which branch holds the work |
 | Loop-worker PRs on the island merged since a block was written (author `app/homelab-agents-1234`, bodies only) | is the blocker a fact about the island, or about that one ride |
 | The gateway's own read-only views: `GET /healthz`, `/catalog/opencode`, `/catalog/openrouter`, `/sessions?task=<task>` on `agent-gateway.agent-egress.svc:8080`; the deployed `policy.json` and `benchmarks.json` under `argocd/resources/agent-gateway/` | live-verify a claim about the catalog, the store, a session's outcome; test a `standing` outcome's own trigger |
+| What the ride can do: the repo's recipe (`.agents/fix.yaml`, `.agents/build.yaml` — the paths it may not touch, the gates it runs, its stop markers) and the pod's reach ([`docs/agents/agentstack.md`](../docs/agents/agentstack.md) §The egress dial, with the repo's `fixer:` block in its claim) | before a `queue` or `goal` body is written: a body never asks a ride for an edit its recipe bans or a read its pod cannot make |
 | For an `escape:` input: the PR's body, reviews, review comments and issue comments, its file names (a hunk only when a finding cannot be classified without it), and the spec section it touches at the PR's base sha | step E — what the reviewers found that the body could have prevented |
 | For a `wait:` input: the item's comments (its events when they show the release), and the lines the wait cites at the default-branch commit before its parking comment | step W — whether the rules made the wait necessary |
 | The platform rules you must obey, by section: `agents/coordinator/README.md` §Authoring an issue body; `docs/agents/issue-authoring.md` §Creating a Goal — the consumer card; `agents/footprint.sh` `classify_touches` (run it, do not re-derive it); `scripts/goal-lint.sh` | the grammar the machinery reads |
@@ -99,8 +100,23 @@ Bounded on purpose ([`islands-no-corpus-read`](../docs/spikes/context-and-autono
 Every live read is a GET. A probe that errors is not an empty answer: say which read failed and
 decide on what you have. Never: `docs/agents/` as a corpus, `agents/coordinator/TICK-LOG.md`, other islands, the gateway's
 `src/` (you judge the contract, not the code). **A fact you need and cannot find in that set is
-never a guess and never a wider read:** it goes under `Unverified` and into **Facts I lacked**
-(step 3).
+never a guess.** There are two kinds:
+- **A fact the decision stands on** — which means fixes it, how large, whether it fits, whether
+  the fix is possible at all. You establish it before a body is written, with the narrowest GET
+  that answers it (a cluster read, a Prometheus query, the one ledger or doc section that holds
+  it) — outside the table when it has to be. Name each such read under **Facts I lacked**, so
+  the facts file gains the row. A deciding fact you cannot read leaves the input with no write:
+  the report lists it `deferred (fact)` with the fact and where it lives (receipt line
+  `deferred`). It is never handed to the worker.
+- **Any other fact** goes under `Unverified` and into **Facts I lacked** (step 3), never a wider
+  read.
+
+**Gathering is a subagent's job when it is more than a few reads.** A deciding fact that takes a
+survey (several objects, a ledger plus the live thing, a sibling's history) goes to a subagent of
+this sitting — your own Agent tool, no model override, read-only — briefed with the one question,
+where the answer lives, and the shape to return it in (the numbers and their sources, no
+recommendation). You decide on what it returns and cite it in the body. Never `file` a research
+issue, and never queue a ride, for a fact a subagent can read in this sitting.
 
 ## Outcomes — exactly one per input
 
@@ -164,7 +180,11 @@ never a guess and never a wider read:** it goes under `Unverified` and into **Fa
      recent operator-login one).
    `seat` names the entry and the one fact. **No entry → you decide**: pin ⚖ the
    cheaper-to-reverse option, name the others under `Unverified`, go on to step 4 — production
-   feedback (alerts, the dig, step E, a prober ride) corrects a wrong pin. A scope you cannot pin
+   feedback (alerts, the dig, step E, a prober ride) corrects a wrong pin. **You decide on
+   evidence.** When the fix is a choice between means (raise a limit, shrink what consumes it,
+   clean up sooner), read what each costs and whether it fits (§What you read — a fact the
+   decision stands on) before you pin; the body carries the choice and the numbers it stood on.
+   A worker implements a decision; it never makes one. A scope you cannot pin
    is a `goal`, a `split`, or the smaller scope pinned ⚖. An option that blinds its own detector
    (a read pinned to an old upstream revision so a staleness alert goes quiet) is excluded
    without asking.
@@ -300,7 +320,7 @@ Requirement: `GW-<REQ>` on `specs/endpoints/<page>.md` — world `<world>`.
 | "<the happy path>" | … || … |
 | "<the failure mode worth a conversation>" ⚖ | … || … |
 Index row: delete `⚑ gap (<date>, PR #N → work #M): …` verbatim / trim it to `<the remaining text>`.
-Unverified: <what you did not read on the wire — "verify during implementation">.
+Unverified: <what you did not read on the wire — "verify during implementation">; never a fact the fix depends on.
 
 ## Out of scope
 <the sibling gap on the same row that stays; what step 3 left to the operator>
@@ -314,6 +334,14 @@ Unverified: <what you did not read on the wire — "verify during implementation
   serialises two issues on the same requirement instead of letting their PRs collide.
 - You state the rows, never the process: the worker's recipe (`.agents/fix.yaml`) carries the
   `Spec changes:` heading (rule 1) and the ratchets.
+- **The body is for a worker that does what it is told and does not reason** — the cheapest
+  model on the rail may ride it. Every acceptance line is an edit, or a command with its expected
+  result. No line asks the worker to choose, to measure before it can choose, or to "stop and
+  report if …" on a fact you could have read; `Unverified` never holds a fact that would change
+  `Touches`, the means or a number in the body. Before you write it, check the ride can do it
+  (§What you read — what the ride can do): no `Touches` path the recipe bans, and every read an
+  acceptance line needs is one the pod's reach allows. What the worker cannot read, you read,
+  and it goes into the body as a fact with its source.
 - **Which ⚖ is which.** In an issue body `⚖` marks a row or pin with a plausible alternative
   (rule 4) — a flag for the specs reviewer on a choice already made, never an open question. A
   fork on step 3's list is not a `⚖` in the body: it is `seat`. An island's facts file

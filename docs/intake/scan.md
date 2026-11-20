@@ -20,8 +20,9 @@
   (+ its schema). The old member the item replaces (`agents/coordinator-scan.sh`, `coordinator-session.sh`, `update-pr-branch.sh`, `review-reflex.sh`, `major-handoff.sh`, … — the list in the README) may be read to explain a
   difference the comparison shows — never as the source of a component, and never edited. Never `docs/agents/` as a corpus (the design-agents read is operator-typed
   only; [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Design questions) — a design
-  doc a page links on first use is read at that section only. A fact outside this set goes under
-  `Unverified` (intake.md step 3), never a wider read.
+  doc a page links on first use is read at that section only. A fact outside this set that the
+  decision stands on is read with the narrowest GET (intake.md §What you read); any other goes
+  under `Unverified`, never a wider read.
 - **Write tier** (`classify_touches`, run 2026-11-14): `islands/**` = `machine-merge`;
   `docs/intake/**` = `machine-merge`. Anything under `agents/**` is `codeowner-merge` and **out of
   this island's scope** — the old members are never edited from an island item.
