@@ -3,6 +3,10 @@
   "exit": 2,
   "fault": "the block holds Infinity, which is not a JSON number"
  },
+ "malformed-baseline-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 401 digits, a number too large to read"
+ },
  "malformed-baseline-not-number.md": {
   "exit": 2,
   "fault": "kpi.baseline is not a number"
@@ -39,9 +43,17 @@
   "exit": 2,
   "fault": "an experiment block outside a \"## Experiment\" section"
  },
+ "malformed-case-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 4301 digits, a number too large to read"
+ },
  "malformed-case-number-overflow.md": {
   "exit": 2,
   "fault": "the block holds -1e999, a number too large to read"
+ },
+ "malformed-cases-nested-too-deep.md": {
+  "exit": 2,
+  "fault": "the block nests deeper than 32 levels"
  },
  "malformed-cases-not-array.md": {
   "exit": 2,
@@ -91,6 +103,10 @@
   "exit": 2,
   "fault": "missing key kpi"
  },
+ "malformed-max-window-digit-run.md": {
+  "exit": 2,
+  "fault": "kpi.max_window \"9999999999d\" is not a whole number followed by m, h or d"
+ },
  "malformed-max-window-fraction.md": {
   "exit": 2,
   "fault": "kpi.max_window \"1.5d\" is not a whole number followed by m, h or d"
@@ -102,6 +118,10 @@
  "malformed-min-samples-fraction.md": {
   "exit": 2,
   "fault": "kpi.min_samples is not a positive integer"
+ },
+ "malformed-min-samples-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 301 digits, a number too large to read"
  },
  "malformed-min-samples-query-without-window.md": {
   "exit": 2,
@@ -133,7 +153,7 @@
  },
  "malformed-none-without-reason.md": {
   "exit": 2,
-  "fault": "the \"Experiment: none\" line gives no reason (want \"Experiment: none — <why>\")"
+  "fault": "the \"Experiment: none\" line gives no reason (want \"Experiment: none \u2014 <why>\")"
  },
  "malformed-pass-no-space.md": {
   "exit": 2,
@@ -194,6 +214,89 @@
   "exit": 3,
   "reason": "baseline too thin (1 in 10 d)"
  },
+ "valid-edges.md": {
+  "exit": 0,
+  "out": {
+   "cases": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  1
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "id": "edge ]]]] [[[[ \\\" {{{{ of the format",
+   "kpi": {
+    "baseline": 100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+    "max_window": "168h",
+    "max_window_s": 604800,
+    "min_samples": 12,
+    "min_samples_query": "count(count by (job_id) (max_over_time(press_job_state[$window])))",
+    "min_window": "1m",
+    "min_window_s": 60,
+    "pass": "> -.5e-3",
+    "pass_op": ">",
+    "pass_value": -0.0005,
+    "query": "(count(count_over_time((press_job_state{state=\"waiting\"} == 1)[$window:1m]) > 10) or vector(0)) and on() (min(avg_over_time(up{job=\"press-exporter\"}[$window])) > 0.95)"
+   },
+   "requirement": "a lone surrogate \ud800 is carried"
+  }
+ },
  "valid-guards.md": {
   "exit": 0,
   "out": {
@@ -232,7 +335,7 @@
     "pass_value": 250.0,
     "query": "quantile_over_time(0.95, press_wait_seconds[$window])"
    },
-   "requirement": "docs/intake/example.md ## Sources — the press queue, live"
+   "requirement": "docs/intake/example.md ## Sources \u2014 the press queue, live"
   }
  },
  "valid.md": {
@@ -253,7 +356,7 @@
     "pass_value": 0.0,
     "query": "(count(count_over_time((press_job_state{state=\"waiting\"} == 1)[$window:1m]) > 10) or vector(0)) and on() (min(avg_over_time(up{job=\"press-exporter\"}[$window])) > 0.95)"
    },
-   "requirement": "docs/intake/example.md ## Sources — the press queue, live"
+   "requirement": "docs/intake/example.md ## Sources \u2014 the press queue, live"
   }
  }
 }

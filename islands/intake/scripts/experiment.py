@@ -71,7 +71,9 @@ NONE_LINE = re.compile(r"^Experiment:\s*none\b(.*)$")
 NONE_REASON = re.compile(r"^ — (\S.*)$")
 # matched with fullmatch, ASCII digits only: "7d\n" and a non-ASCII digit int() would convert are both refused
 PASS = re.compile(r"(<=|>=|<|>) (-?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)", re.ASCII)
-DURATION = re.compile(r"([0-9]+)([mhd])", re.ASCII)
+DURATION = re.compile(r"([0-9]{1,9})([mhd])", re.ASCII)  # bounded: int() of a digit run has a length limit
+MAX_INT_DIGITS = 300  # an integer token longer than this is refused before int() or float() can raise on it
+MAX_DEPTH = 32  # nesting of the block's JSON, refused before the parser's own recursion limit can be met
 ABSENT = 'no "## Experiment" section and no "Experiment: none — <why>" line'
 
 
@@ -186,10 +188,42 @@ def _float(token):
     return number
 
 
+def _int(token):
+    # integer tokens never reach parse_float; int() raises past its digit limit and float(int) past 1e308
+    if len(token.lstrip("-")) > MAX_INT_DIGITS:
+        raise Malformed(f"the block holds an integer of {len(token.lstrip('-'))} digits, a number too large to read")
+    return int(token)
+
+
+def _depth(text):
+    """The deepest nesting of [ and { in a JSON text, strings skipped."""
+    depth = deepest = 0
+    in_string = escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif ch in "]}":
+            depth -= 1
+    return deepest
+
+
 def parse_block(text):
     """The fenced block's text → the parsed JSON object. Raises Malformed."""
+    if _depth(text) > MAX_DEPTH:
+        raise Malformed(f"the block nests deeper than {MAX_DEPTH} levels")
     try:
-        block = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_float)
+        block = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_float,
+                           parse_int=_int)
     except json.JSONDecodeError as e:
         raise Malformed(f"the block is not one JSON value (line {e.lineno} column {e.colno} of the block)") from None
     if not isinstance(block, dict):
@@ -317,7 +351,7 @@ def main(argv=None):
     if a.check:
         return EXIT[status]
     if status == "ok":
-        print(json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False))
+        print(json.dumps(value, sort_keys=True, allow_nan=False))  # ASCII out: a lone surrogate cannot break the write
     else:
         print(f"experiment: {status} — {value}", file=sys.stderr)
     return EXIT[status]
