@@ -5,6 +5,11 @@
 # its devbox.json is this script's toolchain; claude, git and curl are the pod image's); the machinery
 # inventory (predicate, key, capacity, belts, identity) is that manifest's header. Inputs are the container's environment — MODE, REVIEW (the workflow's
 # parameters), ISLAND (ONE island: the workflow's walk starts this script once per island, homelab#3579), the INTAKE_* knobs, the transcripts-bucket keys, PUSHGATEWAY — never an Argo template tag.
+# ISLAND is a platform island (a row of the selector's table: this repo, docs/intake/<island>.md) or a STACK island
+# `<stack>/<repo>` (homelab#3580: declared by that stack's AgentStack claim, `repos[].intake.facts`) — step 0 below
+# resolves either to a repo and a facts file, and no stack or stack repo is named in this file. Where a slash is
+# invalid the name travels as ISLAND_KEY (`/` → `-`: the bucket prefix, the gateway task key) or base64 (the
+# Pushgateway grouping key); the metric label and the receipt's `island` keep the name as the claim spells it.
 # Harness: islands/intake/tests/island-intake-test.sh (run by `devbox run deep-dig-test`).
 set -uo pipefail
 DAY="$(date -u +%Y-%m-%d)"; TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"; RUN_START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -16,6 +21,13 @@ ND=0; NM=0; NRR=0; NG=0; NE=0   # this run's inputs per source: dig findings, pi
 NW=0; NST=0                     # …wait inputs (parking comments) and stale waits (re-read at once)
 WC_H=0; WC_R=0; WC_O=0; WC_U=0; NFW=0; NFWI=0   # the wait read: intake-written records by class, R+O, ledger items
 REVIEW_RAN=0
+ISLAND_KEY="${ISLAND//\//-}"
+# the Pushgateway grouping key: a path segment cannot hold a slash, so a stack island's name rides base64
+# (`island@base64/<url-safe base64>` — the Pushgateway decodes it into the same `island` label)
+case "$ISLAND" in
+  */*) PGW_ISLAND="island@base64/$(printf '%s' "$ISLAND" | base64 | tr -d '\n=' | tr '+/' '-_')";;
+  *) PGW_ISLAND="island/$ISLAND";;
+esac
 _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
   [ -n "$PGW" ] || return 0
   printf '%s\n' \
@@ -35,10 +47,10 @@ _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
     "island_intake_wait_records{class=\"U\"} $WC_U" \
     "# TYPE island_intake_false_waits gauge" "island_intake_false_waits $NFW" \
     "# TYPE island_intake_false_wait_items gauge" "island_intake_false_wait_items $NFWI" \
-    | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/island/$ISLAND" >/dev/null 2>&1 \
+    | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/$PGW_ISLAND" >/dev/null 2>&1 \
     || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
 }
-TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}"
+TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/intake-${ISLAND_KEY}-${DAY}/intake-r1-${TS_RUN}"
 _ts_put() { # <local> <remote-basename>
   [ -s "$1" ] || return 0
   [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 writer key — $2 not captured"; return 1; }
@@ -51,13 +63,46 @@ _ts_put() { # <local> <remote-basename>
 # the clone is the bootstrap's (the manifest): this file is read from it, so it cannot make it
 cd /work/homelab || exit 1
 
+# ── 0. THE ISLAND'S REPO AND FACTS FILE (homelab#3580) ──────────────────────────────────────────
+# The selector resolves the name (`--resolve`): a platform island is this repo and docs/intake/<island>.md,
+# with no claims read; a stack island is the repo and the facts path its claim declares, read live
+# (scripts/claims-read.sh). A stack island's repo is cloned beside this clone — default branch, depth 1,
+# its push URL disabled (the sitting writes to GitHub through `gh` only) — and the model sessions run
+# there, so the facts file's repo-relative reads resolve. Every failure here is THIS island's step
+# failing (exit 1), before any selection or session: the walk's other islands are other pods.
+_fail0() { _push 0 0 0 0 0; echo "island-intake: $1"; exit 1; }
+WORK=/work/homelab   # where the model sessions run and the lenses read the base
+HL=""                # the prefix a homelab path needs from there ("" = the homelab clone itself)
+SEL_ARGS=(); CLAIMS_ARGS=()
+case "$ISLAND" in */*)
+  bash islands/intake/scripts/claims-read.sh /tmp/claims.json || _fail0 "$ISLAND — a stack island cannot be resolved without the claims — exit 1, Argo retries"
+  CLAIMS_ARGS=(--claims /tmp/claims.json);;
+esac
+RESOLVED="$(bash islands/intake/scripts/intake-select.sh --resolve --repo "${ORG:-teststuffstash}/homelab" --island "$ISLAND" "${CLAIMS_ARGS[@]}" 2>/tmp/resolve.log)" \
+  || { cat /tmp/resolve.log; _fail0 "$ISLAND resolves to no island — this island's step fails"; }
+REPO_SLUG="$(jq -r '.repo' <<< "$RESOLVED")"; FACTS="$(jq -r '.facts' <<< "$RESOLVED")"; ISLAND_KIND="$(jq -r '.kind' <<< "$RESOLVED")"
+if [ "$ISLAND_KIND" = stack ]; then
+  WORK=/work/island-repo; HL="/work/homelab/"
+  rm -rf "$WORK"
+  _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+  git clone -c "$_ah" --depth 1 "https://github.com/$REPO_SLUG.git" "$WORK" || _fail0 "$ISLAND — clone failed ($REPO_SLUG) — exit 1, Argo retries"
+  git -C "$WORK" remote set-url --push origin "no-push://the-intake-sitting-reads-only" || echo "island-intake: could not disable the push URL of $WORK — continuing"
+  # claude's workdir trust for this clone too (the bootstrap seeds the homelab clone's)
+  { jq --arg d "$WORK" '.projects[$d] = {hasTrustDialogAccepted: true}' "$HOME/.claude.json" > /tmp/claude.json.next && mv /tmp/claude.json.next "$HOME/.claude.json"; } 2>/dev/null \
+    || echo "island-intake: could not add $WORK to $HOME/.claude.json (the workdir trust seed) — continuing"
+  SEL_ARGS=(--claims /tmp/claims.json --facts "$WORK/$FACTS")
+fi
+# the facts file can carry a sitting (scripts/facts-check.sh — the ONE predicate, the harness's too)
+FACTS_MISS="$(bash islands/intake/scripts/facts-check.sh "$WORK/$FACTS" | paste -sd';' -)" || true
+[ -z "$FACTS_MISS" ] || _fail0 "$ISLAND — the facts file $FACTS ($REPO_SLUG) cannot carry a sitting: $FACTS_MISS"
+
 # ── 1. SELECT, per source (deterministic; exit 1 = hold, 2 = a probe failed) ──────
 # A hold is a hold only when the selector WROTE a selection saying so: an unexpected death
 # (set -e) also exits 1, and reading that as "nothing to do" is the fail-open the first
 # in-cluster dry-run hit (2026-10-28 — inputs 0 while four findings were waiting).
 _select() { # <source> → 0 fire, 1 hold, 2 failed; the selection lands in /tmp/sel-<source>.json
   local _rc=0
-  bash islands/intake/scripts/intake-select.sh --source "$1" --island "$ISLAND" --out "/tmp/sel-$1.json" 2>"/tmp/select-$1.log" || _rc=$?
+  bash islands/intake/scripts/intake-select.sh --source "$1" --island "$ISLAND" "${SEL_ARGS[@]}" --out "/tmp/sel-$1.json" 2>"/tmp/select-$1.log" || _rc=$?
   cat "/tmp/select-$1.log"
   if [ "$_rc" -eq 2 ] || ! jq -e '.schema == "island-intake-select/v1"' "/tmp/sel-$1.json" >/dev/null 2>&1; then
     echo "island-intake: selection failed (source $1, rc=$_rc, no valid selection)"; return 2
@@ -119,7 +164,7 @@ fi
 ADMIT_WHY=""
 _admit() { # <task suffix> → rc 0 (rail + TS_MODEL + GW_LLM_ENV set) | 1 (not admitted: ADMIT_WHY says why)
   local _gw=0 _rm
-  gw_admit_lane /tmp/gw-llm.env --stack platform --role coordinator --task "intake-${ISLAND}-$DAY$1" --tier heavy --prefer strongest || _gw=$?
+  gw_admit_lane /tmp/gw-llm.env --stack platform --role coordinator --task "intake-${ISLAND_KEY}-$DAY$1" --tier heavy --prefer strongest || _gw=$?
   case "$_gw" in
     0) trap gw_release EXIT
        case "$GW_RAIL $GW_MODEL" in
@@ -140,15 +185,33 @@ if ! _admit ""; then
 fi
 A_RAIL="$rail"; A_MODEL="$TS_MODEL"
 
-FACTS="docs/intake/$ISLAND.md"   # every island's facts file, the gateway's included (ADR-160; intake.md §Island facts)
+# FACTS = step 0's: docs/intake/<island>.md for every platform island, the gateway's included (ADR-160; intake.md
+# §Island facts); the claim's path, in the stack's clone, for a stack island
 rm -rf /tmp/review; mkdir -p /tmp/review/issues
 {
+if [ "$ISLAND_KIND" = stack ]; then
+cat <<BRIEF
+You are the ISLAND INTAKE sitting for the \`$ISLAND\` island, running unattended in-cluster
+(agents/coordinator/island-intake-argo.yaml). \`$ISLAND\` is a STACK island: the repo $REPO_SLUG,
+declared in its stack's AgentStack claim. Your working directory is a fresh clone of that repo's
+default branch at $WORK (cwd) — its open issues are your inputs, and every issue, label and comment
+you write goes to $REPO_SLUG. The platform's files are in a second clone, homelab master at
+/work/homelab: every \`islands/…\`, \`agents/…\` or \`docs/…\` path the brief names is under it.
+Read ${HL}islands/intake/rules/intake.md IN FULL first and follow it exactly —
+it is your brief; this prompt only adds the inputs, the mode and the receipt protocol.
+Your island's facts file (intake.md §Island facts): $FACTS — in this repo (cwd); read it IN FULL after
+the brief. A stack island has no dig findings, no gap rows and no wait read: those lists are empty.
+BRIEF
+else
 cat <<BRIEF
 You are the ISLAND INTAKE sitting for the \`$ISLAND\` island, running unattended in-cluster
 (agents/coordinator/island-intake-argo.yaml). Your working tree is a fresh clone of homelab
 master at /work/homelab (cwd). Read islands/intake/rules/intake.md IN FULL first and follow it exactly —
 it is your brief; this prompt only adds the inputs, the mode and the receipt protocol.
 Your island's facts file (intake.md §Island facts): $FACTS — read it IN FULL after the brief.
+BRIEF
+fi
+cat <<BRIEF
 
 mode: $MODE
 review: $REVIEW
@@ -184,11 +247,11 @@ Procedure step R: test the ONE fact, then change the ruling or write nothing.
 id \`<specs page>#<REQ>\` (the index row verbatim in \`row\`). Rule each one (intake.md §Inputs).
 
 \`escape:\` — PRs of issues this island queued that drew CHANGES_REQUESTED: step E
-(islands/intake/rules/intake-escape.md), one record per blocking finding under \`## Escape records\`.
+(${HL}islands/intake/rules/intake-escape.md), one record per blocking finding under \`## Escape records\`.
 \`escape-prior:\` — earlier sittings' records, from their receipts: read, never re-classified.
 
 \`wait:\` — parking comments on the island's items, released since or standing: step W
-(islands/intake/rules/intake-wait.md), one record per input under \`## Wait records\`; the ledger's earlier
+(${HL}islands/intake/rules/intake-wait.md), one record per input under \`## Wait records\`; the ledger's earlier
 records are in /tmp/wait/prior.json.
 
 LIVE READS (the brief's read set; every one is a GET, from this pod):
@@ -226,7 +289,7 @@ ruling — \`INTAKE-RULED: <owner/repo>#<n> queue|goal|seat|standing|close <refs
 a filed queue/goal issue is reviewed and labelled like any other. For every \`## Escape records\` record also print
   INTAKE-ESCAPE: <pr id> <finding id> <class A|B|C|D|E|X> <the intake check it names, one line>
 For every \`## Wait records\` record its INTAKE-WAIT line, and for a key the ledger puts at the bar its
-INTAKE-WAIT-PROPOSAL line — both one JSON object on one line (islands/intake/rules/intake-wait.md).
+INTAKE-WAIT-PROPOSAL line — both one JSON object on one line (${HL}islands/intake/rules/intake-wait.md).
 In dry-run mode print the lines you WOULD print.
 BRIEF
 if [ "$REVIEW" = review-repair ]; then
@@ -259,7 +322,7 @@ _ts_put /tmp/brief.md brief.md || true
 _ts_put /tmp/sel.json inputs.json || true
 
 : > /tmp/ts-mark; : > /tmp/intake.log
-timeout "${AUTHOR_TIMEOUT_S:-3600}" env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 \
+( cd "$WORK" && timeout "${AUTHOR_TIMEOUT_S:-3600}" env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 ) \
   | tee /tmp/intake.log \
   || echo "WARN: the intake session failed — whatever it printed is still harvested" | tee -a /tmp/intake.log
 gw_release
@@ -302,7 +365,7 @@ grep -oE '^ *INTAKE-ESCAPE: [^ ]+ [^ ]+ [A-EX]( .*)?$' /tmp/intake.log | sed 's/
 # rule entry, is model output gone wrong: skipped and counted (`wait_lines_dropped`, with samples),
 # never a reason to lose the valid lines beside it.
 { grep -E '^ *INTAKE-WAIT: ' /tmp/intake.log || true; } | sed 's/^ *INTAKE-WAIT: //' \
-  | jq -R -s --slurpfile sel /tmp/sel.json --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" '
+  | jq -R -s --slurpfile sel /tmp/sel.json --arg run "intake-${ISLAND_KEY}-${DAY}/intake-r1-${TS_RUN}" '
       ([$sel[0].inputs[] | select(.kind == "wait") | {key: .id, value: .}] | from_entries) as $rows
       | def ok: (.wait | type) == "string" and $rows[.wait] != null and (.class | IN("H","R","O","U"))
           and ((.rules // []) | type == "array" and all(.[]; type == "object" and (.mark | IN("caused","missing")) and ((.file // "") | type == "string" and . != "")));
@@ -345,7 +408,7 @@ NFWI="$(jq -r '.false_waits.items // 0' /tmp/wait-ledger.json 2>/dev/null)" || N
 # rule). The launcher is the belt: an INTAKE-HOLD issue still unlabelled after the repair is labelled
 # here (and, when the repair did not run, gets the review comment + the ruling first/last). Nothing
 # here loops; a lens that fails or defers never holds the queue.
-REPO_SLUG="${ORG:-teststuffstash}/homelab"
+# REPO_SLUG = step 0's: this repo for a platform island, the claim's repo for a stack island
 _re_repo="$(printf '%s' "$REPO_SLUG" | sed 's/\./\\./g')"
 grep -oE '^ *INTAKE-HOLD: [^ ]+ add=[^ ]+' /tmp/intake.log | sed 's/^ *INTAKE-HOLD: //' \
   | jq -R -s --arg re "^${_re_repo}#([0-9]+|new-[0-9]+)\$" --slurpfile ruled /tmp/ruled-q.json '
@@ -462,11 +525,11 @@ if not keys:
     sys.exit(3)
 print(masked)' "$SNIP" "$1"
 }
-_base_ready() { # <sha> → the clone holds it (a depth-1 clone has only master's tip; fetch the author's base when it differs)
-  git cat-file -e "$1^{commit}" 2>/dev/null && return 0
+_base_ready() { # <sha> → the island's clone ($WORK) holds it (a depth-1 clone has only the tip; fetch the author's base when it differs)
+  git -C "$WORK" cat-file -e "$1^{commit}" 2>/dev/null && return 0
   # the clone's own config already carries the auth header (`git clone -c` persists it): a second -c doubles it (HTTP 400)
-  git fetch -q --depth 1 origin "$1" 2>&1 | tail -2 | sed 's/^/island-intake: base fetch: /'
-  git cat-file -e "$1^{commit}" 2>/dev/null
+  git -C "$WORK" fetch -q --depth 1 origin "$1" 2>&1 | tail -2 | sed 's/^/island-intake: base fetch: /'
+  git -C "$WORK" cat-file -e "$1^{commit}" 2>/dev/null
 }
 
 if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
@@ -489,8 +552,8 @@ if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
       if ! _admit "-lens-unit-$ui"; then _lens_record unit "$ui" "deferred: $ADMIT_WHY" "" 0; continue; fi
       while [ "$runs" -lt 2 ]; do
         runs=$((runs + 1)); rm -f "$out"
-        _lens_run "$case" islands/intake/rules/intake-review-unit.md "Unit review (islands/intake/rules/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out. Your wall clock is ${LENS_TIMEOUT_S} s: write the file well before it with what you can support — an unwritten file is a failed run." \
-          "$LENS_TIMEOUT_S" "unit-$ui" "Read(/${case}/**)" "Glob" "Bash(git -C /work/homelab show:*)" "Bash(git -C /work/homelab grep:*)" "Edit(/${out})" || true
+        _lens_run "$case" islands/intake/rules/intake-review-unit.md "Unit review (islands/intake/rules/intake-review-unit.md, your system prompt) of the unit ${REPO_SLUG}#${keys[*]} at base ${base}, island \`$ISLAND\`. Use the frozen case directory $case (issues/<n>.md, issues/<n>.comments.md, edges.md, BASE_SHA) in place of the gh reads; the repository at the base is the clone at $WORK, read ONLY as \`git -C $WORK show ${base}:<path>\` / \`git -C $WORK grep -n <pattern> ${base} -- <path>\`. Write your ONE file to the absolute path $out. Your wall clock is ${LENS_TIMEOUT_S} s: write the file well before it with what you can support — an unwritten file is a failed run." \
+          "$LENS_TIMEOUT_S" "unit-$ui" "Read(/${case}/**)" "Glob" "Bash(git -C $WORK show:*)" "Bash(git -C $WORK grep:*)" "Edit(/${out})" || true
         [ -s "$out" ] && break
       done
       if [ -s "$out" ]; then st="ran"; _findings unit "$out" "unit#$ui"; else st="skipped: failed twice (no findings file)"; fi
@@ -515,8 +578,8 @@ if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
           "$PASS1_TIMEOUT_S" "rows-$ui-p1" "Read(/${p1}/**)" "Glob" "Edit(/${out})" || true
         if [ -n "$(_pass1_lines "$out")" ]; then
           cp "$out" "/tmp/review/out/rows-$ui.pass1.md"
-          _lens_run "$case" islands/intake/rules/intake-review-rows.md "Rows review (islands/intake/rules/intake-review-rows.md, your system prompt) of ${REPO_SLUG}#${head} at base ${base}, island \`$ISLAND\` — PASS 2 of a staged read. $out already holds your FROZEN '## Pass 1 (frozen)': keep it verbatim and complete the file (order step 3, '## Findings', '## Cannot run pre-queue'). Use the frozen case directory $case (process/, masked/, issues/<n>.md — a Goal child's Goal body beside it —, BASE_SHA) in place of the gh reads; the repository at the base is the clone at /work/homelab, read ONLY as \`git -C /work/homelab show ${base}:<path>\` / \`git -C /work/homelab grep -n <pattern> ${base} -- <path>\`. Your wall clock is ${LENS_TIMEOUT_S} s: complete the file well before it." \
-            "$LENS_TIMEOUT_S" "rows-$ui" "Read(/${case}/**)" "Read(/${out})" "Glob" "Bash(git -C /work/homelab show:*)" "Bash(git -C /work/homelab grep:*)" "Edit(/${out})" || true
+          _lens_run "$case" islands/intake/rules/intake-review-rows.md "Rows review (islands/intake/rules/intake-review-rows.md, your system prompt) of ${REPO_SLUG}#${head} at base ${base}, island \`$ISLAND\` — PASS 2 of a staged read. $out already holds your FROZEN '## Pass 1 (frozen)': keep it verbatim and complete the file (order step 3, '## Findings', '## Cannot run pre-queue'). Use the frozen case directory $case (process/, masked/, issues/<n>.md — a Goal child's Goal body beside it —, BASE_SHA) in place of the gh reads; the repository at the base is the clone at $WORK, read ONLY as \`git -C $WORK show ${base}:<path>\` / \`git -C $WORK grep -n <pattern> ${base} -- <path>\`. Your wall clock is ${LENS_TIMEOUT_S} s: complete the file well before it." \
+            "$LENS_TIMEOUT_S" "rows-$ui" "Read(/${case}/**)" "Read(/${out})" "Glob" "Bash(git -C $WORK show:*)" "Bash(git -C $WORK grep:*)" "Edit(/${out})" || true
           # the frozen pass 1 survives pass 2 whatever pass 2 did to the file
           [ -n "$(_pass1_lines "$out")" ] || cp "/tmp/review/out/rows-$ui.pass1.md" "$out"
         fi
@@ -536,7 +599,7 @@ if [ "$REVIEW" = review-repair ] && [ "$NH" -gt 0 ]; then
     {
     cat <<REPAIR
 You are the REPAIR PASS of the ISLAND INTAKE sitting for the \`$ISLAND\` island (mode: $MODE), running
-unattended in-cluster; cwd = a fresh clone of homelab master. Follow islands/intake/rules/intake.md §Review and repair,
+unattended in-cluster; cwd = $WORK, a fresh clone of $REPO_SLUG. Follow ${HL}islands/intake/rules/intake.md §Review and repair,
 steps 3 and 4, exactly (and §A queue-ready body for any edit). Below: the first pass's report, then every
 lens's findings file; the bodies under review are also at /tmp/review/issues/<n>.md (GitHub's copy wins in apply). Answer EVERY finding by its id, once (\`changed: …\` / \`declined: …\`), then on each
 issue of each unit: the ONE \`intake: review — …\` comment, then the labels (the INTAKE-HOLD lines of the
@@ -562,8 +625,8 @@ REPAIR
     done
     } > /tmp/review/repair-brief.md
     # on stdin: the first-pass report + every findings file can exceed one argv string (MAX_ARG_STRLEN, 128 KiB)
-    timeout "$REPAIR_TIMEOUT_S" env "${GW_LLM_ENV[@]}" claude -p --model "$TS_MODEL" \
-        --permission-mode bypassPermissions --max-turns 80 < /tmp/review/repair-brief.md > /tmp/review/repair.log 2>&1 \
+    ( cd "$WORK" && timeout "$REPAIR_TIMEOUT_S" env "${GW_LLM_ENV[@]}" claude -p --model "$TS_MODEL" \
+        --permission-mode bypassPermissions --max-turns 80 < /tmp/review/repair-brief.md > /tmp/review/repair.log 2>&1 ) \
       && P_STATUS="ran" || P_STATUS="failed: the repair session ended rc≠0 (its lines are still read)"
     gw_release
   fi
@@ -627,7 +690,8 @@ awk '/^## Wait records/{on=1} on && /^## / && !/^## Wait (records|proposals)/{ex
 
 # ── 6. RECEIPT ────────────────────────────────────────────────────────────────────────────────
 jq -n --arg island "$ISLAND" --arg mode "$MODE" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" \
+      --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg run "intake-${ISLAND_KEY}-${DAY}/intake-r1-${TS_RUN}" \
+      --arg repo "$REPO_SLUG" --arg kind "$ISLAND_KIND" --arg facts "$FACTS" \
       --arg review "$REVIEW" --arg ps "$P_STATUS" --arg pr "$P_RAIL" --arg pm "$P_MODEL" \
       --argjson labelled "$NL" --argjson unheld "$UNHELD" --rawfile escmd /tmp/escape-records.md \
       --rawfile waitmd /tmp/wait-records.md --slurpfile waits /tmp/waits.json --slurpfile wl /tmp/wait-ledger.json \
@@ -635,7 +699,7 @@ jq -n --arg island "$ISLAND" --arg mode "$MODE" --arg ts "$(date -u +%Y-%m-%dT%H
       --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json --slurpfile filed /tmp/ruled-filed.json --slurpfile holds /tmp/holds.json \
       --slurpfile units /tmp/units.json --slurpfile lenses /tmp/lenses.json \
       --slurpfile findings /tmp/findings.json --slurpfile escapes /tmp/escapes.json \
-      '{schema: "island-intake-receipt/v1", island: $island, mode: $mode, ts: $ts, run: $run,
+      '{schema: "island-intake-receipt/v1", island: $island, island_kind: $kind, repo: $repo, facts: $facts, mode: $mode, ts: $ts, run: $run,
         session_ran: true, model: $model, rail: $rail,
         inputs: ($sel[0].inputs | map(.id)), counts: $sel[0].counts, ruled: $ruled[0], ruled_filed: $filed[0],
         review: {mode: $review, held: [$holds[0][].ref], units: $units[0], labelled: $labelled, unheld: $unheld,
@@ -651,7 +715,7 @@ echo "island-intake: $NR of $NIN input(s) ruled ($NQ queued) — review: $(jq -r
 jq -c '.ruled[]' /tmp/receipt.json; jq -c '.findings[]' /tmp/receipt.json
 _ts_put /tmp/receipt.json receipt.json \
   || echo "⚠ island-intake: the RECEIPT did not upload — tomorrow's sitting re-reads these inputs (its own step 2 finds what this one filed)"
-jq -n --arg role coordinator --arg lane intake --arg project homelab --arg task "intake-${ISLAND}-$DAY" \
+jq -n --arg role coordinator --arg lane intake --arg project homelab --arg task "intake-${ISLAND_KEY}-$DAY" \
       --arg model "$A_MODEL" --arg rail "$A_RAIL" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
       '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
         session_key:"coordinator-claude", pod:$pod, timestamp:$ts,
@@ -665,7 +729,11 @@ _ts_put /tmp/ts-manifest.json manifest.json || true
 { find "$HOME/.claude/projects" /tmp/review -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")" || true; done
 
 # ── 7. RING once, so queued work dispatches now rather than on the scan's cron ──────
-if [ "$MODE" = apply ] && [ "$NQ" -gt 0 ]; then
+if [ "$MODE" = apply ] && [ "$NQ" -gt 0 ] && [ "$ISLAND_KIND" = stack ]; then
+  # the queued issues are in the stack's repo: its own loop's scan finds them on its cron. The bell's
+  # payload names a stack's loop namespace, which no claim field this script reads carries.
+  echo "island-intake: $NQ queued in $REPO_SLUG — no /coordinate ring for a stack island (its loop's scan dispatches)"
+elif [ "$MODE" = apply ] && [ "$NQ" -gt 0 ]; then
   curl -m 5 -fsS -X POST -H "Content-Type: application/json" \
     -d '{"stack":"platform","loop_ns":"platform-agents","unit":"-"}' \
     http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate >/dev/null 2>&1 \

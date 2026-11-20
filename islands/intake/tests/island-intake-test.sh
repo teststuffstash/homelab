@@ -561,11 +561,12 @@ want="ClusterRoleBinding/island-intake-read → ClusterRole/island-intake-read;C
   || bad "bindings" "$got"
 [ "$(yq -r 'select(.kind == "ServiceAccount" and .metadata.name == "'"$SA"'") | .metadata.namespace' "$CDIR/rbac.yaml" | nb)" = agent-coordinator ] \
   && ok "…and the ServiceAccount is declared in agent-coordinator" || bad "service account object" "not in rbac.yaml"
-# island-intake-read: get/list only, on exactly the four kinds (acceptance 1)
+# island-intake-read: get/list only, on exactly five kinds — homelab#3577's four, plus the AgentStack claims
+# (homelab#3580 acceptance 2: the stack islands' declaration; a rule on the existing role, no new object)
 got="$(yq -r 'select(.kind == "ClusterRole" and .metadata.name == "island-intake-read") | .rules[]
         | (.apiGroups | join(",")) + ":" + (.resources | sort | join(",")) + ":" + (.verbs | sort | join(","))' "$CDIR/rbac.yaml" | nb | sort | tr '\n' ';')"
-[ "$got" = ":resourcequotas:get,list;argoproj.io:cronworkflows,workflowtemplates:get,list;monitoring.coreos.com:prometheusrules:get,list;" ] \
-  && ok "island-intake-read = get, list on resourcequotas, prometheusrules, cronworkflows, workflowtemplates" || bad "island-intake-read" "$got"
+[ "$got" = ":resourcequotas:get,list;argoproj.io:cronworkflows,workflowtemplates:get,list;monitoring.coreos.com:prometheusrules:get,list;platform.teststuff.net:agentstacks:get,list;" ] \
+  && ok "island-intake-read = get, list on resourcequotas, prometheusrules, cronworkflows, workflowtemplates, agentstacks" || bad "island-intake-read" "$got"
 # no ClusterRole the SA holds carries a write verb (the executor's task-result Role is the chart's, not this app's)
 got="$(for f in "$CDIR"/*.yaml; do yq -r 'select(.kind == "ClusterRole" and (.metadata.name == "island-intake-read" or .metadata.name == "agent-read-infra" or .metadata.name == "agent-read-app"))
         | .metadata.name as $n | .rules[] | .verbs[] | select(. != "get" and . != "list" and . != "watch") | $n + ":" + .' "$f"; done | nb | sort -u | tr '\n' ' ')"
@@ -600,7 +601,7 @@ n="$(jq -rn --slurpfile i "$DL" --slurpfile r "$REPO/devbox.lock" '[$i[0].packag
 section "island-intake-argo.yaml — the script, run"
 # the launcher script, from its FILE; the manifest's bootstrap (clone → exec the script) runs it, its exec
 # pointed at this redirected copy (the clone stub's tree holds the unredirected one)
-sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" "$SITTING" > "$TMP/sitting.sh"   # /tmp/ FIRST: $TMP is under /tmp
+sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" -e "s#/work/island-repo#$TMP/work/island-repo#g" "$SITTING" > "$TMP/sitting.sh"   # /tmp/ FIRST: $TMP is under /tmp
 yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"intake\") | .container.args[0]" "$YAML" \
   | sed -e "s#/tmp/#$TMP/run/#g" -e "s#/work/homelab#$TMP/work/homelab#g" \
         -e "s#exec bash islands/intake/scripts/sitting.sh#exec bash $TMP/sitting.sh#" > "$TMP/script.sh"
@@ -647,6 +648,12 @@ case "$1" in
        exec "$@";;
 esac
 exit 95
+EOF
+cat > "$BIN/kubectl" <<'EOF'
+#!/bin/bash
+# no cluster in the platform rows: the claims read (the list step's, homelab#3580) fails here, as it does when the
+# API is unreachable — the stack-island rows put their own kubectl in front
+echo "Unable to connect to the server (stub: no cluster)" >&2; exit 1
 EOF
 chmod +x "$BIN"/*
 echo '[]' > "$TMP/pile-empty.json"   # the pile source's seam: an empty pile unless a row sets PILE_JSON
@@ -1328,27 +1335,7 @@ nofile=""; for f in "$REPO"/docs/intake/*.md; do
 # `## What a ride can do` holds at least one line. The files checked are the ones the SELECTOR lists
 # (--list-islands), so an island gaining a facts file is checked without an edit here.
 # facts_sections <file> → one line per shortfall on stdout; nothing = the file has both sections.
-facts_sections() {
-  awk '
-    function cells(l,  n, a) { sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l); n = split(l, a, "|"); return n }
-    function cell(l, i,  a) { sub(/^[ \t]*\|/, "", l); sub(/\|[ \t]*$/, "", l); split(l, a, "|"); gsub(/^[ \t]+|[ \t]+$/, "", a[i]); return a[i] }
-    /^## / { sec = $0 }
-    sec == "## Sources" && /^## Sources$/ { src = 1; next }
-    sec == "## What a ride can do" && /^## What a ride can do$/ { ride = 1; next }
-    sec == "## Sources" && /^[ \t]*\|/ {
-      if (!hdr) { if (tolower(cell($0,1)) == "question" && tolower(cell($0,2)) == "read" && tolower(cell($0,3)) == "note" && cells($0) == 3) hdr = 1; next }
-      if ($0 ~ /^[ \t]*\|[ \t:|-]+\|[ \t]*$/) next          # the separator line
-      if (cells($0) == 3 && cell($0,1) != "" && cell($0,2) != "") rows++
-    }
-    sec == "## What a ride can do" && /[^ \t]/ { ridelines++ }
-    END {
-      if (!src) print "no `## Sources` heading"
-      else if (!hdr) print "`## Sources` has no `| question | read | note |` table"
-      else if (!rows) print "`## Sources` table has no row"
-      if (!ride) print "no `## What a ride can do` heading"
-      else if (!ridelines) print "`## What a ride can do` is empty"
-    }' "$1"
-}
+facts_sections() { bash "$REPO/islands/intake/scripts/facts-check.sh" --sections "$1"; }   # the ONE predicate — the launcher's too (homelab#3580)
 section "facts files — \`## Sources\` and \`## What a ride can do\` (homelab#3578)"
 FACTS_ISLANDS="$(env -u GH_TOKEN -u INTAKE_TS_DIR -u INTAKE_ISSUES_JSON bash "$SEL" --list-islands 2>/dev/null)"
 # expected = ALL_ISLANDS above (the selector's ISLANDS row): the check walks what the selector knows, all nine
@@ -1614,6 +1601,268 @@ cp "$TMP/body-9.spec" "$TMP/body-9.md"; cp "$TMP/r-author.spec" "$TMP/r-author.o
 rm -f "$TMP/r.calls" "$TMP"/prompt-*.txt; RUN_PATH="$RBIN:$BIN" RUN_ENV="REVIEW=off" run_script apply
 { [ "$(grep -c . "$TMP/r.calls")" = 1 ] && grep -q 'REVIEW: off' "$TMP/prompt-author.txt" && ! grep -q 'INTAKE-HOLD:' "$TMP/prompt-author.txt"; } 2>/dev/null \
   && ok "review=off: one author session, told to label as it rules" || bad "review off" "$(cat "$TMP/r.calls")"
+
+# ── stack islands: declared in the AgentStack claim (homelab#3580) ─────────────────────────────────
+# No real stack: fixtures/stack-claims.json is an invented claims list in the live answer's STRUCTURE
+# (a v1 List of AgentStack items: metadata.name, spec.repos[].name/.specs/.intake) — stack `beta` first
+# so the order below is the selector's sort, not the file's — and fixtures/stack-repos/<repo>/ are the
+# repos the `git clone` stub serves. Expected values, from the issue's acceptance:
+#   alpha: alpha-iac (no `intake`) → no island; alpha-app (intake.facts docs/intake.md, complete) → `alpha/alpha-app`
+#   beta:  beta-svc (facts path absent from its repo) → listed, its step fails; beta-web (facts file with no
+#          `Body shape:` line and no `## What a ride can do`) → listed, its step fails
+section "stack islands — the claim declares them (homelab#3580)"
+SFX="$REPO/islands/intake/tests/fixtures"; CLAIMS_FX="$SFX/stack-claims.json"
+got="$(bash "$SEL" --list-islands --claims "$CLAIMS_FX" 2>"$TMP/slist.err")"; rc=$?
+{ [ "$rc" = 0 ] && [ "$(printf '%s' "$got" | tr '\n' ' ')" = "$ALL_ISLANDS alpha/alpha-app beta/beta-svc beta/beta-web" ] && [ ! -s "$TMP/slist.err" ]; } \
+  && ok "--list-islands --claims: the platform islands as today, then one <stack>/<repo> per declaring repo, by stack then repo; a repo without the field is absent" \
+  || bad "--list-islands --claims" "rc=$rc got '$(printf '%s' "$got" | tr '\n' ' ')' $(cat "$TMP/slist.err")"
+echo 'not json' > "$TMP/claims-bad.json"
+bash "$SEL" --list-islands --claims "$TMP/claims-bad.json" >/dev/null 2>"$TMP/slist.err"; rc=$?
+{ [ "$rc" = 2 ] && grep -q 'not a claims list' "$TMP/slist.err"; } && ok "…an unreadable claims file is exit 2, never a list without the stack islands" || bad "--claims unreadable" "rc=$rc $(cat "$TMP/slist.err")"
+# a claim is a stack's own text: a name or a path that is not a plain name / repo-relative path is dropped, loudly
+jq '.items[0].spec.repos += [{"name": "beta-x", "intake": {"facts": "../../etc/passwd"}}, {"name": "b;x", "intake": {"facts": "f.md"}}]' "$CLAIMS_FX" > "$TMP/claims-odd.json"
+got="$(bash "$SEL" --list-islands --claims "$TMP/claims-odd.json" 2>"$TMP/slist.err" | tr '\n' ' ')"
+{ [ "$got" = "$ALL_ISLANDS alpha/alpha-app beta/beta-svc beta/beta-web " ] && [ "$(grep -c 'left out' "$TMP/slist.err")" = 2 ]; } \
+  && ok "…a facts path with \`..\` or a repo name with a shell character is left out and named on stderr" || bad "--claims odd names" "got '$got' $(cat "$TMP/slist.err")"
+# resolution: a platform name → this repo + docs/intake/<island>.md, no claims; a stack name → the claim's repo + path
+[ "$(bash "$SEL" --resolve --island router-pair 2>/dev/null)" = '{"island":"router-pair","kind":"platform","repo":"teststuffstash/homelab","facts":"docs/intake/router-pair.md"}' ] \
+  && ok "--resolve: a platform island is homelab and its docs/intake/ file, with no claims file" || bad "--resolve platform" "$(bash "$SEL" --resolve --island router-pair 2>&1)"
+[ "$(bash "$SEL" --resolve --island alpha/alpha-app --claims "$CLAIMS_FX" 2>/dev/null)" = '{"island":"alpha/alpha-app","kind":"stack","repo":"teststuffstash/alpha-app","facts":"docs/intake.md"}' ] \
+  && ok "--resolve: a stack island is <org>/<repo> and the claim's facts path" || bad "--resolve stack" "$(bash "$SEL" --resolve --island alpha/alpha-app --claims "$CLAIMS_FX" 2>&1)"
+[ "$(ORG=otherorg bash "$SEL" --resolve --island beta/beta-svc --claims "$CLAIMS_FX" 2>/dev/null | jq -r '.repo + " " + .facts')" = "otherorg/beta-svc docs/intake/facts.md" ] \
+  && ok "…the org is the environment's (ORG), the repo and the path are the claim's" || bad "--resolve org" "$(ORG=otherorg bash "$SEL" --resolve --island beta/beta-svc --claims "$CLAIMS_FX" 2>&1)"
+for row in "alpha/alpha-iac:--claims:$CLAIMS_FX:a repo that declares no intake" "alpha/nope:--claims:$CLAIMS_FX:a repo no claim has" "nostack/alpha-app:--claims:$CLAIMS_FX:a stack no claim has" "nope:::a name with no table row"; do
+  IFS=: read -r isl flag file what <<< "$row"
+  # shellcheck disable=SC2086  # flag + file are one optional pair
+  out="$(bash "$SEL" --resolve --island "$isl" $flag $file 2>"$TMP/sres.err")"; rc=$?
+  { [ "$rc" = 2 ] && [ -z "$out" ] && grep -q 'resolves to nothing' "$TMP/sres.err"; } && ok "--resolve $isl ($what): exit 2, \`resolves to nothing\`" || bad "--resolve $isl" "rc=$rc out=$out $(cat "$TMP/sres.err")"
+done
+bash "$SEL" --resolve --island alpha/alpha-app >/dev/null 2>"$TMP/sres.err"; rc=$?
+{ [ "$rc" = 2 ] && grep -q 'needs --claims' "$TMP/sres.err"; } && ok "…a stack name without a claims file is exit 2 (never the default repo)" || bad "--resolve no claims" "rc=$rc $(cat "$TMP/sres.err")"
+
+# membership (fixtures/stack-issues.json, seven open issues of the repo). Undecided by the pile's own filters:
+# #5 carries agent/queued and #6 a standing `intake:` ruling → out; #1 #2 #3 #4 #7 remain. The facts file's
+# `## Membership` lines (fixtures/stack-repos/alpha-app/docs/intake.md): `exclude label: epic` → #2;
+# `exclude title: ^(release|chore\(deps\)):` → #1 (`release: 1.4.0`) and #7 (`chore(deps): …`), NOT #3 (its
+# `release:` is mid-title). #4 has a title and a Touches the gateway's row would claim: here it is a member.
+SISS="$SFX/stack-issues.json"; AFACTS="$SFX/stack-repos/alpha-app/docs/intake.md"
+smem() { INTAKE_ISSUES_JSON="$SISS" bash "$SEL" --island alpha/alpha-app --claims "$CLAIMS_FX" "$@" --json 2>"$TMP/smem.err" | jq -r '[.[] | select(.kind == "member") | .number] | sort | map(tostring) | join(" ")'; }
+[ "$(smem)" = "1 2 3 4 7" ] && ok "a stack island's members with no --facts: every undecided open issue of the repo, whatever its title or Touches" || bad "stack members" "$(smem) $(cat "$TMP/smem.err")"
+[ "$(smem --facts "$AFACTS")" = "3 4" ] && ok "…with the facts file: minus \`exclude label:\` and \`exclude title:\` (an anchored ERE: a mid-title match stays)" || bad "stack exclusions" "$(smem --facts "$AFACTS") $(cat "$TMP/smem.err")"
+sed '/^## Membership$/,/^## Sources$/{/^## Sources$/!d}' "$AFACTS" > "$TMP/facts-nomem.md"
+[ "$(smem --facts "$TMP/facts-nomem.md")" = "1 2 3 4 7" ] && ok "…a facts file with no \`## Membership\` section excludes nothing" || bad "no membership section" "$(smem --facts "$TMP/facts-nomem.md")"
+printf '# x\n\n## Membership\n\n- exclude labels: epic\n' > "$TMP/facts-typo.md"
+INTAKE_ISSUES_JSON="$SISS" bash "$SEL" --island alpha/alpha-app --claims "$CLAIMS_FX" --facts "$TMP/facts-typo.md" --json >/dev/null 2>"$TMP/smem.err"; rc=$?
+{ [ "$rc" = 2 ] && grep -q 'unknown membership line' "$TMP/smem.err"; } && ok "…a mistyped \`exclude\` line is exit 2, never a wider membership" || bad "membership typo" "rc=$rc $(cat "$TMP/smem.err")"
+printf '# x\n\n## Membership\n\nexclude title: ^(release\n' > "$TMP/facts-ere.md"
+INTAKE_ISSUES_JSON="$SISS" bash "$SEL" --island alpha/alpha-app --claims "$CLAIMS_FX" --facts "$TMP/facts-ere.md" --json >/dev/null 2>"$TMP/smem.err"; rc=$?
+{ [ "$rc" = 2 ] && grep -q 'not a usable ERE' "$TMP/smem.err"; } && ok "…an ERE grep refuses is exit 2" || bad "membership ERE" "rc=$rc $(cat "$TMP/smem.err")"
+INTAKE_ISSUES_JSON="$SISS" bash "$SEL" --island alpha/alpha-app --claims "$CLAIMS_FX" --facts "$TMP/no-such-facts.md" --json >/dev/null 2>"$TMP/smem.err"; rc=$?
+[ "$rc" = 2 ] && ok "…an unreadable --facts file is exit 2" || bad "membership facts unreadable" "rc=$rc"
+# the pile for a stack island: ids carry the stack's repo; the receipts are read from intake-<stack>-<repo>-<day>/
+TSS="$TMP/ts-stack"; mkdir -p "$TSS/homelab"
+spile() { INTAKE_ISSUES_JSON="$SISS" INTAKE_TS_DIR="$TSS" INTAKE_NOW="$NOW" bash "$SEL" --source pile --island alpha/alpha-app --claims "$CLAIMS_FX" --facts "$AFACTS" --out "$TMP/spile.json" 2>"$TMP/spile.err"; }
+spile; rc=$?
+{ [ "$rc" = 0 ] && [ "$(jq -c '[.island, [.inputs[].id]]' "$TMP/spile.json")" = '["alpha/alpha-app",["teststuffstash/alpha-app#3","teststuffstash/alpha-app#4"]]' ]; } \
+  && ok "--source pile: the stack island's inputs are ids of ITS repo (<org>/<repo>#<n>)" || bad "stack pile" "rc=$rc $(jq -c '[.island, [.inputs[].id]]' "$TMP/spile.json" 2>&1) $(tail -1 "$TMP/spile.err")"
+# two apply receipts today under the slash-less prefix reach the daily cap (INTAKE_DAILY_MAX default 2); the same
+# two under another island's prefix do not
+for r in a b; do mkdir -p "$TSS/homelab/intake-gateway-2026-10-27/$r"; echo '{"schema":"island-intake-receipt/v1","mode":"apply","session_ran":true,"ts":"2026-10-27T01:00:00Z","ruled":[]}' > "$TSS/homelab/intake-gateway-2026-10-27/$r/receipt.json"; done
+spile; rc1=$?
+mv "$TSS/homelab/intake-gateway-2026-10-27" "$TSS/homelab/intake-alpha-alpha-app-2026-10-27"
+spile; rc2=$?
+{ [ "$rc1" = 0 ] && [ "$rc2" = 1 ] && grep -q 'hold: daily cap' "$TMP/spile.err"; } \
+  && ok "…its receipts are read from homelab/intake-<stack>-<repo>-<day>/ (the name with / replaced by -): two there reach its daily cap" || bad "stack receipts prefix" "rc1=$rc1 rc2=$rc2 $(tail -1 "$TMP/spile.err")"
+rm -rf "$TSS/homelab/intake-alpha-alpha-app-2026-10-27"
+for src in dig wait; do
+  INTAKE_TS_DIR="$TSS" INTAKE_NOW="$NOW" bash "$SEL" --source "$src" --island alpha/alpha-app --claims "$CLAIMS_FX" --out "$TMP/snone.json" 2>"$TMP/snone.err"; rc=$?
+  { [ "$rc" = 1 ] && grep -q 'no dig source for a stack island' "$TMP/snone.err" \
+      && jq -e --arg s "$src" '.schema == "island-intake-select/v1" and .source == $s and .counts.inputs == 0 and .inputs == []' "$TMP/snone.json" >/dev/null; } \
+    && ok "--source $src for a stack island selects nothing and says \`no dig source for a stack island\` (a valid empty selection, exit 1)" || bad "stack $src" "rc=$rc $(cat "$TMP/snone.err")"
+done
+INTAKE_ISSUES_JSON="$SISS" INTAKE_TS_DIR="$TSS" INTAKE_NOW="$NOW" bash "$SEL" --source gaps --island alpha/alpha-app --claims "$CLAIMS_FX" --out "$TMP/snone.json" 2>/dev/null; rc=$?
+{ [ "$rc" = 1 ] && jq -e '.counts.inputs == 0 and .specs_root == null' "$TMP/snone.json" >/dev/null; } && ok "--source gaps for a stack island: no specs root, nothing selected" || bad "stack gaps" "rc=$rc"
+
+# the facts check is ONE script (scripts/facts-check.sh): the launcher runs it before any session, facts_sections
+# above is its --sections mode. In full it also wants the `Body shape:` line — and every platform facts file passes it.
+FC="$REPO/islands/intake/scripts/facts-check.sh"
+miss=""; for isl in $FACTS_ISLANDS; do bash "$FC" "$REPO/docs/intake/$isl.md" >/dev/null || miss="$miss $isl"; done
+[ -z "$miss" ] && ok "facts-check.sh passes every platform island's docs/intake/<island>.md (the launcher runs it for them too)" || bad "facts-check platform" "fails:$miss"
+out="$(bash "$FC" "$AFACTS")"; rc=$?
+{ [ "$rc" = 0 ] && [ -z "$out" ]; } && ok "facts-check.sh: the complete stack facts file passes (exit 0, nothing printed)" || bad "facts-check good" "rc=$rc $out"
+out="$(bash "$FC" "$SFX/stack-repos/beta-web/docs/intake.md" | tr '\n' ';')"
+[ "$out" = 'no single `Body shape: spec|edit` line;no `## What a ride can do` heading;' ] && ok "…a file without a \`Body shape:\` line and \`## What a ride can do\`: both named, exit 1" || bad "facts-check incomplete" "$out"
+out="$(bash "$FC" "$SFX/stack-repos/beta-svc/docs/intake/facts.md" | tr '\n' ';')"
+[ "$out" = 'the facts file does not exist (or is empty);' ] && ok "…a missing file: named" || bad "facts-check missing" "$out"
+printf '# x\n\nBody shape: spec\nBody shape: edit\n\n## Sources\n\n| question | read | note |\n|---|---|---|\n| q | `r` | n |\n\n## What a ride can do\n\n- x\n' > "$TMP/facts-two-shapes.md"
+[ "$(bash "$FC" "$TMP/facts-two-shapes.md" | tr '\n' ';')" = 'no single `Body shape: spec|edit` line;' ] && ok "…two \`Body shape:\` lines are not one" || bad "facts-check two shapes" "$(bash "$FC" "$TMP/facts-two-shapes.md")"
+
+# the sitting, run for a stack island. Stubs in front of the platform rows': kubectl serves the fixture claims
+# (STUB_KUBECTL=fail|empty for the failures), git serves homelab from the checkout (the bootstrap's clone) and a
+# stack repo from fixtures/stack-repos/<repo> by the URL's name, claude and gh record where they ran / what they wrote.
+SB="$TMP/sbin"; mkdir -p "$SB"
+cat > "$SB/kubectl" <<EOF
+#!/bin/bash
+echo "kubectl \$*" >> "$TMP/skubectl.calls"
+case "\${STUB_KUBECTL:-ok}" in
+  fail) echo 'Error from server (Forbidden): agentstacks.platform.teststuff.net is forbidden' >&2; exit 1;;
+  empty) echo '{"apiVersion":"v1","kind":"List","items":[]}';;
+  *) case "\$*" in "get agentstacks.platform.teststuff.net "*"-o json") cat "$CLAIMS_FX";; *) exit 1;; esac;;
+esac
+EOF
+cat > "$SB/git" <<EOF
+#!/bin/bash
+echo "git \$* (cwd \$PWD)" >> "$TMP/sgit.calls"
+case " \$* " in
+  *" clone "*)
+    url=""; for a in "\$@"; do case "\$a" in https://*) url="\$a";; esac; done
+    case "\$url" in */homelab.git) exec "$BIN/git" "\$@";; esac
+    src="$SFX/stack-repos/\$(basename "\$url" .git)"; dest="\${@: -1}"
+    [ -d "\$src" ] || { echo "fatal: repository '\$url' not found" >&2; exit 128; }
+    mkdir -p "\$dest" && cp -R "\$src/." "\$dest/";;
+esac
+exit 0
+EOF
+cat > "$SB/claude" <<EOF
+#!/bin/bash
+echo "claude cwd=\$PWD" >> "$TMP/sclaude.calls"
+cat "$TMP/sclaude.out"
+EOF
+cat > "$SB/gh" <<EOF
+#!/bin/bash
+echo "gh \$*" >> "$TMP/sgh.calls"
+case "\$1 \$2" in "issue view") echo '{"labels":[],"comments":[]}';; esac
+exit 0
+EOF
+chmod +x "$SB"/*
+stack_run() { # <island> <mode> [env…]
+  rm -f "$TMP/skubectl.calls" "$TMP/sgit.calls" "$TMP/sclaude.calls" "$TMP/sgh.calls" "$TMP/pgw.body" "$TMP/s5.dest"
+  TS="$TSS" PILE_JSON="$SISS" RUN_PATH="$SB:$BIN" RUN_ENV="ISLAND=$1 PUSHGATEWAY=http://pgw REVIEW=off ${*:3}" run_script "$2"
+}
+# the island label a Pushgateway URL carries: `island/<name>`, or `island@base64/<url-safe base64>` decoded back
+pgw_island() { # <curl.calls> → the island each metrics push names, one per line
+  sed -n 's#.*/metrics/job/island_intake/##p' "$1" | while read -r seg; do
+    case "$seg" in island@base64/*) b="${seg#island@base64/}"; b="$(printf '%s' "$b" | tr -- '-_' '+/')"; while [ $(( ${#b} % 4 )) -ne 0 ]; do b="$b="; done; printf '%s' "$b" | base64 -d; echo;;
+                   island/*) echo "${seg#island/}";; *) echo "?$seg";; esac
+  done
+}
+# #3 ruled standing, #4 queued with its hold line (review off: the belt labels it); a forged id of another repo is dropped
+printf 'INTAKE-RULED: teststuffstash/alpha-app#3 standing -\nINTAKE-RULED: teststuffstash/alpha-app#4 queue -\nINTAKE-HOLD: teststuffstash/alpha-app#4 add=agent-fix,task/fix,agent/queued\nINTAKE-RULED: teststuffstash/homelab#4 queue -\n' > "$TMP/sclaude.out"
+stack_run alpha/alpha-app apply; rc=$?
+[ "$rc" = 0 ] && ok "a stack island's sitting (alpha/alpha-app) exits 0" || bad "stack sitting" "rc=$rc $(tail -4 "$TMP/run.log")"
+{ [ "$(grep -c . "$TMP/skubectl.calls")" = 1 ] && grep -q '^kubectl get agentstacks.platform.teststuff.net .*-o json$' "$TMP/skubectl.calls"; } 2>/dev/null \
+  && ok "…the leaf reads the live claims once (kubectl get agentstacks.platform.teststuff.net -o json)" || bad "leaf claims read" "$(cat "$TMP/skubectl.calls" 2>&1)"
+{ grep -qE "^git clone -c http\.extraHeader=Authorization: Basic [A-Za-z0-9+/=]+ --depth 1 https://github\.com/teststuffstash/alpha-app\.git $TMP/work/island-repo \(cwd $TMP/work/homelab\)\$" "$TMP/sgit.calls" \
+    && [ "$(grep -c ' clone ' "$TMP/sgit.calls")" = 2 ] && [ -s "$TMP/work/island-repo/docs/intake.md" ] && [ -s "$TMP/work/homelab/islands/intake/rules/intake.md" ] \
+    && grep -q "^git -C $TMP/work/island-repo remote set-url --push origin " "$TMP/sgit.calls"; } \
+  && ok "…and clones the declared repo beside the homelab clone: default branch (no -b), --depth 1, the sitting's token, push URL disabled" || bad "stack clone" "$(cat "$TMP/sgit.calls")"
+[ "$(cat "$TMP/sclaude.calls")" = "claude cwd=$TMP/work/island-repo" ] && ok "…the author session runs with that clone as its working directory" || bad "stack cwd" "$(cat "$TMP/sclaude.calls" 2>&1)"
+{ grep -qF "Your island's facts file (intake.md §Island facts): docs/intake.md — in this repo (cwd)" "$TMP/up/brief.md" \
+    && grep -qF "Read $TMP/work/homelab/islands/intake/rules/intake.md IN FULL" "$TMP/up/brief.md" \
+    && grep -qF 'the repo teststuffstash/alpha-app' "$TMP/up/brief.md" && ! grep -q 'docs/intake/alpha' "$TMP/up/brief.md"; } \
+  && ok "…its brief hands it the rules from the homelab clone and the facts file from its own repo, at the claim's path" || bad "stack brief" "$(head -12 "$TMP/up/brief.md" 2>&1)"
+[ "$(jq -c '[.inputs[] | select(.kind == "member") | .id]' "$TMP/up/inputs.json" 2>/dev/null)" = '["teststuffstash/alpha-app#3","teststuffstash/alpha-app#4"]' ] \
+  && [ "$(jq -c '.counts | [.dig, .gaps, .waits]' "$TMP/up/inputs.json")" = '[0,0,0]' ] \
+  && ok "…its inputs are the repo's undecided issues minus the facts file's exclusions (the selector got --facts from the clone); no dig, gap or wait input" || bad "stack inputs" "$(jq -c '[.counts, [.inputs[].id]]' "$TMP/up/inputs.json" 2>&1)"
+grep -c 'no dig source for a stack island' "$TMP/run.log" | grep -qx 2 && ok "…the dig and wait sources say \`no dig source for a stack island\` in the run's log" || bad "stack dig/wait line" "$(grep -c 'no dig source' "$TMP/run.log")"
+[ "$(jq -c '[.island, .island_kind, .repo, .facts, (.ruled | map([.input, .outcome]))]' "$TMP/up/receipt.json" 2>/dev/null)" = '["alpha/alpha-app","stack","teststuffstash/alpha-app","docs/intake.md",[["teststuffstash/alpha-app#3","standing"],["teststuffstash/alpha-app#4","queue"]]]' ] \
+  && ok "receipt: island \`alpha/alpha-app\`, its repo and facts path, rulings by the repo's ids (another repo's forged id dropped)" || bad "stack receipt" "$(jq -c '[.island, .repo, .ruled]' "$TMP/up/receipt.json" 2>&1)"
+{ [ -s "$TMP/s5.dest" ] && grep -q '/receipt\.json$' "$TMP/s5.dest" \
+    && [ -z "$(grep -vE '^s3://b/homelab/intake-alpha-alpha-app-[0-9]{4}-[0-9]{2}-[0-9]{2}/intake-r1-[0-9TZ]+/[^/]+$' "$TMP/s5.dest")" ] \
+    && jq -e '(.run | test("^intake-alpha-alpha-app-[0-9-]+/intake-r1-")) ' "$TMP/up/receipt.json" >/dev/null \
+    && jq -e '.task | test("^intake-alpha-alpha-app-[0-9]{4}-[0-9]{2}-[0-9]{2}$")' "$TMP/up/manifest.json" >/dev/null; } \
+  && ok "…every record lands under s3://<bucket>/homelab/intake-alpha-alpha-app-<day>/ — no slash from the name in the prefix, the run id or the task key" || bad "stack receipt prefix" "$(sort -u "$TMP/s5.dest" 2>/dev/null | head -3)"
+{ [ "$(pgw_island "$TMP/curl.calls" | sort -u)" = "alpha/alpha-app" ] && grep -q '/metrics/job/island_intake/island@base64/[A-Za-z0-9_-]*$' "$TMP/curl.calls" \
+    && grep -qx 'island_intake_session_ran 1' "$TMP/pgw.body" && grep -qx 'island_intake_inputs 2' "$TMP/pgw.body" && grep -qx 'island_intake_queued 1' "$TMP/pgw.body"; } 2>/dev/null \
+  && ok "…its metrics carry island=\"alpha/alpha-app\": the grouping key is \`island@base64/<url-safe base64>\` (no slash in a path segment) and decodes to the name" || bad "stack metrics" "$(grep metrics "$TMP/curl.calls" 2>/dev/null)"
+{ grep -q '^gh api -X POST repos/teststuffstash/alpha-app/issues/4/labels ' "$TMP/sgh.calls" && grep -q -- '--repo teststuffstash/alpha-app' "$TMP/sgh.calls" \
+    && ! grep -q 'homelab' "$TMP/sgh.calls" && [ "$(jq -c '.review.labelled' "$TMP/up/receipt.json")" = 1 ]; } 2>/dev/null \
+  && ok "writes go to the stack's repo: the belt reads and labels teststuffstash/alpha-app#4 — no gh call names homelab" || bad "stack writes" "$(cat "$TMP/sgh.calls" 2>&1)"
+{ ! grep -q '/coordinate' "$TMP/curl.calls" && grep -q 'no /coordinate ring for a stack island' "$TMP/run.log"; } \
+  && ok "…and a stack island's queue rings no platform /coordinate (said in the log)" || bad "stack ring" "$(grep coordinate "$TMP/curl.calls" "$TMP/run.log")"
+stack_run alpha/alpha-app dry-run; rc=$?
+{ [ "$rc" = 0 ] && [ "$(cat "$TMP/sclaude.calls")" = "claude cwd=$TMP/work/island-repo" ] && jq -e '.mode == "dry-run" and .facts == "docs/intake.md"' "$TMP/up/receipt.json" >/dev/null \
+    && ! grep -q ' -X POST ' "$TMP/sgh.calls" 2>/dev/null; } \
+  && ok "dry-run for a stack island: the facts file read from the stack's clone at the claim's path, nothing written to GitHub" || bad "stack dry-run" "rc=$rc $(tail -3 "$TMP/run.log")"
+# the "did not start" push (the manifest's _dead) names the island the script's own _push names
+stack_run alpha/alpha-app apply STUB_DEVBOX_INSTALL_RC=1; rc=$?
+{ [ "$rc" = 1 ] && [ "$(pgw_island "$TMP/curl.calls")" = "alpha/alpha-app" ] && grep -qx 'island_intake_probe_ok 0' "$TMP/pgw.body"; } 2>/dev/null \
+  && ok "the bootstrap's \"did not start\" push uses the same base64 grouping key for a stack island" || bad "stack _dead key" "rc=$rc $(grep metrics "$TMP/curl.calls" 2>/dev/null)"
+# a platform island still resolves with no claims read, no second clone
+stack_run mgmt-box apply; rc=$?
+{ [ "$rc" = 0 ] && [ ! -e "$TMP/skubectl.calls" ] && [ "$(grep -c ' clone ' "$TMP/sgit.calls")" = 1 ] && [ ! -e "$TMP/work/island-repo" ] && [ "$(pgw_island "$TMP/curl.calls")" = "mgmt-box" ]; } \
+  && ok "a platform island resolves to homelab with NO claims read and no second clone (unchanged)" || bad "platform resolution" "rc=$rc kubectl=$(cat "$TMP/skubectl.calls" 2>/dev/null) $(tail -2 "$TMP/run.log")"
+
+# failures of ONE island's step, each before any model session, each pushing probe_ok 0 under its own island label
+sfail() { # <island> <log pattern> <label> [env…]
+  stack_run "$1" apply "${@:4}"; rc=$?
+  { [ "$rc" = 1 ] && [ ! -s "$TMP/sclaude.calls" ] && grep -qE -- "$2" "$TMP/run.log" && [ "$(pgw_island "$TMP/curl.calls")" = "$1" ] && grep -qx 'island_intake_probe_ok 0' "$TMP/pgw.body"; } 2>/dev/null \
+    && ok "$3" || bad "$3" "rc=$rc claude=$(cat "$TMP/sclaude.calls" 2>/dev/null) $(tail -3 "$TMP/run.log")"
+}
+sfail beta/beta-svc 'the facts file docs/intake/facts\.md \(teststuffstash/beta-svc\) cannot carry a sitting: the facts file does not exist' \
+  "a claim whose facts path is not in the repo: the step fails naming the path, no session"
+sfail beta/beta-web 'cannot carry a sitting: no single `Body shape: spec\|edit` line;no `## What a ride can do` heading' \
+  "a facts file without a \`Body shape:\` line and \`## What a ride can do\`: the step fails naming both, no session"
+sed '/^## Sources$/,$d' "$AFACTS" > "$TMP/facts-nosrc.md"; printf '\n## What a ride can do\n\n- x\n' >> "$TMP/facts-nosrc.md"
+mkdir -p "$TMP/altrepos/alpha-app/docs"; cp "$TMP/facts-nosrc.md" "$TMP/altrepos/alpha-app/docs/intake.md"
+sed "s#$SFX/stack-repos#$TMP/altrepos#" "$SB/git" > "$TMP/git.alt"; cp "$SB/git" "$TMP/git.keep"; cp "$TMP/git.alt" "$SB/git"
+sfail alpha/alpha-app 'cannot carry a sitting: no `## Sources` heading' "a facts file without \`## Sources\`: the step fails naming it, no session"
+cp "$TMP/git.keep" "$SB/git"
+sfail alpha/alpha-iac "alpha/alpha-iac resolves to no island" "a name no claim declares (alpha/alpha-iac): that island's step fails — nothing cloned for it, no session"
+[ "$(grep -c ' clone ' "$TMP/sgit.calls")" = 1 ] && ok "…with only the bootstrap's homelab clone made" || bad "unresolved clone" "$(cat "$TMP/sgit.calls")"
+sfail alpha/alpha-app 'claims read FAILED — stack islands not walked' "a stack island whose claims read fails: the step fails (exit 1 for Argo to retry), no session" STUB_KUBECTL=fail
+mkdir -p "$TMP/altrepos2"; sed "s#$SFX/stack-repos#$TMP/altrepos2#" "$TMP/git.keep" > "$SB/git"
+sfail alpha/alpha-app 'clone failed \(teststuffstash/alpha-app\)' "a stack repo that does not clone: the step fails, no session"
+cp "$TMP/git.keep" "$SB/git"
+
+# the list step with the claims (acceptance 2 + 3): the read, the selector's --claims, the gauge
+slist() { # [env…]
+  rm -rf "$TMP/work" "$TMP/run"/*; rm -f "$TMP/skubectl.calls" "$TMP/pgw.body"; : > "$TMP/curl.calls"; mkdir -p "$TMP/work"
+  ( cd "$TMP" && H="$TMP" PATH="$SB:$BIN:$PATH" HOME="$TMP/home" ISLAND=all GH_TOKEN=x PUSHGATEWAY=http://pgw env "$@" bash "$TMP/list.sh" ) > "$TMP/list.log" 2>&1
+}
+NINE='"gateway","scan","launch","retro","router-pair","mgmt-box","dependency-upgrades","substrate","agent-loop"'
+slist; rc=$?
+{ [ "$rc" = 0 ] && [ "$(jq -c . "$LIST_OUT" 2>/dev/null)" = "[$NINE,\"alpha/alpha-app\",\"beta/beta-svc\",\"beta/beta-web\"]" ]; } \
+  && ok "the list step reads the live claims and emits the platform islands, then the stack islands" || bad "list step, claims" "rc=$rc $(cat "$LIST_OUT" 2>&1) $(tail -2 "$TMP/list.log")"
+{ grep -qx 'island_intake_claims_read_ok 1' "$TMP/pgw.body" && [ "$(grep -c -- '--data-binary @-' "$TMP/curl.calls")" = 1 ] && grep -q '/metrics/job/island_intake_claims$' "$TMP/curl.calls" \
+    && ! grep -q 'claims read FAILED' "$TMP/list.log"; } 2>/dev/null \
+  && ok "…and pushes island_intake_claims_read_ok 1 from the list step (its own Pushgateway group — no island's gauges replaced)" || bad "claims gauge ok" "$(cat "$TMP/pgw.body" "$TMP/curl.calls" 2>&1)"
+for mode in fail empty; do
+  slist STUB_KUBECTL=$mode; rc=$?
+  { [ "$rc" = 0 ] && [ "$(jq -c . "$LIST_OUT" 2>/dev/null)" = "[$NINE]" ] && grep -qx 'island-intake: claims read FAILED — stack islands not walked' "$TMP/list.log" \
+      && grep -qx 'island_intake_claims_read_ok 0' "$TMP/pgw.body" && grep -q '/metrics/job/island_intake_claims$' "$TMP/curl.calls"; } 2>/dev/null \
+    && ok "a claims read that $( [ $mode = fail ] && echo fails || echo 'answers no items' ): the platform islands are still emitted, the FAILED line printed, island_intake_claims_read_ok 0 pushed" \
+    || bad "list step, claims $mode" "rc=$rc $(cat "$LIST_OUT" 2>&1) $(tail -3 "$TMP/list.log")"
+done
+[ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .container.env[] | select(.name == "PUSHGATEWAY") | .value')" = "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .container.env[] | select(.name == "PUSHGATEWAY") | .value')" ] \
+  && ok "the list step's container has the leaf's PUSHGATEWAY" || bad "list step PUSHGATEWAY" "differs or missing"
+
+# the claim field (acceptance 1) and the mirror (acceptance 12)
+XRD="$REPO/argocd/resources/agentstack/xrd.yaml"
+XI='.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.repos.items.properties.intake'
+{ [ "$(yq -r "$XI | .type" "$XRD")" = object ] && [ "$(yq -r "$XI | .required | join(\",\")" "$XRD")" = facts ] \
+    && [ "$(yq -r "$XI | .properties | keys | join(\",\")" "$XRD")" = facts ] && [ "$(yq -r "$XI | .properties.facts.type" "$XRD")" = string ] \
+    && [ "$(yq -r '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.repos.items.required | join(",")' "$XRD")" = name ]; } \
+  && ok "XRD: repos[].intake is an object with ONE required string, facts — and stays optional on a repo" || bad "xrd intake" "$(yq -r "$XI" "$XRD" | head -5)"
+XPAT="$(yq -r "$XI | .properties.facts.pattern" "$XRD")"
+{ grep -qE -- "$XPAT" <<< "docs/intake.md" && ! grep -qE -- "$XPAT" <<< "../x.md" && ! grep -qE -- "$XPAT" <<< "/abs.md" && ! grep -qE -- "$XPAT" <<< "a/.hidden/x.md"; } \
+  && ok "…its facts pattern takes a repo-relative path and refuses \`..\`, a leading slash and a dot-led segment" || bad "xrd facts pattern" "$XPAT"
+[ "$(jq '[.. | objects | select(has("intake"))] | length' "$REPO/agents/stacks.json")" = 0 ] \
+  && ok "agents/stacks.json (the mirror) carries no \`intake\` key: no stack has declared one, and the launcher never reads the mirror for it" || bad "mirror" "an intake key in agents/stacks.json"
+{ ! grep -qE '^[^#]*stacks\.json' "$REPO/islands/intake/scripts/claims-read.sh" "$REPO/islands/intake/scripts/sitting.sh" "$SEL"; } \
+  && ok "…no intake script reads agents/stacks.json (the claims are read live)" || bad "mirror read" "$(grep -nE '^[^#]*stacks\.json' "$REPO/islands/intake/scripts/"*.sh | head -3)"
+
+# the point of the child: no stack and no stack repo is named in the scripts, the selector or the manifest. The
+# names searched are (a) every non-platform stack and its repos in agents/stacks.json — the names homelab already
+# carries — and (b) the fixture's invented ones; whole-word, fixed-string, over code and comments alike.
+NAMES="$( { jq -r '.stacks[] | select(.name != "platform") | .name, (.repos[] | if type == "object" then .name else . end)' "$REPO/agents/stacks.json"
+            jq -r '.items[] | .metadata.name, (.spec.repos[].name)' "$CLAIMS_FX"; } | sort -u)"
+hits=""; for n in $NAMES; do
+  h="$(grep -rnwF -- "$n" "$REPO/islands/intake/scripts" "$YAML" | head -2)"; [ -z "$h" ] || hits="$hits [$n] $h"
+done
+{ [ "$(printf '%s\n' "$NAMES" | grep -c .)" -ge 8 ] && [ -z "$hits" ]; } \
+  && ok "no stack or stack-repo name ($(printf '%s\n' "$NAMES" | grep -c .) searched: the mirror's non-platform stacks and repos, the fixture's) in islands/intake/scripts/ or the manifest" \
+  || bad "a stack name in the launcher, the selector or the manifest" "$hits"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

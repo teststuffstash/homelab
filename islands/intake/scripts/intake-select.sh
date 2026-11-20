@@ -194,10 +194,41 @@
 # no facts would improvise. No read but the checkout (no gh, no bucket, no kube); exit 0.
 #
 #   bash islands/intake/scripts/intake-select.sh --list-islands
+#
+# STACK ISLANDS (homelab#3580) — an island declared by a stack's AgentStack claim, never by a row here:
+# `repos[].intake.facts: <path in that repo>` (argocd/resources/agentstack/xrd.yaml). Its name is
+# `<stack>/<repo>` as the claim spells them (claim `metadata.name`, `spec.repos[].name`); the slash is what
+# tells it from a platform island. No stack and no stack repo is named in this file: every one comes from
+# the claims file (`--claims <file>` = a `kubectl get agentstacks.platform.teststuff.net -o json` answer,
+# read by scripts/claims-read.sh).
+#
+#   --list-islands --claims <file>   the platform islands as above, then one line per claim-declared repo,
+#                                    by stack name then repo name. A name or a facts path that is not a
+#                                    plain repo-relative path is named on stderr and left out.
+#   --resolve --island <name> [--claims <file>]
+#                                    one JSON line {island, kind: platform|stack, repo, facts}: a platform
+#                                    island is this repo and docs/intake/<island>.md (no claims read); a
+#                                    stack island is `<org>/<repo>` (org = $ORG, default teststuffstash — a
+#                                    claim's repos live in that org, the XRD's `repos[].name`) and the
+#                                    claim's facts path. A name that resolves to nothing is exit 2.
+#   --source … --island <stack>/<repo> --claims <file> [--facts <facts file in the clone>]
+#     repo      = the claim's repo — every read (`gh`, the receipts) is that repo's
+#     members   = EVERY open issue of the repo the pile's walk calls undecided (the same lifecycle and
+#                 ruling filters as a platform island; no title or Touches test), MINUS what the facts
+#                 file's `## Membership` section excludes. Its lines, one per rule (a leading `- ` allowed):
+#                   exclude label: <label>     an issue carrying exactly that label
+#                   exclude title: <ERE>       an issue whose title matches (grep -E, case-sensitive)
+#                 No section (or no --facts) = no exclusion. Any other `exclude …` line, an unreadable
+#                 file or an ERE grep refuses is exit 2 — a typo never widens the membership silently.
+#     dig, wait = select NOTHING, said on stderr (`no dig source for a stack island`): the dig diagnoses
+#                 the platform's alerts; a stack's alerts reach its repo as issues, which are the pile
+#     gaps      = nothing (no specs root is declared for a stack island); escape = as a platform island
+#     receipts  = homelab/intake-<stack>-<repo>-<day>/ — the name with `/` replaced by `-`
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 REPO="teststuffstash/homelab"; MIN=3; AGE_H=24; JSON=0; SOURCE=issues; ISLAND=gateway; OUT=""; LIST=0
+CLAIMS=""; FACTS_FILE=""; RESOLVE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --source) SOURCE="$2"; shift 2;;
@@ -208,10 +239,83 @@ while [ $# -gt 0 ]; do
     --age-h) AGE_H="$2"; shift 2;;
     --json)  JSON=1; shift;;
     --list-islands) LIST=1; shift;;
+    --claims) CLAIMS="$2"; shift 2;;
+    --facts) FACTS_FILE="$2"; shift 2;;
+    --resolve) RESOLVE=1; shift;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0;;
     *) echo "intake-select: unknown arg $1" >&2; exit 2;;
   esac
 done
+
+# ── stack islands (homelab#3580; the header's STACK ISLANDS) ─────────────────────────────────────
+# Kept OUT of the island table below (agents/island_rules.py evaluates that block): a stack island has
+# no row. ISLAND_KEY = the name wherever a slash is invalid (the receipts' prefix).
+STACK_ISLAND=0; case "$ISLAND" in */*) STACK_ISLAND=1;; esac
+ISLAND_KEY="${ISLAND//\//-}"
+PLATFORM_REPO="$REPO"
+# claims_islands <claims file> → `<stack>/<repo>\t<repo>\t<facts>` per repo declaring intake.facts, by
+# stack then repo. Names and the path are DATA from a claim a stack wrote: each must be a plain name /
+# repo-relative path (the XRD's own pattern) — anything else is named on stderr and dropped.
+claims_islands() {
+  jq -e '(.items | type) == "array"' "$1" >/dev/null 2>&1 || { echo "intake-select: --claims $1 is unreadable or not a claims list" >&2; return 1; }
+  jq -r '[ .items[] | (.metadata.name // "") as $s | (.spec.repos // [])[]
+           | select((.intake | type) == "object" and (.intake.facts | type) == "string" and (.intake.facts | length) > 0)
+           | {s: $s, r: (.name // ""), f: .intake.facts} ] | sort_by([.s, .r]) | .[] | [.s, .r, .f] | @tsv' "$1" \
+    | while IFS=$'\t' read -r _s _r _f; do
+        if [[ "$_s" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] && [[ "$_r" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+           && [[ "$_f" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$ ]]; then
+          printf '%s/%s\t%s\t%s\n' "$_s" "$_r" "$_r" "$_f"
+        else
+          printf "intake-select: a claim's intake declaration is not a plain stack/repo name and repo-relative path — left out: %q/%q → %q\n" "$_s" "$_r" "$_f" >&2
+        fi
+      done
+}
+STACK_REPO=""; STACK_FACTS=""
+if [ "$STACK_ISLAND" = 1 ] && [ "$LIST" = 0 ]; then
+  [ -n "$CLAIMS" ] || { echo "intake-select: island '$ISLAND' is a stack island — it needs --claims <file>" >&2; exit 2; }
+  _rows="$(claims_islands "$CLAIMS")" || exit 2
+  _row="$(awk -F'\t' -v i="$ISLAND" '$1 == i && !seen { print; seen = 1 }' <<< "$_rows")"
+  [ -n "$_row" ] || { echo "intake-select: island '$ISLAND' resolves to nothing — no claim declares repos[].intake.facts under that stack/repo name" >&2; exit 2; }
+  STACK_REPO="$(printf '%s' "$_row" | cut -f2)"; STACK_FACTS="$(printf '%s' "$_row" | cut -f3)"
+  REPO="${ORG:-teststuffstash}/$STACK_REPO"
+fi
+# island_known <island> → the guard every source opens with: a stack island resolved above, or a table row
+island_known() { [ "$STACK_ISLAND" = 1 ] || island_members "$1" >/dev/null; }
+# stack_exclusions <facts file> <issues json file> → the numbers the facts file's `## Membership` section
+# excludes, one per line (the header's grammar); return 2 on an unreadable file, an unknown `exclude`
+# line or an ERE grep refuses.
+stack_exclusions() {
+  local facts="$1" iss="$2" lines kind val rc
+  [ -r "$facts" ] || { echo "intake-select: --facts $facts is unreadable" >&2; return 2; }
+  lines="$(awk '
+    /^## / { on = ($0 ~ /^## Membership[ \t]*$/); next }
+    on { l = $0; sub(/^[ \t]*([-*][ \t]+)?/, "", l); sub(/[ \t]+$/, "", l)
+         if (l ~ /^exclude label:[ \t]*[^ \t]/) { sub(/^exclude label:[ \t]*/, "", l); print "label\t" l }
+         else if (l ~ /^exclude title:[ \t]*[^ \t]/) { sub(/^exclude title:[ \t]*/, "", l); print "title\t" l }
+         else if (l ~ /^exclude([ \t:]|$)/) { print "bad\t" l } }' "$facts")"
+  [ -n "$lines" ] || return 0
+  jq -r '.[] | "\(.number)\t\((.title // "") | gsub("[\n\t]"; " "))"' "$iss" > "$iss.titles"
+  while IFS=$'\t' read -r kind val; do
+    case "$kind" in
+      label) jq -r --arg l "$val" '.[] | select([.labels[]?.name] | index($l)) | .number' "$iss";;
+      title) rc=0; cut -f2- "$iss.titles" | grep -nE -e "$val" > "$iss.hits" || rc=$?
+             [ "$rc" -le 1 ] || { echo "intake-select: \`exclude title: $val\` is not a usable ERE ($facts)" >&2; rm -f "$iss.titles" "$iss.hits"; return 2; }
+             cut -d: -f1 "$iss.hits" | while read -r ln; do sed -n "${ln}p" "$iss.titles" | cut -f1; done;;
+      *) echo "intake-select: unknown membership line \`$val\` in $facts (exclude label: <label> | exclude title: <ERE>)" >&2
+         rm -f "$iss.titles" "$iss.hits"; return 2;;
+    esac
+  done <<< "$lines"
+  rm -f "$iss.titles" "$iss.hits"
+}
+# stack_none — `--source dig|wait` for a stack island: a valid EMPTY selection and a hold (exit 1)
+stack_none() {
+  local sel ts; ts="$(date -u -d "@${INTAKE_NOW:-$(date -u +%s)}" +%Y-%m-%dT%H:%M:%SZ)"
+  sel="$(jq -n --arg island "$ISLAND" --arg source "$SOURCE" --arg ts "$ts" --argjson dmax "${INTAKE_DAILY_MAX:-2}" \
+    '{schema: "island-intake-select/v1", island: $island, source: $source, ts: $ts, counts: {inputs: 0},
+      sittings_today: 0, daily_max: $dmax, inputs: [], prior: []}')"
+  if [ -n "$OUT" ]; then printf '%s\n' "$sel" > "$OUT"; else printf '%s\n' "$sel"; fi
+  echo "hold: no dig source for a stack island ($ISLAND: --source $SOURCE selects nothing)" >&2; exit 1
+}
 
 # ── the island table ─────────────────────────────────────────────────────────────────────────────
 # One row per island in island_pattern / island_alert_rules (dig findings) AND island_members
@@ -402,7 +506,7 @@ read_receipts() {
   local k d
   for k in $(seq 0 "$2"); do
     d="$(date -u -d "@$(( $1 - k * 86400 ))" +%Y-%m-%d)"
-    ts_read_objects "intake-$ISLAND-$d" 'receipt.json'
+    ts_read_objects "intake-$ISLAND_KEY-$d" 'receipt.json'
   done
 }
 # responder_day <rel> → the YYYYMMDD of a responder run dir (`…/responder-r<k>-<YYYYMMDD>T…Z/…`), or nothing.
@@ -639,7 +743,7 @@ emit_sel() {
 # ── --source gaps ────────────────────────────────────────────────────────────────────────────────
 cmd_gaps() {
   local root now dmax gmax lookback receipts sel ts today
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"
   gmax="${INTAKE_GAP_MAX:-6}"; lookback="${INTAKE_GAP_LOOKBACK_D:-30}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
@@ -689,7 +793,7 @@ cmd_gaps() {
 # ── --source escape ──────────────────────────────────────────────────────────────────────────────
 cmd_escape() {
   local now dmax lookback receipts queued prs sel ts today since
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"; lookback="${INTAKE_ESCAPE_LOOKBACK_D:-30}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
   since="$(date -u -d "@$(( now - lookback * 86400 ))" +%Y-%m-%d)"
@@ -901,7 +1005,7 @@ JQ_WAIT='
 
 cmd_wait() {
   local now dmax lookback stand wmax receipts since sel ts today members bod targets refs isl
-  island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+  island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
   now="${INTAKE_NOW:-$(date -u +%s)}"; dmax="${INTAKE_DAILY_MAX:-2}"; lookback="${INTAKE_WAIT_LOOKBACK_D:-30}"
   stand="${INTAKE_WAIT_STANDING_D:-${INTAKE_REREAD_AGE_D:-3}}"; wmax="${INTAKE_WAIT_MAX:-6}"
   ts="$(date -u -d "@$now" +%Y-%m-%dT%H:%M:%SZ)"; today="$(date -u -d "@$now" +%Y-%m-%d)"
@@ -982,8 +1086,24 @@ if [ "$LIST" = 1 ]; then
     [ -f "$ROOT/docs/intake/$_isl.md" ] || { echo "intake-select: '$_isl' has no facts file (docs/intake/$_isl.md) — not listed" >&2; continue; }
     printf '%s\n' "$_isl"
   done
+  if [ -n "$CLAIMS" ]; then
+    _rows="$(claims_islands "$CLAIMS")" || exit 2
+    printf '%s\n' "$_rows" | cut -f1 | { grep -v '^$' || true; }
+  fi
   exit 0
 fi
+
+# ── --resolve ────────────────────────────────────────────────────────────────────────────────────
+if [ "$RESOLVE" = 1 ]; then
+  if [ "$STACK_ISLAND" = 1 ]; then
+    jq -nc --arg island "$ISLAND" --arg repo "$REPO" --arg facts "$STACK_FACTS" '{island: $island, kind: "stack", repo: $repo, facts: $facts}'
+  else
+    island_members "$ISLAND" >/dev/null 2>&1 || { echo "intake-select: island '$ISLAND' resolves to nothing — no row in the island table, and not a <stack>/<repo> name" >&2; exit 2; }
+    jq -nc --arg island "$ISLAND" --arg repo "$PLATFORM_REPO" --arg facts "docs/intake/$ISLAND.md" '{island: $island, kind: "platform", repo: $repo, facts: $facts}'
+  fi
+  exit 0
+fi
+if [ "$STACK_ISLAND" = 1 ]; then case "$SOURCE" in dig|wait) stack_none;; esac; fi
 
 case "$SOURCE" in
   issues|pile) ;;
@@ -995,7 +1115,7 @@ case "$SOURCE" in
 esac
 
 # ── the issue pile (--source issues, --source pile) ──────────────────────────────────────────────
-island_members "$ISLAND" >/dev/null || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
+island_known "$ISLAND" || { echo "intake-select: no membership row for island '$ISLAND'" >&2; exit 2; }
 PARSER="$ROOT/agents/issue_body.py"
 [ -f "$PARSER" ] || { echo "intake-select: $PARSER missing (run from a homelab checkout)" >&2; exit 2; }
 
@@ -1087,6 +1207,15 @@ if [ "$REREAD" = 1 ] && [ "${INTAKE_PR_HOLDS:-0}" = 1 ]; then
     || { echo "intake-select: PR-hold jq failed" >&2; exit 2; }
   eval "$holds"
 fi
+# a stack island's exclusions (its facts file's `## Membership` section), read once
+declare -A STACK_EXCL=()
+if [ "$STACK_ISLAND" = 1 ] && [ -n "$FACTS_FILE" ]; then
+  printf '%s' "$issues" > "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"
+  _ex="$(stack_exclusions "$FACTS_FILE" "${TMPDIR:-/tmp}/intake-stack-issues.$$.json")" || { rm -f "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"; exit 2; }
+  rm -f "${TMPDIR:-/tmp}/intake-stack-issues.$$.json"
+  for _n in $_ex; do STACK_EXCL[$_n]=1; done
+  echo "intake-select: $ISLAND — ${#STACK_EXCL[@]} open issue(s) excluded by the facts file's \`## Membership\` lines" >&2
+fi
 cand_args=(); reread_args=()
 i=0
 while [ "$i" -lt "$count" ]; do
@@ -1107,6 +1236,10 @@ while [ "$i" -lt "$count" ]; do
   # membership: the island table (island_of_issue — title, else every Touches entry, first row wins)
   touches="${F_touches[$ix]:-}"
   kind=member
+  if [ "$STACK_ISLAND" = 1 ]; then
+    # a stack island: every issue of its repo, minus what its facts file excludes (the header's STACK ISLANDS)
+    [ -z "${STACK_EXCL[$num]:-}" ] || continue
+  else
   case "$(island_of_issue "$title" "$touches" "$ix")" in
     "$ISLAND") ;;
     "") # nobody's: an attribution input for ATTRIBUTION_ISLAND when bot-filed (not author type User)
@@ -1115,6 +1248,7 @@ while [ "$i" -lt "$count" ]; do
       kind=attribution;;
     *) continue;;
   esac
+  fi
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
   # …except `intake: forward → <island>`: another sitting passed the item on (islands/intake/rules/intake.md
