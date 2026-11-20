@@ -26,6 +26,9 @@ from urllib.parse import quote
 import allure
 import pytest
 
+from .page import params as page_params
+from .page import table as page_table
+from .page import tables, ticks
 from .rules import SPECS, rule
 from .world import World
 
@@ -36,53 +39,18 @@ COMPONENT = [sys.executable, "-m", "scan_island.major_handoff"]
 
 # ── the page, parsed ──────────────────────────────────────────────────────────────────────────────
 
-
-def _cells(line: str) -> list[str]:
-    return [c.strip() for c in line.strip().strip("|").split("|")]
-
-
-def _tables(text: str) -> list[tuple[str, list[str], list[list[str]]]]:
-    """Every table of the page as (the `####` heading above it, header cells, body rows)."""
-    out, heading, lines = [], "", text.splitlines()
-    i = 0
-    while i < len(lines):
-        if lines[i].startswith("#### "):
-            heading = lines[i].removeprefix("#### ").strip()
-        if lines[i].startswith("|") and i + 1 < len(lines) and re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", lines[i + 1].strip()):
-            header, rows, i = _cells(lines[i]), [], i + 2
-            while i < len(lines) and lines[i].startswith("|"):
-                row = _cells(lines[i])
-                if len(row) != len(header):
-                    raise ValueError(f"{PAGE.name}: a row of {len(row)} cells under a {len(header)}-cell header: {lines[i]}")
-                rows.append(row)
-                i += 1
-            out.append((heading, header, rows))
-            continue
-        i += 1
-    return out
-
-
-TABLES = _tables(PAGE.read_text("utf-8"))
+TABLES = tables(PAGE)
 
 
 def table(question: str) -> tuple[list[str], list[list[str]]]:
-    [(header, rows)] = [(h, r) for q, h, r in TABLES if q == question and h[0] == "description"]
-    return header, rows
-
-
-def argname(header_cell: str) -> str:
-    expected = header_cell.endswith("?")
-    name = re.sub(r"[^a-z0-9]+", "_", header_cell.removesuffix("?").lower()).strip("_")
-    return f"expected_{name}" if expected else name
+    return page_table(TABLES, question)
 
 
 def params(question: str) -> tuple[list[str], list]:
-    header, rows = table(question)
-    return [argname(h) for h in header[1:]], [pytest.param(*row[1:], id=row[0]) for row in rows]
+    return page_params(TABLES, question)
 
 
-def _ticks(cell: str) -> list[str]:
-    return re.findall(r"`([^`]+)`", cell)
+_ticks = ticks
 
 
 [LEGEND] = [dict((r[0], r[1:]) for r in rows) for _q, h, rows in TABLES if h[0] == "literal"]
