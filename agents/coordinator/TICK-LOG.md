@@ -15658,3 +15658,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
   oracle's read. Goal #3586 filed, branch cut, children #3602–#3606; #3563 carries the first block.
 - **Two heredoc accidents** (a subagent's and the seat's): a nested heredoc ended early and the remainder ran as shell
   with empty variables; nothing was changed either time. Briefs now say: write such fragments with a file tool.
+
+## 2026-11-20 ~22:30Z → 11-21 ~00:45Z — seat: nx-02 boot-disk incident (operator: "look at alerts")
+
+- Read the alert list, then grafana-pg "Not enough disk space", then `ContinuousArchiving=False` on 3 CNPG clusters since
+  06:50Z, then nx-02 over ssh: the SA400 had left the bus, root was `emergency_ro`, binaries failed with I/O errors, LXC 220 was dead.
+- Grew the volumes (`85b7c85c`): forgejo-pg + infisical-pg 5→15 Gi (they were ~9 h from full at ~200 MB/h WAL), grafana-pg 2→6 Gi.
+  Patched the grafana PVCs by hand (CNPG did not resize while unhealthy). Restarted grafana-pg-3 + Grafana: pg-4 promoted, `/api/health` 200.
+- The operator hot-plugged a spare 480 G SA400 (old Talos). Wiped its first and last 2 MiB with perl (wipefs/dd/sgdisk all hit I/O errors),
+  verified by reading the zeros back. The operator reseated the original SA400 and it came back as `sdc` with its partitions intact.
+- Dropped the temporary backup-Garage build: `pct create` needs the template on the dead root, and the reseated disk makes it moot.
+  The reboot is deferred to the morning, attended. The operator wants the lessons discussed first. Incident draft: docs/incidents/2026-11-20-nx-02-boot-disk.md.
