@@ -99,7 +99,7 @@ gw_preflight_request() {
     echo "PREFLIGHT REFUSED: --round '${1:-}' is not a non-negative integer (sessions.schema.json post.input.round). No session, no pod." >&2
     return 2;;
   esac
-  # The retry contract (GW-SESSIONS-ADMIT): the caller's automatic re-admission counter at the SAME
+  # The retry contract (GW-SESSIONS-RETRY): the caller's automatic re-admission counter at the SAME
   # round; 1 (the default) is omitted from the request.
   case "${2:-1}" in ''|0|*[!0-9]*)
     echo "PREFLIGHT REFUSED: AGENT_GATEWAY_ATTEMPT='${2:-}' is not a positive integer (sessions.schema.json post.input.attempt). No session, no pod." >&2
