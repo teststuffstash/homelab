@@ -1,0 +1,78 @@
+# Behaviour fixture for the router root-filesystem belt (mgmt-probe.sh check_firmware → disk_row).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/router-disk.promtool-test
+#
+# promtool's clock starts at 0. Series are what the belt publishes every tick (15 min; sampled here
+# at ≤5m): read_ok for every router tried, size/avail bytes only for a reading that counts. avail is
+# df's — outside UFS's reserve, NEGATIVE past 100 %.
+rule_files:
+  - router-disk.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # THE EVENT (read 2026-11-21, docs/incidents/2026-11-20-nx-02-boot-disk.md): opnsense-nx02's 8 GB
+  # root at 108 % (avail -635586560), opnsense-pve's at 44 % (avail 3813520834, 48 % available).
+  # nx-02 fires once the 30m `for:` is served; pve stays silent; nothing is unread.
+  - interval: 1m
+    name: "today's nx-02 node (108 %) fires Low; pve's (44 %) does not"
+    input_series:
+      - series: 'mgmt_router_disk_size_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "7944835072x60"
+      - series: 'mgmt_router_disk_avail_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "-635586560x60"
+      - series: 'mgmt_router_disk_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "1x60"
+      - series: 'mgmt_router_disk_size_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "7944835072x60"
+      - series: 'mgmt_router_disk_avail_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "3813520834x60"
+      - series: 'mgmt_router_disk_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "1x60"
+    alert_rule_test:
+      - { eval_time: 29m, alertname: MgmtRouterDiskLow, exp_alerts: [] }
+      - eval_time: 31m
+        alertname: MgmtRouterDiskLow
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-nx02, role: node }
+      - { eval_time: 59m, alertname: MgmtRouterDiskUnread, exp_alerts: [] }
+
+  # A node filling day by day crosses 20 % available and fires after its `for:`; the test VM at the
+  # same level never alerts. 32 GB = 34359738368 bytes; 20 % = 6871947673.
+  - interval: 5m
+    name: "crossing 20 % available fires after 30m; the test VM never alerts"
+    input_series:
+      - series: 'mgmt_router_disk_size_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "34359738368x40"
+      - series: 'mgmt_router_disk_avail_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "7000000000x12 6800000000x28"
+      - series: 'mgmt_router_disk_size_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-test",role="test"}'
+        values: "7944835072x40"
+      - series: 'mgmt_router_disk_avail_bytes{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-test",role="test"}'
+        values: "0x40"
+    alert_rule_test:
+      - { eval_time: 55m, alertname: MgmtRouterDiskLow, exp_alerts: [] }
+      - { eval_time: 1h25m, alertname: MgmtRouterDiskLow, exp_alerts: [] }
+      - eval_time: 1h35m
+        alertname: MgmtRouterDiskLow
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-pve, role: node }
+
+  # Unreadable (the `firmware` user without page-system-login-logout: 403 → read_ok 0, no size/avail):
+  # fires after 6h; a one-hour blip that recovers does not; the test VM unread never alerts.
+  - interval: 5m
+    name: "read_ok 0 for 6h fires Unread; a 1h blip does not; the test VM never does"
+    input_series:
+      - series: 'mgmt_router_disk_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-pve",role="node"}'
+        values: "0x100"
+      - series: 'mgmt_router_disk_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-nx02",role="node"}'
+        values: "0x12 1x88"
+      - series: 'mgmt_router_disk_read_ok{job="mgmt-node",instance="192.168.2.53:9100",node="opnsense-test",role="test"}'
+        values: "0x100"
+    alert_rule_test:
+      - { eval_time: 5h55m, alertname: MgmtRouterDiskUnread, exp_alerts: [] }
+      - eval_time: 6h5m
+        alertname: MgmtRouterDiskUnread
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", node: opnsense-pve, role: node }
+      - { eval_time: 6h5m, alertname: MgmtRouterDiskLow, exp_alerts: [] }
