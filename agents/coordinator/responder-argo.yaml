@@ -182,7 +182,10 @@ metadata:
   namespace: agent-coordinator
 spec:
   entrypoint: main
-  serviceAccountName: agent-coordinator
+  # The responder's OWN identity (rbac.yaml §responder, responder-git.yaml) — a role carries its
+  # own boundary (docs/agents/roles.md §What a role is). Was the shared `agent-coordinator` SA and
+  # its coordinator-git token, i.e. cluster-wide pod create/exec and actions/workflows write.
+  serviceAccountName: responder
   # The subscription semaphore (FU-088 Argo layer) sits on the `respond` LEAF template — not here,
   # and not on the `respond-retry` wrapper that calls it. Two waits must defer WITHOUT holding a
   # slot: the declared-window GRACE (FU-230, operator ruling 2026-10-09) and the FU-113(b) retry
@@ -216,7 +219,7 @@ spec:
       - { name: payload, value: "{}" }
   volumes:
     - { name: work, emptyDir: {} }
-    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    - { name: responder-git, secret: { secretName: responder-git, optional: true } }
     # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token for the gateway's caller check.
     - name: gateway-token
       projected:
@@ -370,8 +373,8 @@ spec:
           - { name: OTEL_TRACES_EXPORTER, value: "none" } # no traces pipeline on the collector (otel-config.yaml); unset = SDK default otlp, a 404 per pod
           - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=responder,stack=platform" }
           - name: GH_TOKEN
-            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+            valueFrom: { secretKeyRef: { name: responder-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/responder-git/GH_TOKEN" }
           # §A1 transcript capture (FU-210): the write-only key for the agent-transcripts bucket.
           # Same-ns Secret written by the Crossplane Workspace (garage-workspace.yaml), same four
           # vars and the same `optional: true` degrade as agents/reviewer-session.sh's pod — the
@@ -388,7 +391,7 @@ spec:
             valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
         volumeMounts:
           - { name: work, mountPath: /work }
-          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          - { name: responder-git, mountPath: /var/run/responder-git, readOnly: true }
           - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         command: [bash, -lc]
         args:
