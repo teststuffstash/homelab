@@ -941,7 +941,9 @@ rejection past its due time reloads as due — the first re-probe pass after the
 because the in-memory mark waits for the probe's verdict, never a clock.
 
 Legend: `arrange` = the ride(s) on the first gateway, as in the tables above; `roll` = the first
-gateway's store closes, that many seconds pass, a second gateway starts on the same DB path; `after`
+gateway's store closes, that many seconds pass, a second gateway starts on the same DB path (a
+`roll` naming `the policy now declares <rail> latch_scope: <scope>` starts it on the policy with that
+one value changed — a policy rollout riding the roll); `after`
 = a ride on the second gateway before the ask (`—` = none); `role` / `rail` = the body's.
 
 | description | world | arrange | roll | after | role | rail | decision? | rail? | reason? | retry_after_s? |
