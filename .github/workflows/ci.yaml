@@ -566,6 +566,9 @@ jobs:
       - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
         if: steps.diff.outputs.lock-intake-lint-test != 'false'
         run: devbox run lock-intake-lint-test
+      - name: image-clock self-test (devbox run image-clock-test)
+        if: steps.diff.outputs.image-clock-test != 'false'
+        run: devbox run image-clock-test
 
       # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
       # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local

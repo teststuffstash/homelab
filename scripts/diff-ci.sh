@@ -203,6 +203,7 @@ MAP=(
   # The `-- <cmd>` form because the root devbox.json is codeowner-author; no ci.yaml step — `ci`
   # runs the full lint.
   "-- python3 scripts/lock-intake-lint.py --uv-floor:(^|/)uv\.lock$"
+  "image-clock-test:^scripts/image-clock"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which

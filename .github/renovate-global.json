@@ -46,6 +46,12 @@
 
   "packageRules": [
     {
+      "description": "The platform's LEAD OFFSET (ADR-166, superseding ADR-158's version window): on homelab — where prod's pins live — a minor or major waits 14 days, a week past the stacks' 7, so every stack's test pin has run a version for a week before the platform can propose it, however far prod jumps. Patches keep the 7 (they rarely break a consumer). Security fixes bypass it (vulnerabilityAlerts). Later rules that null the cooldown (the crossplane chart) still win; docker has no usable release timestamp (timestamp-optional below) — its 7/14 days come from scripts/image-clock.py's allowedVersions rules, appended to this file at run time (docs/renovate.md §The image clock).",
+      "matchRepositories": ["teststuffstash/homelab"],
+      "matchUpdateTypes": ["minor", "major"],
+      "minimumReleaseAge": "14 days"
+    },
+    {
       "description": "Digest / pin bumps (any manager) — a human can't review a hash → mechanical `automerge` lane (org cooldown + CI gate + renovate-approve reflex).",
       "matchUpdateTypes": ["digest", "pin", "pinDigest"],
       "addLabels": ["automerge"],
