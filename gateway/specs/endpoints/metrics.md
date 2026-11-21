@@ -136,7 +136,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_openrouter_catalog_refresh_total` | `outcome` | OpenRouter catalog refresh attempts by outcome; every outcome renders from 0 ([GW-CATALOG-OR](catalog.md#gw-catalog-or)) |
 | `gateway_canary_rides_total` | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged) |
 | `gateway_canary_admissions_total` | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
-| `gateway_rail_choice_total` | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
+| `gateway_rail_choice_total` | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`, `order`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
 
 #### The families — gauges and the histogram
 
@@ -338,7 +338,7 @@ labels reads both.
 | model is a policy openrouter id ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_requests_total, gateway_provider_failovers_total` | `model` | `the openrouter rail's policy models` |
 | provider is a snapshot slug or unattributed ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_requests_total` | `provider` | `the endpoint snapshot's slugs, unattributed` |
 | a failover's from and to are snapshot slugs too ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_failovers_total` | `from, to` | `the endpoint snapshot's slugs, unattributed` |
-| reason is why the rail choice fell ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `reason` | `price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint` |
+| reason is why the rail choice fell ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `reason` | `price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint, order` |
 | the rail choice's model is the twin's openrouter spelling ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `model` | `the openrouter rail's policy models` |
 
 #### No unbounded label, ever
