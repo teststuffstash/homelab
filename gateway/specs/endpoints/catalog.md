@@ -1450,8 +1450,8 @@ per clean ride and by price alone), `clean-rate` (the measured rate flipped the 
 `headroom`, `not-in-catalog` (unverified — expected: no row drives it), `no-eligible-endpoint`, and
 ⚖ `order` — the two twin cells cost exactly the same per clean ride, so the role's rail order
 decides and the answer says so (unverified — expected: no row drives an exact tie; the sixth value
-of `RAIL_CHOICE_REASONS`, which neither `metrics.schema.json`'s `gateway_rail_choice_total.reason`
-nor `sessions.schema.json`'s `rail_choice.reason` enumerates yet). A failed-over request bills the serving provider: its row names that
+of `RAIL_CHOICE_REASONS`, enumerated by both `metrics.schema.json`'s `gateway_rail_choice_total.reason`
+and `sessions.schema.json`'s `rail_choice.reason`). A failed-over request bills the serving provider: its row names that
 provider, its outcome judges that cell
 ([§Failover](openai-chat.md#failover--before-the-first-byte-only) — the choice does not change it).
 
