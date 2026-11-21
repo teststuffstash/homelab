@@ -36,15 +36,16 @@ def _roll_seconds(roll: str) -> int:
 async def _rolled(app, transport, clock, roll: str, db: str | None = None):
     """The roll: the first gateway's store closes (the pod is gone), the roll's seconds pass, and a
     second gateway starts on the same DB path (or on `db`), sharing the fakes, the policy and the clock.
-    A roll naming `the policy now declares <rail> latch_scope: <scope>` starts the second gateway on
-    the policy with that one value changed (a policy rollout that rides the roll)."""
+    A roll naming `the policy now declares <rail> <admission key>: <value>` starts the second gateway
+    on the policy with that one admission value changed, `none` = the key removed (a policy rollout
+    that rides the roll)."""
     st = app.state
     policy = st.policy
-    if m := re.search(r"the policy now declares (\w+) latch_scope: (\w+)", roll):
-        rail, scope = m.group(1), m.group(2)
+    if m := re.search(r"the policy now declares (\w+) (\w+): (\w+)", roll):
+        rail, key, value = m.group(1), m.group(2), m.group(3)
         rp = policy.rails[rail]
         policy = dataclasses.replace(policy, rails={**policy.rails, rail: dataclasses.replace(
-            rp, admission=dataclasses.replace(rp.admission, latch_scope=scope))})
+            rp, admission=dataclasses.replace(rp.admission, **{key: None if value == "none" else value}))})
     with when(f"roll = {roll}: the first gateway's store closes; {_roll_seconds(roll)} s pass; a second gateway starts on {db or 'the same DB'}"):
         st.store.close()
         clock.advance(_roll_seconds(roll))
@@ -75,6 +76,9 @@ MARK_ROWS = [
     pytest.param("policy-default · upstream-429", "reviewer ride on anthropic → 429 (retry-after: 30)", "+10 s, the policy now declares anthropic latch_scope: model",
                  DASH, "reviewer", "anthropic", "dispatch", "anthropic", DASH, DASH,
                  id="a latch written under account scope does not reload once the rail declares model scope"),
+    pytest.param("policy-default · upstream-429", "reviewer ride on anthropic → 429 (retry-after: 30)", "+10 s, the policy now declares anthropic latch_429_hold_s: none",
+                 DASH, "reviewer", "anthropic", "dispatch", "anthropic", DASH, DASH,
+                 id="a latch does not reload once the rail drops its latch hold"),
     pytest.param("policy-default · upstream-429-reset", "worker ride on openrouter → 429, reset T0 + 42 s, the same session → 200", "+10 s", DASH, "worker", "openrouter",
                  "dispatch", "openrouter", DASH, DASH, id="a mark cleared by a 2xx before the roll is gone after it"),
     # anthropic (no probe): hold 900 → the mark lifts half-open at T0 + 900, the hold row keeps 900; the
