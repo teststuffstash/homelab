@@ -1,0 +1,9 @@
+CALL gh pr view 3444 --repo teststuffstash/homelab --json headRefOid,commits
+CALL gh api -X POST repos/teststuffstash/homelab/pulls/3444/reviews -f commit_id=536ed6a0f0e1d2c3b4a5968778695a4b3c2d1e0f -f event=APPROVE -F body=@<file> --jq .id
+BODY LGTM at the reviewed head
+CALL gh pr view 3444 --repo teststuffstash/homelab --json headRefOid,commits
+CALL gh api -X PUT repos/teststuffstash/homelab/pulls/3444/reviews/9001/dismissals -f event=DISMISS -f message=verdict-pin: the PR's content moved past the reviewed head 536ed6a0 during submit — this verdict is about an older head (homelab#3444)
+OUT verdict-pin: submitted then DISMISSED — the content moved during submit. Do not resubmit; stop here.
+OUT SHIM_RC: 0
+OUT DROP: VERDICT_DROPPED: content moved past 536ed6a0 during submit; review 9001 dismissed (APPROVE)
+RC 0

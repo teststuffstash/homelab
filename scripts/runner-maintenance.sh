@@ -20,9 +20,10 @@
 # ignored, docs/runbook.md §Recreating a Talos VM), and this verb consumes that plan. The runner is
 # stateless (boot-minted registration, fresh disk), so a replace is safe exactly when no job is
 # running on it: the job dies with the VM, and its repo reads a red run nobody caused. This verb
-# makes "no job in flight" a computed answer. It is built ATTENDED
-# first and wired into the box later — the shape `scripts/helm-release-evidence.sh` took
-# (docs/management-box.md §"Non-Talos VMs: the runner verb").
+# makes "no job in flight" a computed answer. It is built ATTENDED first; the box calls the same
+# `run` unattended (mgmt/scripts/mgmt-runner.sh as its MGMT_TF, policy `apply_vm_recreate`, shipped
+# off) — the shape `scripts/helm-release-evidence.sh` took (docs/management-box.md §"Non-Talos VMs:
+# the runner verb").
 #
 # A VM is its registrations: cloud-init registers `<vm>` and `<vm>-2` (two slots, same labels,
 # `var.github_runner_labels`). `drain` REMOVES the declared custom labels from every registration of
@@ -85,6 +86,19 @@ SILENCE="${SILENCE:-1}"
 SLOTS="${RUNNER_SLOTS:-2}"   # cloud-init's `<vm>` + `<vm>-2`
 POLL="${RUNNER_POLL:-20}"
 MGMT_TF="${MGMT_TF:-$ROOT/mgmt/scripts/mgmt-tf.sh}"
+# CI-OUTCOME alerts are not this verb's health signal (operator ruling, docs/management-box.md §Non-Talos
+# VMs): a red run anywhere in the fleet is routine and says nothing about the replaced VM, and a green
+# one would need a known-good job re-run on it — still not proof. The verb's health is its own `verify`
+# (registrations online with every label, the exporter up) plus the cluster compare; a runner change
+# that breaks a stack's build surfaces as that stack's red CI, which the stack reports or fixes itself
+# (version bumps on its side, never a migration). Declared, not silenced: the responder still sees them.
+# The window opens `--no-ci` for the same reason: its close skips the stranded-CI probe (gh; the box has none).
+# And the new-alert diff is SCOPED to this VM (operator ruling, same section): the VM is outside the
+# cluster, so only an alert about it — its instance, its `vm`/`name`/`host` label (the pve guest alerts
+# carry `name`), a `CiRunner*` name — can be its
+# doing; any other new alert in the fleet prints out of scope and passes. The cluster probes (nodes,
+# targets, cilium, pods) stay as strict as ever.
+CI_OUTCOME_ALERTS="GithubWorkflowRunFailed"
 MAINT="${MAINT_WINDOW:-$ROOT/scripts/maintenance-window.sh}"
 SEATWIN="${SEAT_WINDOW:-$ROOT/agents/seat-window.sh}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -314,7 +328,8 @@ cmd_run() { # <plan-id> <vm>
   mkdir -p "$dir"; log "evidence → $dir"
   local hours=$(( (${DRAIN_TIMEOUT:-3600} + ${VERIFY_TIMEOUT:-1800} + ${COMPARE_SETTLE:-600} + 1800 + 3599) / 3600 ))
   bash "$MAINT" open --reason "ci-runner VM replace: $vm, plan $plan — scripts/runner-maintenance.sh" \
-    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" \
+    --alerts "TargetDown,CiRunnerNodeExporterDown,CiDispatchStalled" --hours "$hours" --expect "$CI_OUTCOME_ALERTS" --no-ci \
+    --scope-ip "$VM_IP" --scope-vm "$vm" --scope-prefix CiRunner \
     > "$dir/window-open.log" 2>&1 || { cat "$dir/window-open.log" >&2; log "run: window did not open — not draining"; exit 3; }
   local wid; wid="$(sed -n 's/^  maintenance-window slot: \([^ ]*\) .*/\1/p' "$dir/window-open.log")"; wid="${wid%%$'\n'*}"
   [ -n "$wid" ] || { log "run: could not read the window id from 'open' — not draining ('devbox run maint -- list')"; exit 3; }
@@ -356,7 +371,8 @@ cmd_run() { # <plan-id> <vm>
   # `up` returns — compare until clean, like the box loop's post-check.
   end=$(( $(date +%s) + ${COMPARE_SETTLE:-600} )); ok=0
   while :; do
-    if bash "$MAINT" compare "$dir/health-before.json" > "$dir/health-compare.txt" 2>&1; then ok=1; break; fi
+    if bash "$MAINT" compare "$dir/health-before.json" --expect "$CI_OUTCOME_ALERTS" \
+         --scope-ip "$VM_IP" --scope-vm "$vm" --scope-prefix CiRunner > "$dir/health-compare.txt" 2>&1; then ok=1; break; fi
     [ "$(date +%s)" -lt "$end" ] || break
     sleep 30
   done

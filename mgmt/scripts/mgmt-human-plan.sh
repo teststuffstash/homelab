@@ -27,6 +27,12 @@ for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; d
   [ -n "$d" ] && [ -d "$d/homelab-pve-ssh" ] && CRED="$d" && break
 done
 [ -n "$CRED" ] || { echo "mgmt-human-plan: cred dir not found (homelab-pve-ssh/ — the key the box trusts)" >&2; exit 1; }
+# The box's host key is PINNED from the wallet cache (mgmt-ssh-host, via scripts/wallet-files.sh),
+# never trusted on first use — the rule mgmt-state-pull.sh and mgmt-provision-secrets.sh follow.
+HOSTPUB="$CRED/homelab-mgmt/extra-files/etc/ssh/ssh_host_ed25519_key.pub"
+[ -f "$HOSTPUB" ] || { echo "mgmt-human-plan: no pinned host key at $HOSTPUB — run scripts/wallet-files.sh" >&2; exit 1; }
+KH="$(mktemp)"; trap 'rm -f "$KH"' EXIT
+echo "$HOST $(cut -d' ' -f1,2 "$HOSTPUB")" > "$KH"
 # shellcheck disable=SC2016
 remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    export MGMT_BOX=1   # the box closure + tofu from the lock as data, never devbox (FU-305, mgmt-tools.sh)
@@ -34,5 +40,5 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    grep -q -- "--human-plan" "$S" || { echo "mgmt-human-plan: the box checkout ($(git -C /var/lib/homelab rev-parse --short HEAD)) predates the human-plan mode — wait for mgmt-pull (hourly) or run: systemctl start mgmt-pull" >&2; exit 1; }
    echo "mgmt-human-plan: sentinel at $(git -C /var/lib/homelab rev-parse --short HEAD) on $(hostname) — human plan of #$1" >&2
    exec "$S" --human-plan "$@"'
-exec ssh -t -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+ssh -t -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
   "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$@")"

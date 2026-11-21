@@ -201,7 +201,7 @@ async def test_a_preference_for_the_strongest(gw, app, store, upstreams, arrange
 
 
 FAILOVER_ROWS = [
-    pytest.param(f"{NEAR_SHARE}; the openrouter fake's deepinfra answers 500", "dispatch", "openrouter", "openrouter over opencode: headroom",
+    pytest.param(f"{NEAR_SHARE}; the openrouter fake's deepinfra answers 500; the consumer reports outcome clean", "dispatch", "openrouter", "openrouter over opencode: headroom",
                  "deepinfra 500, atlas-cloud 200", "atlas-cloud 1 / 1, deepinfra 0 / 0",
                  id="the choice survives a failover: the ride's rows name the serving provider, its outcome judges that cell ⚖"),
 ]

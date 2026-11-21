@@ -13,7 +13,9 @@
 #   predicate  = the digest agents/deep-dig-select.sh builds — deterministic shell, replayable by
 #                agents/deep-dig-test.sh: `triage: dig` ∧ (standing ≥ 6 h ∨ ≥ 3 of 7 days) ∧ not
 #                explained by a declared window / an open issue naming it / an open follow-up /
-#                meta-state / a dig finding for the same (alert, subject) within 7 d. The subject is
+#                meta-state / a dig finding for the same (alert, subject) within 7 d — except a STALE
+#                issue / follow-up / meta-state explanation, re-tested once per 14-d hold, fresh groups
+#                ranked first (deep-dig-select.sh header, 3b). The subject is
 #                the responder's own cascade, extracted from responder-argo.yaml at run time.
 #   edge       = this CronWorkflow, daily 03:30Z (before the Monday 05:00Z retro, after the night's
 #                alerts have had hours to stand). No Sensor: a dig is never urgent by definition.
@@ -114,7 +116,7 @@ spec:
           semaphores:
             - configMapKeyRef: { name: subscription-capacity, key: claude }
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator
+          image: registry.teststuff.net/agent-coordinator
           env:
             - { name: HOME, value: "/home/node" }
             - { name: ORG, value: "teststuffstash" }
@@ -196,10 +198,12 @@ spec:
                 cat /tmp/dig-select.log; _push 0 0 0 0 0 0; echo "deep-dig: selection failed — no session"; exit 1
               fi
               cat /tmp/dig-select.log
-              CAND="$(jq -r '.counts.candidates' /tmp/dig.json)"; GROUPS="$(jq -r '.counts.selected' /tmp/dig.json)"; EXPL="$(jq -r '.counts.explained' /tmp/dig.json)"
+              # NGROUPS, never GROUPS: bash owns $GROUPS (the caller's gids; assignment is silently dropped), so
+              # the zero-group exit below never fired and the gauge + manifest read the gid (1000).
+              CAND="$(jq -r '.counts.candidates' /tmp/dig.json)"; NGROUPS="$(jq -r '.counts.selected' /tmp/dig.json)"; EXPL="$(jq -r '.counts.explained' /tmp/dig.json)"
               _ts_put /tmp/dig.json digest.json
               _ts_put /tmp/dig-select.log select.log
-              if [ "${GROUPS:-0}" -eq 0 ]; then
+              if [ "${NGROUPS:-0}" -eq 0 ]; then
                 _push 1 "$CAND" 0 "$EXPL" 0 0
                 echo "deep-dig: nothing unexplained is standing or recurring — no session today (digest → $TS_PREFIX)"; exit 0
               fi
@@ -213,10 +217,10 @@ spec:
               _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role responder --task "dig-$DAY" || _gw=$?
               case "$_gw" in
                 0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
-                1) _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
+                1) _push 1 "$CAND" "$NGROUPS" "$EXPL" 0 0; echo "deep-dig: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
                 *)
               rail="$(SUBSCRIPTION_TIER=dispatch bash agents/subscription-latch.sh --pick-rail)" || rail=""
-              if [ -z "$rail" ]; then _push 1 "$CAND" "$GROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
+              if [ -z "$rail" ]; then _push 1 "$CAND" "$NGROUPS" "$EXPL" 0 0; echo "deep-dig: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
               TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role responder --fallback sonnet)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)";;
               esac
 
@@ -224,7 +228,7 @@ spec:
               # that size is how the retro's cell died (E2BIG at 146 KB) — DIG_MAX_GROUPS bounds it.
               {
               cat <<'BRIEF'
-              You are the DEEP DIG — the scheduled, grouped half of the homelab alert triage (docs/agents/roles.md §deep dig, ADR-148). Not the responder: nothing here is urgent, and you are paid for DEPTH, not speed. Each group below is a set of `triage: dig` alerts that have STOOD for hours or RECURRED across days, started in the same window on the same host, and that no open issue, declared window, follow-up or earlier dig explains. The alerts that WERE explained are listed too so you do not re-derive them; the `explained_by` reference is the record — read it before you touch anything related. `windows` is the declared-window HISTORY of the lookback (agents/seat-window.sh — opened/closed/tail times, reason, the alert names it expected): when a group's onset falls inside or just after one, a person's maintenance is a hypothesis to TEST against that record, never a conclusion to assume.
+              You are the DEEP DIG — the scheduled, grouped half of the homelab alert triage (docs/agents/roles.md §deep dig, ADR-148). Not the responder: nothing here is urgent, and you are paid for DEPTH, not speed. Each group below is a set of `triage: dig` alerts that have STOOD for hours or RECURRED across days, started in the same window on the same host, and that no open issue, declared window, follow-up or earlier dig explains. The alerts that WERE explained are listed too so you do not re-derive them; the `explained_by` reference is the record — read it before you touch anything related. A group with `retest: true` is a RE-TEST: its alerts stood continuously while an open issue, follow-up or `dig-explained:` line (each alert's `retest.explained_by`) explained them — read that record, then test the specific claim it makes against live evidence; verdict `explained` if the record still holds, `cause-found` if it is stale or the condition has progressed beyond what it describes (ADR-148). `windows` is the declared-window HISTORY of the lookback (agents/seat-window.sh — opened/closed/tail times, reason, the alert names it expected): when a group's onset falls inside or just after one, a person's maintenance is a hypothesis to TEST against that record, never a conclusion to assume.
 
               YOUR JOB, per group: find the ONE cause (or say honestly that you could not), with evidence you actually read, and say what would change it. Standing conditions have history — use it. Read in this order, naming each read in your evidence:
                 (1) The alert annotations in the digest — the rule author wrote the runbook hints there.
@@ -256,11 +260,11 @@ spec:
               if DIG_DIGEST=/tmp/dig.json DIG_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" DIG_RUN="dig-${DAY}/dig-r1-${TS_RUN}" bash agents/deep-dig-select.sh harvest /tmp/dig.log /tmp/findings; then
                 N="$(ls /tmp/findings/finding-*.json 2>/dev/null | wc -l | tr -d ' ')"
               else
-                echo "deep-dig: the session produced NO valid finding block for $GROUPS group(s) — the transcript is the only record"
+                echo "deep-dig: the session produced NO valid finding block for $NGROUPS group(s) — the transcript is the only record"
               fi
               jq -n --arg role responder --arg lane dig --arg project homelab --arg task "dig-$DAY" \
                     --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
-                    --argjson groups "$GROUPS" --argjson findings "$N" \
+                    --argjson groups "$NGROUPS" --argjson findings "$N" \
                     '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
                       session_key:"coordinator-claude", pod:$pod, timestamp:$ts, groups:$groups, findings:$findings,
                       files:["digest.json","brief.md","dig.log","select.log"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
@@ -268,8 +272,8 @@ spec:
               _ts_put /tmp/ts-manifest.json manifest.json
               for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && _ts_put "$f" "$(basename "$f")"; done
               { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")"; done
-              _push 1 "$CAND" "$GROUPS" "$EXPL" 1 "$N"
-              echo "deep-dig: $GROUPS group(s) dug, $N finding(s) → $TS_PREFIX"
+              _push 1 "$CAND" "$NGROUPS" "$EXPL" 1 "$N"
+              echo "deep-dig: $NGROUPS group(s) dug, $N finding(s) → $TS_PREFIX"
               for f in /tmp/findings/finding-*.json; do [ -f "$f" ] && jq -r '"  \(.verdict) \(.group): \(.cause | .[0:160])\(if .pr != "" then " [PR \(.pr)]" else "" end)"' "$f"; done
               exit 0
           resources:

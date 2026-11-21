@@ -1,0 +1,31 @@
+# changes-requested/body-edit-specs-reviewer-held — the body-edit leg holds whichever reviewer
+# asked: the same world as body-edit-held, but the CHANGES_REQUESTED is the SPECS reviewer's.
+#
+# CONDITION UNDER REPLAY. PR #1097 carries homelab-specs-reviewer's CHANGES_REQUESTED (17:23);
+# the worker answered by EDITING THE BODY (17:30); the only later commit is an updater merge.
+# The specs reviewer re-opens its own CHANGES_REQUESTED on a newer body edit, the code
+# reviewer's `reviewable_again` shape (docs/agents/specs-reviewer.md §candidate table), so the
+# PR is that reviewer's work item. (This row asserted a dispatch until the specs reviewer
+# learned to re-read body edits; the scan's exception for its verdicts went with it.)
+#
+# THE CONTRACT:
+#   1. The same reads as body-edit-held (one `gh pr view`, one lazy `gh api graphql`).
+#   2. No UNIT: the clause holds the PR for the reviewer's re-read instead of queueing a
+#      redundant worker round. On base (with the specs-reviewer exception) it dispatches — red.
+pins:
+  - MP-T11
+name: changes-requested-body-edit-specs-reviewer-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - file:bridge.sh
+  - block:changes-requested-gate
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab

@@ -39,3 +39,13 @@ jobs:
           GATEWAY_SPECS_S3_ACCESS_KEY_ID: ${{ secrets.GATEWAY_SPECS_S3_ACCESS_KEY_ID }}
           GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
         run: devbox run gateway-specs-pr-purge -- "${{ github.event.number }}"
+
+      # The scan island's preview (bucket `scan-specs`, prefix pr-<N>/ — written by ci.yaml's `Scan
+      # specs site publish` step). Same key, same "nothing to purge" no-op for a PR that published none.
+      - name: Purge the scan-specs pr-prefix (close)
+        if: ${{ !cancelled() }}
+        env:
+          GATEWAY_SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          GATEWAY_SPECS_S3_ACCESS_KEY_ID: ${{ secrets.GATEWAY_SPECS_S3_ACCESS_KEY_ID }}
+          GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
+        run: devbox run -- bash islands/scripts/specs-site.sh purge scan "${{ github.event.number }}"

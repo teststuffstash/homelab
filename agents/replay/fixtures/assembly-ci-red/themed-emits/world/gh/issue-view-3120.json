@@ -1,0 +1,8 @@
+{
+  "labels": [
+    {
+      "name": "agent/in-progress"
+    }
+  ],
+  "body": "Theme: wire declarations.\n\nTouches: gateway/**\n"
+}

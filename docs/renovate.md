@@ -208,10 +208,12 @@ separate pin, and moving it in step everywhere is FU-240.
     `DRY-RUN: Would commit files`, but only when a branch is (re)built — an up-to-date branch runs
     nothing.
 
-  The two consumers: `scripts/upstream-alerts-refresh.sh` (the kube-prometheus-stack rule
-  re-renders the upstream alert list on its branch) and `scripts/vendor-kyverno-policies.sh`
-  (re-fetches `policy/component/` on a `KYVERNO_POLICIES_SHA` bump). Both are bash/curl/sed/awk
-  only, for exactly this container.
+  The three consumers: `scripts/upstream-alerts-refresh.sh` (the kube-prometheus-stack rule
+  re-renders the upstream alert list on its branch), `scripts/vendor-kyverno-policies.sh`
+  (re-fetches `policy/component/` on a `KYVERNO_POLICIES_SHA` bump) and
+  `scripts/vendor-garage-chart.sh` (rebuilds `argocd/charts/garage` with its local patches on a
+  `GARAGE_CHART_TAG` bump). All are bash/curl/sed/awk (the last also git + tar) only, for exactly
+  this container.
 - **`pinGitHubActionDigests` pins our OWN reusable workflows too**, which would freeze every
   `teststuffstash/homelab/.github/workflows/*.reusable.yml@master` caller at one homelab commit and
   queue a digest PR per master move. First-party `teststuffstash/**` refs are excluded in the

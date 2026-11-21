@@ -46,6 +46,7 @@ coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail
 coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
+dead-ride-record	dead-ride-record
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-candidate	deploy-revert-candidate
 deploy-revert-judge	deploy-revert-judge
@@ -164,6 +165,7 @@ slo-teeth	slo-teeth
 sprout-report-skips-buckets	sprout-report-skips-buckets
 sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp
+strike-comment-post	strike-comment-post
 strike-quota-classifier	strike-quota-classifier
 touches-check-predicate	touches-check-predicate
 unblocked-unlabeled-blocker-open	unblocked-unlabeled

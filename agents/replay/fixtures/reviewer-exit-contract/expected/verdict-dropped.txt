@@ -1,0 +1,5 @@
+CALL gh pr view 42 --repo teststuffstash/test-project --json reviews,comments,labels,commits,headRefOid
+OUT exit-contract: terminal OK — verdict dropped by the verdict pin (VERDICT_DROPPED: content moved past abc1234d before submit (APPROVE)); the new head gets its own review
+OUT FINAL: 0
+OUT TERMINAL_OK: 1
+RC 0

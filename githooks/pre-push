@@ -25,6 +25,13 @@
 # executable content at all.
 # `githooks/pre-push --dry-run <rev>` prints the selected set without running it, e.g.
 # `--dry-run 7c50f507` reproduces the miss.
+# git exports GIT_DIR (and friends) to a hook run from a LINKED WORKTREE. Every gate below
+# inherits it, and a replay suite that builds a throwaway repo (`git init`, `git commit` in a temp
+# dir) then writes into THIS repository instead: 2026-11-12, a master push from a worktree left
+# the shared checkout `core.bare = true` and five "base" commits on the worktree's HEAD. Drop
+# them; every git call here and below finds its repository from the working directory.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
 if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN=1
   dry_arg="${2:?usage: githooks/pre-push --dry-run <rev-or-range>}"

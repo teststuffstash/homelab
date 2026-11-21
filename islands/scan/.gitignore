@@ -1,0 +1,11 @@
+allure-results/
+.devbox/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+# the specs site build (islands/scripts/specs-site.sh): staged docs root, rendered site, the run's report
+.site-src/
+.site-evidence/
+specs-site/
+allure-report-single/

@@ -56,7 +56,7 @@ classes:
   - id: 3
     name: First-party images
     extract: first_party_images
-    where: "`agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`)"
+    where: "`agents/images.env` (agent-base, agent-coordinator) + every `image: ghcr.io/teststuffstash/…` or `registry.teststuff.net/agent-…` ref the deploy-pin sweep must reach (`argocd/**`, `agents/coordinator/*.yaml`)"
     manager: "n/a — the deploy-pin PR (ADR-084); Renovate never touches our own artifacts (a `2026.<m>.<d>-g<sha>` tag does not order)"
     proof_head_prefixes: ["deploy/", "runner-image-pin"]
     proof_paths: ["agents/images.env", "argocd/platform/arc-runners", "agents/coordinator/", "argocd/resources/agent-gateway/"]
@@ -218,10 +218,10 @@ classes:
     manager: "none — no Renovate, by ruling (operator 2026-09-29: the official update path; `opnsense/core` tags precede packages and hotfix `_N` builds have no tag)"
     proof_head_prefixes: []
     proof_paths: []
-    proposer: {status: human, text: "none in git — the router's own `firmware/check` is the authority, by ruling (2026-09-29); a belt-raised record (the box reading `firmware/status` per node, the `check_substrate` pattern) was discussed, never built — ROADMAP §Deploy paths program step 1 (the currency belt)"}
+    proposer: {status: human, text: "none in git — the router's own `firmware/check` is the authority, by ruling (2026-09-29); the box's belt RUNS that check daily per node and raises the offer as `MgmtRouterFirmwareBehind` (the detector cell) — the person reads it and updates"}
     merge_gate: {status: human, text: "nothing merges — a SERIES move (a major) is a `SERIES` + `NANO_VERSION` edit under the codeowner read; inside a series nothing in git moves (latest, by #2501); MAJORS attended (ruling 2026-09-29, 'until the router is a VM pair' — met 2026-10-09; ADR-152: box-run after one attended drill along the rolling path (ROADMAP §Deploy paths step 4))"}
     deploy_edge: {status: human, text: "seat API calls per node — `core/firmware/check` → `update` (hotfix/minor, cumulative in a series) → `upgrade` (major: offline, three automatic reboots) — trialled on test VM 9110 from `baseline` first (docs/opnsense-test-vm.md §The official update path); prod followed the same path the same day on 2026-09-29 and 2026-09-30"}
-    detector: {status: gap, text: "no `firmware/status` belt (behind-series / EOL) — the pair belts and the weekly drill only see the aftermath; the accidental detector (`every build failed at the old SERIES`, how the 2026-09-30 and 2026-10-11 head moves were found) is GONE by design since #2501, so the gap is now pure — prod sat at 26.7.5 with 26.7.6 pending on 2026-10-11 and only a hand `firmware/check` said so; the drill now builds at the head, so its config diff vs prod is the one read that notices a skew"}
+    detector: {status: gap, text: "BUILT, not yet proven live — the box belt's `check_firmware` (mgmt/scripts/mgmt-probe.sh, docs/management-box.md §MB2): per CARP node + the test VM it reads `core/firmware/status` and POSTs the router's own `firmware/check` when the node's `last_check` is over 24 h old (config-neutral, docs/opnsense-test-vm.md §The official update path; `status` alone is only the last check's cache — opnsense-pve had none on 2026-11-17), publishing `mgmt_router_firmware_*` → `MgmtRouterFirmwareBehind` (an update offered > 7 d on a prod node) and `MgmtRouterFirmwareUnread` (no usable reading 6 h, or a check > 2 d old). Identity: a dedicated `firmware` API user held only by the box (OPN_FIRMWARE_API_*; the firmware API is one ACL including installs, so `automation` never holds it — the ruling in ansible/group_vars/opnsense.yml); live once scripts/opnsense-api-users.sh has created it and mgmt-provision-secrets.sh carried its pair. The event it replays: prod sat at 26.7.5 with 26.7.6_3 offered from 2026-10-11 and nothing fired; ok once Behind fires on a real offer. Behind-SERIES / EOL (a major) is the same `status: upgrade` reading"}
     revert: {status: gap, text: "none written down — the nodes are VMs (ADR-144), so a `qm snapshot` rollback exists and the loader keeps the previous kernel as `kernel (1 of 2)`; ADR-152 (2): the snapshot is the firmware revert, local to the target because the box's path rides the router"}
     canary: {status: human, text: "the BACKUP node first (snapshot, update, `check`), then the MASTER through `carp-maintenance enter` → update → `check` → `leave` with the FU-308 dead-man armed (drill R1 2026-09-30: three reboots, flows kept, failover 0.62 s / failback 3.1 s) — a seat act; the lease-wrapped box run is ROADMAP §Deploy paths program step 4"}
 
@@ -288,12 +288,26 @@ classes:
     manager: "none — a hand bump; no Renovate manager reads these group_vars literals"
     proof_head_prefixes: []
     proof_paths: []
-    proposer: {status: human, text: "a hand edit, normally beside a re-vendor of the in-cluster chart (the lockstep comment in the group_vars file) — nothing proposes it and nothing checks the two agree"}
+    proposer: {status: human, text: "a hand edit, normally beside the in-cluster Garage bump (class 20; the lockstep comment in the group_vars file) — nothing proposes it and nothing checks the two agree"}
     merge_gate: {status: human, text: "a human authors it (no proposer); the bot review is the only reader — `/ansible/` is unowned since the ADR-128 trial; no `ci` step exercises the playbook"}
     deploy_edge: {status: gap, text: "a human `ansible/garage-backup.yml` re-run (idempotent, docs/longhorn-backup.md) — a merge deploys nothing, and nothing records the version the LXC runs. Unproposed, so no armed drift (S9); the box as the ansible applier (ADR-152, ROADMAP §Deploy paths) would take it with Matchbox"}
     detector: {status: gap, text: "liveness only — `LonghornBackupTargetDown` (blackbox `/health`) and `LonghornBackupStale` (argocd/resources/longhorn-backup/) fire on a broken target, never on a git-vs-live version split"}
     revert: {status: human, text: "`git revert` + the playbook re-run; the backups themselves are the data at stake — a Garage downgrade across a metadata-format change is not a revert"}
     canary: {status: human, text: "the in-cluster Garage runs the same release first (lockstep comment) — the de-facto canary for the binary; the LXC itself has no second instance"}
+
+  - id: 20
+    name: In-cluster Garage (the vendored chart)
+    extract: garage_chart
+    where: "`scripts/vendor-garage-chart.sh` — `GARAGE_CHART_TAG` + `GARAGE_CHART_SHA`, the upstream tag `argocd/charts/garage` is BUILT from (the chart is vendored so a sync never depends on git.deuxfleurs.fr; its `appVersion` is the image tag, so one pin moves chart and image). Local patches live in the script, their why in `argocd/charts/garage/VENDORED.md`. Missing from the register until 2026-11-13: the chart was a hand copy with no line a manager could read, and sleep-tracking#218 sat outside the ADR-158 window behind it"
+    manager: "custom.regex → `gitea-tags` (git.deuxfleurs.fr is a Forgejo) over the TAG+SHA pair, with `scripts/vendor-garage-chart.sh` as the branch's `postUpgradeTasks` command (the third G12 consumer — docs/renovate.md §Gotchas) so the bump is born with the chart rebuilt and the patches re-applied"
+    proof_head_prefixes: ["renovate/"]
+    proof_paths: ["scripts/vendor-garage-chart.sh", "argocd/charts/garage/"]
+    proposer: {status: ok, text: "Renovate `custom.regex` over the pin pair (renovate-global.json, 2026-11-13). Proven 2026-11-13: homelab#3344 (v2.3.0 → v2.5.0) was born with the chart rebuilt, all five patches applied and `--verify` green in `ci`"}
+    merge_gate: {status: human, text: "patch → `deps-review`, armed (the class-1 chart shape); minor → `major`-labelled, un-armed: the lens reads the notes of every release crossed and blocks on a one-way one until the docs say so (it did on #3344, v2.5.0), a human merges in an attended window (`scripts/garage-upgrade.sh preflight` before, `verify` after — docs/garage.md §Upgrading); a real major (v2 → v3) → human. Both by operator ruling 2026-11-13: a one-way release stops and escalates. `argocd-validate-pins` (required `ci`) renders the rebuilt chart with the Application's values and asserts every local patch in the output"}
+    deploy_edge: {status: ok, text: "ArgoCD auto-sync of `argocd/platform/garage.yaml` (a path source in this repo) — the StatefulSet rolls one zone at a time behind `minReadySeconds`"}
+    detector: {status: ok, text: "`GarageQuorumMembersRestarted` / `GarageS3ServerErrors` and the `garage-alerts` set (docs/garage.md), plus the Application's own health; `component-check` reds a vendored chart that drifted from its pin (`--check`)"}
+    revert: {status: human, text: "`git revert` of the bump commit restores chart and image together (one commit by construction). Inside one major a running mixed-version cluster is upstream's promise, but DOWNGRADE is not: a minor CAN be one-way — v2.5.0 is, per its release notes (it says a node, once upgraded, must not be downgraded to older Garage versions). For such a release the rollback is NOT `git revert` of the bump but a forward fix, or restoring the pre-upgrade metadata snapshot `preflight` takes under the old binary (writes since are lost; a human decides); check each release's notes for that line. Not drilled here; across a major the same holds"}
+    canary: {status: human, text: "by the one-cluster canary ruling (operator 2026-10-10). The stacks' kind tests run Garage up to one minor AHEAD of prod (ADR-158) — the nearest thing to a canary, for the S3 API only; the backup LXC (class 19) follows this class, it does not lead it"}
 
 overrides:
   # keyed by the printed dependency name, or by the FULL row key (`<class>:<name>@<where>`) when the

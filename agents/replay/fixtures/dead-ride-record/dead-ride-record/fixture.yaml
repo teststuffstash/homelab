@@ -1,0 +1,41 @@
+# THE CONTRACT (islands/launch/specs/outcome.md LAUNCH-OUTCOME-STRIKE-COMMENT): a worker ride whose
+# pod died hard — `agent` container ended non-zero, no `AGENT_RUN_STATS` line in its log (finalize
+# never ran) — gets EXACTLY ONE terminal record on its issue even when its launcher is gone. The
+# scan's per-repo pass (`REPLAY:dead-ride-record`) runs agents/ride-ended.sh, which runs the
+# launcher's own `strike-classifier` + `strike-line-format` + `strike-comment-post` blocks over the
+# ended pod. So the record is the launcher's, byte for byte: `AGENT_STRIKE: model=<chain entry>
+# error_class=<class> round=<r> session=<pod>`, the resumable-branch line, the log tail.
+#
+# Every world carries a second pod that ended exit 0 (`issue-3290-r2`, Succeeded): it is never read
+# (no `logs` call for it in any stream) — a clean end is finalize's to record.
+#
+# Rows:
+#   died-branch-pushed      the dead-ride shape: Error, no stats, one `fix/issue-3303-*` branch at
+#                           origin → one AGENT_STRIKE (class `unknown`, model from the pod's
+#                           struck-model annotation) carrying `**Resumable branch pushed:**`.
+#   finalized-control       the same pod, but its log HAS the stats line → nothing written, no
+#                           GitHub read at all (finalize + the launcher's stats path own it).
+#   already-recorded        a terminal comment naming `session=<pod>` after the pod's creation
+#                           (the launcher outlived the ride and wrote it) → nothing written.
+#   prior-attempt-record    the same session name, but posted BEFORE this pod was created (an
+#                           earlier attempt reusing the name) → this death is still recorded.
+#   oom-killed              agent terminated OOMKilled → class `oom` (the kubelet's verdict).
+#   branch-ambiguous        two `fix/issue-3303-*` branches → recorded, resumable `unknown`.
+#   comments-unreadable     the comment list read fails → nothing written (rule #6).
+#   still-settling          the agent ended inside the settle window (finishedAt in the future
+#                           relative to any run of this fixture) → not even read (a live launcher
+#                           writes first) AND not deleted by the janitor.
+#   deadline-kill-recorded-spared  DeadlineExceeded with the janitor's finish margin set wide →
+#                           recorded as `timeout` and the pod is kept.
+#
+# The block spans the completed-pod janitor too: a Failed pod is deleted only once its startTime
+# is 2h old AND its agent container ended RIDE_ENDED_JANITOR_S (3600s) ago, so a deadline kill
+# (Failed at startTime + 4h) gets read before it is reaped. Every row's stream therefore ends with
+# the janitor's list + deletes; the exit-0 pod is reaped (Succeeded, 30 min grace) in every row.
+name: dead-ride-record
+mode: table
+source: agents/coordinator-scan.sh
+world: died
+parts:
+  - file:bridge.sh
+  - block:dead-ride-record

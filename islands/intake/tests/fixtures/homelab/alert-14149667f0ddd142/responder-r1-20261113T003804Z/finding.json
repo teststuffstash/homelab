@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-13T00:38:12Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "14149667f0ddd142",
+  "subject": "workload:homelab/agent-homelab-issue-3302-r2",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-nn48x-respond-56136344",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3307-r2",
+      "reason": "Completed pod still holds a 20Gi ephemeral PVC against the full agentstack-storage quota, blocking 3302-r2 and 3307-r3.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3307-r2 — Completed pod still holds a 20Gi ephemeral PVC against the full agentstack-storage quota, blocking 3302-r2 and 3307-r3."
+    }
+  ]
+}

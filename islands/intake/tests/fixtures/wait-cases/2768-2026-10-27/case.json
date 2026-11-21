@@ -1,0 +1,16 @@
+{
+  "schema": "intake-wait-case/v1",
+  "item": "teststuffstash/homelab#2768",
+  "parked_at": "2026-10-27T21:20:28Z",
+  "parking_comment_id": 6453849698,
+  "parked_by": "RasmusSoot",
+  "writer": "intake",
+  "as_of": "2026-10-27T21:20:28Z",
+  "rules": {
+    "path": "gateway/intake.md",
+    "commit": "4ecdc0ad6cfcab2652e0a8dc7a0da78d8e4ae470"
+  },
+  "island": "gateway",
+  "recorded_at": "2026-11-19T20:53:22Z",
+  "note": "the brief landed on master 19 min after this parking; the spike sitting ran that PR's text, so the rules commit is the brief's first"
+}

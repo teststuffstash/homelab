@@ -34,10 +34,11 @@
     "anthropic": {
       "user_agent": "forward",
       "admission": {
-        "_comment": "⚖ the old proxy's values, copied (sessions.md §Capacity): utilization_thresholds 5h = ANTHROPIC_UTIL_THRESHOLD's code default 0.80 (openrouter-proxy.py; unset in its deployment.yaml), 7d = ANTHROPIC_UTIL_THRESHOLD_7D 0.95 (deployment.yaml); latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
-        "utilization_thresholds": {"5h": 0.80, "7d": 0.95},
+        "_comment": "⚖ utilization_thresholds 5h + 7d 0.95 = operator ruling (sessions.md §Capacity): defer at 95 % of either subscription window (the old proxy's 5h 0.80 deferred a fifth of the window unused). latch_scope model: Fable carries its own weekly limit, so one model's 429 cools that cell only; the account windows stay guarded by the thresholds, read from every response. latch_429_hold_s = ANTHROPIC_429_HOLD_S 900. reading_stale_s 900 has NO old-proxy precedent (it only drops a reading whose reset passed) — the gateway's own guess, ⚖.",
+        "utilization_thresholds": {"5h": 0.95, "7d": 0.95},
         "reading_stale_s": 900,
-        "latch_429_hold_s": 900
+        "latch_429_hold_s": 900,
+        "latch_scope": "model"
       },
       "max_sessions": 5,
       "side_models": ["claude/haiku"],
@@ -151,6 +152,16 @@
       "stacks": ["platform"],
       "roles": ["coordinator", "responder", "retro"],
       "bind_namespaces": ["openrouter-operator"]
+    },
+    "system:serviceaccount:agent-coordinator:responder": {
+      "stacks": ["platform"],
+      "roles": ["responder"],
+      "bind_namespaces": []
+    },
+    "system:serviceaccount:agent-coordinator:island-intake": {
+      "stacks": ["platform"],
+      "roles": ["coordinator"],
+      "bind_namespaces": []
     },
     "system:serviceaccount:agent-coordinator:outcome-judge": {
       "stacks": ["platform"],

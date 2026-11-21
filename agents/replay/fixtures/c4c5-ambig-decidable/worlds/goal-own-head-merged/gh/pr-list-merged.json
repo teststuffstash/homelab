@@ -1,0 +1,4 @@
+[
+  {"number": 342, "headRefName": "fix/issue-329-loop", "body": "Lands the exclusive-held reconcile on the goal branch."},
+  {"number": 340, "headRefName": "fix/issue-328-probe", "body": "Implements #328"}
+]

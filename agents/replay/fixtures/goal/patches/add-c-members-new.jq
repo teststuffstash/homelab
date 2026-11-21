@@ -2,7 +2,7 @@
 # uses it carries the SAME `state-fp:goal-checkpoint-c:` marker as `goal-checkpoint-c-held`
 # (hash of the set `#301`), so the current set `#301 #303` differs from the recorded one and the
 # clause re-arms: ONE unit. This is the row that keeps the hold from becoming a permanent silence
-# — the #2477 `goal-checkpoint-b-verdict-rearms` shape, on the member SET instead of a PR state.
+# — the #2477 `goal-checkpoint-b-replaced-releases` shape, on the member SET instead of a PR identity.
 . + [
   {
     "number": 301,

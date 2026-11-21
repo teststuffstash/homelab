@@ -86,7 +86,11 @@ additionalPrometheusRulesMap:
             annotations:
               description: 'Postgres instance {{ $labels.pod }} ({{ $labels.namespace }}) has been NotReady for 10m — the CNPG cluster is degraded (often a replica that can''t rejoin and loops on pg_rewind; the primary may be serving alone). Recovery: delete the replica''s PVC+pod so CNPG re-clones from the primary.'
               summary: CloudNativePG instance {{ $labels.pod }} not ready
-            expr: kube_pod_container_status_ready{namespace=~"forgejo|infisical|monitoring",container="postgres"} == 0
+            # Any namespace: the pod-owner join keeps CNPG instances only (owner kind Cluster), so a
+            # stack's cluster is covered with no list to extend; `and` keeps the left side's labels.
+            expr: |
+              kube_pod_container_status_ready{container="postgres"} == 0
+                and on (namespace, pod) kube_pod_owner{owner_kind="Cluster"}
             for: 10m
             labels:
               severity: warning
@@ -96,7 +100,9 @@ additionalPrometheusRulesMap:
             annotations:
               description: '{{ $labels.pod }} ({{ $labels.namespace }}) restarted >3 times in 15m — likely a replica stuck on pg_rewind (no common timeline ancestor). Re-clone it: delete the replica''s PVC + pod.'
               summary: CloudNativePG instance {{ $labels.pod }} crash-looping
-            expr: increase(kube_pod_container_status_restarts_total{namespace=~"forgejo|infisical|monitoring",container="postgres"}[15m]) > 3
+            expr: |
+              increase(kube_pod_container_status_restarts_total{container="postgres"}[15m]) > 3
+                and on (namespace, pod) kube_pod_owner{owner_kind="Cluster"}
             for: 0m
             labels:
               severity: warning
@@ -349,6 +355,14 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://chart-revert.agent-coordinator.svc.cluster.local:8080/alert
+      # oracle-iac#1192: KargoProdVerificationFailed (oracle-iac prometheusrule-kargo.yaml) STARTS the
+      # oracle stack's fixed WorkflowTemplate oracle-fleet/prod-diagnose — no argument, no session
+      # (agents/coordinator/kargo-prod-diagnose-argo.yaml). The responder triages the same alert and
+      # reads the finished record. send_resolved false: a resolve is not a second failure.
+      - name: kargo-prod-diagnose
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/kargo-prod-failed
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -404,6 +418,14 @@ alertmanager:
           matchers:
             - alertname =~ "ArgoControllerSilent|AgentLoopWorkflowsFailing"
           receiver: chart-revert
+        # oracle-iac#1192: KargoProdVerificationFailed goes to BOTH kargo-prod-diagnose (starts the
+        # stack's fixed diagnosis workflow) AND the responder (triage: now, reads its record). The
+        # rule is transition-keyed and resolves after an hour, so the 3h repeat never re-delivers it.
+        - continue: true
+          matchers:
+            - alertname = "KargoProdVerificationFailed"
+            - stack = "oracle"
+          receiver: kargo-prod-diagnose
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts
@@ -565,6 +587,12 @@ grafana:
   grafana.ini:
     server:
       root_url: https://grafana.teststuff.net
+    plugins:
+      # A pod start must not swap a plugin version under the pinned image (FU-173's no-unpinned-
+      # drift rule): the default `true` upgrades unpinned preinstalled plugins (bundled core
+      # datasources included) to grafana.com's latest at each start, and /api/ds/query 404s
+      # `plugin.notRegistered` mid-swap. The pinned list below still installs.
+      preinstall_auto_update: false
   persistence:
     enabled: false
   plugins:

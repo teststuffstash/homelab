@@ -3074,7 +3074,7 @@ under the operator's login, weighted by age: old and stale, a free hand on the e
 light editing only, and a would-be close is `seat`. Any other human's issue stays `seat`. Every such
 write is reversible from the comment and edit history. Re-reading the waits an earlier ruling left
 (`agent/blocked`, `intake: seat`) is part of the sitting. Mechanism:
-[`gateway/intake.md`](../gateway/intake.md) §Hard limits and procedure step R; evidence:
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §Hard limits and procedure step R; evidence:
 [`spikes/island-intake.md`](spikes/island-intake.md) §Run 3.
 **Considered:** keeping "never close a human-filed issue" (rejected: 18 of 28 gateway issues are
 under the operator's login but nearly all were written by jail sessions, so most of the pile could
@@ -3085,3 +3085,43 @@ much the operator still holds an issue's wording. A wait is a claim about one fa
 re-tested it: 3 of 4 rulings a fresh read changed were re-reads of earlier waits.
 **Consequences:** the sitting's token closes and edits issues it previously only commented on. The
 daily cron reads the issue pile and its waits (FU-320). A wrong close is undone by reopening.
+
+### ADR-164 — Island intake asks the operator only for a closed list; everything else it decides and production corrects (2026-11-19)
+**Status:** Accepted (operator, 2026-11-19).
+**Decision:** an [island intake](glossary.md) sitting parks an item on the operator (`intake: seat`,
+`blocked-on: human`) only for an entry of a closed list — access or money the island does not hold,
+an attended or irreversible act, direction (a Goal over the ceiling, what the island is for),
+another owner's gate, a ruling the tracker records as pending on that question, and the ADR-163
+whose-issue limits. With no entry, intake pins the cheaper-to-reverse option ⚖ and queues; the
+island's alerts, the deep dig, the escape read and prober rides correct a wrong pin. "Ruling" means
+the operator's recorded answer, whatever session typed it under the operator's login. Mechanism:
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §The procedure step 3; each island's instances are its
+facts' `Operator-only` lines ([`intake/`](intake/)).
+**Considered:** the open-ended "a human fact is missing" trigger (rejected: a read of ten gateway
+waits found six decidable from what intake already reads); drafting the list and waiting for
+evidence before adopting it (rejected: the build needs the data that adopting it produces).
+**Why:** a wrong queue costs one ride and is caught by the feedback the island already runs; a
+wrong park costs operator time and nothing re-tests it.
+**Consequences:** fewer `seat` outcomes; more queued items, some of them wrong and undone by the
+loop. A re-read whose wait maps to no entry, or whose `blocked-on: issue=|pr=` target closed, is
+decided afresh. The literal `intake: seat` and every receipt key stay as they are.
+
+### ADR-165 — The responder may start a stack's fixed WorkflowTemplate the alert names; the admission guard is the boundary (2026-11-21)
+**Status:** Accepted (operator, 2026-11-21).
+**Decision:** the responder's "no kubectl mutations" breaker gets ONE exception: when the alert names a
+stack's fixed WorkflowTemplate as its remedy, the triage session may start it — a Workflow whose spec
+is only `workflowTemplateRef: {name: <template>}`, no arguments. The template decides and refuses on its
+own; the responder only starts it. The boundary is admission, not the brief: the
+`workflow-template-start-guard` ValidatingAdmissionPolicy admits, per (namespace, starter), only the
+granted templates in that shape (`agents/coordinator/kargo-prod-diagnose-argo.yaml`), on the
+responder's own ServiceAccount (`agents/coordinator/rbac.yaml` §responder). First grant:
+`oracle-fleet/prod-step-back` (oracle-iac#1193, oracle-fleet#1095).
+**Considered:** the #818 graduation dial (rejected for now: it renders core-group verbs only, binds
+`agentstack-loop` rather than the responder's SA, and has no consumer — the larger build); keeping
+step-back a human act (rejected: the stack ruled a fixed, refusing workflow for it).
+**Why:** a start of a fixed, refusing template carries no authority the template's own SA does not
+already bound, and the guard makes any other shape fail at the apiserver whatever the session writes.
+**Consequences:** a new stack template = one guard entry + one Role, written by the platform. Written
+so the dial can absorb it later as its first non-core entry. The responder's report names the started
+Workflow.
+

@@ -1,0 +1,15 @@
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/330/comments?per_page=100
+CALL gh api repos/teststuffstash/homelab/issues/329/comments?per_page=100
+CALL gh pr list --repo teststuffstash/homelab --state merged --base goal/1162-scan --limit 100 --json number,headRefName,body
+CALL gh api repos/teststuffstash/homelab/git/matching-refs/heads/fix/issue-329-
+CALL gh api repos/teststuffstash/homelab/compare/goal/1162-scan...fix/issue-329-x
+OUT RESUMABLE homelab#329=fix/issue-329-x
+OUT CLASS homelab|issue-330|phantom|machine|...
+OUT CLASS homelab|issue-329|phantom|machine|...
+OUT UNIT c4c5-redispatch|homelab|issue-330|fix
+OUT UNIT c4c5-redispatch|homelab|issue-329|fix
+OUT ORPHAN [homelab] ✓ issue #329 — goal child ABANDONED (no terminal record, no live pod, nothing merged into its base from or citing it); origin fix/issue-329-x is ahead of the base → C4/C5 redispatch with --work-branch
+OUT V2   issue #330 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

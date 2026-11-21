@@ -1,0 +1,33 @@
+[
+ {
+  "id": 35945437679,
+  "node_id": "REFE_lADODboMws8AAAABetIG6M8AAAAIXoPZ7w",
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/events/35945437679",
+  "actor": {
+   "login": "RasmusSoot",
+   "id": 1532090,
+   "node_id": "MDQ6VXNlcjE1MzIwOTA=",
+   "avatar_url": "https://avatars.githubusercontent.com/u/1532090?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/RasmusSoot",
+   "html_url": "https://github.com/RasmusSoot",
+   "followers_url": "https://api.github.com/users/RasmusSoot/followers",
+   "following_url": "https://api.github.com/users/RasmusSoot/following{/other_user}",
+   "gists_url": "https://api.github.com/users/RasmusSoot/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/RasmusSoot/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/RasmusSoot/subscriptions",
+   "organizations_url": "https://api.github.com/users/RasmusSoot/orgs",
+   "repos_url": "https://api.github.com/users/RasmusSoot/repos",
+   "events_url": "https://api.github.com/users/RasmusSoot/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/RasmusSoot/received_events",
+   "type": "User",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "event": "referenced",
+  "commit_id": "1f14859b5a36fa8e912eead866212958e4ebb69c",
+  "commit_url": "https://api.github.com/repos/teststuffstash/homelab/commits/1f14859b5a36fa8e912eead866212958e4ebb69c",
+  "created_at": "2026-11-12T18:06:03Z",
+  "performed_via_github_app": null
+ }
+]

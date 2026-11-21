@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/pulls/3301/files --paginate
+CALL gh pr view 3301 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT ORPHAN [homelab] ⏳ ASSEMBLY PR #3301 ci-red SETTLING — 1 check(s) still in flight on the head (<1800s); the goal-checkpoint for goal #3118 reads a settled rollup, next tick (trigger=assembly-ci-red)
+OUT REACHED: end
+RC 0

@@ -31,6 +31,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# The hypervisors' host keys, pinned in git: the jail's ~/.ssh/known_hosts dies with the container.
+HV_KH="$ROOT/machines/hypervisor_known_hosts"
 log() { echo "[router-node] $*" >&2; }
 die() { log "FAIL: $*"; exit 1; }
 cmd="${1:-}"; NODE="${2:-}"
@@ -40,7 +42,8 @@ cmd="${1:-}"; NODE="${2:-}"
 # (nx-02 eno2 <-> pve enp6s0) makes both nodes' WANs one segment. Runtime-only: `down` removes all.
 if [ "$cmd" = fakeisp ] || [ "$cmd" = probe ]; then
   K="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
-  hyp() { ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=10 "root@$1" "${@:2}"; }
+  hyp() { ssh -i "$K" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$HV_KH" "root@$1" "${@:2}"; }
   WANMAC="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' machines/machines.yaml)"
   case "$cmd:$NODE" in
     fakeisp:up)
@@ -82,7 +85,15 @@ HOST="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].ansible_host" "$INV")
 STANDBY="$(yq -r ".all.children.opnsense.hosts[\"$INV_HOST\"].opnsense_standby" "$INV")"
 case "$HOST" in 192.168.2.1|''|null) die "$INV_HOST's ansible_host is '$HOST' — a node never holds .1" ;; esac
 PVE_KEY="${OPN_TEST_PVE_KEY:-$HOME/.claude/homelab-pve-ssh/id_ed25519}"
-pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$HV_KH" "root@$PVE" "$@"; }
+# pve_q <what> <cmd> — a yes/no question to the hypervisor: 0 = yes, 1 = no. FAILS CLOSED: when
+# ssh itself fails (exit 255 — host key, key file, host down) it dies, never reads as "no".
+pve_q() {
+  local what="$1" rc=0; shift
+  pve "$@" || rc=$?
+  case $rc in 0) return 0 ;; 255) die "could not read $what on $PVE (ssh exit 255) — refusing to proceed unguarded" ;; *) return 1 ;; esac
+}
 node_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$HOST" "$@"; }   # the seed's root key = the pve key
 KDB="$HOME/.claude/homelab-keepass/homelab.kdbx"
@@ -140,7 +151,8 @@ deadman_disarm() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\"
 deadman_status() { node_ssh "p=\$(cat $DEADMAN_PID 2>/dev/null); if [ -n \"\$p\" ] && kill -0 \$p 2>/dev/null; then echo \"dead-man ARMED (pid \$p)\"; else echo 'no dead-man'; fi; tail -n 2 /tmp/carp-deadman.log 2>/dev/null"; }
 carp_vip1() { api diagnostics/interface/get_vip_status 2>/dev/null | jq -r '[.rows[]? | select(.subnet=="192.168.2.1") | .status] | join(",")'; }
 carp_maintenance() {   # $1 = enter|leave|status
-  local dem r i; [ -n "$API_CURL" ] || api_setup
+  local dem r i
+  if [ -z "$API_CURL" ]; then case "$1" in enter|leave) api_setup opnsense-api ;; *) api_setup ;; esac; fi
   dem="$(carp_demotion)"; [ -n "$dem" ] || die "cannot read net.inet.carp.demotion on $HOST"
   case "$1" in
     status) echo "$INV_HOST ($HOST): demotion=$dem .1=$(carp_vip1) $( [ "$dem" -ge 240 ] && echo 'IN maintenance' || echo 'not in maintenance'); $(deadman_status | tr '\n' ' ')"; return 0 ;;
@@ -164,14 +176,22 @@ killswitch_disarm() { pve "systemctl stop $KS_UNIT; echo \"\$(date -u +%FT%TZ) d
 killswitch_status() { pve "systemctl is-active -q $KS_UNIT && echo armed || echo NOT-ARMED; c=\$(grep -c TRIPPED $KS_LOG 2>/dev/null); echo \${c:-0}"; }
 
 API_CURL=''
-api_setup() {  # prod's wallet pair — carried to the node, so it authenticates there too
+api_setup() {  # the `automation` API user (FU-013) — carried to the node, so it authenticates there too
   API_CURL="$(mktemp)"; chmod 600 "$API_CURL"
   # a pre-set pair wins (the management box: /var/lib/mgmt/env — it holds no wallet), as in
-  # scripts/opnsense-playbook.sh
+  # scripts/opnsense-playbook.sh; else the wallet's automation pair. Every API read `check` and
+  # `carp-maintenance status` make answers it (probed 2026-11-17) except Status: Interfaces, which
+  # `check` reads over the seed key instead. $1 = another wallet entry prefix: `carp-maintenance
+  # enter|leave` pass root's (opnsense-api), because the toggle POST
+  # (diagnostics/interface/carp_status/maintenance) lies outside page-status-carp's
+  # get_vip_status pattern and no privilege for it is established (it acts, so it is never probed
+  # as `automation` on prod). Root's pair for every verb: OPN_AS_ROOT=1.
+  local entry="${1:-opnsense-automation-api}"
+  if [ "${OPN_AS_ROOT:-0}" = 1 ]; then entry=opnsense-api; unset OPN_API_KEY OPN_API_SECRET; log "API as ROOT (OPN_AS_ROOT=1)"; fi
   if [ -n "${OPN_API_KEY:-}" ] && [ -n "${OPN_API_SECRET:-}" ]; then
     printf 'user = "%s:%s"\n' "$OPN_API_KEY" "$OPN_API_SECRET" > "$API_CURL"
   else
-    printf 'user = "%s:%s"\n' "$(kp opnsense-api-key)" "$(kp opnsense-api-secret)" > "$API_CURL"
+    printf 'user = "%s:%s"\n' "$(kp "$entry-key")" "$(kp "$entry-secret")" > "$API_CURL"
   fi
 }
 api() { curl -sfk -K "$API_CURL" --max-time 30 "https://$HOST/api/$1"; }
@@ -201,7 +221,7 @@ script_env() {
 converge() {
   local dhcp_enable=0 dhcp_server=kea kea_ha=''   # Kea's config converges on every node; only a LIVE one serves
   if [ "$STANDBY" != true ]; then   # LIVE (ADR-145): the kill switch would trip on the first converge
-    pve "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
+    pve_q "$KS_UNIT's state" "systemctl is-active -q $KS_UNIT || systemctl is-enabled -q $KS_UNIT" \
       && die "$INV_HOST is LIVE but $KS_UNIT is still armed/enabled on $PVE — retire it first: $VMID in pve_router_live_vmids, then ansible/pve-router-killswitch.yml"
     dhcp_enable=1
     kea_ha="$(kea_ha_env)"
@@ -209,7 +229,8 @@ converge() {
   fi
   local p rest plays='opnsense-acme.yml opnsense-bgp.yml opnsense-unbound.yml opnsense-haproxy.yml'
   # opnsense-users.yml is NOT run: a node's users + keys are carried from prod (seed-shape
-  # --carry api-users); the play mints keys into the wallet for users that lack one.
+  # --carry api-users). A listed user prod lacks is not carried; scripts/opnsense-api-users.sh then
+  # installs the pair the other node holds, or mints one pair for every node (roles/opnsense-users).
   rest="$(cd ansible && ls opnsense-*.yml | grep -vxF -e opnsense-users.yml $(printf -- '-e %s ' $plays))"
   for p in $plays $rest; do
     log "play $p → $INV_HOST ($HOST), $( [ "$STANDBY" = true ] && echo standby || echo LIVE)"
@@ -320,6 +341,11 @@ check() {
   fi
   v="$(dig +short +time=2 +tries=2 @192.168.2.1 opnsense.teststuff.net A | tail -1 || true)"
   [ -n "$v" ] && ok "Unbound @.1 answers (opnsense.teststuff.net → $v)" || no "Unbound @.1 did not answer"
+  # …and the node's OWN resolver, whatever its CARP role: `.1` answering is the OTHER node while this
+  # one is BACKUP, and a BACKUP whose Unbound is down takes `.1` with no DNS (2026-11-20, a full disk:
+  # docs/incidents/2026-11-20-nx-02-boot-disk.md).
+  v="$(dig +short +time=2 +tries=2 "@$HOST" opnsense.teststuff.net A | tail -1 || true)"
+  [ -n "$v" ] && ok "Unbound @$HOST (own) answers (opnsense.teststuff.net → $v)" || no "Unbound @$HOST (the node's own resolver) did not answer"
   v="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://grafana.teststuff.net/api/health || true)"
   [ "$v" = 200 ] && ok "HAProxy path (grafana /api/health 200)" || no "grafana via HAProxy: HTTP ${v:-none}"
   return $bad
@@ -332,7 +358,7 @@ build() {
   [ "$STANDBY" = true ] || die "$INV_HOST must be opnsense_standby: true to be built"
   pve "qm config $VMID" | grep -q "^name: $VMNAME$" || die "vm $VMID is not $VMNAME on $PVE — apply tofu/opnsense-router.tf first"
   pve "qm config $VMID" | grep -qi "^net0:.*=${LAN_MAC}," || die "vm $VMID's net0 MAC is not $LAN_MAC (the kill switch watches that MAC)"
-  pve "ping -c2 -W1 $HOST >/dev/null 2>&1" && die "$HOST already answers on the LAN — address taken"
+  pve_q "whether $HOST answers" "ping -c2 -W1 $HOST >/dev/null 2>&1" && die "$HOST already answers on the LAN — address taken"
   killswitch_arm
   local M="$ROOT/machines/machines.yaml" wan_mac
   wan_mac="$(yq -r '.machines[] | select(.name == "opnsense") | .wan_mac' "$M")"

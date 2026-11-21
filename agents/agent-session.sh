@@ -801,6 +801,9 @@ if command -v "$KUBECTL" >/dev/null 2>&1; then
     # REPLAY:specs-process-volume once the issue's declared footprint is known (after the body
     # read). Absent field ⇒ empty ⇒ nothing below engages.
     SPECS_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .specs | select(type == "object")] | first // empty' 2>/dev/null)" || SPECS_CLAIM_JSON=""
+    # The repo's FURTHER roots (`extraSpecs: [{root, tests?}]`, a monorepo of islands) — the same
+    # mount for a footprint that reaches one of them, pinned from THAT root's README. Absent ⇒ "".
+    EXTRA_SPECS_CLAIM_JSON="$(printf '%s' "$claims_json" | jq -c --arg p "$PROJECT" '[.items[].spec.repos[] | select(.name == $p) | .extraSpecs | select(type == "array")] | first // empty' 2>/dev/null)" || EXTRA_SPECS_CLAIM_JSON=""
   else
     echo "WARN: agentstacks probe failed — cannot derive --docker or the egress knobs; pass --docker explicitly for docker-gated repos" >&2
   fi
@@ -1096,7 +1099,7 @@ render_env_card() {
   # ADR-135: one line per declared image volume — mounted, or declared-but-not (never silent).
   [ -n "${IV_CARD:-}" ] && printf '%s' "$IV_CARD"
   # ADR-156: the pinned spec process, mounted by REPLAY:specs-process-volume when the issue's
-  # declared footprint reaches the claim's `specs` roots (SPECS_PROCESS = mounted | unmounted |
+  # declared footprint reaches the claim's `specs` roots or an `extraSpecs` root (SPECS_PROCESS = mounted | unmounted |
   # ""). STATIC text by design — no version (the mount's VERSION file has it), no rule content
   # (the rules ARE the mount): the card points, the process speaks for itself, and the specs
   # reviewer judges the PR's rows against the same pinned text. The degraded arm is said, never
@@ -1252,6 +1255,13 @@ if [ -n "${RECIPE:-}" ]; then
       [ -n "$v" ] || return 1
       printf '%s' "$v"
     }
+    sp_readme_version() {  # <slug> <ref> <path> → the version a specs README's `RULES.md @ v<x>` link names (`…/blob/v0.6.9/…/process/RULES.md` ⇒ 0.6.9); rc 1 if unreadable/unparseable
+      local v
+      v="$(gh api "repos/$1/contents/$3?ref=$2" -H "Accept: application/vnd.github.raw" 2>/dev/null \
+            | sed -n 's#.*allure-behavior-snippets/blob/v\([0-9][0-9A-Za-z.-]*\)/allure_behavior_snippets/process/RULES\.md.*#\1#p' | head -1)" || v=""
+      [ -n "$v" ] || return 1
+      printf '%s' "$v"
+    }
     if [ -n "${SPECS_CLAIM_JSON:-}" ]; then
       # Claim strings are prompt-adjacent input (they reach this log): one path grammar for all
       # three — repo-relative, no leading slash, no dot-led segment, no `//` — the XRD's pattern,
@@ -1281,6 +1291,57 @@ if [ -n "${RECIPE:-}" ]; then
             echo "→ spec process: #${ISSUE_N}'s footprint reaches ${_sp_root}/ or ${_sp_tests}/ — pin v${_sp_ver} (${_sp_pin}@${BASE_REF}) resolves to ${_sp_dig}"
             iv_resolve_entry process "ghcr.io/${SPECS_PROCESS_IMAGE}@${_sp_dig}" "$SPECS_PROCESS_MOUNT" nocard && SPECS_PROCESS="mounted"
           fi
+        fi
+      fi
+    fi
+    # An `extraSpecs` root (a monorepo of islands): engaged only when the primary pair did not reach
+    # (one process mount per ride; the primary wins a footprint that reaches both). The first listed
+    # root the footprint reaches decides. Its version is the one the root's README pins — the
+    # `RULES.md @ v<x>` link every island README carries (gateway/specs/README.md §Rules is the
+    # template) — and a README that pins nothing parseable falls back to the repo's PRIMARY pin
+    # file, said on stderr. Same loud degrade, same card switch, same mount as the primary pair.
+    if [ -z "$SPECS_PROCESS" ] && [ -n "${EXTRA_SPECS_CLAIM_JSON:-}" ] && [ "$EXTRA_SPECS_CLAIM_JSON" != "[]" ]; then
+      _sp_re='^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+      _ib_rc=0
+      ISSUE_TOUCHES="$(printf '%s' "$_ib_body" | ib_get Touches "$_ib_ref")" || _ib_rc=$?
+      [ "$_ib_rc" -eq 0 ] || ib_refuse_malformed Touches "$_ib_ref"
+      _sx_root=""; _sx_tests=""
+      if [ -n "$ISSUE_TOUCHES" ]; then
+        while IFS='|' read -r _sx_r _sx_t; do   # `|` is outside the path grammar, and a non-blank IFS keeps an empty field in place
+          if ! grep -Eq "$_sp_re" <<< "$_sx_r" || { [ -n "$_sx_t" ] && ! grep -Eq "$_sp_re" <<< "$_sx_t"; }; then
+            echo "WARN: an \`extraSpecs\` entry for ${PROJECT} is outside the path grammar — that root NOT considered this ride (ADR-156)" >&2
+            continue
+          fi
+          _sx_fp="${_sx_r}/**"; [ -z "$_sx_t" ] || _sx_fp="${_sx_fp}, ${_sx_t}/**"
+          if fp_conflict "$ISSUE_TOUCHES" "$_sx_fp"; then _sx_root="$_sx_r"; _sx_tests="$_sx_t"; break; fi
+        done < <(printf '%s' "$EXTRA_SPECS_CLAIM_JSON" | jq -r '.[] | select(type == "object") | (if (.root|type)=="string" then .root else "" end) + "|" + (if (.tests|type)=="string" then .tests else "" end)' 2>/dev/null)
+      fi
+      if [ -n "$_sx_root" ]; then
+        SPECS_PROCESS="unmounted"
+        _sx_reach="${_sx_root}/"; [ -z "$_sx_tests" ] || _sx_reach="${_sx_reach} or ${_sx_tests}/"
+        _sx_src="${_sx_root}/README.md"
+        if ! _sp_ver="$(sp_readme_version "${ORG:-teststuffstash}/${PROJECT}" "$BASE_REF" "$_sx_src")"; then
+          # The fallback: the primary pair's pin file (claim `pin`, else the shared layout default).
+          _sx_src=""
+          if [ -n "${SPECS_CLAIM_JSON:-}" ]; then
+            _sx_proot="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.root|type)=="string" then .root else "" end' 2>/dev/null)" || _sx_proot=""
+            _sx_src="$(printf '%s' "$SPECS_CLAIM_JSON" | jq -r 'if (.pin|type)=="string" then .pin else "" end' 2>/dev/null)" || _sx_src=""
+            if [ -z "$_sx_src" ] && [ -n "$_sx_proot" ]; then
+              case "$_sx_proot" in */*) _sx_src="${_sx_proot%/*}/scripts/lib/snippets.sh";; *) _sx_src="scripts/lib/snippets.sh";; esac
+            fi
+            grep -Eq "$_sp_re" <<< "$_sx_src" || _sx_src=""
+          fi
+          echo "WARN: ${_sx_root}/README.md@${BASE_REF} pins no \`RULES.md @ v<version>\` process link — falling back to the repo's primary pin${_sx_src:+ (${_sx_src})} (ADR-156)" >&2
+          _sp_ver=""
+          [ -z "$_sx_src" ] || _sp_ver="$(sp_pin_version "${ORG:-teststuffstash}/${PROJECT}" "$BASE_REF" "$_sx_src")" || _sp_ver=""
+        fi
+        if [ -z "$_sp_ver" ]; then
+          echo "WARN: spec process NOT mounted — neither ${_sx_root}/README.md nor the repo's primary pin names a process version at ${BASE_REF} in ${PROJECT}, while #${ISSUE_N}'s footprint reaches ${_sx_reach}; the ride's card says so (ADR-156)" >&2
+        elif ! _sp_dig="$(iv_digest_of ghcr.io "$SPECS_PROCESS_IMAGE" "v${_sp_ver}")"; then
+          echo "WARN: spec process NOT mounted — ghcr.io/${SPECS_PROCESS_IMAGE}:v${_sp_ver} (the pin at ${_sx_src}@${BASE_REF}) has no anonymously served manifest (release not published as an image? private package?); the ride's card says so (ADR-156)" >&2
+        else
+          echo "→ spec process: #${ISSUE_N}'s footprint reaches ${_sx_reach} (extraSpecs) — pin v${_sp_ver} (${_sx_src}@${BASE_REF}) resolves to ${_sp_dig}"
+          iv_resolve_entry process "ghcr.io/${SPECS_PROCESS_IMAGE}@${_sp_dig}" "$SPECS_PROCESS_MOUNT" nocard && SPECS_PROCESS="mounted"
         fi
       fi
     fi
@@ -1684,7 +1745,7 @@ if [ -n "${RECIPE:-}" ] || [ -n "${AGENT_PR_OPEN:-}" ]; then
   RUN_CMD="mkdir -p /work/bin; printf '%s' '${PR_OPEN_B64}' | base64 -d > /work/bin/pr-open; chmod +x /work/bin/pr-open; export PATH=/work/bin:\$PATH PR_OPEN_BASE=${BASE_REF}; ${RUN_CMD}"
 fi
 
-IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
+IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-registry.teststuff.net/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 # Idempotency: for TASKED runs the key IS the pod name (workflow.md §Hazards — implemented
@@ -1953,18 +2014,19 @@ ${PF_RV_BODY}"
           PF_INDEX_ITEM "reviews.md" "OK"
         # <<<REPLAY:fetch-reviews<<<
 
-        # Coordinator's ruling/arbitration comment (search issue + PR comments for ARBITRATE)
+        # Coordinator's ruling/arbitration comment (the newest ARBITRATE over issue + PR comments)
         PF_ARB_MD=""
         PF_ARB_COMMENT=""
         # Fetch PR conversation comments (the issue-tab comments, not inline review comments)
         PF_PR_ISSUE_COMMENTS=""
         PF_PR_ISSUE_COMMENTS="$(gh api "repos/${PF_SLUG}/issues/${PF_PR}/comments" --paginate 2>/dev/null)" || PF_PR_ISSUE_COMMENTS=""
-        # Search issue comments first for line-anchored ARBITRATE marker (word boundary, not colon)
-        PF_ARB_COMMENT="$(printf '%s' "$PF_COMMENTS_RAW" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select(.body | test(\"^ARBITRATE\\\\b\"))] | last" 2>/dev/null)" || PF_ARB_COMMENT=""
-        # If not found on issue, search PR conversation comments
-        if [ -z "$PF_ARB_COMMENT" ] || [ "$PF_ARB_COMMENT" = "null" ]; then
-          PF_ARB_COMMENT="$(printf '%s' "$PF_PR_ISSUE_COMMENTS" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select(.body | test(\"^ARBITRATE\\\\b\"))] | last" 2>/dev/null)" || PF_ARB_COMMENT=""
-        fi
+        # The directive = the NEWEST trusted top-level comment matching `^ARBITRATE\b` over the
+        # issue's comments UNION the PR's conversation comments, by created_at — either surface
+        # may carry it (coordinator README §ARBITRATE marker contract). One select, no surface
+        # precedence: an issue-first fallback handed PR#3337's round 5 the issue's 11-13 ruling
+        # over the PR's newer one. Same rule as coordinator-scan.sh NOOP_RERUN_JQ ($dir), which
+        # reads gh's camelCase `createdAt` and so keeps its own copy — change both together.
+        PF_ARB_COMMENT="$(printf '%s\n%s\n' "${PF_COMMENTS_RAW:-[]}" "${PF_PR_ISSUE_COMMENTS:-[]}" | jq -s -c "[.[][] | ${PF_TRUST_JQ} | select((.body // \"\") | test(\"^ARBITRATE\\\\b\"))] | sort_by(.created_at // \"\") | last" 2>/dev/null)" || PF_ARB_COMMENT=""
         if [ -n "$PF_ARB_COMMENT" ] && [ "$PF_ARB_COMMENT" != "null" ]; then
           PF_ARB_AUTHOR="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.user.login // ""')"
           PF_ARB_BODY="$(printf '%s' "$PF_ARB_COMMENT" | jq -r '.body // ""')"
@@ -3103,6 +3165,10 @@ kind: Pod
 metadata:
   name: ${POD}
   labels: { app: agent-session, project: ${PROJECT}, ride-size: ${RIDE_SIZE}${SUB_LABEL} }
+  # The strike's model attribution, carried for agents/ride-ended.sh (the scan-side caller of the
+  # terminal record): it reads an ENDED pod, so the chain-entry model must live on the pod — the
+  # MODEL env below is the resolved id, which is not what the chain walk matches on.
+  annotations: { agent.teststuff.net/struck-model: "${STRUCK_MODEL}" }
 spec:
   restartPolicy: Never
   # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns
@@ -3812,20 +3878,72 @@ if [ -n "$RUN_CMD" ]; then
       [ -z "$KEY_RETRY_LINE" ] || [ -z "$_strike_provider" ] || KEY_RETRY_LINE="${KEY_RETRY_LINE} provider=${_strike_provider}"
       # <<<REPLAY:strike-provider-append<<<
 
+    # >>>REPLAY:strike-comment-post>>>
+    # THE TERMINAL RECORD'S ONE EMITTER (islands/launch/specs/outcome.md LAUNCH-OUTCOME-STRIKE-COMMENT).
+    # Two callers run this exact text: this launcher, and agents/ride-ended.sh — the scan's dead-ride
+    # pass, which extracts THIS block and the classifier blocks above (strike-classifier,
+    # strike-line-format) between their sentinels and runs them over an ended pod whose launcher died
+    # first (the launcher runs inside a coordinator session's time-bounded shell, so it often does).
+    # Two things only the no-stats path (finalize never ran) adds, because either caller may get there:
+    #   • ONE record per pod lifetime. A terminal comment whose first line is `AGENT_STRIKE:` /
+    #     `KEY-RETRY:` naming `session=<pod>`, posted at or after the pod's creation, means the other
+    #     caller already wrote it (a re-admitted attempt reuses the pod NAME, hence the creation
+    #     bound). An unreadable comment list writes nothing (rule #6): the next scan pass retries.
+    #   • The resumable-branch line finalize would have written (agent-runtime agent-finalize
+    #     `resumable_note`, the line the scan's C4/C5 reader parses). Without finalize there is no
+    #     salvage verdict, so it is derived from what the remote shows: a `--work-branch` ride's
+    #     branch (it exists by construction), else exactly ONE `fix/issue-<N>-*` branch — the recipe's
+    #     own branch convention (.agents/build.yaml, fix.yaml), issue-scoped, never an `agent/*` scan.
+    #     Zero, several, or an unreadable listing says `unknown` — never "nothing to resume".
+    ISSUE_N=""
+    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+    SLUG=""
+    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+    RECORD_GO=1; RECORD_NOTE=""
+    if [ -z "${STATS:-}" ] && { [ -n "$STRIKE_LINE" ] || [ -n "$KEY_RETRY_LINE" ]; } \
+       && [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      [ -n "${RIDE_SINCE:-}" ] || RIDE_SINCE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || true)"
+      if [ -z "${RIDE_SINCE:-}" ]; then
+        # no creation time = no bound: every earlier attempt's record would match, so the read is
+        # as good as failed (rule #6) — write nothing, the scan's pass retries with the pod's own.
+        RECORD_GO=""
+        echo "  (creation time of ${POD} unreadable — terminal record NOT written this pass; the scan's dead-ride pass retries)"
+      elif ! _rec_cmts="$(gh api "repos/${SLUG}/issues/${ISSUE_N}/comments?per_page=100" --paginate 2>/dev/null)" \
+         || ! jq -s -e . >/dev/null 2>&1 <<<"${_rec_cmts:-null}"; then
+        RECORD_GO=""
+        echo "  (comment list of ${SLUG}#${ISSUE_N} unreadable — terminal record for ${POD} NOT written this pass; the scan's dead-ride pass retries)"
+      elif jq -s -e --arg pod "$POD" --arg since "$RIDE_SINCE" '
+          [.[][]? | select(((.created_at // "") >= $since)
+                           and ((.body // "") | split("\n")[0]
+                                | test("^(AGENT_STRIKE|KEY-RETRY): .* session=" + $pod + "( |$)")))]
+          | length > 0' >/dev/null 2>&1 <<<"$_rec_cmts"; then
+        RECORD_GO=""
+        echo "→ terminal record for ${POD} already on ${SLUG}#${ISSUE_N} — not written twice"
+      elif [ -n "${WORK_BRANCH:-}" ]; then
+        RECORD_NOTE=$'\n\n'"**Resumable branch pushed:** \`${WORK_BRANCH}\` — the ride was dispatched on it, so it holds the work banked so far; the next round can resume from it (C5), not restart."
+      elif _rec_refs="$(gh api "repos/${SLUG}/git/matching-refs/heads/fix/issue-${ISSUE_N}-" --jq '.[].ref' 2>/dev/null)"; then
+        _rec_n="$(grep -c '^refs/heads/' <<<"$_rec_refs" || true)"
+        if [ "$_rec_n" = "1" ]; then
+          RECORD_NOTE=$'\n\n'"**Resumable branch pushed:** \`${_rec_refs#refs/heads/}\` — the next round can resume from it (C5), not restart."
+        else
+          RECORD_NOTE=$'\n\n'"(resumable branch **unknown** — finalize never ran, and origin holds ${_rec_n:-0} \`fix/issue-${ISSUE_N}-*\` branches; this is not a statement that none exists. Check the run log before restarting from base.)"
+        fi
+      else
+        RECORD_NOTE=$'\n\n'"(resumable branch **unknown** — finalize never ran and the branch listing was unreadable; this is not a statement that none exists. Check the run log before restarting from base.)"
+      fi
+    fi
     if [ -n "$STRIKE_LINE" ]; then
       if [ -z "${PR_URL:-}" ]; then
         echo "→ no PR opened — ${STRIKE_LINE}"
       else
         echo "→ harness death with PR — ${STRIKE_LINE}"
       fi
-      ISSUE_N=""
-      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-      SLUG=""
-      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      if [ -z "$RECORD_GO" ]; then
+        :
+      elif [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
         # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
-        STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-          "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+        STRIKE_BODY="$(printf '%s%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$STRIKE_LINE" "$RECORD_NOTE" "$POD" "$(tail -n 15 "$RUNLOG")")"
         echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
         gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
           || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
@@ -3835,13 +3953,11 @@ if [ -n "$RUN_CMD" ]; then
     fi
     if [ -n "$KEY_RETRY_LINE" ]; then
       echo "→ key-class failure — ${KEY_RETRY_LINE}"
-      ISSUE_N=""
-      case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
-      SLUG=""
-      case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
-      if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
-        KEY_RETRY_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
-          "$KEY_RETRY_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+      if [ -z "$RECORD_GO" ]; then
+        :
+      elif [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+        KEY_RETRY_BODY="$(printf '%s%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+          "$KEY_RETRY_LINE" "$RECORD_NOTE" "$POD" "$(tail -n 15 "$RUNLOG")")"
         echo "→ posting key-retry marker to ${SLUG}#${ISSUE_N}"
         gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$KEY_RETRY_BODY" 2>&1 | tail -1 \
           || echo "  (key-retry marker failed — non-fatal; the marker still shows in these logs)"
@@ -3849,6 +3965,7 @@ if [ -n "$RUN_CMD" ]; then
         echo "  (no issue task / non-GitHub repo / no GH_TOKEN — key-retry not posted, logged above only)"
       fi
     fi
+    # <<<REPLAY:strike-comment-post<<<
   fi
 
   # Goal #1640 acceptance 4: the retry's re-run. A FUNCTION so the clause-replay fixture can stub

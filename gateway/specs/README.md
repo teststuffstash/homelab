@@ -123,7 +123,7 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | Requirement | Page | What it pins |
 |---|---|---|
 | [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which cell — the walk's order, the explicit overrides, the harness taken from the cell, the preferred end of a tier's list (`prefer`) · `⚑ gap`: `/route` not served, the ladder's labels / urgency / budget unread |
-| [GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry) | sessions | the retry contract — ordered tier lists, the task's strikes (cell / model / harness scope), `cells-exhausted`, `attempt` and the superseded re-run · `⚑ gap`: one model across rails is two ids |
+| [GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry) | sessions | the retry contract — ordered tier lists, the task's strikes (cell / model / harness scope), `cells-exhausted`, `attempt` and the superseded re-run |
 | [GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity) | sessions | the ladder's capacity half — window utilization, the 429 latch, the cell cooldown, the rejected credential and its recovery, the Go window draw and catalog, the Go account headroom, the marks kept across a restart, the openrouter provider axis · `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the capacity doorbell |
 | [GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env) | sessions | the pod's complete LLM env per harness |
 | [GW-SESSIONS-TOKEN](endpoints/sessions.md#gw-sessions-token) | sessions | the session token's shape, storage, lifetime |

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "scan island toolchain (homelab#3389): the gateway's shape — python from the same nixpkgs flake ref + uv — plus jq (the replay adapter's row patches and the gh stub's --jq). Run `devbox run ci` from THIS directory; outside, `bash islands/scan/scripts/ci.sh`.",
+  "packages": {
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
+    "uv": "latest",
+    "jq": "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE": "only-system",
+    "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/scan-island$VENV_SUFFIX"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci": [
+        "bash scripts/suite.sh"
+      ]
+    }
+  }
+}

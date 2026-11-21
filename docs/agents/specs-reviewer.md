@@ -74,8 +74,8 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 
 | state at the content commit | the tick does |
 |---|---|
-| a live own verdict (APPROVED / CHANGES_REQUESTED, never DISMISSED) | nothing — done |
-| more than one live own verdict | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
+| a live own verdict (APPROVED / CHANGES_REQUESTED, never DISMISSED) | nothing — done, UNLESS it is CHANGES_REQUESTED and the PR body was edited after it: then the PR is a candidate again (the code reviewer's `reviewable_again` shape — a newer content commit OR a newer body edit answers a CHANGES_REQUESTED; an APPROVED never re-opens on an edit). The body's `lastEditedAt` comes through `agents/pr-last-edited.sh`, asked only for PRs under an own live CHANGES_REQUESTED (≤ 1 GraphQL query per repo per tick; a failed read degrades to the commit-time rule) |
+| more than one live own verdict, unless each earlier one was a CHANGES_REQUESTED the body was edited after | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
 | an own `PARTIAL READ:` hold comment keyed to the content commit | nothing — held until a push moves the content commit (§The partial read) |
 | no live `homelab-reviewer` APPROVED | nothing — the code gate goes first ("one old reviewer and THEN the new"; a Renovate PR's approval comes from the renovate-approve reflex, so this holds for it too) |
 | CI not green, or label `agent/error` | nothing |
@@ -87,12 +87,20 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 `allure-behavior-snippets` wheel (`SNIPPETS_VERSION`, verified against `SNIPPETS_SHA256`, extracted
 and run with the image's stdlib `python3`); the round context the pack cannot fetch itself (PR body,
 `issue-intent.md` = each closing issue's `## Acceptance` section, `prior-review.md` = the newest own
-LLM review in any state, since a push dismisses it); the head's evidence pack (raw Allure results
+LLM review in any state, since a push dismisses it — on a multi-root PR, only the section of the
+root this pass reviews, since the pass cannot see the other roots' packs); the head's evidence pack (raw Allure results
 + `evidence.json` + `digest.md`) and the newest first-parent base commit's pack as baseline (its
 `evidence.json` + commit) — both read anonymously from the `gateway-specs` bucket's web endpoint,
 `evidence/<pr-N|base>/<sha>.tar.gz`, written by ci (`gateway/scripts/evidence-publish.sh`; until
 2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
-storage — that artifact stays the read fallback until the old runs expire). `evidence-pack` turns these into the model's inputs dir: touched rules,
+storage — that artifact stays the read fallback until the old runs expire). **The diff base** is what the PR itself changes: the pack diffs three-dot from
+`merge-base(base, head)`, and when a PR on a non-default base (a `goal/**` branch) has merged the
+default branch in, every path the base side left alone since its merge-base with the newest
+default-branch commit the head holds, and whose content at head is byte-identical to that commit,
+is taken from that commit into the diff base (a base-side edit the merge discarded stays in the diff) (`pack_diff_base`: a synthetic
+commit grafted under the head in the throwaway clone; the head keeps its sha). Upstream content
+reviewed where it merged is not this PR's spec change. Path-level: a path both sides changed keeps
+the upstream's hunks. `evidence-pack` turns these into the model's inputs dir: touched rules,
 their sections + the spec diff, the specs tree, `digest.md` (`Stamp:` / `Baseline:` + mechanical
 findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` (RULES, CONVENTIONS,
 briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
@@ -316,7 +324,10 @@ read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the 
 `Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
 every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
 same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
-pack name one set of roots. The author brief itself ships with the snippets release (since v0.6.6).
+pack name one set of roots. A repo with several roots lists the rest under `repos[].extraSpecs`
+(one pack and one pass per touched root, one verdict; a body-edit re-review discards the root reviews held from before the edit; the worker mount follows the root's README pin —
+[agentstack.md §The spec process](agentstack.md#the-spec-process-rides-with-the-worker-reposspecs-adr-156)).
+The author brief itself ships with the snippets release (since v0.6.6).
 
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).

@@ -1,0 +1,22 @@
+# assembly-ci-red/rerun-red-again-rearms — the marker from the first ride is on the PR (275c4e614d6a,
+# `ci` started 09:00:10Z); the ride re-ran the environmental red and the re-run has SETTLED red again
+# (`ci` started 10:30:00Z, same head). A check-run's startedAt is its attempt, so this is a new red
+# state and the trigger re-arms — which is what lets the play re-run once instead of minting a child
+# for a flake, and still be summoned when the red was real.
+#
+# THE CONTRACT: the unit and the side-map entry again, despite the marker.
+name: assembly-ci-red-rerun-red-again-rearms
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

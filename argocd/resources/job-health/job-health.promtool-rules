@@ -33,11 +33,11 @@ groups:
       - alert: KubeJobFailed
         expr: |
           kube_job_failed{job="kube-state-metrics"} > 0
-            unless on (namespace, job_name) kube_job_owner{owner_kind="CronJob"}
+            unless on (namespace, job_name) kube_job_owner{owner_kind=~"CronJob|AnalysisRun"}
         for: 15m
         labels:
           severity: warning
           triage: dig
         annotations:
           summary: Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete
-          description: 'A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed condition. Read the pod''s log, then decide: re-run it, or delete the Job once the outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert — their schedule''s health is CronJobNotSucceeding, which self-clears.'
+          description: 'A one-shot Job (not owned by a CronJob, so nothing will retry it) is in a Failed condition. Read the pod''s log, then decide: re-run it, or delete the Job once the outcome is understood. CronJob-owned Jobs deliberately do NOT reach this alert — their schedule''s health is CronJobNotSucceeding, which self-clears. Neither do Jobs owned by an Argo Rollouts AnalysisRun (a Kargo verification probe): a Failed one is a verdict, read on the AnalysisRun''s phase, which the owning stack alerts on.'

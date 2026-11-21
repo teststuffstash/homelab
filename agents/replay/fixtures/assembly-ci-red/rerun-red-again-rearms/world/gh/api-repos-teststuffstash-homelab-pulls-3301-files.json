@@ -1,0 +1,12 @@
+[
+  {
+    "sha": "0000000000000000000000000000000000000001",
+    "filename": "gateway/src/agent_gateway/capacity.py",
+    "status": "modified"
+  },
+  {
+    "sha": "0000000000000000000000000000000000000002",
+    "filename": "gateway/tests/test_capacity.py",
+    "status": "modified"
+  }
+]

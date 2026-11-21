@@ -118,7 +118,7 @@ seen through any `content-encoding` the gateway can decode. Otherwise the reques
 `incomplete` = `no-terminal` (the body ended without it), `timeout` (a mid-stream read timeout;
 the row's status is 504), `transport-error` (the connection broke mid-body) or `client-closed` (the
 pod hung up), the session's `requests_incomplete` + 1, and
-`gateway_requests_incomplete_total{rail,dialect,reason}` + 1 ([GW-METRICS](metrics.md#gw-metrics)).
+`gateway_requests_incomplete_total{rail,dialect,reason,traffic}` + 1 ([GW-METRICS](metrics.md#gw-metrics)).
 A broken stream is never a clean 200 with 0 tokens. The bytes the pod got are unchanged either way.
 The experiment's tap (2026-10-17) saw 8 opencode streams cut by the client mid-body; the old
 record showed each as a 200.
@@ -203,7 +203,7 @@ upstream received; `production_url?` = the URL the same call takes under the pro
 
 Legend (a streamed call, `stream: true`): `requests_incomplete?` = the session's counter after the
 call; `incomplete?` = the request row's `incomplete` (`(none)` = null, complete);
-`incomplete_total?` = `gateway_requests_incomplete_total{rail="anthropic",dialect="anthropic",reason}`
+`incomplete_total?` = `gateway_requests_incomplete_total{rail="anthropic",dialect="anthropic",reason,traffic="real"}`
 for the row's reason (`no-terminal` when the row is complete).
 
 | description | upstream | requests_incomplete? | incomplete? | incomplete_total? |

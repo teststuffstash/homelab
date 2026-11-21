@@ -1,0 +1,11 @@
+# Fix-round prefetch, ARBITRATE on BOTH surfaces: the mirror: a NEWER ARBITRATE on the issue (13:00, a Bot) and an OLDER one on the PR (09:00, a MEMBER) → arbitration.md carries the issue's.
+# Contract: the directive is the newest trusted top-level `^ARBITRATE\b` comment over issue ∪ PR
+# conversation comments by created_at (agents/coordinator/README.md §ARBITRATE marker contract;
+# the same rule as coordinator-scan.sh NOOP_RERUN_JQ).
+name: context-prefetch/fix-round-arbitration-newer-on-issue
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh

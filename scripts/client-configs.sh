@@ -37,6 +37,12 @@ for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; d
 done
 [ -n "$CRED" ] || { echo "client-configs: cred dir not found (homelab-pve-ssh/)" >&2; exit 1; }
 KEY="$CRED/homelab-pve-ssh/id_ed25519"
+# The box's host key is PINNED from the wallet cache (mgmt-ssh-host, via scripts/wallet-files.sh),
+# never trusted on first use — the rule mgmt-state-pull.sh and mgmt-provision-secrets.sh follow.
+HOSTPUB="$CRED/homelab-mgmt/extra-files/etc/ssh/ssh_host_ed25519_key.pub"
+[ -f "$HOSTPUB" ] || { echo "client-configs: no pinned host key at $HOSTPUB — run scripts/wallet-files.sh" >&2; exit 1; }
+KH="$(mktemp)"; trap 'rm -f "$KH"' EXIT
+echo "$MGMT_HOST $(cut -d' ' -f1,2 "$HOSTPUB")" > "$KH"
 
 fetch_one() {
   # ⚠ ONE assignment per `local`. A shell expands every argument of `local` BEFORE it assigns any
@@ -92,9 +98,9 @@ fetch_one() {
   # node-maintenance run against the BOX's copy — and it is likeliest mid-cutover, which is
   # precisely when this gets run. Failing with both sides still on the old value is recoverable;
   # failing with them disagreeing is the bug.
-  scp -q -i "$KEY" -o StrictHostKeyChecking=accept-new "$tmp" "root@$MGMT_HOST:/var/lib/mgmt/$name" \
+  scp -q -i "$KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" "$tmp" "root@$MGMT_HOST:/var/lib/mgmt/$name" \
     || { echo "client-configs: could not write $name to the box — local copy left untouched" >&2; rm -f "$tmp"; exit 1; }
-  ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "root@$MGMT_HOST" "chmod 600 /var/lib/mgmt/$name" \
+  ssh -i "$KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" "root@$MGMT_HOST" "chmod 600 /var/lib/mgmt/$name" \
     || { echo "client-configs: could not chmod $name on the box — local copy left untouched" >&2; rm -f "$tmp"; exit 1; }
   install -m 600 "$tmp" "$dest"
   rm -f "$tmp"

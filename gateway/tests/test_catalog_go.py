@@ -348,11 +348,11 @@ async def test_key_handling(cworld, vendor, caplog, config, key, expected_outcom
 
 # ── Kept across a restart ────────────────────────────────────────────────────────────────────
 BOTH = "both snapshots at T0"
-CORRUPT = "a config row that is not JSON"
+CORRUPT = "a config row that is not JSON, no docs row"
 # (description, stored, restart_at, age_s?, models?, startup_delay?, retry_after_s?)
 RESTART_ROWS = [
     pytest.param(BOTH, "T0 + 600 s", "600 · 600", 5, 21000, 21000, id="a PVC store keeps the snapshot"),
-    pytest.param(CORRUPT, "T0", "none · none", 0, 0, 60, id="a corrupt stored snapshot is ignored"),
+    pytest.param(CORRUPT, "T0", "none · none", 0, 0, 60, id="a corrupt stored snapshot is ignored ⚖"),
     pytest.param(BOTH, "T0 + 3600 s", "3600 · 3600", 5, 18000, 18000, id="a restart inside the interval refreshes nothing at start ⚖"),
     pytest.param(BOTH, "T0 + 21600 s", "21600 · 21600", 5, 0, 60, id="a restart after the interval refreshes at start"),
 ]
@@ -434,17 +434,22 @@ async def test_metrics(cworld, vendor, clock, refreshes, read_at, series, expect
 
 
 MISSING_ROWS = [
-    pytest.param("config", "catalog-ok", 0, "none", id="every policy Go model listed: none missing"),
-    pytest.param("config", "catalog-shrunk", 1, "claude-haiku-5-5", id="policy Go models the config does not list are counted"),
-    pytest.param("docs", "docs-shrunk", 1, "claude-haiku-5-5", id="policy Go models without a limit row under the plan are counted"),
+    pytest.param("none", "config", "catalog-ok", 0, "none", id="every policy Go model listed: none missing"),
+    pytest.param("none", "config", "catalog-shrunk", 1, "claude-haiku-5-5", id="policy Go models the config does not list are counted"),
+    pytest.param("none", "docs", "docs-shrunk", 1, "claude-haiku-5-5", id="policy Go models without a limit row under the plan are counted"),
 ]
 
 
-@pytest.mark.parametrize(("source", "behaviour", "expected_missing", "expected_uncovered"), MISSING_ROWS, ids=[p.id for p in MISSING_ROWS])
-async def test_policy_models_missing(cworld, vendor, source, behaviour, expected_missing, expected_uncovered):
+@pytest.mark.parametrize(("last_good", "source", "behaviour", "expected_missing", "expected_uncovered"), MISSING_ROWS, ids=[p.id for p in MISSING_ROWS])
+async def test_policy_models_missing(cworld, vendor, last_good, source, behaviour, expected_missing, expected_uncovered):
     world(upstream=behaviour)
     app = cworld.build()
     ids = app.state.catalog.policy_models
+    with given(f"last_good = {last_good}"):
+        if last_good != "none":  # one good refresh of the source first: the plausibility floor then holds a shrunk answer
+            vendor.catalog, vendor.config, vendor.docs = "catalog-ok", "config-ok", "docs-ok"
+            with quiet():
+                assert await app.state.catalog.refresh_source(source) == "ok"
     with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)}; source = {source} answers behaviour = {behaviour}"):
         attach_json("policy Go ids", list(ids))
         setattr(vendor, "catalog" if behaviour.startswith("catalog-") else source, behaviour)
@@ -458,4 +463,4 @@ async def test_policy_models_missing(cworld, vendor, source, behaviour, expected
     verdict(f"missing = {expected_missing} · uncovered = {expected_uncovered}",
             expected_missing={"expected": expected_missing, "actual": _value(text, series)},
             expected_uncovered={"expected": expected_uncovered, "actual": joined(uncovered)},
-            source={"actual": source}, behaviour={"actual": behaviour})
+            last_good={"actual": last_good}, source={"actual": source}, behaviour={"actual": behaviour})

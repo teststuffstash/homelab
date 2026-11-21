@@ -91,6 +91,10 @@ ENV_TABLE=(
   "OPN_API_SECRET=opnsense-automation-api-secret"
   "OPN_BACKUP_API_KEY=opnsense-backup-puller-api-key"      # scripts/opnsense-drill.sh compare stage
   "OPN_BACKUP_API_SECRET=opnsense-backup-puller-api-secret"
+  # the firmware belt (mgmt-probe.sh check_firmware): its OWN user — the firmware API is one ACL incl.
+  # installs, so `automation` never holds it (ansible/group_vars/opnsense.yml opnsense_api_users)
+  "OPN_FIRMWARE_API_KEY=opnsense-firmware-api-key"
+  "OPN_FIRMWARE_API_SECRET=opnsense-firmware-api-secret"
   # the router verdict (mgmt-router-verdict.sh): test VM 9110's OWN pair — it opens nothing on the router
   "OPN_TESTVM_API_KEY=opnsense-test-api-key"
   "OPN_TESTVM_API_SECRET=opnsense-test-api-secret"

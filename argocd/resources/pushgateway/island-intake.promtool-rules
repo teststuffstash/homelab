@@ -1,26 +1,36 @@
-# IslandIntakeStale, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
+# IslandIntakeStale and IslandIntakeClaimsUnread (homelab#3580), lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
 # one home) — the rules file that island-intake.promtool-test loads. Not a manifest and not applied to
 # anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
 # PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
 # manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
 #
-# ONE ALERT, its OWN file, for the same reason DeepDigStale has one (deep-dig.promtool-
+# The island intake's alerts, their OWN file, for the same reason DeepDigStale has one (deep-dig.promtool-
 # rules' header): the restart-gap contract is a DIFFERENCE-shaped behaviour worth its own fixture.
 #
 # ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
 # editing the alert:
 #
-#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandIntakeStale")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandIntakeStale" or .alert == "IslandIntakeClaimsUnread")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
 groups:
   - name: agent-runs
     rules:
       - alert: IslandIntakeStale
-        expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+        expr: ((time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400) and on (island) (max by (island) (max_over_time(island_intake_listed_timestamp_seconds[8d])) == on () group_left () max(max_over_time(island_intake_listed_timestamp_seconds[8d])))
         for: 6h
         labels:
           severity: warning
           platform_machinery: "true"
           triage: none
         annotations:
-          summary: Island intake has not run in >2 days — the dig's island findings are not being admitted
-          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig''s cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig.'
+          summary: Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted
+          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island''s has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands.'
+      - alert: IslandIntakeClaimsUnread
+        expr: max(island_intake_claims_read_ok) == 0
+        for: 2d
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: Island intake has not read the AgentStack claims for 2 days — no stack island is getting a sitting
+          description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) reads the live AgentStack claims in its list step to find the stack islands (repos[].intake.facts). That read has failed or answered no claim on every run for 2 days: the platform islands are still walked, every stack island is skipped. Check the `islands` step''s log of the newest island-intake-* workflow (the line `island-intake: claims read FAILED — stack islands not walked` and the one after it), and: kubectl auth can-i list agentstacks.platform.teststuff.net --as=system:serviceaccount:agent-coordinator:island-intake (the rule is on ClusterRole island-intake-read, agents/coordinator/rbac.yaml). Reader: islands/intake/scripts/claims-read.sh.'

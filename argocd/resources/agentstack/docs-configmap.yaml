@@ -188,6 +188,10 @@ data:
       reach the roots, or a repo without this field, gets neither mount nor card line.
     - **One home for the roots.** The specs reviewer reads the same field for its trigger paths and
       its context pack (`pack_roots`), falling back to its per-repo table when the claim has none.
+    - **Several roots in one repo** (`extraSpecs: [{root, tests?}]`, beside `specs`): the specs
+      reviewer gives a PR touching a listed root a pack over that root (one pass per root, one
+      verdict). The worker launcher mounts the pinned process for a ride reaching one (pinned by
+      that root's README `RULES.md @ v<version>` link, else the primary pin); no evidence yet.
     - Nothing is rendered by the Composition for this field. No schema defaults (the `pin` default
       lives in the launcher, where it is read).
 

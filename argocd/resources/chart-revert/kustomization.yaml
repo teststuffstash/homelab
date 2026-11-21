@@ -27,5 +27,5 @@ configMapGenerator:
 # appears, so a tag that differs from the live coordinator pin is never swept: hand-bump this only
 # to a tag the loop has already run on for at least a week — never to the newest pin.
 images:
-  - name: ghcr.io/teststuffstash/agent-coordinator
+  - name: registry.teststuff.net/agent-coordinator
     newTag: 2026.10.5-gca94f4a2dd99

@@ -105,7 +105,9 @@ VM (`qm destroy 9110` on nx-02) and let the next `mgmt-tf` plan/apply recreate i
 (a plugin install refuses an out-of-date base, so the update is not optional), installs what is
 missing, replaces the snapshot. ⚠ It moves the VM PAST prod whenever the mirror's head did — the old
 baseline is gone, the mirror serves no older point (2026-10-26: 26.7.5 → 26.7.7). A new SERIES is
-also a `SERIES` bump in the script.
+also a `SERIES` bump in the script. Replacing the snapshot moves its `snaptime`, which is in the box's
+verdict content key — so no PASS earned on the old baseline carries to a later head
+([`management-box.md`](management-box.md) §MB3 "The router surface").
 
 ## The official update path — observed on this VM (2026-09-29)
 
@@ -303,8 +305,9 @@ splices identity into the seed:
 - `trust`: every `<cert>` + `<ca>` with its refids, plus the GUI's `ssl-certref`;
 - `acme`: `OPNsense/AcmeClient` whole — the registered account and the certificate rows bound to
   those refids;
-- `api-users`: the FU-013 users with their hashed keys, plus root's prod key line appended to the
-  seed's throwaway one;
+- `api-users`: the FU-013 users (`opnsense_api_users`, read from group_vars) with their hashed keys,
+  plus root's prod key line appended to the seed's throwaway one; a listed user prod does not have
+  yet is skipped and named in the `seed-shape:` line (the drill report carries it);
 - `wireguard`: `OPNsense/wireguard` whole — the server keypair and its peers, so the laptop and
   phone configs survive the move unchanged (operator, 2026-09-30: option (a) of
   [`router-move.md`](router-move.md) §The identity).

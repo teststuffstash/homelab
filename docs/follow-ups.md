@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-322** (2026-11-12: FU-321 minted for deploying in-repo images without a pin commit on master. 2026-10-31: FU-319 minted for the class-6 substrate bump queue. FU-320 was minted 2026-10-29 out of order by the island-intake session. 2026-10-24: FU-317 minted for apiserver audit logs to Loki, FU-318 for the Kargo install residuals (homelab#2798). 2026-10-24: FU-316 minted for the ghcr/docker-io cold-blob warmer, blocked on the mcr warmer's soak (S9 sweep). 2026-10-22: FU-314 minted for the specs reviewer's legacy-artifact read fallback (#2796), FU-315 for wk-metal-02's apiserver re-converging on the 3200MiB GOMEMLIMIT. 2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
+  Next free id: **FU-323** (2026-11-21: FU-322 minted for Prometheus holding ~18 days, not 30. 2026-11-12: FU-321 minted for deploying in-repo images without a pin commit on master. 2026-10-31: FU-319 minted for the class-6 substrate bump queue. FU-320 was minted 2026-10-29 out of order by the island-intake session. 2026-10-24: FU-317 minted for apiserver audit logs to Loki, FU-318 for the Kargo install residuals (homelab#2798). 2026-10-24: FU-316 minted for the ghcr/docker-io cold-blob warmer, blocked on the mcr warmer's soak (S9 sweep). 2026-10-22: FU-314 minted for the specs reviewer's legacy-artifact read fallback (#2796), FU-315 for wk-metal-02's apiserver re-converging on the 3200MiB GOMEMLIMIT. 2026-10-17: FU-313 minted for the 30-day OpenCode Go key (expires 2026-11-16) + the service-account move. 2026-10-13: FU-312 minted for in-cluster pulls of registry.teststuff.net stalling mid-stream on the router hairpin (oracle handoff, the ert-corpus roll). 2026-10-10: FU-311 minted for the jails' shared user-PAT rate pool (#2442, claude-jail#4). 2026-10-09: FU-310 minted for dind's HTTPS-first probe of the HTTP-only registry mirrors (a drop + dial timeout per pull, `AgentWorkerEgressDropped`) — operator weighing hosts.toml vs mirror TLS. FU-309 minted for the descheduler — displaced pods never move back after a window, operator-deferred. FU-307 minted for the "MASTER with WAN down" belt the pair lacks — blocked on an attended gate restart; FU-308 for a dead-man `leave` on unattended router proofs — both from the 2026-10-08 incident. 2026-10-08: FU-306 minted for the ci-runner VM replace the box cannot yet run itself — the attended verb is proven. 2026-10-07: FU-305 minted for the box loops a devbox bump wedged — sentinel silent). (2026-10-05: FU-304 minted for the laptop CP that cannot hold the apiserver — the sizing lever is the operator's, the detector shipped first (PR#2264). 2026-10-03: FU-303 minted for the etcd/scheduler/controller-manager scrape gaps the ADR-148 upstream classification found. 2026-10-02: FU-299 minted for Longhorn having no backup at all, FU-300 for the box's window-blind apply loop, FU-301 for helm_release applies (evidence first), FU-302 for the box's missing Prometheus-free view of the cluster. 2026-09-29: FU-298 minted for the OPNsense plays not converging a FRESH router (found by the FU-297 test VM). 2026-09-29: FU-297 minted for the OPNsense test VM on nx-02 that validates router-config PRs against a real 26.1 API (#2033 first). 2026-09-28 night: FU-295 minted for the box sentinel never reporting on homelab goal/** PRs (found by the ADR-142 control drill), FU-296 for governance-lint's untested worker match (found by drill D3). 2026-09-28: FU-294 minted for the npm Renovate lane no fixer ride can serve (lockfile regeneration needs a registry, homelab's claim egress is `none`, no baseline npm mirror) — #2032 parked on a human; FU-293 minted for the flat `scripts/` directory that path-based CODEOWNERS rules cannot cut, the iac-lane.md debt parked 2026-08-12. 2026-09-27: FU-292 minted for the runtime-major adoptables harvest gap — a dependency PR has no container, so the lens's follow-up bullets land nowhere. 2026-09-27: FU-291 minted for late-round reviewer findings. 2026-09-25: FU-290 minted for the homelab-agents GraphQL pool exhaustion under Renovate PR churn (the detector fix is PR#1979). FU-289 minted for nx-02 NUMA pressure swapping CI memory after wk-04 PCI passthrough. 2026-09-24: the counter read FU-288 after FU-288 was minted — corrected by the fu-sweep. 2026-09-23: FU-287 minted for the kernel-oops counter re-counting old
   lines on every Alloy restart, measured at the belt's own acceptance; FU-286 minted for the box's talosctl trailing the fleet by a
   minor, which devbox cannot resolve past yet — found by the belt's own FAIL, which nothing read;
   FU-285 minted for the replica co-location a disk pull
@@ -142,18 +142,6 @@ six OVERSIZE items pointer-ized into
 
 - [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
       super admin today, signups disabled).
-- [ ] **FU-313** — **The OpenCode Go API key is a 30-day key: it expires 2026-11-16** (rotated 2026-10-17 after
-      the previous one expired silently at 17:12:49Z, Go rail down ~2 h). Operator-blocked: the move to an
-      OpenCode service-account key (opencode.ai/v2/docs/console/api/#service-accounts) needs the console.
-      Rotation: wallet `opencode-go-api-key` → `devbox run infisical-secret OPENCODE_GO_API_KEY=…` →
-      force-sync ExternalSecret `agent-egress/opencode-go-key` → restart `agent-gateway` + `openrouter-proxy`.
-      Scope settled 2026-10-18: an **"Inference only"** service-account key suffices — its scope covers
-      `GET /api/v2/config` (vendor doc, console/api), the ONLY console call either pod makes (`gateway/src/agent_gateway/catalog.py`;
-      the proxy calls inference only); neither reads Budgets. **Next:** operator mints an Inference-only
-      service-account key before 2026-11-16 (`GoRailCredentialRejected`, #2691/#2693, fires only AFTER expiry; the pre-expiry warning is FU-156's declared half).
-
-## GitOps & platform
-
 - [ ] **FU-317** — **apiserver audit logs never leave the CPs.** Talos writes `kube-apiserver` audit
       logs on each control plane, but nothing ships them to Loki — so "who wrote this RBAC/Secret" has no
       answer off-node (found by the Kargo RBAC hardening, homelab#2798: a denied escalation is visible only
@@ -185,15 +173,15 @@ six OVERSIZE items pointer-ized into
       enable — fixed 2026-09-29 by #2115, drill green.) **Next:** an upstream issue at O-X-L
       (operator's call), then a pin bump + drop the harness workaround.
 - [ ] **FU-297** — **OPNsense test VM + rebuild drill + the CARP pair: POINTER.** Router-config PRs validated on
-      VM 9110, box-posted `opnsense-test-vm` on every head since 2026-10-26 (#2930, ADR-152 step 1); a weekly from-nothing rebuild drill on the box scores prod's
-      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score). The pair is COMPLETE
-      (2026-10-09; history: [`router-move.md`](router-move.md) §Status). Drill GREEN since 2026-10-11 (56; 57 on 10-18 →
-      `MgmtOpnsenseDrillScoreRegressed`). Cert renewal on the pair fixed 2026-10-26 (#2927, #2934, #2939, #2940).
-      **The box's BACKUP converge has REFUSED since 2026-10-31** (`management-apply` failure on f50222b1 and 5f5f8916:
-      `ansible-live-drift … opnsense/kea-dhcp.py:192.168.2.71=2`; read 2026-11-12) — router merges are not reaching the BACKUP.
-      **Next:** (0) read the Kea drift on `opnsense-pve` and converge it by hand so the box resumes, then ask why no alert fired; (1) the carry is a SEAT verb today — schedule it on the management box (nightly `opnsense-cert-carry.sh
-      nx02 pve`, idempotent) so the BACKUP follows the MASTER's renewals without a session; (2) the 56 click-ops rows
-      (`OPNsense/Kea` 36, `virtualip` 17, `hasync` 2); CI for `scripts/opnsense-drill.sh` (#2493). Relates FU-013, FU-298.
+      VM 9110, box-posted `opnsense-test-vm` on every head (ADR-152 step 1); a weekly from-nothing rebuild drill scores prod's
+      click-ops residue — [`opnsense-test-vm.md`](opnsense-test-vm.md) (§The realism score); pair history: [`router-move.md`](router-move.md) §Status.
+      Done 2026-11-17 (TICK-LOG): both nodes converged from master, the box's BACKUP converge resumed, refusals tracked per
+      subject (#3528), nightly cert carry on the box as `automation` (#3526), firmware belt + `firmware` API user (#3525, #3529).
+      **Next:** (1) OPERATOR RULING — the BACKUP has no route to the firmware mirror (only the CARP master has WAN), so
+      ROADMAP step 4's "update the BACKUP first" cannot fetch: each node updates while MASTER / a low-priority gateway via the
+      peer's LAN address (seat's pick) / offline package copy; (2) then the attended window 26.7.5 → 26.7.9_3 (reboot), which
+      should clear 17 of the drill's 22 rows; (3) wire `opnsense-users-self-test` into `ci.yaml` (operator-direct) and rule
+      on CI for `scripts/opnsense-drill.sh` (#2493); (4) #3539's first live PASS carry. Relates FU-013, FU-298.
 - [ ] **FU-310** — **dind probes the HTTP-only registry mirrors over HTTPS first: one dropped SYN + a dial
       timeout per pull.** Rides list the mirror VIPs as `insecure-registries` (`agents/agent-session.sh` daemon.json)
       and pull by bare IP (`192.168.40.31/playwright/…`), so docker tries :443 before :80; the ride CNP allows :80
@@ -267,14 +255,14 @@ six OVERSIZE items pointer-ized into
       ingress VIP). **Next (operator):** shorten the path (registry-fs beside the ingress, or in-cluster pullers
       off the VIP) vs accept ~21 MB/s per pve node; separately, `intel1` co-location (registry-data beside
       garage-0). Evidence: [`spikes/registry-filesystem-backend.md`](spikes/registry-filesystem-backend.md) §2026-10-14 re-measure.
-- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its three biggest
-      tenants are ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
-      2026-09-22), so our release churn sets the mirror's size. The registry's only size knob is the TTL, and
-      that TTL nearly filled it (720h left over from FU-196 v0; #1870 set 168h + 150Gi). Serve
-      first-party images from `registry.teststuff.net` (ADR-121's "later"). The mirror then holds
-      third-party images only. **Next:** per-repo keep-sets there first (only oracle-fleet has a
-      retention policy; the store is the 150Gi filesystem volume since FU-280's 2026-09-24 cutover, not
-      the 48Gi bucket), then dual-publish → pin flip per image. Relates FU-196, FU-203, FU-280.
+- [ ] **FU-274** — **First-party images still ride the ghcr pull-through mirror.** Its biggest tenants
+      were ours (`oracle-fleet-ingester`, `agent-base`, `oracle-fleet-static-site`: 320 revisions on
+      2026-09-22), so our release churn sets the mirror's size, and its only size knob is the TTL (#1870:
+      168h + 150Gi). Serve first-party images from `registry.teststuff.net` (ADR-121's "later"); the mirror
+      then holds third-party images only. **Done 2026-11-13:** `agent-base` + `agent-coordinator` publish
+      there only (#3330, keep-set `scripts/registry-keep-set.sh`; forced — both carry the Claude Code binary
+      and their public ghcr packages are now deleted). **Next:** the two oracle images — reuse the keep-set
+      script, then dual-publish → pin flip per image. Relates FU-196, FU-203, FU-280.
 - [ ] **FU-194** — **homelab#541's kernel-log carve-out is STILL not true for a jail, after
       ADR-118 shipped** (found 2026-08-27 by testing the claim rather than restating it). The
       carve-out promises "any session with LogQL access reads kernel-log lines" — the motivating
@@ -581,7 +569,7 @@ the block needs pruning, not more headings.
       rethink. Relates FU-181, FU-131.
 - [ ] **FU-182** — **The pushgateway grows without bound (no TTL on pushed groups).** Writer twin of homelab#807;
       the 08-24 HELP-line log flood fixed (agent-runtime#84, homelab#811). Groups 3223 (10-03) → **3631 (10-14)**,
-      ~37/day. Pattern: [`docs/patterns/observability.md`](patterns/observability.md). **Next:** group hygiene —
+      ~37/day; **4427 (11-16)** — the 128Mi limit OOM-looped from 11-06 (23 kills), raised to 512Mi as a stopgap. Pattern: [`docs/patterns/observability.md`](patterns/observability.md). **Next:** group hygiene —
       a cleanup pass (cron or push-time) deleting terminal-ride groups older than the ledger's retention need,
       sized so reads stay flat. Relates FU-131, observability §B1.
 
@@ -670,7 +658,7 @@ the block needs pruning, not more headings.
       fingerprint faces (PR#1352), cap split (PR#1375/#1376), arbitrate rule-2 capacity re-arm (#2546, r8 F5 —
       the deferral is still coordinator prose, not a launcher marker). Open: the RULED-BUT-NEVER-DISPATCHED
       arbitrate face (09-08, PR#1513/#1515 — no re-arm for a ruling with no round behind it, or dispatch BEFORE
-      the comment). **Next:** honest strike-held rows + hold-chain propagation; that re-arm. No-strike C4/C5
+      the comment); the checkpoint-(b) marker surviving a DEFERRED launch (#3553, 11-19). **Next:** honest strike-held rows + hold-chain propagation; that re-arm. No-strike C4/C5
       limbo is FU-204's. Relates FU-187, FU-143, FU-147.
 
 - [ ] **FU-200** — **The brief's fleet-strike rule: reader BUILT, re-key open.** "Same `error_class=` on ≥2 issues
@@ -680,14 +668,16 @@ the block needs pruning, not more headings.
       strike store (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01). Relates FU-199, agent-runtime#85, model-routing §M1a.
 
 - [ ] **FU-320** — **Island intake: the gateway admits its own ordinary work (P6 first leg).** Brief
-      [`gateway/intake.md`](../gateway/intake.md), selector `gateway/scripts/intake-select.sh`, design + evidence
-      [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). **WIRED for the dig source 2026-10-28** (#3004 + #3008:
-      `island-intake` CronWorkflow 05:00Z, receipts = the ruled-input ledger, `INTAKE_DAILY_MAX`); dry-run proven in-cluster. **Issue pile + re-reads wired 2026-11-11** (#3259, ADR-163; the sitting asks `prefer: strongest` → Fable, #3266/#3271; in-cluster dry-run proven).
-      **Next:** the first unattended cron sitting over the pile (05:00Z) read against the seat-run results in the spike
-      §Run 3; operator rulings in the spike §Open questions 2, 4, 5 (Goal ceiling, rule 10
-      grammar, the second island — oracle-fleet ASKED 2026-11-07 (handoff: bot-filed feedback-triage lane-B/C issues need
-      admission; RULED: facts stay in the stack repo, platform owns launch mechanics only — ADR-160, #3209). Settle: bot-filing → `agent/queued` ≈ 0 days, two weeks, rides ≤ 2 rounds.
-      Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
+      [`islands/intake/rules/intake.md`](../islands/intake/rules/intake.md), selector `islands/intake/scripts/intake-select.sh`, design + evidence
+      [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). WIRED: dig source 2026-10-28 (#3004 + #3008, `island-intake`
+      CronWorkflow 05:00Z, receipts = the ruled-input ledger); issue pile + re-reads 2026-11-11 (#3259, ADR-163; `prefer: strongest`).
+      **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),
+      `gap` + `escape` sources; islands scan/launch/retro are intake islands (`docs/intake/`, Goals #3389 #3390 #3384).
+      **Learning loop 2026-11-19** (ADR-164): step 3 = a closed list (#3547/#3549), responder classes as a dig-source input (#3544), the WAIT read (#3555), weekly rules digest (#3552).
+      **Intake as its own island 2026-11-20:** rules — intake reads every deciding fact, checks the ride's recipe and reach (#3570); Goal #3574 BUILT and on master (#3598, 18:37Z: `islands/intake/`, SA `island-intake` read-only, agent-base + island devbox, one run walking nine islands, stack islands from the claim, [`CONTRACT.md`](../islands/intake/CONTRACT.md)); first sitting under it proven by a dry run; oracle told.
+      **Next:** read the first 05:00Z full walk (2026-11-21); Goal #3586 (outcome experiments) in build; the replay runner + the edit-PR leg; meta-state pickup; the sittings' `prefer: strongest` spent Fable's weekly limit on 11-21 (45 sessions in 7 d) — weigh a Fable share vs opus (meta-state).
+      oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
+      ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
 - [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
       pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
       never green, pool starved — FU-218). #1489 (ADR-103 addendum) shrank the class to all-vacuous PRs.
@@ -811,8 +801,8 @@ the block needs pruning, not more headings.
       (#2844), harness-scoped strikes (#2880); the harness-follows-the-cell ruling is #2870 (queued). **Next (seat):** a canary
       window per 6 h refresh, re-cut when the lists move (last #2903; 11-01 check = derivation, terra in the snapshot, no tier);
       the weekly AA pull misses release-day models (terra, 10-26) — `benchmarks-snapshot.sh`'s cadence knob; hand-passed codex
-      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:** FU-313;
-      ruling #2768; #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
+      candidates → #3145; read the first platform worker ride through `/sessions` and the first non-prober codex ride. **Operator-only:**
+      #2867's strike-accounting + version-drift findings; the baseline forwarder's 4 forks; oracle prober
       codex child (#2904/#2905 live) waits on oracle-fleet#933 → arm oracle-iac#1141 (TICK-LOG 10-24).
 - [ ] **FU-271** — **Gateway HA waits for a measured store (ADR-139, deferred).** In-process
       semaphores/breakers/in-flight/latches double every cap at 2 replicas, so HA needs a session
@@ -1050,14 +1040,19 @@ the block needs pruning, not more headings.
 
 ## Hardware & nodes
 
+- [ ] **FU-322** — **Prometheus holds ~18 days, not 30.** The 45 GB `retentionSize` wins over `retention: 31d`
+      (SERVICES.md). The operator wants 30 days of data everywhere (2026-11-21, nx-02 incident: the 10-09
+      drill's counters were already gone when the take-back outage needed them). Deferred: "a bigger problem
+      for another day". Next: size the PVC for 30 days at the measured ingest rate and grow it.
 - [ ] **FU-315** — **wk-metal-02's apiserver re-converges on its 3200MiB GOMEMLIMIT and GC-thrashes.**
       2026-10-22: cp-01 burned 3.5/4 cores in GC for two days at the shared limit (live heap ~2.7 GiB);
       the VMs now run 5000MiB (#2807), the X250 (7.45 GiB, `ControlPlaneNodeMemoryLow` standing) cannot
       take that. Its apiserver hit 1.8 cores the moment the VMs restarted (heap 2.78 GiB); restarted
       05:57Z, so it refills on the same ~weeks clock. FU-304 closed 10-14 "the CP role
       stays" on a soak predating the refill (10-24: heap 2.80 GiB, CPU ≤0.23). Refill restart #2: 2026-10-28 20:09Z
-      (`talosctl restart -k`, window `wk-metal-02-1793218117-1848`; WSS 3064→1467 MiB, cilium 13/13). **Next (operator):**
-      a windowed apiserver restart per refill, or the CP role → a 16 GB box. Relates FU-304.
+      (`talosctl restart -k`, window `wk-metal-02-1793218117-1848`; WSS 3064→1467 MiB, cilium 13/13). #3: 2026-11-19 19:30Z
+      (22 d later; thrashed 43 h at 3.4 cores as etcd leader before anyone looked — TICK-LOG 11-19). **Next (operator):**
+      a windowed apiserver restart per refill, or the CP role → a 16 GB box; no detector reads GC-at-the-limit. Relates FU-304.
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
       [Diagnosis, counters, placement, detectors, boot-disk move, the DIMM window](spikes/nx-02-numa-placement.md).
@@ -1128,7 +1123,7 @@ the block needs pruning, not more headings.
       run 2026-10-14 set a `dig-explained:` marker (#2555); its lane anomalies are the next input (dig 10-10 "5
       findings, wrote 2"; no responder triage 10-11/10-14; dig TOOL_GAPs — TICK-LOG 2026-10-14). (d) `now`-lane grouping LANDED
       #2761 (10-20). (e) the lane's own dependency cone. (f) dig→worker: island findings → island intake (FU-320, 10-28;
-      replay 10-05→10-28 = 1 dispatchable cause). oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
+      replay 10-05→10-28 = 1 dispatchable cause). (g) re-test of a stale explanation LANDED #3546 (11-19) — proof owed: a re-test finding. oracle-fleet's 5 rules lack `triage` (stack lane). Relates FU-230, FU-231.
 - [ ] **FU-247** — **Alert on a captured kernel oops.** The `page_table_check` oops sat unread in Loki
       for six days (2026-09-10). **Detector LANDED + PROVEN LIVE 2026-09-23** (#1948): an Alloy
       `stage.metrics` counter on the kmsg stream → `KernelOopsCaptured` per node, a sender-side metric

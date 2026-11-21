@@ -456,7 +456,17 @@ while IFS=$'\t' read -r pr sha bref; do
       elif [ -z "$changes" ]; then echo "apply: nothing to apply."
       else
         outside="$(printf '%s\n' "$changes" | mgmt_apply_allowed "$POL" "$root")" || outside="(allowlist unreadable — the apply loop refuses until it reads)"
+        # a VM recreate the box runs itself (apply_vm_recreate mode on, mgmt-runner.sh): named as such when
+        # it is ALL that leaves the allowlist — the intent review reads which VM the merge recreates
+        rnames=""
+        if [ -n "$outside" ] && rcand="$(mgmt_runner_candidates "$POL" "$root" "$out" 2>/dev/null)"; then
+          ract="$(awk -F'\t' '$4 == "on"' <<<"$rcand")"
+          if [ -n "$ract" ] && rout="$(printf '%s\n' "$changes" | mgmt_runner_rest "$ract" | mgmt_apply_allowed "$POL" "$root")" && [ -z "$rout" ]; then
+            rnames="$(cut -f2 <<<"$ract" | tr '\n' ' ' | sed 's/ $//; s/ /, /g')"
+          fi
+        fi
         if [ -z "$outside" ]; then echo "apply: all addresses inside the apply allowlist — the box applies after merge."
+        elif [ -n "$rnames" ]; then echo "apply: VM recreate by the box after merge, one VM per tick through runner-maintenance: $rnames — the rest inside the apply allowlist."
         else n=$(wc -l <<<"$outside"); echo "apply: $n address(es) OUTSIDE the apply allowlist — human apply: $(tr '\n' ' ' <<<"$outside" | sed 's/ $//' | sed 's/ /, /g')"; fi
       fi
     } >>"$bodyf"

@@ -43,6 +43,12 @@ for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; d
   [ -n "$d" ] && [ -d "$d/homelab-pve-ssh" ] && CRED="$d" && break
 done
 [ -n "$CRED" ] || { echo "mgmt-tf: cred dir not found (homelab-pve-ssh/ — the key the box trusts)" >&2; exit 1; }
+# The box's host key is PINNED from the wallet cache (mgmt-ssh-host, via scripts/wallet-files.sh),
+# never trusted on first use — the rule mgmt-state-pull.sh and mgmt-provision-secrets.sh follow.
+HOSTPUB="$CRED/homelab-mgmt/extra-files/etc/ssh/ssh_host_ed25519_key.pub"
+[ -f "$HOSTPUB" ] || { echo "mgmt-tf: no pinned host key at $HOSTPUB — run scripts/wallet-files.sh" >&2; exit 1; }
+KH="$(mktemp)"; trap 'rm -f "$KH"' EXIT
+echo "$HOST $(cut -d' ' -f1,2 "$HOSTPUB")" > "$KH"
 [ $# -ge 1 ] || { echo "usage: $0 <tofu subcommand> [args…]  (MGMT_REF=<ref> to pick the ref; default origin/master)" >&2; exit 2; }
 # -state / -var-file only on the subcommands that accept them (init, providers, validate do not).
 # ⚠ `tofu state` takes its flags AFTER the sub-subcommand: `state rm -state=X <addr>` is valid,
@@ -206,8 +212,11 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    if [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
       && [ "${PLAN_REF:-}" = origin/master ] && [ -n "${PLAN_SHA:-}" ] \
       && [ "$PLAN_SHA" = "$(git rev-parse origin/master)" ]; then
-     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev
-     echo "mgmt-tf: apply loop baseline stamped at ${PLAN_SHA:0:8} (refused-rev cleared)" >&2
+     mkdir -p /var/lib/mgmt/apply; echo "$PLAN_SHA" >/var/lib/mgmt/apply/applied-rev; rm -f /var/lib/mgmt/apply/refused-rev /var/lib/mgmt/apply/refused-desc
+     # the stamp made OBSERVABLE: the apply loop posts the `baseline:` success on this commit at its next
+     # tick (mgmt-lib.sh mgmt_post_human_stamp — it holds the App credential, this shell does not)
+     printf "%s\t%s\n" "$PLAN_SHA" "$PLAN_ID" >/var/lib/mgmt/apply/human-stamp
+     echo "mgmt-tf: apply loop baseline stamped at ${PLAN_SHA:0:8} (refused-rev cleared; the box posts the stamp on its next tick)" >&2
    elif [ "$MODE" = apply ] && [ "$STAMP" = 1 ] && [ $rc = 0 ] && [ "${SCOPED:-1}" = 0 ] \
       && [ "${PLAN_REF:-}" = origin/master ]; then
      echo "mgmt-tf: NOT stamping — this plan is ${PLAN_SHA:0:8}, master is now $(git rev-parse --short origin/master). Re-plan and apply that to advance the baseline." >&2
@@ -215,7 +224,7 @@ remote='set -euo pipefail; set -a; . /var/lib/mgmt/env; set +a
    exit $rc'
 rc=0
 TTY=-t; [ "$MODE" = summary ] && TTY=-T   # a captured read: no pty folding stderr into stdout
-ssh "$TTY" -o StrictHostKeyChecking=accept-new -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
+ssh "$TTY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" -i "$CRED/homelab-pve-ssh/id_ed25519" "root@$HOST" \
   "bash -c $(printf '%q' "$remote") _ $(printf '%q ' "$REF" "$STAMP" "$MODE" "$PLAN_ID" "${MGMT_YES:-0}" "${ARGS[@]}")" || rc=$?
 # The second failure domain (docs/tofu-state.md §Snapshots): an apply that wrote main's state just
 # produced a snapshot on the box — bring it into the wallet cache now, while the session that made

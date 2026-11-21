@@ -1,0 +1,4 @@
+CALL gh api repos/teststuffstash/homelab/pulls/3301/files --paginate
+OUT ORPHAN [homelab] ⚠ ASSEMBLY PR #3301 has ci-red (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head
+OUT REACHED: end
+RC 0

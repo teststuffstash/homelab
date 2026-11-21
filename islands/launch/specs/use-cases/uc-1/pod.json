@@ -1,0 +1,21 @@
+{
+  "_comment": "UC-1 step 5 — the fields of the created pod other islands read (pod.schema.json). No LLM credential, literal or by reference (LAUNCH-POD-ENV-PULL); the git broker is still the old proxy's (LAUNCH-POD-CRED ⚑ gap).",
+  "metadata": {
+    "name": "agent-homelab-issue-2588-r1",
+    "namespace": "homelab",
+    "labels": { "app": "agent-session", "project": "homelab", "ride-size": "standard", "homelab.teststuff.net/gateway-session": "«id»" }
+  },
+  "spec": { "serviceAccountName": "agentstack-worker", "restartPolicy": "Never", "activeDeadlineSeconds": 14400 },
+  "env": {
+    "AGENT_GATEWAY_PULL_URL": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/«id»/env",
+    "AGENT_GATEWAY_ENV_KEYS": "OPENCODE_CONFIG_CONTENT",
+    "GIT_CRED_BROKER_URL": "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/git-token?ns=homelab"
+  },
+  "volumes": {
+    "gateway-token": { "audience": "agent-gateway", "expirationSeconds": 600, "mountPath": "/var/run/secrets/agent-gateway" },
+    "context-bundle": { "configMap": "agent-homelab-issue-2588-r1-context", "mountPath": "/work/context" }
+  },
+  "command": {
+    "order": ["pr-open install", "env pull prelude (exit 97 on failure)", "bundle mount point", "recipe write", "opencode run -m gateway/deepseek-v4.1-flash '…Issue: 2588.' </dev/null"]
+  }
+}

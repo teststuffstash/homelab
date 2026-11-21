@@ -1,0 +1,4 @@
+[
+  {"created_at": "2026-11-13T00:05:00Z", "body": "<!-- agent-summary -->\nround 1 dispatched"},
+  {"created_at": "2026-11-13T00:43:41Z", "body": "AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1\n\n**Resumable branch pushed:** `fix/issue-3303-wire-quarry` — the next round can resume from it (C5), not restart.\n\n<details><summary>last 15 log lines (agent-homelab-issue-3303-r1)</summary>\n\n~~~text\n…\n~~~\n\n</details>\n"}
+]

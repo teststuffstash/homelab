@@ -1,0 +1,82 @@
+# Behaviour fixture for IslandRulesDigestOverdue (FU-320) — the weekly island rules digest's belt:
+# retro-report.promtool-test's restart-gap cases at this alert's 7 d + 6 h threshold, plus the
+# never-landed case (`or vector(0)` — DeepDigStale's shape).
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/island-rules-digest.promtool-test
+#   (in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# CLOCK: promtool's test clock starts at 0; a push VALUE is the epoch the push happened at, so
+# "landed at test-hour H" is literally H*3600, and `time() - value` at any later eval is its age.
+# Threshold: 7 * 86400 + 6 * 3600 = 626400 s = 174 h.
+rule_files:
+  - island-rules-digest.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── (a) a digest that landed 10 minutes ago is nowhere near overdue ──────────────────────────
+  - interval: 1m
+    name: "(a) a fresh success stays quiet"
+    input_series:
+      - series: 'island_rules_digest_last_success_timestamp_seconds{job="island_rules_digest"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: IslandRulesDigestOverdue
+        exp_alerts: []
+
+  # ── (b) THE RESTART GAP — a pushgateway wipe of a 4-day-old success must not page ───────────
+  # A success lands at test-hour 100 (value 360000); the gateway is wiped at hour 102 (`stale`).
+  # At hour 200 the real age is 100 h (< 174 h). Without the [8d] bridge the current scrape is
+  # absent, `or vector(0)` falls to epoch 0 and time() = 720000 > 626400 fires — this eval pins it.
+  - interval: 1h
+    name: "(b) a pushgateway wipe of a <7d-old success must not page"
+    input_series:
+      - series: 'island_rules_digest_last_success_timestamp_seconds{job="island_rules_digest"}'
+        values: "_x100 360000 stale"
+    alert_rule_test:
+      - eval_time: 200h
+        alertname: IslandRulesDigestOverdue
+        exp_alerts: []
+
+  # ── (c) a lane that stops landing — fires after 7 d + 6 h + for:30m ──────────────────────────
+  - interval: 1h
+    name: "(c) a success that ages past 7d6h fires after for:30m"
+    input_series:
+      - series: 'island_rules_digest_last_success_timestamp_seconds{job="island_rules_digest"}'
+        values: "0+0x200"
+    alert_rule_test:
+      - eval_time: 173h
+        alertname: IslandRulesDigestOverdue
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: IslandRulesDigestOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "The weekly island rules digest has not landed in over 7 days — rule-file changes are going unreviewed"
+              description: "The Friday 06:00Z island-rules-digest CronWorkflow (ns agent-coordinator) has not delivered a report PR or a no-change record in over 7 days. Changes to the island rules files (the briefs and rules launchers hand sessions) are not reaching the operator's weekly read. Check: argo -n agent-coordinator cron get island-rules-digest and the newest island-rules-digest-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-rules-digest. Brief: docs/agents/retros/ISLAND-RULES-BRIEF.md; change record: agents/island_rules.py changes."
+
+  # ── (d) never landed — `or vector(0)`: a lane that never runs is visible ─────────────────────
+  - interval: 1h
+    name: "(d) no success ever pushed fires once the clock passes the threshold"
+    input_series:
+      - series: 'up{job="unrelated"}'
+        values: "1+0x200"
+    alert_rule_test:
+      - eval_time: 173h
+        alertname: IslandRulesDigestOverdue
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: IslandRulesDigestOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+            exp_annotations:
+              summary: "The weekly island rules digest has not landed in over 7 days — rule-file changes are going unreviewed"
+              description: "The Friday 06:00Z island-rules-digest CronWorkflow (ns agent-coordinator) has not delivered a report PR or a no-change record in over 7 days. Changes to the island rules files (the briefs and rules launchers hand sessions) are not reaching the operator's weekly read. Check: argo -n agent-coordinator cron get island-rules-digest and the newest island-rules-digest-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-rules-digest. Brief: docs/agents/retros/ISLAND-RULES-BRIEF.md; change record: agents/island_rules.py changes."

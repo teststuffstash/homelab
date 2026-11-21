@@ -1,0 +1,5 @@
+CALL kubectl -n test-project get pod agent-test-project-issue-42-r2 -o jsonpath={.metadata.creationTimestamp}
+CALL gh api repos/teststuffstash/test-project/issues/42/comments?per_page=100 --paginate
+OUT → terminal record for agent-test-project-issue-42-r2 already on teststuffstash/test-project#42 — not written twice
+OUT → key-class failure — KEY-RETRY: model=openrouter/x error_class=budget-403-key round=2 session=agent-test-project-issue-42-r2 match=key limit exceeded
+RC 0

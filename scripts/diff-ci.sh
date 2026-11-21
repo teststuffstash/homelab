@@ -25,8 +25,21 @@
 #   key = ci_key(task) below. Every ci.yaml gate step reads its own key with
 #   `if: steps.diff.outputs.<key> != 'false'` — absent (push / dispatch: the diff step is skipped)
 #   means RUN, so master pushes run everything (the net). Fails open: an empty/unreadable list,
-#   or a change to devbox.json/lock, ci.yaml or this file, prints true for every row.
+#   or a change to ci.yaml, prints true for every row. The three other shared inputs are read for
+#   WHAT changed (2026-11-13 — ~40 % of the full runs were a one-task edit; numbers in
+#   docs/spikes/ci-runtime-2026-11.md), each failing open when the base side cannot be read:
+#     devbox.json   only `shell.scripts` entries changed → the rows of those tasks, of every task
+#                   whose script calls one, and of every tracked file that calls one (`devbox run
+#                   <task>`; prose and recorded data excluded: *.md, *.json, *.txt, fixtures/,
+#                   worlds/); any other key → every row
+#     devbox.lock   every row except the gateway island's (its tasks run in gateway/'s own devbox;
+#                   any task whose script runs `cd gateway &&`; the root closure is proven by
+#                   the warm step every run pays)
+#     diff-ci.sh    the rows whose task or regex differ from the base's (`--dump-map` below)
+#   The base side is origin/master in a full clone, else the PR base via the API
+#   (GITHUB_BASE_REF + GITHUB_REPOSITORY + GH_TOKEN, all present in ci.yaml's diff step).
 set -euo pipefail
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"   # absolute: --ci-outputs re-invokes itself after the cd
 cd "$(dirname "$0")/.."
 
 # Single-line assignments — ci.yaml `eval "$(grep -m1 '^PROM_PATHS=' scripts/diff-ci.sh)"`s
@@ -51,14 +64,14 @@ MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root
 # precision is only worth chasing on the expensive rows (the two heavies + the self-tests
 # scoped to their deployment dir).
 MAP=(
-  "argocd-validate-pins:^argocd/"
+  "argocd-validate-pins:^(argocd/|scripts/(argocd-validate-pins|vendor-garage-chart)\\.sh$)"
   # report-only workload standards over every Application's RENDERED manifests (charts included —
   # iac-lane.md L0b's render pass, standing alone): the vendored+local policies, the checker, and
   # everything the ArgoCD layer applies. Exit 0 in --report mode; no ci.yaml step yet (operator-direct).
-  "component-check:^(argocd/|policy/component/|scripts/(component-check|vendor-kyverno-policies)\.sh$)"
+  "component-check:^(argocd/|policy/component/|scripts/(component-check|vendor-kyverno-policies|vendor-garage-chart)\.sh$)"
   "manifest-lint:^argocd/"
   "agentstack-rbac-lint:^argocd/resources/(agentstack|crossplane)/"
-  "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"
+  "sentinel-smoke:^(policy/iac/|scripts/iac-sentinel(-test)?\.sh|scripts/iac-policy-test\.sh|scripts/fixtures/iac-policy/|devbox\.(json|lock)$)"
   "mgmt-policy-test:$MGMT_PATHS"
   "prometheus-rules-lint:$PROM_PATHS"
   "exporter-self-test:^argocd/resources/github-exporter/"
@@ -72,6 +85,8 @@ MAP=(
   # row renders every input at the worktree. Its ci.yaml step lands operator-direct (pin-only-guarded).
   "xr-render:$XR_RENDER_PATHS"
   "argo-lint:^agents/coordinator/"
+  # the users role's key plan (one pair on every router node) — its ci.yaml step lands operator-direct
+  "opnsense-users-self-test:^(ansible/roles/opnsense-users/|scripts/opnsense-api-users)"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest
@@ -96,12 +111,12 @@ MAP=(
   # via docker: every spec page's Mermaid diagrams render, every flowchart node link lands on its
   # requirement heading — the oracle-fleet e2e-specs-site shape). Inputs: the site config, the
   # staged renderer init, any spec page, the build and the leg itself. Docker pull + WAN → PUSH_HEAVY.
-  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/e2e/test_specs_site\.py$)"
+  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/lib/site-build\.sh$|scripts/e2e/test_specs_site\.py$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
   # + the island intake selector: intake is the dig's consumer and its harness runs in this gate (FU-320)
-  "deep-dig-test:^(agents/|gateway/scripts/intake-select)"
+  "deep-dig-test:^(agents/|islands/intake/|gateway/[^/]+\.md$|docs/intake/|docs/agents/retros/ISLAND-RULES-BRIEF\.md$)"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
   "state-fp-replay:^agents/"
@@ -129,17 +144,34 @@ MAP=(
   "devbox-update-test:^scripts/devbox-update|^scripts/lock-cache-check|^scripts/fixtures/devbox-update/"
   # the self-test's only inputs are scripts/governance-lint.sh + scripts/governance-lint-test.sh (FU-296)
   "governance-lint-test:^scripts/governance-lint"
+  # the keep-set's selection rule; its only input is the script itself (FU-274)
+  "registry-keep-set-test:^scripts/registry-keep-set"
   # the belt's own CI invocation, covered by the belt: ci.yaml's `devbox run diff-ci -- --coverage-only`
   # is extracted below as task `diff-ci` and matches this row's first word. Locally this is one
   # level of recursion (a belt-only run, no git base) that exits in well under a second.
-  "diff-ci -- --coverage-only:^(scripts/diff-ci\.sh|\.github/workflows/ci\.yaml)$"
+  "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
+  # the scan island's gate (homelab#3389, islands/scan/): ruff + pytest incl. the replay-family adapter.
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
+  # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
+  "-- bash islands/scan/scripts/ci.sh:^(islands/scan/|agents/replay/(fixtures/(major-handoff|updater)/|stubs/|run\.sh$)|agents/(major-handoff|update-pr-branch|renovate-currency|machine-comment)\.sh$)"
+  # the scan island's browsable specs site (islands/scripts/specs-site.sh: the suite for its evidence,
+  # the mkdocs build, the mirror to the scan-specs bucket; soft-skips the upload without
+  # GATEWAY_SPECS_S3_* creds, so locally it is the dogfood build). Inputs: the island, the script, and
+  # the gateway pieces it shares (config, assets, the build/upload/evidence libs). WAN-bound and
+  # minutes long → kept off the pre-push hook by PUSH_HEAVY_CMDS below.
+  "-- bash islands/scripts/specs-site.sh publish scan:^(islands/(scan|scripts)/|gateway/(mkdocs\.yml$|site-assets/|site-overrides/|scripts/allure-report\.sh$|scripts/lib/(site-build|s3-publish|snippets)\.sh$))"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
+  # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
+  # as rule()-labelled cases + the stub control; enters the island's own devbox). GitHub CI has no step
+  # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
+  # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
+  "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
   # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
   # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "specs-review-self-test:^agents/specs-reviewer-session\.sh$"
@@ -147,6 +179,10 @@ MAP=(
   # §Gate A); its only input is the script. Its ci.yaml step lands operator-direct, like the row above.
   "pr-open-self-test:^agents/pr-open\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
+  # the retro island's tests root (Goal #3384): uv sync --frozen + ruff + pytest over the replay oracle.
+  # No ci.yaml step runs it yet (ci.yaml is pin-only-guarded; the step lands operator-direct, like the
+  # specs-review-self-test row) — so pr-gate is the only place it runs today.
+  "-- bash islands/retro/scripts/ci.sh:^islands/retro/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
   # *.md/*.sh/*.py/*.yaml/*.yml (code comments included) and resolve them against living .md,
@@ -200,6 +236,8 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
+# The same exclusion for `-- <cmd>` rows, which have no task name to list above: a prefix per line.
+PUSH_HEAVY_CMDS="-- bash islands/scripts/specs-site.sh "
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
@@ -208,13 +246,74 @@ if [ "${1:-}" = "--coverage-only" ]; then COVERAGE_ONLY=true; shift; fi
 # ci_key <task> — the GITHUB_OUTPUT key for a MAP row's task: non-alnum runs → '-', trimmed
 # (`mgmt-policy-test` → itself, `estimate-budget -- --self-test` → `estimate-budget-self-test`).
 ci_key() { printf '%s' "$1" | tr -cs 'a-zA-Z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//'; }
+# --dump-map: one `task<TAB>regex` line per MAP row — what --ci-outputs diffs a base copy of this
+# script against when the PR edits the MAP.
+if [ "${1:-}" = "--dump-map" ]; then
+  for entry in "${MAP[@]}"; do printf '%s\t%s\n' "${entry%%:*}" "${entry#*:}"; done
+  exit 0
+fi
+# base_file <path> — the base side's copy on stdout; non-zero when it cannot be read (→ fail open).
+base_file() {
+  local ref="${DIFF_CI_BASE_GIT_REF:-origin/master}"
+  if git cat-file -e "$ref:$1" 2>/dev/null; then git show "$ref:$1"; return; fi
+  [ -n "${GITHUB_BASE_REF:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] || return 1
+  gh api -H 'Accept: application/vnd.github.raw' "repos/$GITHUB_REPOSITORY/contents/$1?ref=$GITHUB_BASE_REF"
+}
+# devbox_changed_tasks <base devbox.json> — the changed script names + every task whose script calls
+# one, transitively; exit 3 when anything outside shell.scripts differs (→ every row).
+devbox_changed_tasks() {
+  python3 - "$1" devbox.json <<'PY'
+import json, re, sys
+base, head = (json.load(open(p)) for p in sys.argv[1:3])
+def rest(d):
+    d = json.loads(json.dumps(d)); d.get("shell", {}).pop("scripts", None); return d
+if rest(base) != rest(head):
+    sys.exit(3)
+bs, hs = base.get("shell", {}).get("scripts", {}), head.get("shell", {}).get("scripts", {})
+changed = {k for k in set(bs) | set(hs) if bs.get(k) != hs.get(k)}
+text = {k: json.dumps(v) for k, v in hs.items()}
+grew = True
+while grew:
+    grew = False
+    for k, t in text.items():
+        if k not in changed and any(re.search(r"devbox run (-- )?%s\b" % re.escape(c), t) for c in changed):
+            changed.add(k); grew = True
+print("\n".join(sorted(changed)))
+PY
+}
 if [ "${1:-}" = "--ci-outputs" ]; then
-  list="${2:-}"; all=false
+  list="${2:-}"; all=false; lock=false; tasks=""; maprows=""
+  match=$(mktemp); trap 'rm -f "$match" "$match".*' EXIT
   if [ -z "$list" ] || [ ! -s "$list" ]; then all=true
-  elif grep -qE '^(devbox\.(json|lock)|\.github/workflows/ci\.yaml|scripts/diff-ci\.sh)$' "$list"; then all=true; fi
+  elif grep -qE '^\.github/workflows/ci\.yaml$' "$list"; then all=true
+  else
+    grep -vE '^devbox\.json$' "$list" >"$match" || true
+    grep -qE '^devbox\.lock$' "$list" && lock=true
+    if grep -qE '^devbox\.json$' "$list"; then
+      if base_file devbox.json >"$match.dj" 2>/dev/null && tasks=$(devbox_changed_tasks "$match.dj"); then
+        # a tracked file that calls a changed task counts as changed (the mgmt fixtures' nested
+        # `devbox run yq` class); prose and recorded data (markdown, JSON/text captures, replay
+        # fixtures and worlds) mention task names without running them
+        for t in $tasks; do
+          git grep -lE "devbox run (-- )?$t([^a-zA-Z0-9-]|\$)" -- ':!*.md' ':!*.json' ':!*.txt' \
+            ':!**/fixtures/**' ':!**/worlds/**' >>"$match" 2>/dev/null || true
+        done
+      else all=true; fi
+    fi
+    if ! $all && grep -qE '^scripts/diff-ci\.sh$' "$list"; then
+      if base_file scripts/diff-ci.sh >scripts/.diff-ci-base.sh 2>/dev/null \
+         && maprows=$(bash scripts/.diff-ci-base.sh --dump-map 2>/dev/null) && [ -n "$maprows" ]; then
+        maprows=$(comm -13 <(printf '%s\n' "$maprows" | sort) <(bash "$SELF" --dump-map | sort) | cut -f1)
+      else all=true; fi
+      rm -f scripts/.diff-ci-base.sh
+    fi
+  fi
   for entry in "${MAP[@]}"; do
     task="${entry%%:*}"; regex="${entry#*:}"; v=false
-    if $all || grep -qE "$regex" "$list"; then v=true; fi
+    if $all || grep -qE "$regex" "$match" \
+       || grep -qxF -- "${task%% *}" <<<"$tasks" || grep -qxF -- "$task" <<<"$maprows"; then v=true
+    elif $lock && ! jq -e --arg t "${task%% *}" '.shell.scripts[$t] | tostring | test("cd gateway &&")' devbox.json >/dev/null 2>&1; then v=true
+    fi
     echo "$(ci_key "$task")=$v"
   done
   exit 0
@@ -235,6 +334,7 @@ if [ "${1:-}" = "--push-gates" ]; then
   for entry in "${MAP[@]}"; do
     task="${entry%%:*}"; regex="${entry#*:}"
     case " $PUSH_HEAVY " in *" ${task%% *} "*) continue ;; esac
+    case "$task" in "$PUSH_HEAVY_CMDS"*) continue ;; esac
     if $all || grep -qE "$regex" "$list"; then printf '%s\n' "$task"; fi
   done
   exit 0
@@ -294,6 +394,9 @@ EOF_STEPS
 belt_n=$(( $(printf '%s\n' $ci_tasks | grep -c .) + $(grep -vE '^\s*#' .github/workflows/ci.yaml | grep -oE 'devbox run -- .*' | sed -e 's/^devbox run //' -e 's/[[:space:]]*$//' | sort -u | grep -c .) ))
 if $COVERAGE_ONLY; then
   echo "diff-ci: coverage belt ok (every ci.yaml devbox task — $belt_n distinct — has a MAP row or a PR_ONLY exemption, and every MAP step gates on its own skip key)"
+  # The --ci-outputs selection's pinned cases ride this invocation: CI already runs it, and its
+  # row matches both files, so a selection edit can never skip its own test.
+  bash scripts/diff-ci-test.sh
   exit 0
 fi
 

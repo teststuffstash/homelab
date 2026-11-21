@@ -17,7 +17,7 @@ terraform provider majors do (ADR-141 as amended 2026-10-04) — a detector (`Ar
 step 1) + this revert actor (step 2) behind them.
 
 SECOND TARGET KIND (2026-10-31, homelab#1988's base-image post-merge half): the coordinator IMAGE
-pin. A deploy-pin of `ghcr.io/teststuffstash/agent-coordinator` that breaks the image at runtime
+pin. A deploy-pin of `registry.teststuff.net/agent-coordinator` that breaks the image at runtime
 reddens every loop workflow (`AgentLoopWorkflowsFailing`, the per-loop-namespace failure belt) —
 and the four chain templates RUN ON that image, so the chain would revert itself out of existence.
 This receiver does not: its own image tag is pinned in ITS kustomization, which the deploy-pin
@@ -31,7 +31,7 @@ Design: docs/designs/fu-1990-workflow-pin-revert.md Part 7.
 Runs from a ConfigMap (the repo's DIY pattern — github-exporter, openrouter-proxy; kustomize's
 configMapGenerator hash rolls the pod on edits). The operator flagged ConfigMap-shipped scripts as
 an IMAGE candidate; at ~10 KiB this one is accepted here as is. Stdlib only; `git` and `gh` come
-from the image (ghcr.io/teststuffstash/agent-coordinator — the same one the chain's templates
+from the image (registry.teststuff.net/agent-coordinator — the same one the chain's templates
 run; its `gh` is a wrapper that reads $GH_TOKEN_FILE per call).
 
 HTTP (:8080):
@@ -89,7 +89,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 TARGETS = {
     "ArgoControllerSilent": {"kind": "chart", "file": "argocd/platform/argo-workflows.yaml", "chart": "argo-workflows"},
     "AgentLoopWorkflowsFailing": {"kind": "image", "file": "agents/coordinator/kustomization.yaml",
-                                  "image": "ghcr.io/teststuffstash/agent-coordinator", "chart": "agent-coordinator"},
+                                  "image": "registry.teststuff.net/agent-coordinator", "chart": "agent-coordinator"},
 }
 OUTCOMES = ("reverted", "already", "no_candidate", "not_pin_only", "conflict", "error")
 WEBHOOK_RESULTS = ("queued", "ignored", "bad_request")

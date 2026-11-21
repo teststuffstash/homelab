@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-16T22:26:15Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "41235cba59738cef",
+  "subject": "workload:homelab/agent-homelab-issue-3303-r2",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-8qk6d-respond-198087182",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3308-r2",
+      "reason": "pod is stuck in Error and its Bound 20Gi docker-lib PVC fills the agentstack-storage quota, blocking 3303-r2 from scheduling.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3308-r2 — pod is stuck in Error and its Bound 20Gi docker-lib PVC fills the agentstack-storage quota, blocking 3303-r2 from scheduling."
+    }
+  ]
+}
