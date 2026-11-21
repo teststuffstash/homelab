@@ -43,7 +43,7 @@ groups:
           triage: none
         annotations:
           summary: An intake experiment is still open more than 2 days past its bound — its verdict was not written
-          description: 'An issue labelled experiment/open is still undecided two days after its window ended. The scheduled island-intake CronWorkflow (ns agent-coordinator) reads every such issue in its `experiments` step, before the sittings. Check that step''s log in the newest island-intake-* workflow (a Prometheus or GitHub read that failed, an upload that failed, an issue in fault — the comment on the issue names it) and read by hand: bash islands/intake/scripts/experiment-read.sh --dry-run. Reader: islands/intake/scripts/experiment-read.sh.'
+          description: 'An issue labelled experiment/open is still undecided two days after its window ended. The scheduled island-intake CronWorkflow (ns agent-coordinator) reads every such issue in its `experiments` step, before the sittings. Check that step''s log in the newest island-intake-* workflow (a Prometheus or GitHub read that failed, a GitHub write or a report upload that failed — the issue keeps experiment/open until one run finishes it) and read by hand: bash islands/intake/scripts/experiment-read.sh --dry-run. Reader: islands/intake/scripts/experiment-read.sh.'
       - alert: IntakeExperimentReadStale
         expr: (time() - max(max_over_time(island_intake_experiments_last_run_timestamp_seconds[8d]))) > 2 * 86400
         for: 6h

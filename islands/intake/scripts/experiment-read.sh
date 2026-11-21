@@ -18,9 +18,11 @@
 #            the label is removed either way
 #   no data  the comment (its reason line says which), label removed, no state change
 #   pending  nothing is written
-# The order of writes is: the comment, then the state, then the label last. A run that died after the comment
-# finds its marker next time and only removes the label — it never comments twice (the state change of a
-# `fail` that died between is not repeated: say so in the issue if the log shows it).
+# The order of writes is: the comment, the state, the report upload, then the label LAST — the label's removal is
+# what takes an issue off the list, so any earlier write that fails keeps it listed and the next run redoes it.
+# A run that died after the comment finds its marker next time and finishes the rest (the state writes are safe
+# to repeat; the Goal-side comment carries its own marker `<!-- experiment-verdict-goal issue=<n> id=<id> -->`)
+# — it never comments twice. A failed `fail` reopens last among its state writes: the list reads CLOSED issues.
 # An issue whose body has no loadable block, or that no merged PR closed, gets ONE comment (marker
 # `<!-- experiment-fault -->`) naming the fault and keeps its label; the run counts it as `fault`.
 #
@@ -32,7 +34,7 @@
 #
 # The report object of every decided experiment (the read's object + issue, repo, comment fields) goes to
 # s3://$AGENT_TS_BUCKET/homelab/experiments/<issue>-<id>.json with the sitting's writer key; an upload that
-# fails fails the step after the comment is written.
+# fails fails the step after the comment is written and keeps the label, so the next run uploads it again.
 #
 # Failure: a GitHub list/read that fails, or a Prometheus that cannot be reached (a preflight read before the
 # first write), exits non-zero having written nothing. A single experiment whose read fails is skipped
@@ -86,7 +88,7 @@ names_of() { # <query> → the metric names, one per line
 sane() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
 
 # ── pass 1: load, t0, read — writes nothing ──────────────────────────────────────────────────────
-declare -A ID VERDICT FAULT T0 BOUND NAMES QUERY
+declare -A ID VERDICT FAULT T0 BOUND NAMES QUERY FINAL
 ORDER=()
 while IFS= read -r row; do
   n="$(jq -r '.number' <<<"$row")"; ORDER+=("$n")
@@ -103,7 +105,7 @@ while IFS= read -r row; do
     m="$(jq -r '.mergedAt // ""' "$W/$n.pr")"
     # the latest merged closing PR is the one that closed the issue last
     [ -n "$m" ] && { [ -z "$merged" ] || [[ "$m" > "$merged" ]]; } && merged="$m"
-  done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (.repository.nameWithOwner // "")] | @tsv' <<<"$row")
+  done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (if .repository.owner.login and .repository.name then "\(.repository.owner.login)/\(.repository.name)" else "" end)] | @tsv' <<<"$row")
   if [ -z "$merged" ]; then FAULT[$n]="no merged pull request closes this issue, so there is no t0"; continue; fi
   T0[$n]="$(date -u -d "$merged" +%s)"
   BOUND[$n]=$(( ${T0[$n]} + $(jq -r '.kpi.max_window_s' "$W/$n.block") ))
@@ -179,9 +181,7 @@ for n in "${ORDER[@]}"; do
   row="$(jq -c --argjson n "$n" '.[] | select(.number == $n)' "$W/list.json")"
   if [ -n "${FAULT[$n]:-}" ]; then
     f="${FAULT[$n]}"
-    if [[ "$f" == __error__* ]]; then say "#$n: ${f#__error__ } — nothing decided"; FAILED=1
-      [ -n "${BOUND[$n]:-}" ] && [ "${BOUND[$n]}" -lt "$NOW" ] && { [ -z "$OVERDUE_BOUND" ] || [ "${BOUND[$n]}" -lt "$OVERDUE_BOUND" ]; } && OVERDUE_BOUND="${BOUND[$n]}"
-      continue; fi
+    if [[ "$f" == __error__* ]]; then say "#$n: ${f#__error__ } — nothing decided"; FAILED=1; continue; fi
     FAULTS=$((FAULTS+1)); say "#$n: fault — $f"
     if has_marker "$n" '<!-- experiment-fault -->'; then say "#$n: fault comment already written"; continue; fi
     printf '<!-- experiment-fault -->\nThe experiment read cannot decide this issue: %s.\n\nIt keeps the label `experiment/open`; the read tries again on its next run.\n' "$f" > "$W/$n.fault.md"
@@ -190,18 +190,10 @@ for n in "${ORDER[@]}"; do
     continue
   fi
   v="${VERDICT[$n]}"
-  if [ "$v" = pending ]; then
-    say "#$n: pending — nothing written"
-    [ "${BOUND[$n]}" -lt "$NOW" ] && { [ -z "$OVERDUE_BOUND" ] || [ "${BOUND[$n]}" -lt "$OVERDUE_BOUND" ]; } && OVERDUE_BOUND="${BOUND[$n]}"
-    continue
-  fi
+  if [ "$v" = pending ]; then say "#$n: pending — nothing written"; continue; fi
   marker="<!-- experiment-verdict id=${ID[$n]} -->"
-  if has_marker "$n" "$marker"; then
-    say "#$n: verdict comment already written ($v) — only the label is left"
-    gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || FAILED=1
-    continue
-  fi
   comment_text "$n"
+  # the Goal lookup comes BEFORE any write: a lookup that errors writes nothing for this issue
   goal=""; target=""
   if [ "$v" = fail ]; then
     goal="$(goal_of "$n")"; grc=$?
@@ -211,34 +203,56 @@ for n in "${ORDER[@]}"; do
         | jq -r '[.[] | select(.state == "open") | select(.title | ascii_downcase | startswith("post-launch:"))] | sort_by(.number) | .[0].number // empty')" \
         || { say "GitHub did not answer for the sub-issues of Goal #$goal"; FAILED=1; continue; }
       [ -n "$target" ] || target="$goal"
+    else goal=""
     fi
   fi
-  [ "$DRY" = 1 ] && { say "[dry-run] #$n: $v"; cat "$W/$n.comment.md"; }
-  gh_write "comment the verdict ($v) on #$n" issue comment "$n" --repo "$REPO" --body-file "$W/$n.comment.md" || { FAILED=1; continue; }
-  if [ "$v" = fail ]; then
-    if [ -z "$goal" ]; then
-      agent="$(jq -r '[.labels[]?.name | select(startswith("agent/"))] | join(" ")' <<<"$row")"
-      args=(); for l in $agent; do args+=(--remove-label "$l"); done
-      gh_write "reopen #$n" issue reopen "$n" --repo "$REPO" || FAILED=1
-      [ "${#args[@]}" -gt 0 ] && { gh_write "remove the agent labels ($agent) from #$n" issue edit "$n" --repo "$REPO" "${args[@]}" || FAILED=1; }
+  # 1. the comment — once (the marker); a run that died after it finishes the rest below
+  if has_marker "$n" "$marker"; then
+    say "#$n: verdict comment already written ($v) — finishing what the earlier run left"
+  else
+    [ "$DRY" = 1 ] && { say "[dry-run] #$n: $v"; cat "$W/$n.comment.md"; }
+    gh_write "comment the verdict ($v) on #$n" issue comment "$n" --repo "$REPO" --body-file "$W/$n.comment.md" || { FAILED=1; continue; }
+  fi
+  # 2. the state (fail only) — every step safe to repeat; any failure keeps the label so the next run redoes it
+  ok_state=1
+  if [ "$v" = fail ] && [ -z "$goal" ]; then
+    # agent/* labels before the reopen: the list reads CLOSED issues only, so the reopen is the last state write
+    agent="$(jq -r '[.labels[]?.name | select(startswith("agent/"))] | join(" ")' <<<"$row")"
+    args=(); for l in $agent; do args+=(--remove-label "$l"); done
+    [ "${#args[@]}" -gt 0 ] && { gh_write "remove the agent labels ($agent) from #$n" issue edit "$n" --repo "$REPO" "${args[@]}" || ok_state=0; }
+    [ "$ok_state" = 1 ] && { gh_write "reopen #$n" issue reopen "$n" --repo "$REPO" || ok_state=0; }
+  elif [ "$v" = fail ]; then
+    gmarker="<!-- experiment-verdict-goal issue=$n id=${ID[$n]} -->"
+    if [ "$DRY" = 0 ] && ! gh api "repos/$REPO/issues/$target/comments?per_page=100" --paginate > "$W/t.json" 2> "$W/t.err"; then
+      say "GitHub did not answer for the comments of #$target"; ok_state=0
+    elif [ "$DRY" = 0 ] && jq -se --arg m "$gmarker" '[.[][]?.body // empty | select(contains($m))] | length > 0' "$W/t.json" >/dev/null 2>&1; then
+      say "#$n: the verdict is already on #$target"
     else
-      { printf 'The experiment of #%s failed (its Goal is #%s); the child stays closed.\n\n' "$n" "$goal"; tail -n +2 "$W/$n.comment.md"; } > "$W/$n.goal.md"
-      gh_write "comment the verdict of #$n on #$target" issue comment "$target" --repo "$REPO" --body-file "$W/$n.goal.md" || FAILED=1
+      { printf '%s\nThe experiment of #%s failed (its Goal is #%s); the child stays closed.\n\n' "$gmarker" "$n" "$goal"; tail -n +2 "$W/$n.comment.md"; } > "$W/$n.goal.md"
+      gh_write "comment the verdict of #$n on #$target" issue comment "$target" --repo "$REPO" --body-file "$W/$n.goal.md" || ok_state=0
     fi
   fi
-  gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || FAILED=1
-  case "$v" in pass) DECIDED_PASS=$((DECIDED_PASS+1));; fail) DECIDED_FAIL=$((DECIDED_FAIL+1));; *) DECIDED_NODATA=$((DECIDED_NODATA+1));; esac
-  # the report object
+  if [ "$ok_state" = 0 ]; then FAILED=1; say "#$n: a state write failed — the label stays, the next run redoes it"; continue; fi
+  # 3. the report object — before the label, so a failed upload is retried by the next run (an idempotent cp)
   key="homelab/experiments/$n-${ID[$n]}.json"
-  jq --arg repo "$REPO" --argjson issue "$n" --arg goal "$goal" --arg target "$target" --argjson dry "$DRY" \
+  jq --arg repo "$REPO" --argjson issue "$n" --arg goal "$goal" --arg target "$target" \
     '. + {repo: $repo, issue: $issue, goal: (if $goal == "" then null else ($goal | tonumber) end), goal_comment_on: (if $target == "" then null else ($target | tonumber) end)}' \
     "$W/$n.report" > "$W/$n.out.json"
   if [ "$DRY" = 1 ]; then say "[dry-run] would upload s3://$BUCKET/$key"; cat "$W/$n.out.json"
   elif [ -z "${AGENT_TS_ACCESS_KEY_ID:-}" ] || ! command -v s5cmd >/dev/null 2>&1 \
       || ! AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="${AGENT_TS_SECRET_ACCESS_KEY:-}" \
            s5cmd --endpoint-url "${AGENT_TS_ENDPOINT:-}" cp "$W/$n.out.json" "s3://$BUCKET/$key" > "$W/up.log" 2>&1; then
-    say "FAILED to upload the report of #$n to s3://$BUCKET/$key: $(head -c 200 "$W/up.log" 2>/dev/null)"; FAILED=1
+    say "FAILED to upload the report of #$n to s3://$BUCKET/$key: $(head -c 200 "$W/up.log" 2>/dev/null) — the label stays"; FAILED=1; continue
   fi
+  # 4. the label, last — its removal is what takes the issue off the list
+  gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || { FAILED=1; continue; }
+  FINAL[$n]=1
+  case "$v" in pass) DECIDED_PASS=$((DECIDED_PASS+1));; fail) DECIDED_FAIL=$((DECIDED_FAIL+1));; *) DECIDED_NODATA=$((DECIDED_NODATA+1));; esac
+done
+# overdue: every experiment this run did not finish (pending, a read that failed, any write that failed) past its bound
+for n in "${ORDER[@]}"; do
+  [ -z "${FINAL[$n]:-}" ] && [ -n "${BOUND[$n]:-}" ] && [ "${BOUND[$n]}" -lt "$NOW" ] || continue
+  { [ -z "$OVERDUE_BOUND" ] || [ "${BOUND[$n]}" -lt "$OVERDUE_BOUND" ]; } && OVERDUE_BOUND="${BOUND[$n]}"
 done
 
 # ── metrics ──────────────────────────────────────────────────────────────────────────────────────

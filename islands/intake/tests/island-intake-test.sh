@@ -2064,10 +2064,13 @@ case "$1 $2" in
   "issue list") [ -f "$EH/list.fail" ] && { echo "HTTP 502" >&2; exit 1; }; cat "$EH/list.json";;
   "pr view") f="$EH/pr-$3.json"; [ -f "$f" ] && cat "$f" || { echo "no such PR" >&2; exit 1; };;
   "api repos"*|"api "*) case "$2" in
-      */parent) n="${2#repos/*/issues/}"; n="${n%/parent}"; f="$EH/parent-$n.json"; [ -f "$f" ] && cat "$f" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; };;
+      */parent) [ -f "$EH/parent.fail" ] && { echo "HTTP 502" >&2; exit 1; }; n="${2#repos/*/issues/}"; n="${n%/parent}"; f="$EH/parent-$n.json"; [ -f "$f" ] && cat "$f" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; };;
+      */comments*) n="${2#repos/*/issues/}"; n="${n%%/comments*}"; f="$EH/comments-$n.json"; [ -f "$f" ] && cat "$f" || echo '[]';;
       */sub_issues*) n="${2#repos/*/issues/}"; n="${n%%/sub_issues*}"; cat "$EH/sub-$n.json";;
     esac;;
-  "issue comment"|"issue reopen"|"issue edit") [ -f "$EH/write.fail" ] && { echo "HTTP 403" >&2; exit 1; }; :;;
+  "issue comment"|"issue reopen"|"issue edit") [ -f "$EH/write.fail" ] && { echo "HTTP 403" >&2; exit 1; }
+    [ "$2" = reopen ] && [ -f "$EH/reopen.fail" ] && { echo "HTTP 403" >&2; exit 1; }
+    [ "$2" = comment ] && [ -f "$EH/comment-$3.fail" ] && { echo "HTTP 403" >&2; exit 1; }; :;;
 esac
 exit 0
 GHEOF
@@ -2088,7 +2091,7 @@ EPID=$!
 for _ in $(seq 1 100); do [ -s "$EH/prom.port" ] && break; sleep 0.1; done
 EPROM="http://127.0.0.1:$(cat "$EH/prom.port" 2>/dev/null)"
 issue_row() { # <n> <labels-csv> <body-file|-> [comments-json] [closing-pr|-]
-  local body="" prs='[]'; [ "$3" != - ] && body="$(cat "$3")"; [ "${5:--}" != - ] && prs="[{\"number\":$5}]"
+  local body="" prs='[]'; [ "$3" != - ] && body="$(cat "$3")"; [ "${5:--}" != - ] && prs="[{\"number\":$5,\"repository\":{\"name\":\"r\",\"owner\":{\"login\":\"o\"}}}]"
   jq -nc --argjson n "$1" --arg l "$2" --arg b "$body" --argjson c "${4:-[]}" --argjson p "$prs" \
     '{number:$n, title:"t", body:$b, labels:($l | split(",") | map(select(length>0)) | map({name:.})), comments:$c, closedByPullRequestsReferences:$p}'
 }
@@ -2132,8 +2135,8 @@ echo '[]' > "$EH/list.json"; erun pass $NOW_AFTER; rc=$?
   && ok "a second run writes nothing (one list call, no comment, no upload)" || bad "second run" "rc=$rc $(cat "$EH/gh.calls")"
 issue_row 41 "experiment/open" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 erun pass $NOW_AFTER; rc=$?
-{ [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && [ "$(writes)" = 1 ] && [ ! -s "$EH/s5.calls" ]; } \
-  && ok "the marker in the issue's comments is what stops a second comment (a run that died before the label only removes it)" || bad "marker" "rc=$rc $(cat "$EH/gh.calls")"
+{ [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && [ "$(writes)" = 1 ] && [ "$(wc -l < "$EH/s5.calls")" = 1 ]; } \
+  && ok "the marker in the issue's comments is what stops a second comment (a run that died before the label re-uploads the report and removes it)" || bad "marker" "rc=$rc $(cat "$EH/gh.calls")"
 
 # fail, no Goal: reopened, agent/* labels removed
 issue_row 41 "experiment/open,agent/done,agent-fix,bug" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
@@ -2162,7 +2165,38 @@ erun fail $NOW_AFTER
   && ok "…a Goal further up the parent chain counts as the ancestor" || bad "goal chain" "$(cat "$EH/gh.calls")"
 rm -f "$EH"/parent-*.json
 
-# pass-through of a Goal lookup that errors: nothing written for it, step fails
+# a state write that fails keeps the label (the next run redoes it) and counts the issue overdue past its bound
+issue_row 41 "experiment/open,agent/done" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/reopen.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/reopen.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" && [ ! -s "$EH/s5.calls" ] \
+    && [ "$(grep -n 'remove-label agent/done' "$EH/gh.calls" | cut -d: -f1)" -lt "$(grep -n 'issue reopen' "$EH/gh.calls" | cut -d: -f1)" ] \
+    && grep -qx 'island_intake_experiments_open 1' "$EH/metrics.body" && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body" \
+    && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 0' "$EH/metrics.body"; } \
+  && ok "fail whose reopen fails: the label stays, no upload, step non-zero, counted open and overdue (agent/* labels go before the reopen)" || bad "reopen fail" "rc=$rc $(cat "$EH/gh.calls" "$EH/metrics.body")"
+issue_row 41 "experiment/open,agent/done" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && grep -q '^gh issue reopen 41 ' "$EH/gh.calls" && grep -q 'remove-label agent/done' "$EH/gh.calls" \
+    && grep -q 'remove-label experiment/open' "$EH/gh.calls" && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 1' "$EH/metrics.body"; } \
+  && ok "…and the next run (marker present) finishes the fail: agent/* removed, reopened, the label removed, no second comment" || bad "fail resume" "rc=$rc $(cat "$EH/gh.calls")"
+echo '{"number":1,"labels":[{"name":"task/goal"}]}' > "$EH/parent-41.json"; echo '[{"number":8,"state":"open","title":"post-launch: v"}]' > "$EH/sub-1.json"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/comment-8.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/comment-8.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "fail under a Goal whose post-launch comment fails: the label stays, counted overdue" || bad "goal comment fail" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q '^gh issue comment 8 ' "$EH/gh.calls" && ! grep -q '^gh issue comment 41 ' "$EH/gh.calls" \
+    && grep -q '^<!-- experiment-verdict-goal issue=41 id=press-waits-down -->$' "$EH/gh.bodies" && grep -q 'remove-label experiment/open' "$EH/gh.calls"; } \
+  && ok "…the next run posts the Goal-side comment (its own marker) and removes the label" || bad "goal resume" "rc=$rc $(cat "$EH/gh.calls")"
+echo '[{"body":"<!-- experiment-verdict-goal issue=41 id=press-waits-down -->\nx"}]' > "$EH/comments-8.json"
+erun fail $NOW_AFTER; rc=$?; rm -f "$EH/comments-8.json"
+{ [ "$rc" = 0 ] && ! grep -q '^gh issue comment' "$EH/gh.calls" && grep -q 'remove-label experiment/open' "$EH/gh.calls"; } \
+  && ok "…and a Goal-side comment already there is not posted twice" || bad "goal marker" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/parent.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/parent.fail" "$EH"/parent-*.json; echo '[]' > "$EH/sub-1.json"
+{ [ "$rc" != 0 ] && [ "$(writes)" = 0 ] && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "a Goal lookup that errors: nothing written for the issue, step non-zero, counted overdue" || bad "goal lookup error" "rc=$rc $(cat "$EH/gh.calls")"
 issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 
 # no data
