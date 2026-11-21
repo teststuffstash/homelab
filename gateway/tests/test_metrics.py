@@ -519,7 +519,7 @@ CATALOG_LABEL_ROWS = [
                  id="model is a policy openrouter id ⚖"),
     pytest.param(OR_WORLD, FAILOVER, "gateway_provider_requests_total", "provider", OR_SLUGS, id="provider is a snapshot slug or unattributed ⚖"),
     pytest.param(OR_WORLD, FAILOVER, "gateway_provider_failovers_total", "from, to", OR_SLUGS, id="a failover's from and to are snapshot slugs too ⚖"),
-    pytest.param(OR_WORLD, TWIN, "gateway_rail_choice_total", "reason", "price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint",
+    pytest.param(OR_WORLD, TWIN, "gateway_rail_choice_total", "reason", "price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint, order",
                  id="reason is why the rail choice fell ⚖"),
     pytest.param(OR_WORLD, TWIN, "gateway_rail_choice_total", "model", OR_MODELS, id="the rail choice's model is the twin's openrouter spelling ⚖"),
 ]
