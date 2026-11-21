@@ -142,7 +142,7 @@ spec:
         # upload, a Goal lookup); a stale last run means the step itself does not run or does not finish. No
         # `or vector(0)`: a series that was never pushed is silent, like IslandIntakeStale's never-listed island.
         # triage: none + platform_machinery — the remedy is reading the experiments step's log.
-        # Fixture: island-intake-experiments.promtool-test.
+        # Fixture: island-intake.promtool-test §(g).
         - alert: IntakeExperimentOverdue
           expr: max(island_intake_experiments_oldest_overdue_seconds) > 2 * 86400
           for: 1h
