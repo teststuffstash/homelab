@@ -13,7 +13,7 @@
 # issue's own comments — an issue that carries it gets no second comment):
 #   pass     one comment (marker, verdict, the section's prose line, a table), label `experiment/open` removed
 #   fail     the same comment; no Goal ancestor (no parent chain reaching an issue labelled `task/goal`):
-#            the issue is reopened and every `agent/*` label removed; a Goal ancestor: the comment is also
+#            the issue is reopened and every `agent/*` label removed (one atomic PATCH with the label); a Goal ancestor: the comment is also
 #            posted on the Goal's open `post-launch:` sub-issue (else on the Goal) and the child stays closed;
 #            the label is removed either way
 #   no data  the comment (its reason line says which), label removed, no state change
@@ -22,7 +22,7 @@
 # what takes an issue off the list, so any earlier write that fails keeps it listed and the next run redoes it.
 # A run that died after the comment finds its marker next time and finishes the rest (the state writes are safe
 # to repeat; the Goal-side comment carries its own marker `<!-- experiment-verdict-goal issue=<n> id=<id> -->`)
-# — it never comments twice. A failed `fail` reopens last among its state writes: the list reads CLOSED issues.
+# — it never comments twice. A `fail` without a Goal reopens, unlabels and removes `experiment/open` in ONE PATCH.
 # An issue whose body has no loadable block, or that no merged PR closed, gets ONE comment (marker
 # `<!-- experiment-fault -->`) naming the fault and keeps its label; the run counts it as `fault`.
 #
@@ -87,8 +87,20 @@ names_of() { # <query> → the metric names, one per line
 }
 sane() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
 
+goal_of() { # <n> → prints the Goal number; exit 0 found, 1 none, 2 error
+  local cur="$1" p
+  for _ in 1 2 3 4 5; do
+    p="$(gh api "repos/$REPO/issues/$cur/parent" 2> "$W/p.err")" || {
+      grep -qiE '404|not found' "$W/p.err" && return 1
+      say "GitHub did not answer for the parent of #$cur: $(tr '\n' ' ' < "$W/p.err" | cut -c1-200)" >&2; return 2; }
+    cur="$(jq -r '.number' <<<"$p")"
+    jq -e '[.labels[]?.name] | index("task/goal")' <<<"$p" >/dev/null 2>&1 && { echo "$cur"; return 0; }
+  done
+  return 1
+}
+
 # ── pass 1: load, t0, read — writes nothing ──────────────────────────────────────────────────────
-declare -A ID VERDICT FAULT T0 BOUND NAMES QUERY FINAL
+declare -A ID VERDICT FAULT T0 BOUND NAMES QUERY FINAL GOAL
 ORDER=()
 while IFS= read -r row; do
   n="$(jq -r '.number' <<<"$row")"; ORDER+=("$n")
@@ -97,6 +109,14 @@ while IFS= read -r row; do
     FAULT[$n]="the body has no loadable experiment block ($(head -c 300 "$W/$n.load.err" | tr '\n' ' '))"; continue
   fi
   ID[$n]="$(sane "$(jq -r '.id' "$W/$n.block")")"
+  # t0 = the merge that shipped the fix. First the merged PR that closed the issue (master-based work,
+  # post-launch children, themed / Base: master Goals). Only when none exists and the issue has a Goal
+  # ancestor: its PR merged into goal/<n> (no closing reference — GitHub's shape), and the change reaches
+  # production with the Goal's ASSEMBLY merge (not merged yet = pending, nothing written). The Goal is read
+  # for every issue: a fail is routed by it.
+  goal="$(goal_of "$n")"; grc=$?
+  if [ "$grc" = 2 ]; then FAULT[$n]="__error__ the Goal lookup of #$n failed"; continue; fi
+  [ "$grc" = 0 ] && GOAL[$n]="$goal"
   merged=""
   while IFS=$'\t' read -r pn prepo; do
     [ -n "$pn" ] || continue
@@ -106,6 +126,13 @@ while IFS= read -r row; do
     # the latest merged closing PR is the one that closed the issue last
     [ -n "$m" ] && { [ -z "$merged" ] || [[ "$m" > "$merged" ]]; } && merged="$m"
   done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (if .repository.owner.login and .repository.name then "\(.repository.owner.login)/\(.repository.name)" else "" end)] | @tsv' <<<"$row")
+  if [ -z "$merged" ] && [ -n "${GOAL[$n]:-}" ]; then
+    gh pr list --repo "$REPO" --state merged --search "Assembly-for: #$goal in:body" --json number,mergedAt,headRefName --limit 20 \
+      > "$W/$n.asm" 2> "$W/$n.asm.err" \
+      || die "GitHub did not answer for Goal #$goal's assembly (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
+    merged="$(jq -r --arg g "$goal" '[.[] | select((.headRefName // "") | test("^goal/" + $g + "(-|$)")) | .mergedAt | select(. != null)] | sort | last // ""' "$W/$n.asm")"
+    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: no merged closing PR and Goal #$goal's assembly is not merged — not in production yet"; continue; fi
+  fi
   if [ -z "$merged" ]; then FAULT[$n]="no merged pull request closes this issue, so there is no t0"; continue; fi
   T0[$n]="$(date -u -d "$merged" +%s)"
   BOUND[$n]=$(( ${T0[$n]} + $(jq -r '.kpi.max_window_s' "$W/$n.block") ))
@@ -165,17 +192,6 @@ comment_text() { # <n> → $W/<n>.comment.md
     overlap_lines "$n"
   } > "$W/$n.comment.md"
 }
-goal_of() { # <n> → prints the Goal number; exit 0 found, 1 none, 2 error
-  local cur="$1" p
-  for _ in 1 2 3 4 5; do
-    p="$(gh api "repos/$REPO/issues/$cur/parent" 2> "$W/p.err")" || {
-      grep -qiE '404|not found' "$W/p.err" && return 1
-      say "GitHub did not answer for the parent of #$cur: $(tr '\n' ' ' < "$W/p.err" | cut -c1-200)" >&2; return 2; }
-    cur="$(jq -r '.number' <<<"$p")"
-    jq -e '[.labels[]?.name] | index("task/goal")' <<<"$p" >/dev/null 2>&1 && { echo "$cur"; return 0; }
-  done
-  return 1
-}
 
 for n in "${ORDER[@]}"; do
   row="$(jq -c --argjson n "$n" '.[] | select(.number == $n)' "$W/list.json")"
@@ -193,18 +209,13 @@ for n in "${ORDER[@]}"; do
   if [ "$v" = pending ]; then say "#$n: pending — nothing written"; continue; fi
   marker="<!-- experiment-verdict id=${ID[$n]} -->"
   comment_text "$n"
-  # the Goal lookup comes BEFORE any write: a lookup that errors writes nothing for this issue
-  goal=""; target=""
-  if [ "$v" = fail ]; then
-    goal="$(goal_of "$n")"; grc=$?
-    if [ "$grc" = 2 ]; then FAILED=1; continue; fi
-    if [ "$grc" = 0 ]; then
-      target="$(gh api "repos/$REPO/issues/$goal/sub_issues?per_page=100" 2> "$W/s.err" \
-        | jq -r '[.[] | select(.state == "open") | select(.title | ascii_downcase | startswith("post-launch:"))] | sort_by(.number) | .[0].number // empty')" \
-        || { say "GitHub did not answer for the sub-issues of Goal #$goal"; FAILED=1; continue; }
-      [ -n "$target" ] || target="$goal"
-    else goal=""
-    fi
+  # the Goal (pass 1) and, for a fail, its post-launch sub-issue — read BEFORE any write
+  goal="${GOAL[$n]:-}"; target=""
+  if [ "$v" = fail ] && [ -n "$goal" ]; then
+    target="$(gh api "repos/$REPO/issues/$goal/sub_issues?per_page=100" 2> "$W/s.err" \
+      | jq -r '[.[] | select(.state == "open") | select(.title | ascii_downcase | startswith("post-launch:"))] | sort_by(.number) | .[0].number // empty')" \
+      || { say "GitHub did not answer for the sub-issues of Goal #$goal"; FAILED=1; continue; }
+    [ -n "$target" ] || target="$goal"
   fi
   # 1. the comment — once (the marker); a run that died after it finishes the rest below
   if has_marker "$n" "$marker"; then
@@ -226,13 +237,14 @@ for n in "${ORDER[@]}"; do
     say "FAILED to upload the report of #$n to s3://$BUCKET/$key: $(head -c 200 "$W/up.log" 2>/dev/null) — the label stays"; FAILED=1; continue
   fi
   # 3. the state (fail only) — every step safe to repeat; any failure keeps the label so the next run redoes it
-  ok_state=1
+  ok_state=1; label_done=""
   if [ "$v" = fail ] && [ -z "$goal" ]; then
-    # agent/* labels before the reopen: the list reads CLOSED issues only, so the reopen is the last state write
-    agent="$(jq -r '[.labels[]?.name | select(startswith("agent/"))] | join(" ")' <<<"$row")"
-    args=(); for l in $agent; do args+=(--remove-label "$l"); done
-    [ "${#args[@]}" -gt 0 ] && { gh_write "remove the agent labels ($agent) from #$n" issue edit "$n" --repo "$REPO" "${args[@]}" || ok_state=0; }
-    [ "$ok_state" = 1 ] && { gh_write "reopen #$n" issue reopen "$n" --repo "$REPO" || ok_state=0; }
+    # ONE atomic write (PATCH /issues/<n>: state + the whole label set): reopened, the agent/* labels and
+    # experiment/open gone, together or not at all. Separate writes can strand it either way — reopened with
+    # the label left (an open issue the CLOSED-only list never reads again), or unlabelled and still closed.
+    jq -c '{state: "open", labels: [.labels[]?.name | select((startswith("agent/") or . == "experiment/open") | not)]}' <<<"$row" > "$W/$n.patch.json"
+    gh_write "reopen #$n and remove its agent/* labels and experiment/open ($(jq -r '.labels | join(",")' "$W/$n.patch.json") kept)" \
+      api --method PATCH "repos/$REPO/issues/$n" --input "$W/$n.patch.json" && label_done=1 || ok_state=0
   elif [ "$v" = fail ]; then
     gmarker="<!-- experiment-verdict-goal issue=$n id=${ID[$n]} -->"
     if [ "$DRY" = 0 ] && ! gh api "repos/$REPO/issues/$target/comments?per_page=100" --paginate > "$W/t.json" 2> "$W/t.err"; then
@@ -246,7 +258,7 @@ for n in "${ORDER[@]}"; do
   fi
   if [ "$ok_state" = 0 ]; then FAILED=1; say "#$n: a state write failed — the label stays, the next run redoes it"; continue; fi
   # 4. the label, last — its removal is what takes the issue off the list
-  gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || { FAILED=1; continue; }
+  [ -n "$label_done" ] || gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || { FAILED=1; continue; }
   FINAL[$n]=1
   case "$v" in pass) DECIDED_PASS=$((DECIDED_PASS+1));; fail) DECIDED_FAIL=$((DECIDED_FAIL+1));; *) DECIDED_NODATA=$((DECIDED_NODATA+1));; esac
 done

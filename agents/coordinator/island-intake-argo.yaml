@@ -190,12 +190,13 @@ spec:
       - name: intake-islands
         steps:
           # THE EXPERIMENT READ (Goal #3586, homelab#3604): before the sittings, so an experiment that
-          # failed is an undecided input of THIS run's sitting. `continueOn: failed` — a read that failed
+          # failed is an undecided input of THIS run's sitting. `continueOn: failed + error` (Argo reports an
+          # evicted / OOM-killed / node-lost pod as Error, matched separately — homelab#268) — a read that failed
           # never stops the sittings — and the `experiments-failed` group at the end fails the workflow
           # when it did (continueOn alone would end the workflow Succeeded).
           - - name: experiments
               template: experiments
-              continueOn: { failed: true }
+              continueOn: { failed: true, error: true }
           - - name: islands
               template: list-islands
           - - name: sitting
@@ -206,7 +207,7 @@ spec:
               withParam: "{{steps.islands.outputs.parameters.islands}}"
           - - name: experiments-failed
               template: experiments-failed
-              when: "{{steps.experiments.status}} == Failed"
+              when: "{{steps.experiments.status}} != Succeeded"
       # THE EXPERIMENT READ's leaf — the sitting's identity (image, the workflow's ServiceAccount, HOME,
       # NIX_CONFIG, the GH token, the writer key, the Pushgateway) and bootstrap (clone, the island's devbox,
       # exec through it), without the model's env or the subscription semaphore: nothing here calls a model.
