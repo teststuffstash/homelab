@@ -59,6 +59,7 @@ jobs:
         run: |
           git fetch --depth 1 origin image-clock
           git worktree add --detach /tmp/image-clock FETCH_HEAD
+          mkdir -m 1777 "$RUNNER_TEMP/renovate-out" # Renovate's container user is not the runner's (run 44948595864: EACCES)
           devbox run image-clock -- rules --store /tmp/image-clock \
             --base "$GITHUB_WORKSPACE/.github/renovate-global.json" --out "$RUNNER_TEMP/renovate-effective.json"
 
@@ -69,14 +70,14 @@ jobs:
           # Renovate runs in the ARC runner's docker-in-docker sidecar: a mount path names the
           # SIDECAR's filesystem, and only the _work tree (runner.temp included) is shared — the
           # action's default /tmp:/tmp mount is the sidecar's own /tmp (run 44948377325: "Error
-          # parsing config file" on a valid /tmp config). Hence runner.temp for config + report.
-          docker-volumes: ${{ runner.temp }}:${{ runner.temp }}
+          # parsing config file" on a valid /tmp config). Hence runner.temp; the report dir is world-writable.
+          docker-volumes: ${{ runner.temp }}/renovate-out:${{ runner.temp }}/renovate-out
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_AUTODISCOVER: "true"
           RENOVATE_CONFIG_FILE: ${{ runner.temp }}/renovate-effective.json # the global baseline + the image clock's rules
           RENOVATE_REPORT_TYPE: file # the next run's clock universe
-          RENOVATE_REPORT_PATH: ${{ runner.temp }}/renovate-report.json
+          RENOVATE_REPORT_PATH: ${{ runner.temp }}/renovate-out/report.json
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
 
@@ -87,7 +88,7 @@ jobs:
         env:
           TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          devbox run image-clock -- ingest --store /tmp/image-clock --report "$RUNNER_TEMP/renovate-report.json" || true
+          devbox run image-clock -- ingest --store /tmp/image-clock --report "$RUNNER_TEMP/renovate-out/report.json" || true
           cd /tmp/image-clock
           git add -A
           git -c user.name=homelab-renovate -c user.email=homelab-renovate@users.noreply.github.com \
