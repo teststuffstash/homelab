@@ -258,12 +258,50 @@ the ones [`agents/coordinator/git-token.yaml`](../../agents/coordinator/git-toke
 - **No second rules file.** A stack island is decided by [`rules/intake.md`](rules/intake.md) and
   its facts file, nothing else.
 
+## Experiments
+
+An experiment is the check a ruling carries against its own reason: a Prometheus query, a threshold
+and a window, written before the result and decided from the series afterwards. It is not a rollout
+gate; nothing waits for it and nothing is rolled back by it.
+
+- **The section and who writes it.** An issue carries one `## Experiment` section (a prose line and
+  one fenced `experiment` block) or the one line `Experiment: none — <why no series can show it>`.
+  The sitting writes it with the ruling, from numbers it read; the worker never edits it
+  ([`rules/intake.md`](rules/intake.md) §Experiment). The block's format and its loader are
+  [`scripts/experiment.py`](scripts/experiment.py) (`load`).
+- **Which issues are read.** The sitting puts the label `experiment/open` on an issue that carries a
+  block, and [`scripts/experiment-read.sh`](scripts/experiment-read.sh) reads the closed issues that
+  carry it. It runs as the scheduled workflow's first step, before the sittings, and decides
+  nothing if it cannot reach Prometheus or GitHub.
+- **The window.** It starts at t0, the merge instant of the pull request that closed the issue, and
+  ends at the bound, `max_window` after t0 (at most `7d`); a later deploy or restart neither ends nor
+  resets it ([`scripts/experiment.py`](scripts/experiment.py), header, `decide`).
+- **The four verdicts.** `pass`, `fail`, `pending` (short of samples before the bound) and `no data`
+  (short of samples at the bound, or a query that answers nothing — final, never a pass), each a
+  function of t0 and the series only ([`scripts/experiment.py`](scripts/experiment.py)).
+- **What each writes to an issue** ([`scripts/experiment-read.sh`](scripts/experiment-read.sh),
+  header): `pass` and `no data` write one verdict comment and remove `experiment/open`, and change
+  no other state; `pending` writes nothing; a decided experiment is never judged twice (the comment
+  carries a marker). Two open experiments over overlapping windows on one metric name are named in
+  each other's comment; no attribution is attempted.
+- **A failed experiment goes back to intake.** `fail` writes the comment, removes the `agent/*`
+  labels and reopens the issue, which is then an undecided input for the next sitting, with the
+  verdict as a fact ([`rules/intake.md`](rules/intake.md) §Experiment). Under a Goal the child is
+  not reopened: the comment is also posted on the Goal's open `post-launch:` sub-issue, else on the
+  Goal. Nothing is rolled back.
+- **Retention is a limit.** Prometheus holds about 17 days, so a baseline is recorded as a number
+  when the ruling is written and never re-read ([`rules/intake.md`](rules/intake.md) §Experiment,
+  "Baseline"), and a decided verdict is not derived again.
+
+The platform's read covers the platform repo's issues only; it is not run over a stack repo.
+
 ## What stays yours
 
-- **Experiment authoring.** The rules have no step that writes an experiment. An experiment your
-  own sessions author is yours; an issue they file is an input like any other unless a
-  `## Membership` line excludes it. The platform's side of outcome experiments is planned in
-  [homelab#3586](https://github.com/teststuffstash/homelab/issues/3586) and is not built.
+- **Your own experiments' reader.** The platform's read covers the platform repo only. If your
+  issues carry experiments, the reader, its release bound (ending a window when your next release
+  reaches production) and its guard stage are yours. The block's format is shared; its authority is
+  the oracle stack's, and the loader here refuses what that format does not have
+  ([`scripts/experiment.py`](scripts/experiment.py)). See §Experiments.
 - **A review sitting of your own.** The platform's review runs inside the sitting and waits for
   nothing outside it. Your own review composes through the two things a sitting respects: an
   `exclude label:` line keeps an issue out until you remove the label, and an issue carrying any
@@ -282,5 +320,5 @@ the ones [`agents/coordinator/git-token.yaml`](../../agents/coordinator/git-toke
 - The review trial: [`docs/spikes/island-intake.md`](../../docs/spikes/island-intake.md) §Run 4.
 - The stack-island decisions (identity, live claims, no dig source, who pays, the name):
   [homelab#3580](https://github.com/teststuffstash/homelab/issues/3580) §Decision.
-- Experiment authoring stays out of the rules home (the 2026-11-16 handoff result):
-  [homelab#3574](https://github.com/teststuffstash/homelab/issues/3574), design pin 10.
+- The experiment decisions (the block is the oracle stack's, the read is the platform's, no added key):
+  [homelab#3586](https://github.com/teststuffstash/homelab/issues/3586), design pins 1–11.
