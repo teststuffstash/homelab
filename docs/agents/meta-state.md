@@ -68,7 +68,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   sighting on the `image-clock` side branch, `allowedVersions` appended at run time). Touches `.github/workflows/` → `ci` red by
   design: `/seat-review 3652` → the operator's admin merge. Proven by branch dry runs (44949949099: 36 pkgs, 0 failed, 52 rules,
   no postgres 19 proposal). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
-  (postgres 19-alpine) should be autoclosed until 11-27. FU-323 = prod Postgres frozen at 18.3.
+  (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
   security PRs that skip the cooldown — openrouter-operator#111 would land virtualenv 0.9 d old); close #110 (its target
   virtualenv 21.14.9 is itself vulnerable; #113 closed 11-21); admin-merge #111 after ~11-28 once lock-intake-lint clears;

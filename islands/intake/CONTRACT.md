@@ -326,3 +326,5 @@ The platform's read covers the platform repo's issues only; it is not run over a
   [homelab#3580](https://github.com/teststuffstash/homelab/issues/3580) §Decision.
 - The experiment decisions (the block is the oracle stack's, the read is the platform's, no added key):
   [homelab#3586](https://github.com/teststuffstash/homelab/issues/3586), design pins 1–11.
+
+Tracked by: FU-320 (docs/follow-ups.md).
