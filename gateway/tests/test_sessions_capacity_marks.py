@@ -10,6 +10,7 @@ the admission (or the re-probe pass, or the scrape) is asked of that second gate
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
 import re
 
@@ -34,13 +35,22 @@ def _roll_seconds(roll: str) -> int:
 @contextlib.asynccontextmanager
 async def _rolled(app, transport, clock, roll: str, db: str | None = None):
     """The roll: the first gateway's store closes (the pod is gone), the roll's seconds pass, and a
-    second gateway starts on the same DB path (or on `db`), sharing the fakes, the policy and the clock."""
+    second gateway starts on the same DB path (or on `db`), sharing the fakes, the policy and the clock.
+    A roll naming `the policy now declares <rail> <admission key>: <value>` starts the second gateway
+    on the policy with that one admission value changed, `none` = the key removed (a policy rollout
+    that rides the roll)."""
     st = app.state
+    policy = st.policy
+    if m := re.search(r"the policy now declares (\w+) (\w+): (\w+)", roll):
+        rail, key, value = m.group(1), m.group(2), m.group(3)
+        rp = policy.rails[rail]
+        policy = dataclasses.replace(policy, rails={**policy.rails, rail: dataclasses.replace(
+            rp, admission=dataclasses.replace(rp.admission, **{key: None if value == "none" else value}))})
     with when(f"roll = {roll}: the first gateway's store closes; {_roll_seconds(roll)} s pass; a second gateway starts on {db or 'the same DB'}"):
         st.store.close()
         clock.advance(_roll_seconds(roll))
         client = httpx.AsyncClient(transport=transport)  # the rails' fakes + the fake vendor + the fake MCP
-        second = create_app(st.settings, policy=st.policy, source=st.resolver.source, store=Store(db or st.settings.db_path),
+        second = create_app(st.settings, policy=policy, source=st.resolver.source, store=Store(db or st.settings.db_path),
                             client=client, clock=clock, reviewer=st.sessions.reviewer, pods=st.sessions.pods)
         attach_json(f"the second gateway: db {second.state.store.mode}", {"db": second.state.store.mode, "clock": clock.t})
     try:
@@ -61,6 +71,14 @@ MARK_ROWS = [
     # opencode's first backoff 60 → the probe is due at T0 + 60; asked at T0 + 10 → 50
     pytest.param("policy-default · upstream-401-key-expired", "worker ride on opencode → upstream-401-key-expired", "+10 s", DASH, "worker", "opencode",
                  "defer", DASH, "credential-rejected", 50, id="a rejected credential's mark survives with its backoff"),
+    # latched until T0 + 30 under account scope; the second gateway's policy declares model scope → the
+    # latch is dropped, the 429'd cell stays cooled, the walk takes the tier's next anthropic model
+    pytest.param("policy-default · upstream-429", "reviewer ride on anthropic → 429 (retry-after: 30)", "+10 s, the policy now declares anthropic latch_scope: model",
+                 DASH, "reviewer", "anthropic", "dispatch", "anthropic", DASH, DASH,
+                 id="a latch written under account scope does not reload once the rail declares model scope"),
+    pytest.param("policy-default · upstream-429", "reviewer ride on anthropic → 429 (retry-after: 30)", "+10 s, the policy now declares anthropic latch_429_hold_s: none",
+                 DASH, "reviewer", "anthropic", "dispatch", "anthropic", DASH, DASH,
+                 id="a latch does not reload once the rail drops its latch hold"),
     pytest.param("policy-default · upstream-429-reset", "worker ride on openrouter → 429, reset T0 + 42 s, the same session → 200", "+10 s", DASH, "worker", "openrouter",
                  "dispatch", "openrouter", DASH, DASH, id="a mark cleared by a 2xx before the roll is gone after it"),
     # anthropic (no probe): hold 900 → the mark lifts half-open at T0 + 900, the hold row keeps 900; the

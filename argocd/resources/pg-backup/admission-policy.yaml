@@ -68,3 +68,54 @@ metadata:
   name: pg-backup-default
 spec:
   policyName: pg-backup-default
+---
+# archive_timeout 5min → 1h on every CNPG Cluster (incident 2026-11-20-nx-02-boot-disk; docs/postgres.md
+# §Backups). archive_timeout forces a WAL segment switch, and a segment is 16 MB however little was
+# written, so at CNPG's 5min a cluster with any steady trickle of writes piles up ~190 MB/h when the
+# backup target is down — a 2 GiB volume lasts hours. At 1h it is ~16 MB/h: days, time for
+# CNPGWALArchivingFailing to be acted on. The price: an archive-only restore (the ADR-147 "Longhorn broke
+# everything" path) may miss up to the last hour of writes instead of 5 min; replicas still cover a node.
+#
+# CNPG's own defaulting webhook writes `archive_timeout: 5min` into every Cluster's spec, so "absent"
+# never holds on a stored object: the policy rewrites exactly CNPG's default string (or fills it when
+# this policy runs before CNPG's webhook). A consumer who wants another value writes it — any value but
+# the literal "5min" (e.g. "300s") is left alone. Every namespace, wired or not: an unarchived cluster
+# only switches segments less often.
+#
+# Runs on every CREATE and UPDATE; an existing cluster picks it up at its next update (`kubectl annotate`
+# is enough). The parameter is reload-only — CNPG applies it without a restart.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: pg-archive-timeout-default
+spec:
+  failurePolicy: Ignore
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [postgresql.cnpg.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [clusters]
+  matchConditions:
+    - name: archive-timeout-unset-or-cnpg-default
+      expression: >-
+        !has(object.spec.postgresql) || !has(object.spec.postgresql.parameters)
+        || !('archive_timeout' in object.spec.postgresql.parameters)
+        || object.spec.postgresql.parameters['archive_timeout'] == '5min'
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          !has(object.spec.postgresql)
+          ? [JSONPatch{op: "add", path: "/spec/postgresql", value: {"parameters": {"archive_timeout": "1h"}}}]
+          : !has(object.spec.postgresql.parameters)
+          ? [JSONPatch{op: "add", path: "/spec/postgresql/parameters", value: {"archive_timeout": "1h"}}]
+          : [JSONPatch{op: "add", path: "/spec/postgresql/parameters/archive_timeout", value: "1h"}]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: pg-archive-timeout-default
+spec:
+  policyName: pg-archive-timeout-default
