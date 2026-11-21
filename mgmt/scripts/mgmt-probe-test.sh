@@ -14,7 +14,7 @@ export MGMT_TEXTFILE_DIR="$T/text" DRY_RUN=0 MODE=belt
 
 fails=0 n=0
 # shellcheck disable=SC2034  # read by the sourced probe (passed/failed/skipped, publish)
-reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; SEEDS=(); FIRMWARE=(); }
+reset() { RESULTS=(); PASS=0 FAIL=0 SKIPPED=0; SEEDS=(); FIRMWARE=(); DISK=(); }
 check() {  # check <name> <expected "status reason"> — against the single RESULTS row
   n=$((n+1))
   local got="${RESULTS[0]#* }"
@@ -297,6 +297,29 @@ fwrow "no answer → unread" "opnsense-pve node 0 - - - - - -"
 reset; fw_row opnsense-pve node '{"status":"error","last_check":"Tue Nov 17 20:00:00 EET 2026","connection":"error"}' "$LC_CUR" "$FWC" "$LC_CUR" >/dev/null 2>&1
 fwrow "a check that ended in error → unread" "opnsense-pve node 0 - - - - - -"
 
+# disk_row: the root filesystem reading (2026-11-21, docs/incidents/2026-11-20-nx-02-boot-disk.md).
+# DK_NX = opnsense-nx02 at 108 % (df: 8 GB, avail NEGATIVE past the UFS reserve), DK_PVE = opnsense-pve
+# at 44 %; the shape is OPNsense's scripts/system/disk_info.py (a tmpfs row beside `/`).
+DK_NX='{"devices":[{"device":"/dev/ufs/OPNsense_Nano","type":"ufs","total_bytes":7944835072,"used_bytes":7944835072,"available_bytes":-635586560,"used_pct":108,"mountpoint":"/"},{"device":"devfs","type":"tmpfs","total_bytes":1024,"used_bytes":0,"available_bytes":1024,"used_pct":0,"mountpoint":"/var/run"}]}'
+DK_PVE='{"devices":[{"device":"tmpfs","type":"tmpfs","total_bytes":1024,"available_bytes":1024,"mountpoint":"/tmp"},{"device":"/dev/ufs/OPNsense_Nano","type":"ufs","total_bytes":7944835072,"used_bytes":3495727431,"available_bytes":3813520834,"used_pct":44,"mountpoint":"/"}]}'
+dkrow() {  # dkrow <name> <expected row> — against the single DISK row
+  n=$((n+1))
+  if [ "${#DISK[@]}" -eq 1 ] && [ "${DISK[0]}" = "$2" ]; then echo "ok   $1"; else
+    echo "FAIL $1: want '$2', got '${DISK[*]:-<none>}'"; fails=$((fails+1)); fi
+}
+reset; disk_row opnsense-nx02 node "$DK_NX" >/dev/null 2>&1
+dkrow "a full root (108 %) reads with a NEGATIVE avail, the / row picked over tmpfs" "opnsense-nx02 node 1 7944835072 -635586560"
+reset; disk_row opnsense-pve node "$DK_PVE" >/dev/null 2>&1
+dkrow "the / row wherever it sits in devices[]" "opnsense-pve node 1 7944835072 3813520834"
+reset; disk_row opnsense-pve node '{"status":403,"message":"Forbidden"}' >/dev/null 2>&1
+dkrow "a 403 body (no page-system-login-logout) → unread" "opnsense-pve node 0 - -"
+reset; disk_row opnsense-pve node "" >/dev/null 2>&1
+dkrow "no answer → unread" "opnsense-pve node 0 - -"
+reset; disk_row opnsense-pve node '{"devices":[{"mountpoint":"/var/run","total_bytes":1024,"available_bytes":1024}]}' >/dev/null 2>&1
+dkrow "no / row → unread" "opnsense-pve node 0 - -"
+reset; disk_row opnsense-pve node '{"devices":[{"mountpoint":"/","total_bytes":0,"available_bytes":0}]}' >/dev/null 2>&1
+dkrow "a zero size → unread (no ratio from nothing)" "opnsense-pve node 0 - -"
+
 # fw_node: WHEN the belt runs the check. A stub router: per-host status bodies in files, every call logged.
 FWS="$T/fwstub"; mkdir -p "$FWS"; export FWS
 _fw_curl() {
@@ -307,6 +330,7 @@ _fw_curl() {
     "GET running")       cat "$FWS/$host.running" 2>/dev/null || echo '{"status":"ready"}' ;;
     "POST check")        cp "$FWS/$host.after" "$FWS/$host.status" 2>/dev/null; echo '{"status":"ok"}' ;;
     "GET upgradestatus") if [ -e "$FWS/$host.stuck" ]; then echo '{"status":"running"}'; else echo '{"status":"done","log":"***DONE***"}'; fi ;;
+    "GET system_disk")   cat "$FWS/$host.disk" 2>/dev/null || return 22 ;;
     *) return 22 ;;
   esac
 }
@@ -357,6 +381,7 @@ FW_NX_FRESH="$(printf '%s' "$FW_NX" | jq -c '.last_check = "Tue Nov 17 20:00:00 
 printf '%s' "$FW_NX"  >"$FWS/192.168.2.70.status"; printf '%s' "$FW_NX_FRESH" >"$FWS/192.168.2.70.after"
 printf '%s' "$FW_PVE" >"$FWS/192.168.2.71.status"
 printf '%s' "$FW_CUR" >"$FWS/192.168.2.67.status"
+printf '%s' "$DK_NX" >"$FWS/192.168.2.70.disk"; printf '%s' "$DK_PVE" >"$FWS/192.168.2.71.disk"   # the test VM: no disk answer
 ( export MGMT_CACHE_DIR="$FWC" OPN_FIRMWARE_API_KEY=k OPN_FIRMWARE_API_SECRET=s OPN_TESTVM_API_KEY=k OPN_TESTVM_API_SECRET=s FW_NOW="$((LC_CUR + 60))" HOME="$T/home"
   unset OPN_API_KEY OPN_API_SECRET
   check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
@@ -375,6 +400,20 @@ if [ "$got" = "$want" ]; then echo "ok   publish(): read_ok for all three, curre
 $want
 got
 $got"; fails=$((fails+1)); fi
+n=$((n+1))
+want="mgmt_router_disk_read_ok{node=\"opnsense-nx02\",role=\"node\"} 1
+mgmt_router_disk_read_ok{node=\"opnsense-pve\",role=\"node\"} 1
+mgmt_router_disk_read_ok{node=\"opnsense-test\",role=\"test\"} 0
+mgmt_router_disk_size_bytes{node=\"opnsense-nx02\",role=\"node\"} 7944835072
+mgmt_router_disk_size_bytes{node=\"opnsense-pve\",role=\"node\"} 7944835072
+mgmt_router_disk_avail_bytes{node=\"opnsense-nx02\",role=\"node\"} -635586560
+mgmt_router_disk_avail_bytes{node=\"opnsense-pve\",role=\"node\"} 3813520834"
+got="$(grep -E '^mgmt_router_disk_' "$prom" 2>/dev/null)"
+if [ "$got" = "$want" ]; then echo "ok   publish(): disk read_ok for all three, size/avail only for the read ones (same loop, same identity)"; else
+  echo "FAIL disk series: want
+$want
+got
+$got"; fails=$((fails+1)); fi
 # the prod pair is the dedicated `firmware` user's ONLY (operator ruling on #3525): with just the
 # `automation` pair present (the box before provision-secrets carries OPN_FIRMWARE_API_*) the check
 # skips no-input, reads nothing, and publishes no firmware series — MgmtRouterFirmwareUnread's
@@ -384,7 +423,7 @@ reset; rm -f "$FWC"/*; : >"$FWS/calls"
   unset OPN_FIRMWARE_API_KEY OPN_FIRMWARE_API_SECRET OPN_TESTVM_API_KEY OPN_TESTVM_API_SECRET
   check_firmware >/dev/null 2>&1; publish >/dev/null 2>&1; printf '%s\n' "${RESULTS[@]}" >"$T/fw.res" )
 n=$((n+1)); if [ "$(cat "$T/fw.res")" = "firmware skip no-input" ] && [ ! -s "$FWS/calls" ] \
-   && ! grep -q '^mgmt_router_firmware_' "$prom"; then echo "ok   automation pair only → skip no-input, no router call, no firmware series"; else
+   && ! grep -q '^mgmt_router_firmware_\|^mgmt_router_disk_' "$prom"; then echo "ok   automation pair only → skip no-input, no router call, no firmware series"; else
   echo "FAIL automation-only: $(cat "$T/fw.res") calls=$(cat "$FWS/calls") series=$(grep -c '^mgmt_router_firmware_' "$prom")"; fails=$((fails+1)); fi
 unset -f _fw_curl
 

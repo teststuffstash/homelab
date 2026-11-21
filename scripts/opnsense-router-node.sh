@@ -341,6 +341,11 @@ check() {
   fi
   v="$(dig +short +time=2 +tries=2 @192.168.2.1 opnsense.teststuff.net A | tail -1 || true)"
   [ -n "$v" ] && ok "Unbound @.1 answers (opnsense.teststuff.net → $v)" || no "Unbound @.1 did not answer"
+  # …and the node's OWN resolver, whatever its CARP role: `.1` answering is the OTHER node while this
+  # one is BACKUP, and a BACKUP whose Unbound is down takes `.1` with no DNS (2026-11-20, a full disk:
+  # docs/incidents/2026-11-20-nx-02-boot-disk.md).
+  v="$(dig +short +time=2 +tries=2 "@$HOST" opnsense.teststuff.net A | tail -1 || true)"
+  [ -n "$v" ] && ok "Unbound @$HOST (own) answers (opnsense.teststuff.net → $v)" || no "Unbound @$HOST (the node's own resolver) did not answer"
   v="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://grafana.teststuff.net/api/health || true)"
   [ "$v" = 200 ] && ok "HAProxy path (grafana /api/health 200)" || no "grafana via HAProxy: HTTP ${v:-none}"
   return $bad
