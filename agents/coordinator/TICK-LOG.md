@@ -15691,3 +15691,31 @@ updates or reverts as much as possible — mechanical revert or a responder."
   `latch_scope: model`); seat review round 1 REQUEST_CHANGES (3 prose spots), round 2 APPROVE.
 - FU-322 minted (Prometheus ~18 d < the operator's 30 d, deferred). Corrections from the operator: both WAN NICs are
   1 Gbit (378 Mbit/s is the ISP uplink); the tray-to-backplane connector belongs in the disk-or-bus reasoning.
+
+## 2026-11-21 (afternoon/evening) — seat: Goal #3586 built, assembled, live; scan + Crossplane belts
+
+- **Child C (#3604):** the worker built it, but its `pr-open` gate failed on chart-repo egress. The seat opened #3624 from
+  the jail. It took a seat review (sonnet) plus three bot rounds: label last, resuming a `fail`, an overdue gauge over every
+  unfinished experiment, a real-shape closing-PR repo, and the upload before any state write. Merged 14:32Z. E (#3632) was
+  merged by the worker lane 15:00Z.
+- **Goal checkpoint held by a Fable pin:** `goal_lane_clause` deferred on the old proxy's rail pick (a Fable 429 reads as
+  "Anthropic latched"). The operator chose the scan fix: #3636, on a gateway stack (platform) goal-lane units dispatch with
+  the stack's own model and the gateway answers capacity per model. Merged 16:01Z; the checkpoint opened assembly #3637
+  at 16:10Z.
+- **Assembly #3637:** a conflict in docs/intake/router-pair.md (merged master into the goal branch), then `Render-change:`
+  for xr-render. Bot round 1 found 4 defects, fixed in #3642: a newer fail verdict unrules the issue in the selector,
+  `continueOn` failed+error, one atomic PATCH for reopen+labels (not the reviewer's ordering, which strands a closed
+  unlabelled issue), and a Goal-child t0. Rounds 2 and 3 corrected that t0: the closing PR first, then the carrying PR's
+  branch walked to the default branch (themed Goals); an unshipped child goes overdue after 14 d (#3645). Round 3 left only
+  the governance block on a worker-authored `agents/coordinator/**` change; the operator said "admin merge it" → 18:30Z
+  `a330c03f`. ArgoCD synced it, and the CronWorkflow has the experiments step.
+- **Incident, minutes long:** the assembly's `experiment/open` description was 174 chars, and GitHub refuses over 100
+  (422). Every repo's IssueLabels went Synced=False (5 seen) while Ready=True, and no belt saw it. Quickfix `50634967`
+  (98 chars) went direct; all IssueLabels synced, the label exists, #3563 labelled, dry-run read = pending. The operator
+  chose detection over copying vendor limits: #3650 (provider MR state metrics PodMonitor +
+  CrossplaneManagedResourceNotSynced + absent guard; live positive control `pr-oracle-fleet-minutark`).
+- **Second-jail changelogs folded in:** #3625 (WAL archive alert, archive_timeout 1h) and #3630 (CNPG instance alerts in
+  every namespace) are recorded in the nx-02 incident draft. The reviewer-session header sonnet note is fixed (`8c841191`).
+  The Fable weekly drain is intake's `prefer: strongest` (FU-320, meta-state). The Go catalog warning is #3533.
+- Oracle asked about `.agents/intake.md` failing the claim's facts path grammar (no dot-led segment): advised to move it to
+  `docs/intake.md`. The grammar stays shared, with no platform change for one caller.
