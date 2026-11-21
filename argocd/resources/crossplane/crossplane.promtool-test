@@ -81,6 +81,14 @@ tests:
         values: "1x120"
       - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="crossplane-x"}'
         values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-upjet-github-x", phase="Running"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-terraform-x", phase="Running"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-grafana-x", phase="Running"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="crossplane-x", phase="Running"}'
+        values: "1x120"
       - series: 'up{job="monitoring/crossplane-providers", pod="provider-upjet-github-x"}'
         values: "1x9 0x110"
       - series: 'up{job="monitoring/crossplane-providers", pod="provider-terraform-x"}'
@@ -106,9 +114,11 @@ tests:
       - { eval_time: 45m, alertname: CrossplaneProviderMetricsAbsent, exp_alerts: [] }
   # (f) a provider pod the PodMonitor never selected (no up series at all) fires the same way.
   - interval: 1m
-    name: "(f) a provider pod with no target at all fires CrossplaneProviderNotScraped"
+    name: "(f) a Pending provider pod with no target at all fires CrossplaneProviderNotScraped"
     input_series:
       - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-new-x"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-new-x", phase="Pending"}'
         values: "1x120"
       - series: 'up{job="monitoring/crossplane-providers", pod="provider-terraform-x"}'
         values: "1x120"
@@ -120,3 +130,24 @@ tests:
             exp_annotations:
               summary: "Crossplane provider pod provider-new-x has not been scraped for 30m — its managed resources are unwatched"
               description: "Prometheus has no successful scrape of provider-new-x (ns crossplane-system), so CrossplaneManagedResourceNotSynced cannot see that provider's managed resources. Check the pod runs (`kubectl -n crossplane-system get pod provider-new-x`), carries the pkg.crossplane.io/provider label and a `metrics` port the crossplane-providers PodMonitor (ns monitoring) selects, and the target's state in Prometheus."
+  # (g) an evicted provider pod object (phase Failed, never scraped again) beside its Running, scraped
+  # replacement stays quiet — the pod lingers until PodGC, the provider is watched.
+  - interval: 1m
+    name: "(g) a Failed provider pod object beside a scraped replacement stays quiet"
+    input_series:
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-upjet-github-old"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-upjet-github-old", phase="Failed"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-upjet-github-old", phase="Running"}'
+        values: "0x120"
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-upjet-github-new"}'
+        values: "1x120"
+      - series: 'kube_pod_status_phase{namespace="crossplane-system", pod="provider-upjet-github-new", phase="Running"}'
+        values: "1x120"
+      - series: 'up{job="monitoring/crossplane-providers", pod="provider-upjet-github-new"}'
+        values: "1x120"
+      - series: 'crossplane_managed_resource_exists{gvk="repo.github.upbound.io/v1alpha1, Kind=IssueLabels", pod="provider-upjet-github-new"}'
+        values: "12x120"
+    alert_rule_test:
+      - { eval_time: 90m, alertname: CrossplaneProviderNotScraped, exp_alerts: [] }

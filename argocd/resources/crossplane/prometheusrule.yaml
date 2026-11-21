@@ -35,10 +35,12 @@ spec:
         # name Crossplane gives a provider's deployment from its package name) with no successful scrape —
         # crashlooping, a NetworkPolicy, a renamed port, a target the PodMonitor no longer selects. A
         # provider whose name does not start with `provider-` is still scraped and alerted on, just not
-        # guarded here. The absent rule is the whole-belt case (no provider reports at all).
+        # guarded here. Only Running/Pending pods count: an evicted (Failed) pod object lingers until PodGC and its
+        # replacement is the one scraped. The absent rule is the whole-belt case (no provider reports at all).
         - alert: CrossplaneProviderNotScraped
           expr: |
-            kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod=~"provider-.+"}
+            (kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod=~"provider-.+"}
+              and on (pod) (max by (pod) (kube_pod_status_phase{namespace="crossplane-system", phase=~"Running|Pending"}) == 1))
               unless on (pod) (up{job="monitoring/crossplane-providers"} == 1)
           for: 30m
           # triage dig: the pod's state, its labels and the scrape target are readable in-cluster

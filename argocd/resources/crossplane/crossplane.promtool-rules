@@ -20,7 +20,8 @@ groups:
           description: '{{ $value }} managed resource(s) of {{ $labels.gvk }} report Synced=False: the provider''s reconcile is erroring, so a change to what renders them (a composition, a claim, a manifest) is not live, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False); the Synced condition message names the reason (an upstream refusal, a reference or credential that does not resolve, a plan error): `kubectl get <kind> <name> -o jsonpath=''{.status.conditions}''`.'
       - alert: CrossplaneProviderNotScraped
         expr: |
-          kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod=~"provider-.+"}
+          (kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod=~"provider-.+"}
+            and on (pod) (max by (pod) (kube_pod_status_phase{namespace="crossplane-system", phase=~"Running|Pending"}) == 1))
             unless on (pod) (up{job="monitoring/crossplane-providers"} == 1)
         for: 30m
         labels:
