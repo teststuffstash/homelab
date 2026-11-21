@@ -1750,8 +1750,8 @@ pgw_island() { # <curl.calls> → the island each metrics push names, one per li
 printf 'INTAKE-RULED: teststuffstash/alpha-app#3 standing -\nINTAKE-RULED: teststuffstash/alpha-app#4 queue -\nINTAKE-HOLD: teststuffstash/alpha-app#4 add=agent-fix,task/fix,agent/queued\nINTAKE-RULED: teststuffstash/homelab#4 queue -\n' > "$TMP/sclaude.out"
 stack_run alpha/alpha-app apply; rc=$?
 [ "$rc" = 0 ] && ok "a stack island's sitting (alpha/alpha-app) exits 0" || bad "stack sitting" "rc=$rc $(tail -4 "$TMP/run.log")"
-{ [ "$(grep -c . "$TMP/skubectl.calls")" = 1 ] && grep -q '^kubectl get agentstacks.platform.teststuff.net .*-o json$' "$TMP/skubectl.calls"; } 2>/dev/null \
-  && ok "…the leaf reads the live claims once (kubectl get agentstacks.platform.teststuff.net -o json)" || bad "leaf claims read" "$(cat "$TMP/skubectl.calls" 2>&1)"
+{ [ "$(grep -c . "$TMP/skubectl.calls")" = 1 ] && grep -qx 'kubectl get agentstacks.platform.teststuff.net -o json' "$TMP/skubectl.calls"; } 2>/dev/null \
+  && ok "…the leaf reads the live claims once, with no client flag (any override makes in-pod kubectl skip the ServiceAccount config)" || bad "leaf claims read" "$(cat "$TMP/skubectl.calls" 2>&1)"
 { grep -qE "^git clone -c http\.extraHeader=Authorization: Basic [A-Za-z0-9+/=]+ --depth 1 https://github\.com/teststuffstash/alpha-app\.git $TMP/work/island-repo \(cwd $TMP/work/homelab\)\$" "$TMP/sgit.calls" \
     && [ "$(grep -c ' clone ' "$TMP/sgit.calls")" = 2 ] && [ -s "$TMP/work/island-repo/docs/intake.md" ] && [ -s "$TMP/work/homelab/islands/intake/rules/intake.md" ] \
     && grep -q "^git -C $TMP/work/island-repo remote set-url --push origin " "$TMP/sgit.calls"; } \
