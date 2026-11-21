@@ -507,6 +507,19 @@ fwd dependency-upgrades
 [ "$(jq -c '[.inputs[] | [.number, .kind, .forwards]]' "$TMP/fwd-sel.json")" = '[[204,"member",1]]' ] \
   && ok "…and it is the member of the island its title names now (#204 → dependency-upgrades)" || bad "forward target" "$(jq -c '.inputs' "$TMP/fwd-sel.json")"
 
+# a failed experiment's reopened issue (Goal #3586 pin 6): its newest `<!-- experiment-verdict id=… -->` comment newer
+# than its latest `intake:` ruling makes it unruled again — whatever the older ruling named; a later ruling stands.
+XISS="$TMP/xv.json"
+VERDICT=$'<!-- experiment-verdict id=exp-1 -->\n**Experiment verdict: fail**'
+{ fiss 301 "gateway: reopened after a failed experiment" "[$(cm 'intake: queue — the means' 2026-10-10T00:00:00Z),$(cm "$VERDICT" 2026-10-20T00:00:00Z)]"
+  fiss 302 "gateway: ruled again after the verdict" "[$(cm 'intake: queue — the means' 2026-10-10T00:00:00Z),$(cm "$VERDICT" 2026-10-20T00:00:00Z),$(cm 'intake: seat — decided again' 2026-10-21T00:00:00Z)]"
+  fiss 303 "gateway: ruled, no verdict" "[$(cm 'intake: queue — the means' 2026-10-10T00:00:00Z)]"
+} | jq -s . > "$XISS"
+FISS="$XISS" fwd gateway
+[ "$(jq -c '[.inputs[] | select(.kind == "member") | .number] | sort' "$TMP/fwd-sel.json")" = '[301]' ] \
+  && ok "an experiment verdict newer than the latest intake ruling makes the issue a member again (#301); a later ruling stands (#302, a seat wait); no verdict keeps today's behaviour (#303)" \
+  || bad "experiment-verdict unruled" "$(jq -c '.inputs' "$TMP/fwd-sel.json") $(cat "$TMP/fwd.err")"
+
 # ── the CronWorkflow, structurally (the dig's FU-198 pins) ──────────────────────────────────────
 section "island-intake-argo.yaml — shape"
 CW='select(.kind == "CronWorkflow")'

@@ -1144,7 +1144,9 @@ JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\
         elif ($l | index("agent/blocked")) then "blocked"
         elif ($l | any(startswith("agent/"))) then "loop" else "none" end) | @sh); "
   + "F_bot[\($i)]=\(if (try ((.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))) catch false) then 1 else "" end | @sh); "
-  + "F_ruling[\($i)]=\(lazy([.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // "") | @sh); "
+  + "F_ruling[\($i)]=\(lazy(([.comments[]? | select(.body | split("\n")[0] | startswith("intake:"))] | last) as $r
+      | ([.comments[]? | select((.body // "") | test("(^|\n)<!-- experiment-verdict id=")) | .createdAt | select(. != null)] | max) as $v
+      | if $r == null or ($v != null and $v > ($r.createdAt // "")) then "" else ($r.body | split("\n")[0]) end) | @sh); "
   + "F_since[\($i)]=\(lazy(([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
       | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt) | @sh); "
   + "F_refs[\($i)]=\((try ((.number) as $self | [.comments[]? | select(((.body // "") | split("\n")[0] | startswith("intake:")) or ((.body // "") | test("(^|\n)blocked-on:")))]
