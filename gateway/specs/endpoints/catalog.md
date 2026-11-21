@@ -1113,6 +1113,8 @@ parts, each a reviewable file in git:
   [§Cost per clean ride](#cost-per-clean-ride)); the `cost` block is required, `ride_tokens_out_m` a
   positive number, `min_rides` a positive integer. Unknown keys refuse the load like every other
   policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
+  The block itself is optional ⚖: a policy without `tiers` loads with no rules (`Policy.tiers`
+  None), and `tiers check` refuses to run, naming `tiers`.
 - **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
   `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
   derive | check | apply`). The deployed lists EQUAL the derivation, order included — a hand edit

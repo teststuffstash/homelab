@@ -44,6 +44,7 @@ from .store import Store, iso
 log = logging.getLogger("gateway.catalog")
 
 SOURCES = ("config", "docs")
+WIRE_SOURCES = {"catalog": "go-models-dev", "config": "go-console-config", "docs": "go-docs"}  # GW-WIRE-RECORD: a read's source name
 READS = {"config": ("catalog", "config"), "docs": ("docs",)}  # a source's reads, in order; each read has a URL
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 # ⚖ #2933 (operator ruling 2026-10-26): a LISTED model whose dialect the parser does not know is
@@ -529,7 +530,8 @@ class GoCatalog:
     """The two snapshots, their refresh, and what /metrics and GET /catalog/opencode read."""
 
     def __init__(self, policy: Policy, store: Store, client: httpx.AsyncClient, urls: dict[str, str],
-                 api_key: str | None, clock, refresh_s: float):
+                 api_key: str | None, clock, refresh_s: float, wire=None):
+        self.wire = wire  # GW-WIRE-RECORD: the recorder each read's answer reaches BEFORE the parser
         self.policy = policy
         self.store = store
         self.client = client
@@ -567,6 +569,12 @@ class GoCatalog:
             h |= {"authorization": f"Bearer {self.api_key}", "x-opencode-session": str(uuid.uuid4())}
         return h
 
+    def _wire(self, read: str, status: int | None, r, headers: dict[str, str]) -> None:
+        if self.wire is not None:
+            self.wire.record(WIRE_SOURCES[read], self.urls[read], status, r.content if r is not None else None, headers,
+                             r.headers.get("content-type", "") if r is not None else "",
+                             secrets=(self.api_key or "",))
+
     async def refresh_source(self, source: str) -> str:
         now = self.clock()
         self.last_attempt[source] = now
@@ -584,11 +592,14 @@ class GoCatalog:
         parts: dict[str, dict] = {}
         dropped: list[dict] = []
         for read in READS[source]:
+            headers = self._headers(read)
             try:
-                r = await self.client.get(self.urls[read], headers=self._headers(read), timeout=FETCH_TIMEOUT_S)
+                r = await self.client.get(self.urls[read], headers=headers, timeout=FETCH_TIMEOUT_S)
             except httpx.HTTPError as e:
+                self._wire(read, None, None, headers)
                 log.warning("catalog: %s fetch failed (%s read: %s) — keeping the last good snapshot", source, read, type(e).__name__)
                 return "fetch-failed"
+            self._wire(read, r.status_code, r, headers)
             if r.status_code != 200:
                 log.warning("catalog: %s fetch answered %d (%s read) — keeping the last good snapshot", source, r.status_code, read)
                 return "fetch-failed"
