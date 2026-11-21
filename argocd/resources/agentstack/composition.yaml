@@ -107,7 +107,7 @@ spec:
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
                   (dict "name" "task/goal" "color" "5319e7" "description" "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)")
-                  (dict "name" "experiment/open" "color" "c2e0c6" "description" "Closed fix with an open ## Experiment: the intake experiment read (islands/intake/scripts/experiment-read.sh) decides it from the series and removes this label — Goal #3586")
+                  (dict "name" "experiment/open" "color" "c2e0c6" "description" "Closed fix with an undecided ## Experiment; the intake experiment read decides it and removes this")
                   (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. MIDPOINT: goal stays OPEN, shipping to production (ADR-102)")
                   (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
                   (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes it — closed successfully-refuted, descendants close with it (ADR-102)")
