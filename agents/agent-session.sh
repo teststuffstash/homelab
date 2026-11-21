@@ -2928,7 +2928,7 @@ fi
 # the worker was the last gate that consulted the Anthropic latch alone); both latched → defer.
 # All three probes are fail-open burn-savers: the proxy 429s a genuinely latched window.
 # FU-270: not for a /sessions ride — the gateway's admission already walked count + window + latch
-# for the rail it dispatched (GW-SESSIONS-CAPACITY); the old proxy's view is not its rail's.
+# for the rail it dispatched (GW-SESSIONS-ADMIT §Capacity); the old proxy's view is not its rail's.
 if [ "$HARNESS" = "claude" ] && [ -z "${GW_SESSIONS:-}" ]; then
   case "$MODEL" in
     opencode-go/*)
@@ -3751,7 +3751,7 @@ if [ -n "$RUN_CMD" ]; then
 
     # >>>REPLAY:gateway-outcome>>>
     # FU-270 — the failure-ownership contract (gateway/specs/endpoints/sessions.md GW-SESSIONS-OUTCOME
-    # + GW-SESSIONS-RETRY). The gateway owns what it sees first-hand (429, 401,
+    # + GW-SESSIONS-ADMIT §The retry contract). The gateway owns what it sees first-hand (429, 401,
     # cut streams — its own transport strikes); THIS launcher classifies its own ride and reports it
     # BEFORE the DELETE, in the gateway's one vocabulary:
     #   • a TASKED ride (issue-*/pr-*) that struck → the strike's class when it is a vocabulary
