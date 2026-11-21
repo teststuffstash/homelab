@@ -63,8 +63,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
   oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
   `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
-- **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650).** If merged: `CrossplaneManagedResourceNotSynced`
-  must fire for `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
+- **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650 MERGED 19:54Z `31491512`).** Scrape live (3/3 providers
+  `up=1`); `CrossplaneManagedResourceNotSynced` was PENDING at 19:56Z — confirm it FIRED `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
   Workspace `pr-oracle-fleet-minutark` (Synced=False, "failed to make http request"; the oracle stack's). Not firing = the
   PodMonitor or the expr is wrong. Coordinator scan fix #3636 LIVE (a gateway stack's goal lane no longer defers on the old
   proxy's latch; proven 16:10Z by #3586's checkpoint opening #3637).
