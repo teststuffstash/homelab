@@ -15669,3 +15669,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   verified by reading the zeros back. The operator reseated the original SA400 and it came back as `sdc` with its partitions intact.
 - Dropped the temporary backup-Garage build: `pct create` needs the template on the dead root, and the reseated disk makes it moot.
   The reboot is deferred to the morning, attended. The operator wants the lessons discussed first. Incident draft: docs/incidents/2026-11-20-nx-02-boot-disk.md.
+
+## 2026-11-21 — seat: nx-02 boot-disk incident, diagnosis → reboot → router disk fix → take-back (attended)
+
+- **Disk or bus:** SMART clean (static smartctl from `/dev/shm` on the zombie), extended self-test passed, interface CRC
+  1 lifetime. Prometheus: a 30 s stall at 06:47:19–06:48:19Z, gone by 06:49:19Z, no earlier stall in 16.5 d, nx-01 quiet.
+  HBA PHY 0 link errors 29/24/1. Leans toward a drive-controller hang. The previous boot's journal ends 06:47:12Z, so no
+  kernel line survived. Operator: reseat was same-bay, so the bay swap is the remaining A/B.
+- **Found:** `oracle-pg` also not archiving (2 GiB, ~2 weeks headroom); the box's apply/lease/belt loops hung on
+  nx-02's dead Proxmox API.
+- **Reboot, window `seat-1795249029-524`:** `host-maint down` failed at `qm shutdown` (task log on the read-only root).
+  The seat finished by hand: QMP powerdown, `node-maintenance down` wk-04 then cp-02, CARP enter → pve, sysrq reboot
+  08:49:50Z. Back in 137 s; `host-maint up` green; archiving True ×4.
+- **WAN outage 08:54–09:02Z on take-back.** Subagent dig: the WAN was fine (nx-02 `eno2` rx ~875 pkt/s, pve 0); the
+  nx-02 router's disk was 108 % full (filter logs ~110 MB/day × 31 d on 8 GB), so Unbound could not start. Full since
+  ≥10-31, masked by the long-running Unbound. Operator ruling: grow the disks for 30 days of logs → #3621 (32 GB + disk
+  belt + own-resolver `check`), seat-reviewed APPROVE, admin-merged, applied, `growfs` online, users play
+  (`firmware` + Dashboard ACL, operator-approved). Take-back 12:26Z: ~7 s gap.
+- **Gateway:** a `claude/fable` 429 at 05:08Z (Fable's own weekly limit) latched the whole anthropic rail until
+  21:59:59Z (account scope), blocking every reviewer. Operator: defer at 95 %, Fable-only → #3622 (5h 0.95,
+  `latch_scope: model`); seat review round 1 REQUEST_CHANGES (3 prose spots), round 2 APPROVE.
+- FU-322 minted (Prometheus ~18 d < the operator's 30 d, deferred). Corrections from the operator: both WAN NICs are
+  1 Gbit (378 Mbit/s is the ISP uplink); the tray-to-backplane connector belongs in the disk-or-bus reasoning.

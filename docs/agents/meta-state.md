@@ -18,13 +18,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP FIRST (2026-11-21 — nx-02 rebooted; ROUTER PARKED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md) §Recovery; FU-299, FU-297).**
-  nx-02 is whole: guests up, archiving True, backup target up. **opnsense-nx02 sits in CARP MAINTENANCE (demotion 240,
-  dead-man DISARMED) and pve holds `.1` + the WAN ON PURPOSE.** nx-02's take-back at 08:54Z left the LAN with no internet for ~8 min.
-  CAUSE: the nx-02 router's disk is full (108 %, filter logs 3.3 GB), so Unbound cannot start and `.1` gives no DNS (draft
-  §Recovery). Do NOT `carp-maintenance nx02 leave` (nor `host-maint up`) until `dig @192.168.2.70` answers. pve will fill the same
-  way as MASTER (44 % now). Lessons still to route
-  (draft §Lessons); bay-swap test if the disk drops again; hp-01 Longhorn disk at 79 %.
+- **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
+  The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
+  - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
+    backup target on two hosts, paging.
+  - Bay-swap test if the SA400 drops again.
+  - hp-01 Longhorn default disk at 79 % (`LonghornDiskBelowSchedulingFloor`, responder's).
+  - PR #3622 (gateway: anthropic 95 % + `latch_scope: model`) seat-APPROVED; operator admin-merge once `ci` is green.
+    Today's stored Fable latch holds the anthropic rail until 21:59:59Z regardless.
+  - Open question: why reviewer sessions only ever land on anthropic (policy lists opencode + codex).
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
   FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
   unattended merge (#3565) all worked. STILL OWED: read #3533's release on the 11-21/22 05:00Z sitting (it and #3538
