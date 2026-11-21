@@ -189,6 +189,14 @@ spec:
       # fails once all are done if any failed. Sequence = workflowSpec.parallelism above.
       - name: intake-islands
         steps:
+          # THE EXPERIMENT READ (Goal #3586, homelab#3604): before the sittings, so an experiment that
+          # failed is an undecided input of THIS run's sitting. `continueOn: failed + error` (Argo reports an
+          # evicted / OOM-killed / node-lost pod as Error, matched separately — homelab#268) — a read that failed
+          # never stops the sittings — and the `experiments-failed` group at the end fails the workflow
+          # when it did (continueOn alone would end the workflow Succeeded).
+          - - name: experiments
+              template: experiments
+              continueOn: { failed: true, error: true }
           - - name: islands
               template: list-islands
           - - name: sitting
@@ -197,6 +205,75 @@ spec:
                 parameters:
                   - { name: island, value: "{{item}}" }
               withParam: "{{steps.islands.outputs.parameters.islands}}"
+          - - name: experiments-failed
+              template: experiments-failed
+              when: "{{steps.experiments.status}} != Succeeded"
+      # THE EXPERIMENT READ's leaf — the sitting's identity (image, the workflow's ServiceAccount, HOME,
+      # NIX_CONFIG, the GH token, the writer key, the Pushgateway) and bootstrap (clone, the island's devbox,
+      # exec through it), without the model's env or the subscription semaphore: nothing here calls a model.
+      # Prometheus is read through the in-cluster service. One run reads every closed issue labelled
+      # `experiment/open` of the platform repo and writes its verdicts (islands/intake/scripts/experiment-read.sh).
+      - name: experiments
+        metadata:
+          labels: { app: island-intake-workflow }
+        activeDeadlineSeconds: 3600
+        retryStrategy:
+          limit: "2"
+          retryPolicy: OnFailure
+          backoff: { duration: "5m", factor: "2" }
+        container:
+          image: registry.teststuff.net/agent-base
+          env:
+            - { name: HOME, value: "/home/devbox" }
+            - name: NIX_CONFIG
+              value: "experimental-features = nix-command flakes\nflake-registry =\nsubstituters = http://nixcache.nix-cache.svc.cluster.local?priority=10\nextra-trusted-substituters = http://nixcache.nix-cache.svc.cluster.local"
+            - { name: DEVBOX_NO_UPDATE_CHECK, value: "1" }
+            - { name: DEVBOX_DISABLE_TELEMETRY, value: "1" }
+            - { name: DO_NOT_TRACK, value: "1" }
+            - { name: VERSION_CACHE_TTL, value: "31536000" }
+            - { name: ORG, value: "teststuffstash" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: AWS_REGION, value: "garage" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+            - { name: PROMETHEUS, value: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the experiment read)"; exit 1; }
+              cd /work/homelab || exit 1
+              timeout 540 devbox install --config islands/intake || { echo "island-intake: the island's devbox did not install (islands/intake/devbox.json)"; exit 1; }
+              cat > /tmp/experiment-read-launch.sh <<'LAUNCH'
+              cd /work/homelab || exit 1
+              exec bash islands/intake/scripts/experiment-read.sh
+              LAUNCH
+              exec devbox run --config islands/intake -- bash /tmp/experiment-read-launch.sh
+          resources:
+            requests: { cpu: "100m", memory: "512Mi" }
+            limits: { memory: "3Gi" }
+      # The workflow's own failure for a failed `experiments` step (see intake-islands).
+      - name: experiments-failed
+        container:
+          image: registry.teststuff.net/agent-base
+          command: [bash, -lc]
+          args:
+            - |
+              echo "island-intake: the experiment read failed (its step's log) — the sittings ran; failing the workflow"
+              exit 1
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits: { memory: "128Mi" }
       # THE LIST — a JSON array of island names for the walk's withParam. `all` asks the selector in a
       # fresh clone (the table and the facts files are the checkout's; no gh, no bucket) and hands it
       # the live claims for the stack islands (ONE kube read, claims-read.sh — a failed read walks the
