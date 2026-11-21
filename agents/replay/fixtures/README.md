@@ -181,3 +181,15 @@ What pins it is live. After the merge syncs: `kubectl -n agent-coordinator get e
 `system:serviceaccount:agent-coordinator:sensor-review` in `oracle-fleet` and denies one with any
 other spec key; the first `KargoProdVerificationFailed` starts a `prod-diagnose-*` Workflow there.
 
+## The responder's start exception — brief clause (ADR-165, fix/responder-starts-step-back)
+
+No fixture applies. The change adds one clause to the triage brief's HARD RULES in
+`responder-argo.yaml` (a ratchet clause file): the "no kubectl mutations" breaker gains one exception,
+starting a stack's fixed WorkflowTemplate that the alert names. That is PROMPT PROSE read by the
+model, the same shape as the reviewer-prose entry above; no shell line, dedup key, label, comment or
+gateway call changes, so every responder fixture asserts what it asserted before. A fixture could only
+assert that the brief contains the words it contains. The boundary is not the prose but the
+`workflow-template-start-guard` admission policy, pinned live: a server dry-run create as
+`system:serviceaccount:agent-coordinator:responder` in `oracle-fleet` admits the bare
+`prod-step-back` reference and denies `prod-diagnose`, an argument, an extra spec key or inline steps.
+

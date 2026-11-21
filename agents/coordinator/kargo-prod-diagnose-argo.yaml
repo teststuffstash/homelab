@@ -87,6 +87,33 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: platform-start
 subjects:
   - { kind: ServiceAccount, name: sensor-review, namespace: agent-coordinator }
 ---
+# The RESPONDER's start right (ADR-165; oracle-iac#1193): the triage session may start
+# oracle-fleet/prod-step-back — the oracle stack's fixed, refusing step-back — and nothing else.
+# Its own SA (rbac.yaml §responder) gets create on Workflows here, pinned by the guard below to the
+# bare reference; promote on prod stays with the template's own SA (platform-prod-step-back).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-responder-start-prod-step-back
+  namespace: oracle-fleet
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [create, get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtemplates]
+    resourceNames: [prod-step-back]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-responder-start-prod-step-back
+  namespace: oracle-fleet
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: platform-responder-start-prod-step-back }
+subjects:
+  - { kind: ServiceAccount, name: responder, namespace: agent-coordinator }
+---
 # workflow-template-start-guard — a guarded starter may create, in a guarded namespace, ONLY a
 # Workflow that references one allowed WorkflowTemplate and carries nothing else: no steps, no
 # serviceAccountName, no podSpecPatch, no arguments, no cluster-scoped template. Argo merges a
@@ -95,7 +122,8 @@ subjects:
 # Kyverno controller). Matches only the listed (namespace, user) pairs — the Argo controller's own
 # Workflow writes and every other creator are never evaluated. failurePolicy Fail: a broken
 # policy blocks only a guarded start. Deny from the start: nothing else creates Workflows as a
-# guarded starter there, so there is no traffic to soak.
+# guarded starter there, so there is no traffic to soak. Starters today: the Sensor above
+# (prod-diagnose) and the responder (prod-step-back, ADR-165).
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -112,11 +140,13 @@ spec:
     - name: guarded-starters-only
       expression: >-
         (request.namespace + '|' + request.userInfo.username) in
-        ['oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review']
+        ['oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review',
+         'oracle-fleet|system:serviceaccount:agent-coordinator:responder']
   variables:
     - name: allowed
       expression: >-
-        {'oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review': ['prod-diagnose']}
+        {'oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review': ['prod-diagnose'],
+         'oracle-fleet|system:serviceaccount:agent-coordinator:responder': ['prod-step-back']}
         [request.namespace + '|' + request.userInfo.username]
   validations:
     - expression: "request.operation == 'CREATE'"
