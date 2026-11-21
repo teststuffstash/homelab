@@ -517,9 +517,11 @@ yqw() { yq -r "$CW | $1" "$YAML" | grep -v -e '^---$' -e '^$'; }
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake") | .retryStrategy // "none"')" = none ] \
   && ok "the leaf carries no retryStrategy" || bad "FU-198" "leaf retries"
 # homelab#3579: the entrypoint is the WALK (the island list, then the retry wrapper once per name); the retry
-# wrapper still calls the leaf, once per invocation
+# wrapper still calls the leaf, once per invocation. homelab#3604 (a deliberate change of this pinned shape, stated
+# in its PR): the experiment read is the walk's first step and a closing `experiments-failed` group ends the
+# workflow Failed when it failed — the pinned list below gained exactly those two names, nothing else moved.
 [ "$(yqw '.spec.workflowSpec.entrypoint')" = intake-islands ] \
-  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-islands") | [.steps[][] | .name + "=" + .template] | join(" ")')" = "islands=list-islands sitting=intake-retry" ] \
+  && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-islands") | [.steps[][] | .name + "=" + .template] | join(" ")')" = "experiments=experiments islands=list-islands sitting=intake-retry experiments-failed=experiments-failed" ] \
   && [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "intake-retry") | .steps[][] | .template')" = intake ] \
   && ok "entrypoint = the walk (the island list, then the retry wrapper per island), and the retry wrapper calls the leaf" || bad "caller edge" "entrypoint/steps"
 WALK='.spec.workflowSpec.templates[] | select(.name == "intake-islands") | .steps[][] | select(.name == "sitting")'
@@ -2043,6 +2045,255 @@ yq -r '.spec.workflowSpec.templates[] | select(.name == "list-islands") | .conta
 { [ "$(grep -c 'bash islands/intake/scripts/listed-push.sh /tmp/island-intake-islands.txt' "$TMP/list-step.sh")" = 1 ] \
     && [ "$(grep -n 'listed-push.sh /tmp' "$TMP/list-step.sh" | cut -d: -f1)" -gt "$(grep -n 'exit 0' "$TMP/list-step.sh" | head -1 | cut -d: -f1)" ]; } \
   && ok "the list step calls it once, on the full walk only (after the named-island early exit)" || bad "list step listed-push" "$(grep -n 'listed-push\|exit 0' "$TMP/list-step.sh" 2>/dev/null | head -4)"
+
+# ── the scheduled experiment read (homelab#3604; scripts/experiment-read.sh) ─────────────────────────────
+# Stubs: `gh` (answers from files under $EH, logs every call and every body file it is given), the stub
+# Prometheus (prom_stub.py, scenarios of fixtures/experiment-read/prom.json), the s5cmd upload (logged), curl
+# (the metrics push, logged). body.md's t0 is the closing PR's mergedAt 2026-11-01T00:00:05Z; its bound is
+# 2026-11-08T00:00:05Z. EXP_NOW 1794182405 (2026-11-09T00:00:05Z, a day past the bound) is past the bound: scenario pass → pass (value
+# 2), fail → fail (value 7), pending's samples never reach 20 → `no data`; EXP_NOW 1793577605 (2026-11-02T00:00:05Z)
+# is inside the window: pending.
+section "the scheduled experiment read (experiment-read.sh)"
+ER="$REPO/islands/intake/scripts/experiment-read.sh"; EXPFX="$REPO/islands/intake/tests/fixtures/experiment-read"
+EH="$TMP/er"; export EH; mkdir -p "$EH/bin"
+cat > "$EH/bin/gh" <<'GHEOF'
+#!/bin/bash
+echo "gh $*" >> "$EH/gh.calls"
+for ((i=1; i<=$#; i++)); do [ "${!i}" = --body-file ] && { j=$((i+1)); { echo "--- $*"; cat "${!j}"; } >> "$EH/gh.bodies"; }; done
+case "$1 $2" in
+  "issue list") [ -f "$EH/list.fail" ] && { echo "HTTP 502" >&2; exit 1; }; cat "$EH/list.json";;
+  "pr view") f="$EH/pr-$3.json"; [ -f "$f" ] && cat "$f" || { echo "no such PR" >&2; exit 1; };;
+  "api repos"*|"api "*) case "$2" in
+      */parent) [ -f "$EH/parent.fail" ] && { echo "HTTP 502" >&2; exit 1; }; n="${2#repos/*/issues/}"; n="${n%/parent}"; f="$EH/parent-$n.json"; [ -f "$f" ] && cat "$f" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; };;
+      */comments*) n="${2#repos/*/issues/}"; n="${n%%/comments*}"; f="$EH/comments-$n.json"; [ -f "$f" ] && cat "$f" || echo '[]';;
+      */sub_issues*) n="${2#repos/*/issues/}"; n="${n%%/sub_issues*}"; cat "$EH/sub-$n.json";;
+    esac;;
+  "issue comment"|"issue reopen"|"issue edit") [ -f "$EH/write.fail" ] && { echo "HTTP 403" >&2; exit 1; }
+    [ "$2" = reopen ] && [ -f "$EH/reopen.fail" ] && { echo "HTTP 403" >&2; exit 1; }
+    [ "$2" = comment ] && [ -f "$EH/comment-$3.fail" ] && { echo "HTTP 403" >&2; exit 1; }; :;;
+esac
+exit 0
+GHEOF
+cat > "$EH/bin/s5cmd" <<'S5EOF'
+#!/bin/bash
+echo "s5cmd $* key=${AWS_ACCESS_KEY_ID:-}" >> "$EH/s5.calls"
+[ -f "$EH/s5.fail" ] && { echo "ERROR upload" >&2; exit 1; }
+cp "$4" "$EH/up-$(basename "$5")"; exit 0
+S5EOF
+cat > "$EH/bin/curl" <<'CEOF'
+#!/bin/bash
+echo "curl $*" >> "$EH/curl.calls"
+for a in "$@"; do case "$a" in @*) cp "${a#@}" "$EH/metrics.body";; esac; done; exit 0
+CEOF
+chmod +x "$EH/bin/"*
+python3 -I "$REPO/islands/intake/tests/prom_stub.py" "$EXPFX/prom-read.json" "$EH/prom.port" "$EH/prom.log" > "$EH/prom-stub.log" 2>&1 &
+EPID=$!
+for _ in $(seq 1 100); do [ -s "$EH/prom.port" ] && break; sleep 0.1; done
+EPROM="http://127.0.0.1:$(cat "$EH/prom.port" 2>/dev/null)"
+issue_row() { # <n> <labels-csv> <body-file|-> [comments-json] [closing-pr|-]
+  local body="" prs='[]'; [ "$3" != - ] && body="$(cat "$3")"; [ "${5:--}" != - ] && prs="[{\"number\":$5,\"repository\":{\"name\":\"r\",\"owner\":{\"login\":\"o\"}}}]"
+  jq -nc --argjson n "$1" --arg l "$2" --arg b "$body" --argjson c "${4:-[]}" --argjson p "$prs" \
+    '{number:$n, title:"t", body:$b, labels:($l | split(",") | map(select(length>0)) | map({name:.})), comments:$c, closedByPullRequestsReferences:$p}'
+}
+erun() { # <scenario> <now> [args] — a fresh world per call: $EH/list.json (set by the row), logs cleared
+  : > "$EH/gh.calls"; : > "$EH/gh.bodies"; : > "$EH/s5.calls"; : > "$EH/curl.calls"; rm -f "$EH"/up-* "$EH/metrics.body"
+  local sc="$1" now="$2"; shift 2
+  PATH="$EH/bin:$PATH" PROMETHEUS="$EPROM/$sc" EXP_NOW="$now" PUSHGATEWAY=http://pgw EXPERIMENT_REPO=o/r \
+    AGENT_TS_ENDPOINT=http://garage AGENT_TS_BUCKET=agent-transcripts AGENT_TS_ACCESS_KEY_ID=wkey AGENT_TS_SECRET_ACCESS_KEY=wsec \
+    bash "$ER" "$@" > "$EH/out.log" 2>&1
+}
+writes() { grep -cE '^gh issue (comment|reopen|edit)' "$EH/gh.calls"; }
+for n in 90 91; do echo '{"mergedAt":"2026-11-01T00:00:05Z"}' > "$EH/pr-$n.json"; done
+echo '[]' > "$EH/sub-1.json"
+NOW_AFTER=1794182405; NOW_INSIDE=1793577605
+B="$EXPFX/body.md"
+
+# pass
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun pass $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 2 ] && grep -q '^gh issue comment 41 --repo o/r --body-file' "$EH/gh.calls" \
+    && grep -q '^gh issue edit 41 --repo o/r --remove-label experiment/open$' "$EH/gh.calls" \
+    && ! grep -q 'reopen' "$EH/gh.calls" \
+    && grep -q '^<!-- experiment-verdict id=press-waits-down -->$' "$EH/gh.bodies" && grep -q 'Experiment `press-waits-down`: pass' "$EH/gh.bodies" \
+    && grep -q 'At most three press jobs wait' "$EH/gh.bodies" && grep -q '| window | 2000m from t0 2026-11-01T00:00:05Z |' "$EH/gh.bodies" \
+    && grep -q '| value | 2.0 |' "$EH/gh.bodies" && grep -q '| baseline | 5 |' "$EH/gh.bodies" && grep -q 'pass condition | `<= 3`' "$EH/gh.bodies" \
+    && grep -q 'guard `errors` | value 0.0, pass `< 1` — ok' "$EH/gh.bodies"; } \
+  && ok "pass: one comment (marker, verdict, prose line, the table with its guard), the label removed, nothing reopened" \
+  || bad "pass writes" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log" | head -8)"
+{ [ "$(wc -l < "$EH/s5.calls")" = 1 ] && grep -q "s5cmd --endpoint-url http://garage cp .* s3://agent-transcripts/homelab/experiments/41-press-waits-down.json key=wkey" "$EH/s5.calls" \
+    && jq -e '.verdict == "pass" and .issue == 41 and .repo == "o/r" and .id == "press-waits-down"' "$EH/up-41-press-waits-down.json" >/dev/null; } \
+  && ok "…and its report object goes to s3://agent-transcripts/homelab/experiments/41-<id>.json with the writer key" || bad "report upload" "$(cat "$EH/s5.calls")"
+{ grep -q 'metrics/job/island_intake_experiments' "$EH/curl.calls" && grep -q -- '-X PUT' "$EH/curl.calls" \
+    && grep -qx 'island_intake_experiments_open 0' "$EH/metrics.body" && grep -qx 'island_intake_experiments_decided_total{verdict="pass"} 1' "$EH/metrics.body" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 0' "$EH/metrics.body" && grep -qx 'island_intake_experiments_fault 0' "$EH/metrics.body" \
+    && grep -qx "island_intake_experiments_last_run_timestamp_seconds $NOW_AFTER" "$EH/metrics.body"; } \
+  && ok "…and the run's metrics are PUT to job island_intake_experiments" || bad "metrics" "$(cat "$EH/curl.calls" "$EH/metrics.body" 2>&1 | head -8)"
+
+# a second run writes nothing: the label is gone, so the list is empty — and an issue that still carries the label with its marker only loses the label
+echo '[]' > "$EH/list.json"; erun pass $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && [ ! -s "$EH/s5.calls" ] && [ "$(grep -c '^gh issue list' "$EH/gh.calls")" = 1 ] && ! grep -q '^gh pr' "$EH/gh.calls"; } \
+  && ok "a second run writes nothing (one list call, no comment, no upload)" || bad "second run" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun pass $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && [ "$(writes)" = 1 ] && [ "$(wc -l < "$EH/s5.calls")" = 1 ]; } \
+  && ok "the marker in the issue's comments is what stops a second comment (a run that died before the label re-uploads the report and removes it)" || bad "marker" "rc=$rc $(cat "$EH/gh.calls")"
+
+# fail, no Goal: reopened, agent/* labels removed
+issue_row 41 "experiment/open,agent/done,agent-fix,bug" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q '^gh issue reopen 41 --repo o/r$' "$EH/gh.calls" && grep -q '^gh issue edit 41 --repo o/r --remove-label agent/done$' "$EH/gh.calls" \
+    && grep -q '^gh issue edit 41 --repo o/r --remove-label experiment/open$' "$EH/gh.calls" && ! grep -q 'remove-label bug' "$EH/gh.calls" \
+    && grep -q 'Experiment `press-waits-down`: fail' "$EH/gh.bodies" \
+    && [ "$(grep -n 'issue comment' "$EH/gh.calls" | cut -d: -f1)" -lt "$(grep -n 'issue reopen' "$EH/gh.calls" | cut -d: -f1)" ] \
+    && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 1' "$EH/metrics.body"; } \
+  && ok "fail, no Goal ancestor: the comment, then the issue reopened and its agent/* labels (only) removed, the label last" || bad "fail" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+
+# fail under a Goal: the child stays closed, the verdict goes to the open post-launch sub-issue (else the Goal)
+echo '{"number":1,"labels":[{"name":"task/goal"}]}' > "$EH/parent-41.json"
+echo '[{"number":9,"state":"closed","title":"post-launch: old"},{"number":8,"state":"open","title":"Post-launch: verdict of #1"},{"number":7,"state":"open","title":"other"}]' > "$EH/sub-1.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && ! grep -q 'reopen' "$EH/gh.calls" && ! grep -q 'remove-label agent/' "$EH/gh.calls" \
+    && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && grep -q '^gh issue comment 8 --repo o/r --body-file' "$EH/gh.calls" && ! grep -q '^gh issue comment 1 ' "$EH/gh.calls" \
+    && grep -q '^gh issue edit 41 --repo o/r --remove-label experiment/open$' "$EH/gh.calls" && grep -q 'its Goal is #1' "$EH/gh.bodies"; } \
+  && ok "fail under a Goal: the child is not reopened or unlabelled; the verdict also goes on the open post-launch: sub-issue; the label is removed" || bad "goal fail" "rc=$rc $(cat "$EH/gh.calls")"
+echo '[]' > "$EH/sub-1.json"; erun fail $NOW_AFTER
+{ grep -q '^gh issue comment 1 --repo o/r --body-file' "$EH/gh.calls" && ! grep -q 'reopen' "$EH/gh.calls"; } \
+  && ok "…and with no post-launch sub-issue, on the Goal itself" || bad "goal fallback" "$(cat "$EH/gh.calls")"
+echo '{"number":5,"labels":[{"name":"enhancement"}]}' > "$EH/parent-41.json"; echo '{"number":1,"labels":[{"name":"task/goal"}]}' > "$EH/parent-5.json"
+erun fail $NOW_AFTER
+{ grep -q '^gh issue comment 1 --repo o/r' "$EH/gh.calls" && ! grep -q 'reopen' "$EH/gh.calls"; } \
+  && ok "…a Goal further up the parent chain counts as the ancestor" || bad "goal chain" "$(cat "$EH/gh.calls")"
+rm -f "$EH"/parent-*.json
+
+# a state write that fails keeps the label (the next run redoes it) and counts the issue overdue past its bound
+issue_row 41 "experiment/open,agent/done" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/reopen.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/reopen.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" && [ "$(wc -l < "$EH/s5.calls")" = 1 ] \
+    && [ "$(grep -n 'remove-label agent/done' "$EH/gh.calls" | cut -d: -f1)" -lt "$(grep -n 'issue reopen' "$EH/gh.calls" | cut -d: -f1)" ] \
+    && grep -qx 'island_intake_experiments_open 1' "$EH/metrics.body" && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body" \
+    && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 0' "$EH/metrics.body"; } \
+  && ok "fail whose reopen fails: the label stays (the report already uploaded), step non-zero, counted open and overdue (agent/* labels go before the reopen)" || bad "reopen fail" "rc=$rc $(cat "$EH/gh.calls" "$EH/metrics.body")"
+issue_row 41 "experiment/open,agent/done" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && grep -q '^gh issue reopen 41 ' "$EH/gh.calls" && grep -q 'remove-label agent/done' "$EH/gh.calls" \
+    && grep -q 'remove-label experiment/open' "$EH/gh.calls" && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 1' "$EH/metrics.body"; } \
+  && ok "…and the next run (marker present) finishes the fail: agent/* removed, reopened, the label removed, no second comment" || bad "fail resume" "rc=$rc $(cat "$EH/gh.calls")"
+echo '{"number":1,"labels":[{"name":"task/goal"}]}' > "$EH/parent-41.json"; echo '[{"number":8,"state":"open","title":"post-launch: v"}]' > "$EH/sub-1.json"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/comment-8.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/comment-8.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "fail under a Goal whose post-launch comment fails: the label stays, counted overdue" || bad "goal comment fail" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q '^gh issue comment 8 ' "$EH/gh.calls" && ! grep -q '^gh issue comment 41 ' "$EH/gh.calls" \
+    && grep -q '^<!-- experiment-verdict-goal issue=41 id=press-waits-down -->$' "$EH/gh.bodies" && grep -q 'remove-label experiment/open' "$EH/gh.calls"; } \
+  && ok "…the next run posts the Goal-side comment (its own marker) and removes the label" || bad "goal resume" "rc=$rc $(cat "$EH/gh.calls")"
+echo '[{"body":"<!-- experiment-verdict-goal issue=41 id=press-waits-down -->\nx"}]' > "$EH/comments-8.json"
+erun fail $NOW_AFTER; rc=$?; rm -f "$EH/comments-8.json"
+{ [ "$rc" = 0 ] && ! grep -q '^gh issue comment' "$EH/gh.calls" && grep -q 'remove-label experiment/open' "$EH/gh.calls"; } \
+  && ok "…and a Goal-side comment already there is not posted twice" || bad "goal marker" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/parent.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/parent.fail" "$EH"/parent-*.json; echo '[]' > "$EH/sub-1.json"
+{ [ "$rc" != 0 ] && [ "$(writes)" = 0 ] && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "a Goal lookup that errors: nothing written for the issue, step non-zero, counted overdue" || bad "goal lookup error" "rc=$rc $(cat "$EH/gh.calls")"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+
+# no data
+erun pending $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q 'Experiment `press-waits-down`: no data' "$EH/gh.bodies" && [ "$(writes)" = 2 ] && ! grep -q reopen "$EH/gh.calls" \
+    && grep -q '^gh issue edit 41 --repo o/r --remove-label experiment/open$' "$EH/gh.calls" && grep -qx 'island_intake_experiments_decided_total{verdict="no data"} 1' "$EH/metrics.body" \
+    && grep -q 'min_samples\|samples' "$EH/gh.bodies"; } \
+  && ok "no data: the comment with its reason, the label removed, no state change" || bad "no data" "rc=$rc $(cat "$EH/gh.calls" "$EH/gh.bodies" | head -12)"
+
+# pending writes nothing — and an overdue count of 0 inside the window
+erun pending $NOW_INSIDE; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && [ ! -s "$EH/s5.calls" ] && grep -qx 'island_intake_experiments_open 1' "$EH/metrics.body" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 0' "$EH/metrics.body"; } \
+  && ok "pending (inside the window) writes nothing and counts the issue as open" || bad "pending" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+
+# faults: no loadable block / no merged closing PR — one comment, the label kept, once
+issue_row 42 "experiment/open" - '[]' 91 > /dev/null 2>&1
+printf '## Deliverable\nnothing\n' > "$EH/nob.md"
+issue_row 42 "experiment/open" "$EH/nob.md" '[]' 91 > "$EH/a.json"; issue_row 43 "experiment/open" "$B" '[]' - > "$EH/b.json"
+jq -s '.' "$EH/a.json" "$EH/b.json" > "$EH/list.json"; echo '{"mergedAt":"2026-11-01T00:00:05Z"}' > "$EH/pr-91.json"
+erun pass $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(grep -c '^gh issue comment' "$EH/gh.calls")" = 2 ] && ! grep -q 'remove-label' "$EH/gh.calls" \
+    && [ "$(grep -c '^<!-- experiment-fault -->$' "$EH/gh.bodies")" = 2 ] && grep -q 'no loadable experiment block' "$EH/gh.bodies" && grep -q 'no merged pull request' "$EH/gh.bodies" \
+    && grep -qx 'island_intake_experiments_fault 2' "$EH/metrics.body" && grep -qx 'island_intake_experiments_open 2' "$EH/metrics.body"; } \
+  && ok "a body with no loadable block, and an issue no merged PR closed: one fault comment each, label kept, counted as fault" || bad "faults" "rc=$rc $(cat "$EH/gh.calls" "$EH/gh.bodies" | head -12)"
+issue_row 42 "experiment/open" "$EH/nob.md" '[{"body":"<!-- experiment-fault -->\nx"}]' 91 > "$EH/a.json"; issue_row 43 "experiment/open" "$B" '[{"body":"<!-- experiment-fault -->\nx"}]' - > "$EH/b.json"
+jq -s '.' "$EH/a.json" "$EH/b.json" > "$EH/list.json"
+erun pass $NOW_AFTER
+{ [ "$(writes)" = 0 ] && grep -qx 'island_intake_experiments_fault 2' "$EH/metrics.body"; } \
+  && ok "…and the fault comment is written once (the marker), the fault still counted" || bad "fault once" "$(cat "$EH/gh.calls")"
+
+# overlap: two experiments, overlapping windows, one metric name
+sed 's/press-waits-down/press-second/; s/max_over_time(fx_value\[\$window\])/max_over_time(fx_value[$window])/' "$B" > "$EH/body2.md"
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/a.json"; issue_row 42 "experiment/open" "$EH/body2.md" '[]' 91 > "$EH/b.json"
+jq -s '.' "$EH/a.json" "$EH/b.json" > "$EH/list.json"; echo '{"mergedAt":"2026-11-01T12:00:05Z"}' > "$EH/pr-91.json"
+erun pass 1794182405; rc=$?   # 2026-11-09: both windows (11-01 and 11-03 → 11-08, 11-10) overlap
+{ [ "$rc" = 0 ] && [ "$(grep -c '^Overlap: ' "$EH/gh.bodies")" = 2 ] && grep -q '^Overlap: #42 (experiment `press-second`) .* metric `fx_up`' "$EH/gh.bodies" \
+    && grep -q '^Overlap: #41 (experiment `press-waits-down`)' "$EH/gh.bodies"; } \
+  && ok "overlapping windows on one metric name: each verdict comment carries one line naming the other issue" || bad "overlap" "rc=$rc $(cat "$EH/gh.bodies" | grep -n 'Overlap' )"
+echo '{"mergedAt":"2026-11-01T00:00:05Z"}' > "$EH/pr-91.json"
+sed 's/fx_value/fx_other_metric/g; s/fx_up/fx_other_up/g' "$EH/body2.md" > "$EH/body3.md"; issue_row 42 "experiment/open" "$EH/body3.md" '[]' 91 > "$EH/b.json"; jq -s '.' "$EH/a.json" "$EH/b.json" > "$EH/list.json"
+erun pass 1794182405
+{ ! grep -q '^Overlap: ' "$EH/gh.bodies"; } && ok "…and no line for overlapping windows on different metrics" || bad "no overlap" "$(grep Overlap "$EH/gh.bodies")"
+
+# Prometheus down: non-zero, nothing written, nothing pushed; GitHub down likewise
+issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun down $NOW_AFTER; rc=$?
+{ [ "$rc" != 0 ] && [ "$(writes)" = 0 ] && [ ! -s "$EH/s5.calls" ] && [ ! -s "$EH/curl.calls" ] && grep -q 'Prometheus cannot be read' "$EH/out.log"; } \
+  && ok "Prometheus unreachable: exit non-zero, nothing written, uploaded or pushed" || bad "prom down" "rc=$rc $(cat "$EH/out.log" "$EH/gh.calls")"
+touch "$EH/list.fail"; erun pass $NOW_AFTER; rc=$?; rm -f "$EH/list.fail"
+{ [ "$rc" != 0 ] && [ "$(writes)" = 0 ] && [ ! -s "$EH/curl.calls" ] && grep -q 'GitHub did not answer' "$EH/out.log"; } \
+  && ok "GitHub unreachable: exit non-zero, nothing written" || bad "gh down" "rc=$rc $(cat "$EH/out.log")"
+erun value-down $NOW_AFTER; rc=$?
+{ [ "$rc" != 0 ] && [ "$(writes)" = 0 ] && grep -qx 'island_intake_experiments_open 1' "$EH/metrics.body" && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "one experiment whose read fails mid-run: decided nothing, step non-zero, counted open and overdue (now − bound = 1 d)" || bad "value down" "rc=$rc $(cat "$EH/out.log" "$EH/metrics.body" 2>&1| head -8)"
+
+# the upload fails AFTER the comment is written
+touch "$EH/s5.fail"; erun pass $NOW_AFTER; rc=$?; rm -f "$EH/s5.fail"
+{ [ "$rc" != 0 ] && grep -q 'issue comment 41' "$EH/gh.calls" && grep -q 'FAILED to upload' "$EH/out.log"; } \
+  && ok "a failed report upload fails the step, after the comment was written" || bad "upload fail" "rc=$rc $(cat "$EH/out.log")"
+issue_row 41 "experiment/open,agent/done" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/s5.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/s5.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'reopen' "$EH/gh.calls" && ! grep -q 'remove-label' "$EH/gh.calls" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "…on a fail with no Goal the upload comes before the reopen: a failed upload leaves the issue closed and labelled (listed), counted overdue" || bad "fail upload order" "rc=$rc $(cat "$EH/gh.calls")"
+
+# --dry-run writes nothing and says what it would
+erun pass $NOW_AFTER --dry-run; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && [ ! -s "$EH/s5.calls" ] && [ ! -s "$EH/curl.calls" ] \
+    && grep -q '\[dry-run\] would comment the verdict (pass) on #41' "$EH/out.log" && grep -q '\[dry-run\] would upload s3://agent-transcripts/homelab/experiments/41-press-waits-down.json' "$EH/out.log" \
+    && grep -q 'would remove the label experiment/open from #41' "$EH/out.log"; } \
+  && ok "--dry-run prints what it would write and writes nothing (no gh write, upload or push)" || bad "dry-run" "rc=$rc $(cat "$EH/out.log" "$EH/gh.calls" | head -10)"
+kill "$EPID" 2>/dev/null; wait "$EPID" 2>/dev/null
+
+# the workflow shape: the `experiments` step runs before the sittings, continues on failure, the workflow still fails
+SPEC='.spec.workflowSpec'
+steps="$(yq -r "$SPEC.templates[] | select(.name == \"intake-islands\") | .steps | map(.[].name) | join(\" \")" "$YAML")"
+[ "$steps" = "experiments islands sitting experiments-failed" ] && ok "intake-islands runs experiments → islands → sitting → experiments-failed, in that order" || bad "step order" "$steps"
+[ "$(yq -r "$SPEC.templates[] | select(.name == \"intake-islands\") | .steps[0][0].continueOn.failed" "$YAML")" = true ] \
+  && ok "the experiments step is continueOn: failed (the sittings still run)" || bad "continueOn" "$(yq -c "$SPEC.templates[] | select(.name == \"intake-islands\") | .steps[0][0]" "$YAML")"
+{ [ "$(yq -r "$SPEC.templates[] | select(.name == \"intake-islands\") | .steps[3][0].when" "$YAML")" = '{{steps.experiments.status}} == Failed' ] \
+    && [ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments-failed\") | .container.args[0]" "$YAML" | tr -d ' \n')" != "" ] \
+    && yq -r "$SPEC.templates[] | select(.name == \"experiments-failed\") | .container.args[0]" "$YAML" | grep -q 'exit 1'; } \
+  && ok "…and a failed experiments step fails the workflow at the end (a step that exits 1 when it failed)" || bad "workflow ends failed" "$(yq -c "$SPEC.templates[] | select(.name == \"experiments-failed\")" "$YAML")"
+leaf() { yq -o=json -I=0 ".spec.workflowSpec.templates[] | select(.name == \"$1\") | .container | [.image, .command, .volumeMounts[0], (.env | map(select(.name | test(\"^(HOME|NIX_CONFIG|DEVBOX_.*|DO_NOT_TRACK|VERSION_CACHE_TTL|ORG|GH_TOKEN|AWS_REGION|AGENT_TS_ENDPOINT|AGENT_TS_BUCKET|AGENT_TS_ACCESS_KEY_ID|AGENT_TS_SECRET_ACCESS_KEY|PUSHGATEWAY)\$\")))) ]" "$YAML"; }
+{ [ -n "$(leaf experiments)" ] && [ "$(leaf experiments)" = "$(leaf intake)" ]; } \
+  && ok "the experiments leaf's image, command, mounts, token, writer key, bucket, HOME and nix env equal a sitting's" || bad "leaf identity (env)" "experiments: $(leaf experiments | cut -c1-300)
+       intake:      $(leaf intake | cut -c1-300)"
+# the identity: the ServiceAccount is the workflow's (one for every template), the token and the writer key are the sitting's
+[ "$(yq -r "$SPEC.serviceAccountName" "$YAML")" = island-intake ] && [ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName // \"\"" "$YAML")" = "" ] \
+  && ok "…under the workflow's island-intake ServiceAccount (the leaf names none of its own)" || bad "leaf identity" "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName" "$YAML")"
+yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .container.args[0]" "$YAML" > "$TMP/exp-step.sh"
+{ grep -q 'devbox install --config islands/intake' "$TMP/exp-step.sh" && grep -q 'islands/intake/scripts/experiment-read.sh' "$TMP/exp-step.sh" \
+    && grep -q 'devbox run --config islands/intake' "$TMP/exp-step.sh" && grep -q 'PROMETHEUS' <(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .container.env[].name" "$YAML"); } \
+  && ok "the step bootstraps like a sitting (clone, the island devbox) and runs experiment-read.sh through it, with PROMETHEUS set" || bad "step bootstrap" "$(grep -c . "$TMP/exp-step.sh") lines"
+[ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .container.env[] | select(.name == \"PROMETHEUS\") | .value" "$YAML")" = "http://kube-prometheus-stack-prometheus.monitoring.svc:9090" ] \
+  && ok "…Prometheus is the in-cluster service" || bad "prometheus url" "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .container.env[].value" "$YAML" | grep prom)"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
