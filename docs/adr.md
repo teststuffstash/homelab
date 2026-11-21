@@ -3105,3 +3105,23 @@ wrong park costs operator time and nothing re-tests it.
 **Consequences:** fewer `seat` outcomes; more queued items, some of them wrong and undone by the
 loop. A re-read whose wait maps to no entry, or whose `blocked-on: issue=|pr=` target closed, is
 decided afresh. The literal `intake: seat` and every receipt key stay as they are.
+
+### ADR-165 — The responder may start a stack's fixed WorkflowTemplate the alert names; the admission guard is the boundary (2026-11-21)
+**Status:** Accepted (operator, 2026-11-21).
+**Decision:** the responder's "no kubectl mutations" breaker gets ONE exception: when the alert names a
+stack's fixed WorkflowTemplate as its remedy, the triage session may start it — a Workflow whose spec
+is only `workflowTemplateRef: {name: <template>}`, no arguments. The template decides and refuses on its
+own; the responder only starts it. The boundary is admission, not the brief: the
+`workflow-template-start-guard` ValidatingAdmissionPolicy admits, per (namespace, starter), only the
+granted templates in that shape (`agents/coordinator/kargo-prod-diagnose-argo.yaml`), on the
+responder's own ServiceAccount (`agents/coordinator/rbac.yaml` §responder). First grant:
+`oracle-fleet/prod-step-back` (oracle-iac#1193, oracle-fleet#1095).
+**Considered:** the #818 graduation dial (rejected for now: it renders core-group verbs only, binds
+`agentstack-loop` rather than the responder's SA, and has no consumer — the larger build); keeping
+step-back a human act (rejected: the stack ruled a fixed, refusing workflow for it).
+**Why:** a start of a fixed, refusing template carries no authority the template's own SA does not
+already bound, and the guard makes any other shape fail at the apiserver whatever the session writes.
+**Consequences:** a new stack template = one guard entry + one Role, written by the platform. Written
+so the dial can absorb it later as its first non-core entry. The responder's report names the started
+Workflow.
+

@@ -258,7 +258,9 @@ subjects:
 #   - `responder-hubble-exec` below: pods/exec in kube-system ONLY — the brief's (1b) HUBBLE step runs
 #     `kubectl exec -n kube-system ds/cilium -- hubble observe` (no hubble binary in the image). This is
 #     the one wide verb left (a cilium agent is node-privileged); it was cluster-wide before;
-#   - the chart-rendered `argo-workflows-workflow` Role (the Argo executor's own write).
+#   - the chart-rendered `argo-workflows-workflow` Role (the Argo executor's own write);
+#   - per stack, a start right on that stack's fixed templates (ADR-165) — today
+#     `platform-responder-start-prod-step-back` in oracle-fleet (kargo-prod-diagnose-argo.yaml).
 # NOT bound to ClusterRole `agent-coordinator` or `coordinator-scan-workflows`; no Secret read. Its
 # GitHub token is `responder-git` (responder-git.yaml); the gateway admits it by name
 # (argocd/resources/agent-gateway/policy.json `callers`).
