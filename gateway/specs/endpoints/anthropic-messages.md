@@ -475,7 +475,7 @@ Upstream 401/403 never relays its body — a key hint never crosses back — and
 what it says (the body is read, never forwarded): a 401, or a 403 whose error names a credential
 reason (`type` `authentication_error` / `permission_error`, `code` `api_key_expired` /
 `invalid_api_key` / …), is **424 `upstream-auth`**: the
-rail credential is bad, and the [admission](sessions.md#capacity--the-ladders-capacity-half) skips
+rail credential is bad, and the [admission](sessions.md#gw-sessions-capacity) skips
 that credential until a 2xx on it or a new value. ⚖ 424 (Failed Dependency), not 502: the pinned
 harnesses retry 5xx with backoff (opencode retried the expired Go key's 502 nine times in the
 2026-10-17 experiment, `docs/spikes/gateway-free-models-2026-10-17/cells.tsv`), and they retry

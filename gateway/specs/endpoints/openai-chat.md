@@ -101,7 +101,7 @@ openapi file is the citation. ⚖ Whether that endpoint honours `anthropic-beta`
 anywhere read — the header is forwarded untouched and the row is **verify during
 implementation**. The body's `model` is the bare policy id (the [wire id](../glossary.md#wire-id)).
 Upstream 429 passes through with `retry-after` (and cools the session's cell —
-[§Capacity](sessions.md#capacity--the-ladders-capacity-half)); 401/403 is 424 `upstream-auth`,
+[§Capacity](sessions.md#gw-sessions-capacity)); 401/403 is 424 `upstream-auth`,
 403 `upstream-refused` or 403 `upstream-edge-refused`
 ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)); a connection that fails before any
 byte is sent is 502 `upstream-unreachable` (a timeout is 504 `upstream-timeout`). ⚖ The policy
@@ -111,7 +111,7 @@ bare smoke call. A fixed UA might fail that gate, while this rail's edge has not
 An edge refusal here would be request-scoped anyway
 ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)). A rejected stack key is re-verified
 with `GET /v1/key` (free) — unverified in this rule's rows; the probe is
-[GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)'s.
+[GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)'s.
 
 Stream completeness on this dialect: the terminal event is `data: [DONE]`; the rule and the four
 `incomplete` reasons are [GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)'s. A
@@ -222,7 +222,7 @@ non-alphanumerics → `-`), never a table — so it may differ from the vendor's
 `openinference`, tag `open-inference`) until the snapshot covers the model. The slug rides on the
 request row (`requests.provider`), on the gateway's transport strikes and the consumer's
 cell-scoped outcomes ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)) and on the 429
-cooldown ([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)): the cell
+cooldown ([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)): the cell
 is `(rail, model, provider)`, `''` when no answer named one. The answer's name outranks the
 [pin](../glossary.md#pin) ⚖: a pinned request whose answer names another provider is attributed to
 the answer's.

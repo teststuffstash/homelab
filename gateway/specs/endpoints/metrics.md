@@ -126,7 +126,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_sessions_reaped_total` | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
 | `gateway_codex_usage_poll_total` | `outcome` | the codex rail's usage polls by outcome ([GW-CODEX-HEADROOM §Poll](openai-responses.md#poll)): `accepted` = the headroom took the report; the rest name why it did not. The family exists only while the policy declares the codex rail, then every outcome renders from 0 ⚖ — the alerts read `increase()` (an undeclared rail has no series, so `CodexUsagePollSilent` cannot fire on it) |
 | `gateway_codex_upstream_headroom_total` | `outcome` | the codex rail's relayed answers read for their `x-codex-*` headroom headers ([GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers)): `accepted` = the headroom took the report, `absent` = no window header on the answer, the rest name the refusal. Declared-gated and rendered from 0 exactly like the poll family ⚖ |
-| `gateway_credential_probes_total` | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
+| `gateway_credential_probes_total` | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#gw-sessions-capacity)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
 | `gateway_requests_incomplete_total` | `rail`, `dialect`, `reason`, `traffic` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
 | `gateway_go_catalog_refresh_total` | `source`, `outcome` | refresh attempts by outcome; every pair renders from 0 ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
 | `gateway_go_catalog_models_dropped_total` | `source`, `reason` | listed models a refresh dropped, by reason — a wire dialect the parser does not know (drop-and-count, #2933) |
@@ -146,7 +146,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_upstream_seconds` | histogram | `rail`, `traffic` | upstream round-trip, first byte to last |
 | `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
 | `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at` |
-| `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
+| `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#gw-sessions-capacity)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
 | `gateway_go_catalog_models` | gauge | `source` | models in the source's last good snapshot; 0 = none yet |
@@ -242,7 +242,7 @@ Legend (above); `the anthropic ref is a definitive miss, a prober asks` = the st
 is the subscription — deferred `credential-unresolved`); `one openai call on opencode answered 401,
 60 s, the re-probe answered upstream-ok` = a worker ride answered `upstream-401-key-expired`, the
 fake set back to `upstream-ok`, the clock advanced 60 s, then the re-probe pass runs
-([§Capacity](sessions.md#capacity--the-ladders-capacity-half)).
+([§Capacity](sessions.md#gw-sessions-capacity)).
 
 | description | world | event | series | value? |
 |---|---|---|---|---|
