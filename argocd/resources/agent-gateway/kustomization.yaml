@@ -105,15 +105,18 @@ resources:
 # coordinator and reviewer pods run there as this SA — granted ahead of the launchers that will use
 # it) — and `researcher` (the jail's agents/research-fanout.sh mints this SA's token; each platform
 # arm is a worker-launcher ride, FU-270). `agent-coordinator:agent-coordinator` = the coordinator
-# namespace's SHARED SA — the responder, deep dig, island intake and fix-debounce workflows:
-# `coordinator` + `responder`, unbound; and `retro`, bound into `openrouter-operator` (the retro
+# namespace's SHARED SA — the deep dig and fix-debounce workflows: `coordinator` + `responder`
+# (the dig still admits as role `responder`), unbound; and `retro`, bound into `openrouter-operator` (the retro
 # cron's cells hand off to the worker launcher, whose ride pod lives in the platform retro's ride
 # namespace — agents/retro-project.sh) (shared, so the grant reaches every workflow on it — the
 # #2685 per-SA split is the narrower alternative). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
-# never binds. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
+# never binds. `agent-coordinator:responder` = the `respond` WorkflowTemplate (responder-argo.yaml),
+# its OWN ServiceAccount since the 2026-11-21 split (agents/coordinator/rbac.yaml §responder):
+# `responder`, unbound (a triage is an inline session). `agent-coordinator:island-intake` = the island
+# intake sitting (#3577): `coordinator`, unbound. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
 # (agents/coordinator/deploy-revert-argo.yaml; FU-270 (b), #2785): admits nothing (no roles, no
 # binds), `outcome: any` — it lists a task's sessions and reports `wrong-verdict` on the review
 # sessions of a merge the chain reverted (GW-SESSIONS-OUTCOME). `enforce` since 2026-10-17
@@ -146,4 +149,4 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.11.21-gf1202affb67f
+    newTag: 2026.11.21-gcf76b39d553a

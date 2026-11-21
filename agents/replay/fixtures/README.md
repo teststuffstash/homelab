@@ -130,6 +130,23 @@ fix-debounce-decide and specs-review run. The collector has no traces pipeline
 a 404. After the merge, `count_over_time({namespace="agent-coordinator"} |= "traces export: failed" [1h])`
 reads 0.
 
+## The responder on its own ServiceAccount and token (homelab#3628)
+
+No fixture applies. The change swaps the `respond` WorkflowTemplate's `serviceAccountName`
+(`agent-coordinator` → `responder`) and its GitHub token Secret (`coordinator-git` →
+`responder-git`, same `GH_TOKEN` key, same mount shape) in `responder-argo.yaml` (a ratchet clause
+file). These are **credential** inputs: which identity the pod's `kubectl`, `gh` and gateway calls
+present. No dedup key, ledger write, label, comment or gateway request body changes, so every
+responder fixture asserts exactly what it asserted before (`responder-behaviour-test`: 270 passed
+on the branch). A fixture could only assert that the manifest names the SA it names, which is the
+cosmetic fixture this ratchet exists to prevent.
+
+What pins it is live. After the merge syncs: `kubectl auth can-i --as
+system:serviceaccount:agent-coordinator:responder patch configmap/responder-seen -n
+agent-coordinator` is yes and `… create pods -n oracle-fleet` is no; the next `respond-*` pod runs as
+`responder`, its ledger patch lands, and the gateway logs `caller=system:serviceaccount:agent-coordinator:responder`
+on its admission.
+
 ## The agent-loop EventSource at two replicas + PDB (fix/platform-two-replicas)
 
 No fixture applies — the same shape as the eventbus entry above. The change sets `spec.replicas: 2`
@@ -163,4 +180,16 @@ What pins it is live. After the merge syncs: `kubectl -n agent-coordinator get e
 `workflow-template-start-guard` policy accepts a server dry-run create of the bare reference as
 `system:serviceaccount:agent-coordinator:sensor-review` in `oracle-fleet` and denies one with any
 other spec key; the first `KargoProdVerificationFailed` starts a `prod-diagnose-*` Workflow there.
+
+## The responder's start exception — brief clause (ADR-165, fix/responder-starts-step-back)
+
+No fixture applies. The change adds one clause to the triage brief's HARD RULES in
+`responder-argo.yaml` (a ratchet clause file): the "no kubectl mutations" breaker gains one exception,
+starting a stack's fixed WorkflowTemplate that the alert names. That is PROMPT PROSE read by the
+model, the same shape as the reviewer-prose entry above; no shell line, dedup key, label, comment or
+gateway call changes, so every responder fixture asserts what it asserted before. A fixture could only
+assert that the brief contains the words it contains. The boundary is not the prose but the
+`workflow-template-start-guard` admission policy, pinned live: a server dry-run create as
+`system:serviceaccount:agent-coordinator:responder` in `oracle-fleet` admits the bare
+`prod-step-back` reference and denies `prod-diagnose`, an argument, an extra spec key or inline steps.
 

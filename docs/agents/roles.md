@@ -293,7 +293,8 @@ never harder posture on quiet ones.
   🚨 issues were held open by it). Evidence + the build:
   [`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md) §The 2026-09-16 pass;
   capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
-  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
+  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations (one exception: starting a stack's fixed
+  WorkflowTemplate the alert names, admitted by the start guard — [ADR-165](../adr.md)), no agent labels
   (inert, breaker #1), loop-smell → report-only stop.
   **Dispatch SPLIT from triage 2026-08-07 (FU-133 dispatch half):** the session's issue carries
   `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan's

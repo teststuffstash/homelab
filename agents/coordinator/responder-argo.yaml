@@ -182,7 +182,10 @@ metadata:
   namespace: agent-coordinator
 spec:
   entrypoint: main
-  serviceAccountName: agent-coordinator
+  # The responder's OWN identity (rbac.yaml §responder, responder-git.yaml) — a role carries its
+  # own boundary (docs/agents/roles.md §What a role is). Was the shared `agent-coordinator` SA and
+  # its coordinator-git token, i.e. cluster-wide pod create/exec and actions/workflows write.
+  serviceAccountName: responder
   # The subscription semaphore (FU-088 Argo layer) sits on the `respond` LEAF template — not here,
   # and not on the `respond-retry` wrapper that calls it. Two waits must defer WITHOUT holding a
   # slot: the declared-window GRACE (FU-230, operator ruling 2026-10-09) and the FU-113(b) retry
@@ -216,7 +219,7 @@ spec:
       - { name: payload, value: "{}" }
   volumes:
     - { name: work, emptyDir: {} }
-    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    - { name: responder-git, secret: { secretName: responder-git, optional: true } }
     # GW-SESSIONS-AUTH (FU-270): this pod's projected ServiceAccount token for the gateway's caller check.
     - name: gateway-token
       projected:
@@ -370,8 +373,8 @@ spec:
           - { name: OTEL_TRACES_EXPORTER, value: "none" } # no traces pipeline on the collector (otel-config.yaml); unset = SDK default otlp, a 404 per pod
           - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=responder,stack=platform" }
           - name: GH_TOKEN
-            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+            valueFrom: { secretKeyRef: { name: responder-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/responder-git/GH_TOKEN" }
           # §A1 transcript capture (FU-210): the write-only key for the agent-transcripts bucket.
           # Same-ns Secret written by the Crossplane Workspace (garage-workspace.yaml), same four
           # vars and the same `optional: true` degrade as agents/reviewer-session.sh's pod — the
@@ -388,7 +391,7 @@ spec:
             valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
         volumeMounts:
           - { name: work, mountPath: /work }
-          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          - { name: responder-git, mountPath: /var/run/responder-git, readOnly: true }
           - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
         command: [bash, -lc]
         args:
@@ -1493,7 +1496,7 @@ spec:
             (c) needs real work → file EXACTLY ONE issue on the repo STEP 1's rule selects — the owner of your named fix surface, defaulting to '$ROUTE_REPO' when you named none: title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. Then CLASSIFY it before you file: source '/work/homelab/agents/footprint.sh' and, with 'CLASSIFY_CODEOWNERS=/work/homelab/CODEOWNERS' set, call 'classify_touches \"<the Touches: value you just wrote>\"'. A 'codeowner-author' verdict (the operator-author set: '.github/', '.agents/', 'devbox.json'/'.lock', 'mgmt/scripts/' and the three box-executed 'scripts/' verbs — the rest of 'scripts/' is worker-authorable since the ADR-142 trial) or an intersection with '/work/homelab/scripts/pin-only-lint.sh's GUARDED set means no worker can ever land this as a PR, so say so in the body as ONE plain sentence naming the classifier and its verdict (e.g. 'classify_touches: codeowner-author — needs an operator push to master, not a PR') — never a new body line for it; the issue is inert anyway, so this sentence is the only place the verdict reaches the issue itself rather than sitting in the scan log alone (homelab#1207). If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. ALSO end the body with a verdict line, exactly one of: 'fix-verdict: fix' (a code/manifest change in a repo would durably fix this) or 'fix-verdict: report-only' (transient, vendor-side, or needs a human decision first). The verdict is a DIAGNOSIS, not a dispatch — queueing is the platform's job, never yours. When your diagnosis identifies a SINGLE causing issue in the same repo — not a guess, an uncertainty, or a stack of suspects — include the line 'Cause: #<n>' in the body (exact format, one line, same repo only; the shell will bind it as a native sub-issue edge). Omit the line when uncertain; an honest standalone issue is better than a wrong lineage. NO agent labels — the issue is inert; the shell reads your verdict after.
             (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
-            HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. ⚠ EXCEPT a thread a PERSON closed — the HUMAN-CLOSED list above, when present, names them: comment, never reopen; a human close is a decision and the shell restores it after your session. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only. Name your tool gaps as evidence, not lobbying (homelab#536): when a NAMED diagnostic or tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked fetch — and its absence changed what you could verify, add ONE line to your issue body (or your stdout report, when report-only) whose FIRST characters are exactly 'TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>'. Once per session per tool; never a request for the grant itself — the janitor aggregates these into the operator's inventory, and a gap already ruled stays listed with its ruling.
+            HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. ⚠ EXCEPT a thread a PERSON closed — the HUMAN-CLOSED list above, when present, names them: comment, never reopen; a human close is a decision and the shell restores it after your session. Never more than one issue per session. No kubectl mutations — except ONE shape (ADR-165): when the alert itself names a stack's fixed WorkflowTemplate as its remedy, you may start it with 'kubectl create -f' of a Workflow in that stack's namespace whose spec is EXACTLY 'workflowTemplateRef: {name: <that template>}' (metadata.generateName '<template>-', no arguments, no other spec key). The template decides and refuses on its own; you only start it. Admission (workflow-template-start-guard) admits only the templates granted to your ServiceAccount, so a denial is final: never retry with another shape, another verb or another template. Name the started Workflow in your issue or report. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only. Name your tool gaps as evidence, not lobbying (homelab#536): when a NAMED diagnostic or tool is unavailable in-pod — RBAC-denied verb, a binary this image lacks, an egress-blocked fetch — and its absence changed what you could verify, add ONE line to your issue body (or your stdout report, when report-only) whose FIRST characters are exactly 'TOOL_GAP: <tool-or-verb> — <what it was needed for, one clause>'. Once per session per tool; never a request for the grant itself — the janitor aggregates these into the operator's inventory, and a gap already ruled stays listed with its ruling.
 
             REMEDIATION-WOULD MARKER — when your diagnosis names a mechanical remediation you WOULD have performed had the dial been armed (an IMPERATIVE cluster action the #834 dial would have granted — delete a wedged pod, restart a crashlooping workload, clear a stuck resource; a GitOps quick fix — revert/bump PR — is ALREADY a sanctioned outcome of yours and takes NO marker), emit ONE structured line at the start of a line in your output:
               REMEDIATION-WOULD: <verb> <namespace>/<kind>/<name> — <one-clause reason>
