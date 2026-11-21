@@ -36,6 +36,7 @@ resources:
   - deep-dig-argo.yaml
   - island-intake-argo.yaml
   - island-rules-digest-argo.yaml
+  - kargo-prod-diagnose-argo.yaml
   - sentinel-argo.yaml
   - specs-review-argo.yaml
   - responder-budget-alerts.yaml
