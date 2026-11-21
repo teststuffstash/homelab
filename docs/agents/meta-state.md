@@ -24,8 +24,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
     backup target on two hosts, paging.
   - Bay-swap test if the SA400 drops again.
   - hp-01 Longhorn default disk at 79 % (`LonghornDiskBelowSchedulingFloor`, responder's).
-  - PR #3622 (gateway: anthropic 95 % + `latch_scope: model`) seat-APPROVED; operator admin-merge once `ci` is green.
-    Today's stored Fable latch holds the anthropic rail until 21:59:59Z regardless.
+  - Gateway #3622 MERGED + LIVE 12:32Z (anthropic 5h/7d 0.95, `latch_scope: model`). The reloaded Fable latch holds the
+    anthropic rail until 21:59:59Z; read after that the first reviewer dispatch lands on opus. The new pod also logged
+    `catalog: docs parse failed (no Endpoints table)` — keeping the last good snapshot; check whether that is new.
   - Open question: why reviewer sessions only ever land on anthropic (policy lists opencode + codex).
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
   FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
