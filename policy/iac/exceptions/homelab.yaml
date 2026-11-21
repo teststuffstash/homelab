@@ -99,6 +99,7 @@ spec:
             - MutatingAdmissionPolicyBinding
           names:
             - pg-backup-default # ADR-147: CNPG Clusters wired to their namespace's backup store
+            - pg-archive-timeout-default # CNPG archive_timeout 5min → 1h on every Cluster (incident 2026-11-20-nx-02-boot-disk, #3625)
       - resources:
           kinds:
             - ValidatingAdmissionPolicy
