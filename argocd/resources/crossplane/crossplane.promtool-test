@@ -41,7 +41,7 @@ tests:
               triage: dig
             exp_annotations:
               summary: "5 Crossplane managed resource(s) of repo.github.upbound.io/v1alpha1, Kind=IssueLabels not Synced for 30m"
-              description: "A Crossplane provider cannot apply 5 managed resource(s) of repo.github.upbound.io/v1alpha1, Kind=IssueLabels: its calls to the upstream API fail, so a change to what renders them (a composition, a claim, a manifest) is not live there, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False) and read the refusal in the resource's Synced condition message: `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`."
+              description: "5 managed resource(s) of repo.github.upbound.io/v1alpha1, Kind=IssueLabels report Synced=False: the provider's reconcile is erroring, so a change to what renders them (a composition, a claim, a manifest) is not live, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False); the Synced condition message names the reason (an upstream refusal, a reference or credential that does not resolve, a plan error): `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`."
   # (c) a transient upstream error (20 minutes unsynced, then recovered) never fires.
   - interval: 1m
     name: "(c) a 20-minute transient stays quiet"
@@ -68,3 +68,55 @@ tests:
             exp_annotations:
               summary: "No Crossplane managed-resource state series for 30m — the managed-resource belt is blind"
               description: "Prometheus has no crossplane_managed_resource_exists series. Check the crossplane-providers PodMonitor (ns monitoring) still selects the provider pods (label pkg.crossplane.io/provider, ns crossplane-system), that their `metrics` port 8080 answers /metrics, and the scrape target's state in Prometheus."
+  # (e) ONE provider stops being scraped while the others report (the case the absent guard misses): the
+  # github provider pod's target is down, terraform's is up, a non-provider pod and a scraped grafana are ignored.
+  - interval: 1m
+    name: "(e) one provider pod unscraped fires CrossplaneProviderNotScraped for that pod only"
+    input_series:
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-upjet-github-x"}'
+        values: "1x120"
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-terraform-x"}'
+        values: "1x120"
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-grafana-x"}'
+        values: "1x120"
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="crossplane-x"}'
+        values: "1x120"
+      - series: 'up{job="monitoring/crossplane-providers", pod="provider-upjet-github-x"}'
+        values: "1x9 0x110"
+      - series: 'up{job="monitoring/crossplane-providers", pod="provider-terraform-x"}'
+        values: "1x120"
+      - series: 'up{job="monitoring/crossplane-providers", pod="provider-grafana-x"}'
+        values: "1x120"
+      - series: 'crossplane_managed_resource_exists{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+    alert_rule_test:
+      - { eval_time: 35m, alertname: CrossplaneProviderNotScraped, exp_alerts: [] }
+      - eval_time: 45m
+        alertname: CrossplaneProviderNotScraped
+        exp_alerts:
+          - exp_labels:
+              namespace: crossplane-system
+              created_by_kind: ReplicaSet
+              pod: provider-upjet-github-x
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "Crossplane provider pod provider-upjet-github-x has not been scraped for 30m — its managed resources are unwatched"
+              description: "Prometheus has no successful scrape of provider-upjet-github-x (ns crossplane-system), so CrossplaneManagedResourceNotSynced cannot see that provider's managed resources. Check the pod runs (`kubectl -n crossplane-system get pod provider-upjet-github-x`), carries the pkg.crossplane.io/provider label and a `metrics` port the crossplane-providers PodMonitor (ns monitoring) selects, and the target's state in Prometheus."
+      - { eval_time: 45m, alertname: CrossplaneProviderMetricsAbsent, exp_alerts: [] }
+  # (f) a provider pod the PodMonitor never selected (no up series at all) fires the same way.
+  - interval: 1m
+    name: "(f) a provider pod with no target at all fires CrossplaneProviderNotScraped"
+    input_series:
+      - series: 'kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod="provider-new-x"}'
+        values: "1x120"
+      - series: 'up{job="monitoring/crossplane-providers", pod="provider-terraform-x"}'
+        values: "1x120"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: CrossplaneProviderNotScraped
+        exp_alerts:
+          - exp_labels: { namespace: crossplane-system, created_by_kind: ReplicaSet, pod: provider-new-x, severity: warning, triage: dig }
+            exp_annotations:
+              summary: "Crossplane provider pod provider-new-x has not been scraped for 30m — its managed resources are unwatched"
+              description: "Prometheus has no successful scrape of provider-new-x (ns crossplane-system), so CrossplaneManagedResourceNotSynced cannot see that provider's managed resources. Check the pod runs (`kubectl -n crossplane-system get pod provider-new-x`), carries the pkg.crossplane.io/provider label and a `metrics` port the crossplane-providers PodMonitor (ns monitoring) selects, and the target's state in Prometheus."

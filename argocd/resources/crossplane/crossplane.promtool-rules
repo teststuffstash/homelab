@@ -1,4 +1,4 @@
-# CrossplaneManagedResourceNotSynced + CrossplaneProviderMetricsAbsent, lifted VERBATIM out of
+# CrossplaneManagedResourceNotSynced, CrossplaneProviderNotScraped + CrossplaneProviderMetricsAbsent, lifted VERBATIM out of
 # prometheusrule.yaml (comments stripped — the manifest is its one home) — the rules file that
 # crossplane.promtool-test loads. Not a manifest: `promtool test rules` needs upstream-format rules.
 # ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
@@ -17,7 +17,18 @@ groups:
           triage: dig
         annotations:
           summary: '{{ $value }} Crossplane managed resource(s) of {{ $labels.gvk }} not Synced for 30m'
-          description: 'A Crossplane provider cannot apply {{ $value }} managed resource(s) of {{ $labels.gvk }}: its calls to the upstream API fail, so a change to what renders them (a composition, a claim, a manifest) is not live there, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False) and read the refusal in the resource''s Synced condition message: `kubectl get <kind> <name> -o jsonpath=''{.status.conditions}''`.'
+          description: '{{ $value }} managed resource(s) of {{ $labels.gvk }} report Synced=False: the provider''s reconcile is erroring, so a change to what renders them (a composition, a claim, a manifest) is not live, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False); the Synced condition message names the reason (an upstream refusal, a reference or credential that does not resolve, a plan error): `kubectl get <kind> <name> -o jsonpath=''{.status.conditions}''`.'
+      - alert: CrossplaneProviderNotScraped
+        expr: |
+          kube_pod_info{namespace="crossplane-system", created_by_kind="ReplicaSet", pod=~"provider-.+"}
+            unless on (pod) (up{job="monitoring/crossplane-providers"} == 1)
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: Crossplane provider pod {{ $labels.pod }} has not been scraped for 30m — its managed resources are unwatched
+          description: Prometheus has no successful scrape of {{ $labels.pod }} (ns crossplane-system), so CrossplaneManagedResourceNotSynced cannot see that provider's managed resources. Check the pod runs (`kubectl -n crossplane-system get pod {{ $labels.pod }}`), carries the pkg.crossplane.io/provider label and a `metrics` port the crossplane-providers PodMonitor (ns monitoring) selects, and the target's state in Prometheus.
       - alert: CrossplaneProviderMetricsAbsent
         expr: |
           absent(crossplane_managed_resource_exists)
