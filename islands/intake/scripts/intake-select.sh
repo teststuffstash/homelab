@@ -1144,7 +1144,10 @@ JQ_FIELDS='def r: if type == "string" then . else tojson end | until(endswith("\
         elif ($l | index("agent/blocked")) then "blocked"
         elif ($l | any(startswith("agent/"))) then "loop" else "none" end) | @sh); "
   + "F_bot[\($i)]=\(if (try ((.author.is_bot == true) or ((.author.login // "") | test("^app/|\\[bot\\]$"))) catch false) then 1 else "" end | @sh); "
-  + "F_ruling[\($i)]=\(lazy([.comments[]? | .body | split("\n")[0] | select(startswith("intake:"))] | last // "") | @sh); "
+  + "F_ruling[\($i)]=\(lazy([.comments[]? | (.body // "") as $b | ($b | split("\n")[0]) as $f
+      | if ($f | startswith("intake:")) then $f
+        elif ($f | startswith("<!-- experiment-verdict id=")) and ($b | test("(^|\n)\\*\\*Experiment `[^`]*`: fail\\*\\*(\n|$)")) then ""
+        else empty end] | last // "") | @sh); "
   + "F_since[\($i)]=\(lazy(([.comments[]? | select((.body | split("\n")[0] | startswith("intake:")) or (.body | test("(^|\n)blocked-on:")))
       | .createdAt | select(. != null)] | max) // .updatedAt // .createdAt) | @sh); "
   + "F_refs[\($i)]=\((try ((.number) as $self | [.comments[]? | select(((.body // "") | split("\n")[0] | startswith("intake:")) or ((.body // "") | test("(^|\n)blocked-on:")))]
@@ -1250,6 +1253,8 @@ while [ "$i" -lt "$count" ]; do
   esac
   fi
   # a standing ruling: a comment whose first line starts with `intake:` (the LATEST one is the ruling)
+  # …and a FAIL verdict of the experiment read (`<!-- experiment-verdict id=… -->`, Goal #3586) newer than it
+  # voids it: the read reopened the issue, so it is an undecided input again (islands/intake/rules/intake.md §Experiment)
   ruling="$(lazy "${F_ruling[$ix]}")" || exit 5
   # …except `intake: forward → <island>`: another sitting passed the item on (islands/intake/rules/intake.md
   # step 0) and retitled it, so it is an UNRULED candidate of whichever island its title names now

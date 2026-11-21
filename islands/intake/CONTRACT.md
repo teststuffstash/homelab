@@ -273,7 +273,9 @@ gate; nothing waits for it and nothing is rolled back by it.
   block, and [`scripts/experiment-read.sh`](scripts/experiment-read.sh) reads the closed issues that
   carry it. It runs as the scheduled workflow's first step, before the sittings, and decides
   nothing if it cannot reach Prometheus or GitHub.
-- **The window.** It starts at t0, the merge instant of the pull request that closed the issue, and
+- **The window.** It starts at t0, the merge instant of the pull request that closed the issue — for a
+  Goal child (a parent chain reaching a `task/goal` issue), the merge of that Goal's assembly PR, when the
+  change reaches production; until it merges the experiment is `pending` — and
   ends at the bound, `max_window` after t0 (at most `7d`); a later deploy or restart neither ends nor
   resets it ([`scripts/experiment.py`](scripts/experiment.py), header, `decide`).
 - **The four verdicts.** `pass`, `fail`, `pending` (short of samples before the bound) and `no data`

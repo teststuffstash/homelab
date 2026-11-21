@@ -42,7 +42,7 @@ sitting.
 - **The run reads experiments first** (Goal #3586). Before the island list, the workflow's `experiments`
   step runs [`scripts/experiment-read.sh`](scripts/experiment-read.sh) through this island's devbox: every
   closed issue labelled `experiment/open` has its `## Experiment` block decided from Prometheus
-  (`experiment.py read`; t0 = the merge of the PR that closed it) and the verdict is written to the issue
+  (`experiment.py read`; t0 = the merge of the PR that closed it, or for a Goal child the Goal's assembly merge) and the verdict is written to the issue
   (`pass` / `fail` / `no data` once, marker `<!-- experiment-verdict id=<id> -->`; `pending` writes nothing). A
   failed experiment reopens its issue with the `agent/*` labels removed — or, under a Goal, goes to the Goal's
   `post-launch:` sub-issue — so the same run's sitting reads it as an undecided input. The step is
