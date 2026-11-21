@@ -1595,7 +1595,8 @@ release ([GW-SESSIONS-OUTCOME](#gw-sessions-outcome)). A missing or empty `task`
 `malformed-body`. ⚖ Visibility is GET's owner rule, never a refusal: a caller whose entry says
 `outcome: any` sees every session of ITS stacks carrying the task; any other caller sees only the
 sessions it admitted; a row admitted with no caller (`observe`) is visible to any listed caller, as
-the owner rule already says for `GET`. A row outside that is simply not listed — an empty list,
+the owner rule already says for `GET`; a request with no identity (no bearer, under `observe`) sees
+every session of the task, as `GET`'s owner rule lets it read any row. A row outside that is simply not listed — an empty list,
 never a 403, since a list reveals nothing. The caller check is every control-plane route's (401 /
 403 / 503 under `enforce`; counted under `observe`, `{route="list"}`).
 
@@ -1867,7 +1868,7 @@ class's scope is a judgment, marked.
 | `harness-death` | model | consumer | the harness died (goose `-32602` and kin) |
 | `auth-storm` | cell | consumer · **gateway** (an upstream 424 `upstream-auth`) | 401/403 from the serving upstream |
 | `timeout` | cell | consumer · **gateway** (504, or a stream cut by a read timeout) | the completion timed out at the provider |
-| `provider-5xx` | cell | consumer · **gateway** (an upstream 5xx relayed, or 502 `upstream-unreachable`) | the provider failed |
+| `provider-5xx` | cell | consumer · **gateway** (an upstream 5xx relayed, 502 `upstream-unreachable`, or a pre-byte 2xx the dialect cannot read) | the provider failed |
 | `no-pr` | model | consumer | the ride produced no artifact |
 | `unknown` | model | consumer | an unclassified death |
 | `turn-cap` | model | consumer | the ride died at a turn / output cap |

@@ -3,7 +3,7 @@
 **Status:** investigation 2026-10-17; **RULED** the same day (operator, FU-270) — see
 [§Rulings](#rulings-operator-2026-10-17). The read leg is built as
 [GW-CATALOG-GO](../../gateway/specs/endpoints/catalog.md#gw-catalog-go) and admission reads it
-([sessions.md §Capacity](../../gateway/specs/endpoints/sessions.md#capacity--the-ladders-capacity-half):
+([sessions.md §Capacity](../../gateway/specs/endpoints/sessions.md#gw-sessions-capacity):
 per-model windows, `not-in-catalog`, rules-only policy); the questions still open are marked ⚖
 below. The question (operator, 2026-10-17): the Go rail's models, prices and limits
 are hand-copied JSON and Markdown — can they be read from the vendor instead, *"dynamic without

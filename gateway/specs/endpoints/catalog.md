@@ -13,7 +13,7 @@ the Go catalog on 2026-10-14 and nothing noticed
 its vendor facts on a schedule, keeps the last good snapshot of each source in its store, and shows
 them on the two views here and on `/metrics`. Admission reads the snapshots — the Go window draw's
 prices, each model's own windows, `not-in-catalog`
-([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); this page owns
+([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)); this page owns
 only the reading. The design input and the operator's rulings are the spike's §Rulings.
 
 Three legs, two rules each: **the Go catalog** — the refresh ([GW-CATALOG-GO](#gw-catalog-go)) and
@@ -463,7 +463,7 @@ the vendor facts live in the snapshot, so a policy that still carries one refuse
 stale hand copy can never shadow the catalog. Two entries of `rails.<rail>.admission` are closed
 sets, and a value outside one refuses the load: a window under `window_draw.windows` is one the
 page gives a share — `5h`, `7d`, `30d`, the snapshot's `window_shares` — and `latch_scope` is
-`account` (the default) or `model` ([GW-SESSIONS-CAPACITY](sessions.md#capacity--the-ladders-capacity-half)). The same rule holds a Go model's harness window:
+`account` (the default) or `model` ([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)). The same rule holds a Go model's harness window:
 the dispatch answer's `context_tokens` is the snapshot's `context`, and a policy `context_tokens`
 entry for an `opencode-go/*` model refuses the load — the rows live on
 [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
@@ -872,7 +872,7 @@ the horizon it is due again — judged whenever the provider serves our traffic,
 Any verdict (a clean ride, a strike) resets the horizon and the step; a strike reported on a ride
 that saw a 429 on its cell is the task's strike as ever but **not** the cell's verdict — the 429 is
 the likelier cause. The capacity half's own 30/60 s cell cooldown
-([sessions.md §Capacity](sessions.md#capacity--the-ladders-capacity-half)) is untouched by this:
+([sessions.md §Capacity](sessions.md#gw-sessions-capacity)) is untouched by this:
 that is selection's signal, this is the entry gate's.
 
 **The budget cap** ⚖ — policy knobs, never code constants (`rails.openrouter.canary`):
@@ -1147,7 +1147,7 @@ limit)`** — the fee buys at least the model's own allowance (`promise`), and a
 every Go token cheaper (`measured`); an unlimited model prices at 0 (`unlimited`). The fee is the
 Go page's Plan table ([GW-CATALOG-GO-PARSE](#gw-catalog-go-parse), never a policy copy — ruling 5);
 the draw is the gateway's own ledger at the catalog's list rates, the window draw's arithmetic
-([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); the model's
+([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)); the model's
 windows stay the gate — a window at its threshold holds the cell whatever its price. Shown on
 `GET /catalog/opencode` `pricing` (`output.pricing`), read by the snapshot and the rail choice.
 
@@ -1450,8 +1450,8 @@ per clean ride and by price alone), `clean-rate` (the measured rate flipped the 
 `headroom`, `not-in-catalog` (unverified — expected: no row drives it), `no-eligible-endpoint`, and
 ⚖ `order` — the two twin cells cost exactly the same per clean ride, so the role's rail order
 decides and the answer says so (unverified — expected: no row drives an exact tie; the sixth value
-of `RAIL_CHOICE_REASONS`, which neither `metrics.schema.json`'s `gateway_rail_choice_total.reason`
-nor `sessions.schema.json`'s `rail_choice.reason` enumerates yet). A failed-over request bills the serving provider: its row names that
+of `RAIL_CHOICE_REASONS`, enumerated by both `metrics.schema.json`'s `gateway_rail_choice_total.reason`
+and `sessions.schema.json`'s `rail_choice.reason`). A failed-over request bills the serving provider: its row names that
 provider, its outcome judges that cell
 ([§Failover](openai-chat.md#failover--before-the-first-byte-only) — the choice does not change it).
 

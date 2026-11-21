@@ -199,7 +199,8 @@
         "clean-rate",
         "headroom",
         "not-in-catalog",
-        "no-eligible-endpoint"
+        "no-eligible-endpoint",
+        "order"
       ],
       "description": "why one rail's twin cell went first (sessions.schema.json $defs.rail_choice.reason)"
     }

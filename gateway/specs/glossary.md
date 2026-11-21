@@ -104,7 +104,7 @@ test row.
 A size label on a session — `light` | `standard` | `heavy` — that selects the model within the
 chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
-[§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
+[§The retry contract](endpoints/sessions.md#gw-sessions-retry)). The role's default comes from the policy; the caller
 may override it, and may ask for the list to be walked from its END (`prefer: strongest` —
 [§The preferred end of the list](endpoints/sessions.md#the-preferred-end-of-the-list)). Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
 deployed policy's lists are derived from the [tier evidence](#tier-evidence).
@@ -121,13 +121,13 @@ openrouter model's endpoint snapshot has no provider that clears the policy floo
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
-([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
+([sessions.md §Capacity](endpoints/sessions.md#gw-sessions-capacity)).
 
 ## cell
 
 A (rail, model, **provider**) triple — one model served on one rail by one provider, the unit a
 429 cools, a strike excludes and an outcome judges
-([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half),
+([sessions.md §Capacity](endpoints/sessions.md#gw-sessions-capacity),
 [§The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)). The provider is the
 endpoint tag's base slug on the openrouter rail — what `provider.order` names, joined from the
 answer's display name through the [endpoint snapshot](#endpoint-snapshot)
