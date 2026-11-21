@@ -265,7 +265,7 @@ BSHA="$(git -C "$REPO" rev-parse origin/master)"   # the base every run (and eve
 # the test VM's baseline identity for the content key — the same hypervisor ssh as the harness's step 1;
 # unreadable = empty = no key = every head runs (the harness then says why the hypervisor is unreachable)
 PVE_KEY="${OPN_TEST_PVE_KEY:-/var/lib/mgmt/pve-ssh/id_ed25519}"
-BL="$(ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$TVM_PVE" "qm config $TVM_VMID --snapshot $TVM_SNAP" 2>/dev/null \
+BL="$(ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HWT/machines/hypervisor_known_hosts" "root@$TVM_PVE" "qm config $TVM_VMID --snapshot $TVM_SNAP" 2>/dev/null \
        | sed -n "s/^snaptime: \([0-9][0-9]*\)\$/$TVM_VMID\/$TVM_SNAP@\1/p")"
 [ -n "$BL" ] || log "WARN baseline snapshot identity unreadable — no PASS is carried this pass"
 

@@ -474,8 +474,9 @@ spec:
               LAUNCH
               exec devbox run --config islands/intake -- bash /tmp/island-intake-launch.sh
           resources:
-            # 3Gi: `devbox install` evaluates the devbox's nix environment in this container (single-
-            # user nix, no daemon) — 1.2 GB peak measured for this lock on a cold eval cache
-            # (homelab#3577); the sessions that follow stay well under it.
-            requests: { cpu: "100m", memory: "512Mi" }
-            limits: { memory: "3Gi" }
+            # 1Gi: measured in the pod on the first sitting under this image (2026-11-20, the gateway
+            # island, dry-run, 21 min with two lens runs): 360 MiB peak working set, and clone +
+            # `devbox install` done 14 s after the container started (the island devbox adds two
+            # packages to what the image pre-bakes; the pull-through nix cache serves them).
+            requests: { cpu: "100m", memory: "384Mi" }
+            limits: { memory: "1Gi" }

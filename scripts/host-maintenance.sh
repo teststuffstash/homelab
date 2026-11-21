@@ -77,7 +77,9 @@ esac
 BMC_ENTRY=nx-02-bmc-password
 WARNS=0; FAILS=0
 
-hv() { ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 "root@$HIP" "$@"; }
+# The hypervisors' host keys are pinned in git (machines/hypervisor_known_hosts), never the default known_hosts.
+hv() { ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$ROOT/machines/hypervisor_known_hosts" "root@$HIP" "$@"; }
 nm()     { bash "$ROOT/scripts/node-maintenance.sh" "$@"; }
 runner() { bash "$ROOT/scripts/runner-maintenance.sh" "$@"; }
 router() { bash "$ROOT/scripts/opnsense-router-node.sh" "$@"; }

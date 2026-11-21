@@ -13,6 +13,7 @@ resources:
   - upgrade-lease.yaml       # the ⚓ upgrade-lease loop's belts (ADR-150)
   - router-verdict.yaml      # the box's `opnsense-test-vm` verdict loop (ADR-152 step 1)
   - router-firmware.yaml     # the router firmware currency belt (class 14, ADR-152 step 1)
+  - router-disk.yaml         # the router root-filesystem belt (the 2026-11-20 nx-02 disk-full incident)
   - cert-carry.yaml          # the nightly router certificate carry (FU-297)
 
 # The operator's progress view — "Management box — now" (uid mgmt-box-now): in-flight leases +

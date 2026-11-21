@@ -84,6 +84,28 @@ rail_model() {
 # a cheap one, and the goal lane is the one place in this scan where that trade is not close.
 goal_lane_clause() {
   case "${1:-}" in goal-decompose|goal-checkpoint) return 0;; *) return 1;; esac
+}
+# goal_lane_gateway <stack>: TRUE when that stack's coordinator session admits through the agent-gateway
+# — coordinator-session.sh's GW_COORD test, the same stack name (FU-270 (c)). There the gateway owns the
+# model and the capacity answer (role coordinator, tier heavy for these clauses; latch_scope per MODEL,
+# #3622), so the old proxy's rail pick above — which reads one model's 429 as "Anthropic latched" — is
+# not this unit's capacity question. Without this, a spent Fable week held every Goal checkpoint
+# while opus stood free (Goal #3586's assembly, 2026-11-21).
+goal_lane_gateway() { [ "${1:-}" = platform ]; }
+# goal_lane_defers <clause> <rail> <stack>: TRUE when the unit must DEFER on capacity — a goal-lane clause,
+# a Go pick, and a stack whose coordinator does NOT admit through the gateway.
+goal_lane_defers() {
+  goal_lane_clause "${1:-}" || return 1
+  case "${2:-}" in opencode-go/*) ;; *) return 1;; esac
+  goal_lane_gateway "${3:-}" && return 1
+  return 0
+}
+# dispatch_model <clause> <rail> <stack> <stack-model> → the --model the dispatch passes. A goal-lane unit
+# of a gateway stack keeps the stack's own (subscription) model, never the Go substitute: the gateway
+# ignores --model, and if it refuses, the launcher's old-proxy fallback then meets the FU-088 latch with
+# a claude model and DEFERS — never a flash-model decompose (the 2026-09-18 case).
+dispatch_model() {
+  if goal_lane_clause "${1:-}" && goal_lane_gateway "${3:-}"; then printf '%s' "${4:-}"; else rail_model "${2:-}" "${4:-}"; fi
 }   # homelab#840: gh's unstated 30-result default silently hid queued #110 for 24 days (46 open issues, window floor #840). 200 is well above any repo's open-issue count; the scan prints a loud TRUNCATED warning if the fetch fills the limit.
 # Goal #1640 acceptance 5: the router's `/router-status` — the ONE home of live CELL state
 # (`pair_cooldowns`, `serving_classes`, `generations_24h`). ClusterIP-local, unauthenticated, the
@@ -1855,15 +1877,18 @@ fast_unit_dispatch() {
   fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
   case "${FAST_RAIL:-anthropic}" in
     opencode-go/*)
-      if goal_lane_clause "$fclause"; then
+      if goal_lane_defers "$fclause" "$FAST_RAIL" "$fstack"; then
         echo "unit fast-path: ${frepo} ${fitem} (${fclause}) NOT dispatched on the Go rail — its class pins claude/fable; deferring on capacity"
         item_class_push "$frepo" "$fitem" "deferred-capacity" "machine"
         return 0
+      elif goal_lane_clause "$fclause"; then
+        echo "  unit fast-path: Anthropic latched per the old proxy — goal lane of ${fstack} admits through the gateway, which answers capacity per model"
+      else
+        echo "  unit fast-path: Anthropic latched — dispatching on the Go rail (${FAST_RAIL})"
       fi
-      echo "  unit fast-path: Anthropic latched — dispatching on the Go rail (${FAST_RAIL})"
       ;;
   esac
-  fmodel="$(rail_model "${FAST_RAIL:-anthropic}" "$fmodel")"
+  fmodel="$(dispatch_model "$fclause" "${FAST_RAIL:-anthropic}" "$fstack" "$fmodel")"
   echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
   # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
   # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
@@ -7364,7 +7389,7 @@ EOF
     fi
     case "${DISPATCH_RAIL:-anthropic}" in
       opencode-go/*)
-        if goal_lane_clause "$uclause"; then
+        if goal_lane_defers "$uclause" "${DISPATCH_RAIL:-anthropic}" "$name"; then
           echo "  goal lane: ${urepo} ${uitem} (${uclause}) NOT dispatched on the Go rail — its class pins claude/fable (model-classes.json goal-decompose); deferring on capacity until the subscription clears"
           item_class_push "$urepo" "$uitem" "deferred-capacity" "machine"
           tried_units="${tried_units} ${unit}"
@@ -7373,7 +7398,7 @@ EOF
         ;;
     esac
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
-    cmodel="$(rail_model "${DISPATCH_RAIL:-anthropic}" "$cmodel")"
+    cmodel="$(dispatch_model "$uclause" "${DISPATCH_RAIL:-anthropic}" "$name" "$cmodel")"
     # The stack's WORKER model — not this session's model. It is the sizing input the goal-budget
     # estimator needs (a cap is per-ride, and the rides a goal funds are worker rides), read here
     # beside cmodel so the harvest-disposition block below stays free of claim lookups.
@@ -7690,10 +7715,10 @@ EOF
           continue
         fi
         cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
-        cmodel="$(rail_model "$DISPATCH_RAIL" "$cmodel")"
+        cmodel="$(dispatch_model "$uclause" "$DISPATCH_RAIL" "$name" "$cmodel")"
         case "$DISPATCH_RAIL" in
           opencode-go/*)
-            if goal_lane_clause "$uclause"; then
+            if goal_lane_defers "$uclause" "$DISPATCH_RAIL" "$name"; then
               echo "  goal lane: ${urepo} ${uitem} (${uclause}) NOT dispatched on the Go rail — its class pins claude/fable; deferring on capacity"
               item_class_push "$urepo" "$uitem" "deferred-capacity" "machine"
               tried_units="${tried_units} ${unit}"

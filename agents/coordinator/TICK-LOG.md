@@ -15636,3 +15636,58 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - **Direction:** the 11-14 trial already ruled the review model (seat asked again — corrected); intake becomes its own
   island, the contract goes to oracle. Goal #3574 + children #3575–#3581 drafted, bound, edged, goal-lint 0 FAIL;
   none queued; the operator admits.
+
+## 2026-11-20 (third entry) — Goal #3574 built by seat subagents and proven live; #3573 merged; Goal #3586 launched
+
+- **Condition:** operator admitted #3574 ("build it with seat subagents"), later "finish this and launch the next goal
+  while I am gone". **Done:** seven children, one subagent each, serial, PR into `goal/3574-intake-island` with the bot
+  reviewers gating: #3583 #3584 #3585 #3589 #3591 #3595 #3597; assembly #3598 merged 18:37Z.
+- **Seat acts along the way:** four cluster-scoped names onto the sentinel baseline direct (`6af828ae` — the sentinel
+  reads exceptions from master only; `iac-sentinel` status is per head, an empty commit re-evaluates it). Child C: the
+  island devbox trimmed from eight packages to two (the image pre-bakes the rest; the operator asked why 3Gi) and the
+  gateway caller narrowed to `coordinator`/no bind — both amended on #3577. Child F's design (pin 9) written into
+  #3580 before it was built. Assembly review blocked once: per-island `IslandIntakeStale` fired for ever for an island
+  that left the list (the Pushgateway serves a last push for good) — gated on a listed-islands gauge the list step
+  pushes (`listed-push.sh`, fixture cases f, f2).
+- **Live:** `kubectl auth can-i … --as=…:island-intake` as designed; dry-run `island-intake-cpsr9` Succeeded in 21 min
+  (install 14 s, 360 MiB peak → #3609 lowers 3Gi to 1Gi).
+- **#3573** (scratch 40Gi → 100Gi, the ride of #3563) merged on the operator's word; live quota read 100Gi.
+- **Outcome checks:** operator asked how a fix is checked against its reason. Three web prior-art searches (rollout
+  tools, Prometheus-side, flag/experiment platforms): Kargo holds its Stage during a verification and binds it to a
+  version — ruled out; oracle's `experiment` block read and taken unchanged; `kpi.control` proposed, dropped on
+  oracle's read. Goal #3586 filed, branch cut, children #3602–#3606; #3563 carries the first block.
+- **Two heredoc accidents** (a subagent's and the seat's): a nested heredoc ended early and the remainder ran as shell
+  with empty variables; nothing was changed either time. Briefs now say: write such fragments with a file tool.
+
+## 2026-11-20 ~22:30Z → 11-21 ~00:45Z — seat: nx-02 boot-disk incident (operator: "look at alerts")
+
+- Read the alert list, then grafana-pg "Not enough disk space", then `ContinuousArchiving=False` on 3 CNPG clusters since
+  06:50Z, then nx-02 over ssh: the SA400 had left the bus, root was `emergency_ro`, binaries failed with I/O errors, LXC 220 was dead.
+- Grew the volumes (`85b7c85c`): forgejo-pg + infisical-pg 5→15 Gi (they were ~9 h from full at ~200 MB/h WAL), grafana-pg 2→6 Gi.
+  Patched the grafana PVCs by hand (CNPG did not resize while unhealthy). Restarted grafana-pg-3 + Grafana: pg-4 promoted, `/api/health` 200.
+- The operator hot-plugged a spare 480 G SA400 (old Talos). Wiped its first and last 2 MiB with perl (wipefs/dd/sgdisk all hit I/O errors),
+  verified by reading the zeros back. The operator reseated the original SA400 and it came back as `sdc` with its partitions intact.
+- Dropped the temporary backup-Garage build: `pct create` needs the template on the dead root, and the reseated disk makes it moot.
+  The reboot is deferred to the morning, attended. The operator wants the lessons discussed first. Incident draft: docs/incidents/2026-11-20-nx-02-boot-disk.md.
+
+## 2026-11-21 — seat: nx-02 boot-disk incident, diagnosis → reboot → router disk fix → take-back (attended)
+
+- **Disk or bus:** SMART clean (static smartctl from `/dev/shm` on the zombie), extended self-test passed, interface CRC
+  1 lifetime. Prometheus: a 30 s stall at 06:47:19–06:48:19Z, gone by 06:49:19Z, no earlier stall in 16.5 d, nx-01 quiet.
+  HBA PHY 0 link errors 29/24/1. Leans toward a drive-controller hang. The previous boot's journal ends 06:47:12Z, so no
+  kernel line survived. Operator: reseat was same-bay, so the bay swap is the remaining A/B.
+- **Found:** `oracle-pg` also not archiving (2 GiB, ~2 weeks headroom); the box's apply/lease/belt loops hung on
+  nx-02's dead Proxmox API.
+- **Reboot, window `seat-1795249029-524`:** `host-maint down` failed at `qm shutdown` (task log on the read-only root).
+  The seat finished by hand: QMP powerdown, `node-maintenance down` wk-04 then cp-02, CARP enter → pve, sysrq reboot
+  08:49:50Z. Back in 137 s; `host-maint up` green; archiving True ×4.
+- **WAN outage 08:54–09:02Z on take-back.** Subagent dig: the WAN was fine (nx-02 `eno2` rx ~875 pkt/s, pve 0); the
+  nx-02 router's disk was 108 % full (filter logs ~110 MB/day × 31 d on 8 GB), so Unbound could not start. Full since
+  ≥10-31, masked by the long-running Unbound. Operator ruling: grow the disks for 30 days of logs → #3621 (32 GB + disk
+  belt + own-resolver `check`), seat-reviewed APPROVE, admin-merged, applied, `growfs` online, users play
+  (`firmware` + Dashboard ACL, operator-approved). Take-back 12:26Z: ~7 s gap.
+- **Gateway:** a `claude/fable` 429 at 05:08Z (Fable's own weekly limit) latched the whole anthropic rail until
+  21:59:59Z (account scope), blocking every reviewer. Operator: defer at 95 %, Fable-only → #3622 (5h 0.95,
+  `latch_scope: model`); seat review round 1 REQUEST_CHANGES (3 prose spots), round 2 APPROVE.
+- FU-322 minted (Prometheus ~18 d < the operator's 30 d, deferred). Corrections from the operator: both WAN NICs are
+  1 Gbit (378 Mbit/s is the ISP uplink); the tray-to-backplane connector belongs in the disk-or-bus reasoning.

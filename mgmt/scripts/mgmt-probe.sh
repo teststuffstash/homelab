@@ -864,7 +864,16 @@ kps_crds_verdict() {
 # state between windows; "too long" is MgmtRouterFirmwareBehind's, "no reading" is
 # MgmtRouterFirmwareUnread's (argocd/resources/mgmt-metrics/router-firmware.yaml). An unreadable node
 # publishes read_ok 0 and NO currency series — never a false "current".
+#
+# The same loop reads each router's ROOT FILESYSTEM (2026-11-21, docs/incidents/2026-11-20-nx-02-boot-
+# disk.md: opnsense-nx02's 8 GB disk filled with 30 days of logs, Unbound could not start after a cold
+# boot, and nothing alerted): `GET diagnostics/system/system_disk` (the dashboard Disk widget's
+# endpoint — df's `/` row in bytes), as the same identity: its ACL is `page-system-login-logout`
+# ("Lobby: Dashboard", read-only widgets), granted to the `firmware` user beside its one firmware
+# privilege. → mgmt_router_disk_{read_ok,size_bytes,avail_bytes}; MgmtRouterDiskLow /
+# MgmtRouterDiskUnread in argocd/resources/mgmt-metrics/router-disk.yaml. Reports, never fails.
 declare -a FIRMWARE=()   # "<node> <role> <read_ok> <available|-> <reboot|-> <last_check|-> <offered_since|-> <version|-> <offered|->"
+declare -a DISK=()       # "<node> <role> <read_ok> <size_bytes|-> <avail_bytes|->"
 FW_CHECK="${FW_CHECK:-1}"
 FW_CHECK_INTERVAL="${FW_CHECK_INTERVAL:-86400}"   # 24 h: an update is days-scale, the alert 7 d
 FW_CHECK_RETRY="${FW_CHECK_RETRY:-3600}"          # one attempt per node per hour at most
@@ -907,7 +916,13 @@ check_firmware() {
     skipped firmware unreachable "no router answered a firmware reading ($n tried${detail})"
     return
   fi
-  passed firmware "$ok/$n read, $behind with an update offered${detail}"
+  local dok=0
+  for row in "${DISK[@]}"; do
+    read -r -a f <<< "$row"
+    if [ "${f[2]}" = 1 ]; then dok=$((dok + 1)); detail="$detail, ${f[0]} disk $(( (f[3] - f[4]) * 100 / f[3] ))% used"
+    else detail="$detail, ${f[0]} disk unread"; fi
+  done
+  passed firmware "$ok/$n read, $behind with an update offered, $dok/$n disks read${detail}"
 }
 
 # fw_node <name> <role> <host> <curl-config> <cache-dir> — read one router, check if stale, append a row.
@@ -949,6 +964,26 @@ fw_node() {
     fi
   fi
   fw_row "$name" "$role" "$body" "$lc" "$cdir" "$now" "$seed"
+  disk_row "$name" "$role" "$(_fw_curl "$cfg" GET "https://$host/api/diagnostics/system/system_disk")"
+}
+
+# disk_row <name> <role> <system_disk-json> — the root filesystem's row. The body is df's
+# (`{"devices":[{"mountpoint":"/","total_bytes":…,"available_bytes":…},…]}`, OPNsense
+# scripts/system/disk_info.py); available_bytes is what is left OUTSIDE UFS's minfree reserve, so it
+# goes NEGATIVE on a filesystem past 100 % (opnsense-nx02, 108 %, 2026-11-21) — kept signed. Anything
+# else (no answer, a 403 body, no `/` row, a non-integer) is read_ok 0 with no size/avail series.
+disk_row() {
+  local name="$1" role="$2" body="$3" size="" avail=""
+  read -r size avail < <(printf '%s' "$body" | _substrate_jq -r \
+      '[.devices[]? | select(.mountpoint == "/")][0] // {} | "\(.total_bytes // "-") \(.available_bytes // "-")"' 2>/dev/null) || true
+  case "${size:-}" in ''|*[!0-9]*) size="" ;; esac
+  case "${avail#-}" in ''|*[!0-9]*) avail="" ;; esac
+  if [ -z "$size" ] || [ "$size" -le 0 ] || [ -z "$avail" ]; then
+    DISK+=("$name $role 0 - -")
+    log "disk: $name no usable reading (system_disk: $( [ -n "$body" ] && printf '%s' "${body:0:200}" || printf 'no answer or an HTTP error — 403 = the identity lacks page-system-login-logout'))"
+    return
+  fi
+  DISK+=("$name $role 1 $size $avail")
 }
 
 # fw_row <name> <role> <status-json> <last_check-epoch|""> <cache-dir> <now> [<pre-check offer epoch>] — the verdict for one
@@ -1234,6 +1269,22 @@ publish() {
       body+="# TYPE mgmt_router_firmware_update_offered_since_timestamp_seconds gauge"$'\n'
       body+="$fl"
     fi
+  fi
+  # The router root-filesystem gauges (check_firmware's disk_row): read_ok for every router tried;
+  # size/avail only for a reading that counts — an unread node is its own state, never "has room".
+  if [ ${#DISK[@]} -gt 0 ]; then
+    local drow dk
+    body+="# HELP mgmt_router_disk_read_ok 1 = the router answered diagnostics/system/system_disk with a / row, 0 = no usable reading."$'\n'
+    body+="# TYPE mgmt_router_disk_read_ok gauge"$'\n'
+    for drow in "${DISK[@]}"; do read -r -a dk <<< "$drow"; body+="mgmt_router_disk_read_ok{node=\"${dk[0]}\",role=\"${dk[1]}\"} ${dk[2]}"$'\n'; done
+    body+="# HELP mgmt_router_disk_size_bytes The router's root filesystem size (df total)."$'\n'
+    body+="# TYPE mgmt_router_disk_size_bytes gauge"$'\n'
+    for drow in "${DISK[@]}"; do read -r -a dk <<< "$drow"; [ "${dk[2]}" = 1 ] || continue
+      body+="mgmt_router_disk_size_bytes{node=\"${dk[0]}\",role=\"${dk[1]}\"} ${dk[3]}"$'\n'; done
+    body+="# HELP mgmt_router_disk_avail_bytes The router's root filesystem space available outside the UFS reserve (df avail; negative past 100 %)."$'\n'
+    body+="# TYPE mgmt_router_disk_avail_bytes gauge"$'\n'
+    for drow in "${DISK[@]}"; do read -r -a dk <<< "$drow"; [ "${dk[2]}" = 1 ] || continue
+      body+="mgmt_router_disk_avail_bytes{node=\"${dk[0]}\",role=\"${dk[1]}\"} ${dk[4]}"$'\n'; done
   fi
   # Atomic (tmp + rename in the same dir — the collector must never read a half file). Never fail
   # the probe on a reporting failure: the deadman's verdict is about the BOX, and Prometheus is

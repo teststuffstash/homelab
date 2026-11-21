@@ -590,8 +590,9 @@ blocks lifts.
 
 - **Window utilization** (`anthropic`): the last-seen `anthropic-ratelimit-unified-<w>-utilization`
   of each window at/over `utilization_thresholds.<w>` blocks the rail until that window's
-  `-reset`. ⚖ 5h **0.80** = `ANTHROPIC_UTIL_THRESHOLD`'s code default (`openrouter-proxy.py`; unset in
-  its `deployment.yaml`), 7d **0.95** = `ANTHROPIC_UTIL_THRESHOLD_7D` (`deployment.yaml`). A reading
+  `-reset`. ⚖ The deployed policy sets 5h and 7d to **0.95** (operator ruling: defer at 95 % of a
+  window); the worlds keep the old proxy's 5h **0.80** (`ANTHROPIC_UTIL_THRESHOLD`'s code default,
+  `openrouter-proxy.py`) and 7d **0.95** (`ANTHROPIC_UTIL_THRESHOLD_7D`) as fixture values. A reading
   whose reset has passed is no reading (the old proxy's "dead data" rule); a reading older than
   `reading_stale_s` (**900 s**) is no reading either — an unavailable reading admits, never blocks.
   ⚖ The 900 s bound has **no** old-proxy precedent (it sees every subscription ride; this gateway
@@ -613,12 +614,17 @@ blocks lifts.
   `upstream_provider_shared_pool` 105, `openrouter_shared_capacity` 3,
   `openrouter_free_tier_per_minute` 7), while two other models on the same key served 200s
   throughout; an experiment rail latch on one model's 429 deferred a different model.
-- **429 [latch](../glossary.md#latch)** (`anthropic`, `opencode`): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
+- **429 [latch](../glossary.md#latch)** (a rail declaring `latch_scope: account` — `opencode` deployed, `anthropic` in the
+  worlds; the deployed `anthropic` declares `model`, so its 429 only cools the cell): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
   declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` with
   `latch_scope: account` (the default) is one subscription account whose limits are account
   windows (the subscription's 5h/7d), so a 429 there latches the whole rail as well as cooling its
   cell, for the same reset (a reset-less 429 → the hold); any 2xx on the rail clears it early.
-  ⚖ hold **900 s** = `ANTHROPIC_429_HOLD_S` (`openrouter-proxy.py`). `opencode` declares
+  ⚖ hold **900 s** = `ANTHROPIC_429_HOLD_S` (`openrouter-proxy.py`). The deployed `anthropic` rail
+  declares `latch_scope: model` (operator ruling): the subscription meters Fable against a weekly
+  limit of its own, and a Fable 429 under account scope latched every model on the rail until that
+  limit's reset; the account 5h/7d windows are guarded by the window-utilization block above.
+  `opencode` declares
   `latch_scope: account` too (since 2026-11-01): the vendor meters every paid Go model against **one**
   shared account allowance — the published per-model limits only WEIGHT a request's cost against
   that pool (OpenCode support's statement in anomalyco/opencode#54875; the docs still say per model,
@@ -927,12 +933,17 @@ store ([GW-HEALTH](health.md#gw-health)) keeps none. Operator ruling 2026-10-21:
 persisted its latches (`router.latch_save`), so a roll must not forget what a 429 or a 401 taught.
 ⚖ What a reload drops is exactly what the in-memory logic would already have let go by then: a
 cooldown or latch past its `until`, a no-probe rail's rejection past its half-open (its `hold`
-stays, so a repeat still doubles), a mark on a rail the policy no longer names. ⚖ A probe rail's
+stays, so a repeat still doubles), a latch on a rail that no longer latches — no `latch_429_hold_s`, or a
+`latch_scope` other than `account` (such a rail never sets one, so a latch written under the old
+policy must not block the whole rail after the roll — the #3622 rollout reloaded a Fable latch that deferred every
+reviewer until Fable's weekly reset), a mark on a rail the policy no longer names. ⚖ A probe rail's
 rejection past its due time reloads as due — the first re-probe pass after the roll sends it —
 because the in-memory mark waits for the probe's verdict, never a clock.
 
 Legend: `arrange` = the ride(s) on the first gateway, as in the tables above; `roll` = the first
-gateway's store closes, that many seconds pass, a second gateway starts on the same DB path; `after`
+gateway's store closes, that many seconds pass, a second gateway starts on the same DB path (a
+`roll` naming `the policy now declares <rail> <admission key>: <value>` starts it on the policy with
+that one admission value changed, `none` = the key removed — a policy rollout riding the roll); `after`
 = a ride on the second gateway before the ask (`—` = none); `role` / `rail` = the body's.
 
 | description | world | arrange | roll | after | role | rail | decision? | rail? | reason? | retry_after_s? |
@@ -940,6 +951,8 @@ gateway's store closes, that many seconds pass, a second gateway starts on the s
 | a cooled cell survives a restart | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s | +10 s | — | worker | openrouter | defer | — | cell-cooled | 32 |
 | a 429 latch on the subscription survives a restart | policy-default · upstream-429 | reviewer ride on anthropic → 429 (retry-after: 30) | +10 s | — | reviewer | anthropic | defer | — | rail-latched | 20 |
 | a rejected credential's mark survives with its backoff | policy-default · upstream-401-key-expired | worker ride on opencode → upstream-401-key-expired | +10 s | — | worker | opencode | defer | — | credential-rejected | 50 |
+| a latch written under account scope does not reload once the rail declares model scope | policy-default · upstream-429 | reviewer ride on anthropic → 429 (retry-after: 30) | +10 s, the policy now declares anthropic latch_scope: model | — | reviewer | anthropic | dispatch | anthropic | — | — |
+| a latch does not reload once the rail drops its latch hold | policy-default · upstream-429 | reviewer ride on anthropic → 429 (retry-after: 30) | +10 s, the policy now declares anthropic latch_429_hold_s: none | — | reviewer | anthropic | dispatch | anthropic | — | — |
 | a mark cleared by a 2xx before the roll is gone after it | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s, the same session → 200 | +10 s | — | worker | openrouter | dispatch | openrouter | — | — |
 | a half-open hold survives: a repeat rejection after the roll doubles the hold ⚖ | policy-default · upstream-401 | prober ride on anthropic → upstream-401 | +900 s | prober ride on anthropic → upstream-401 | prober | (policy) | defer | — | credential-rejected | 1800 |
 

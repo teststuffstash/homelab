@@ -210,6 +210,14 @@ spec:
       port: "12000"
       endpoint: /provider-errored
       method: POST
+    # oracle-iac#1192: Alertmanager POSTs KargoProdVerificationFailed here
+    # (argocd/platform/values/kube-prometheus-stack.yaml); the `kargo-prod-diagnose` Sensor
+    # (kargo-prod-diagnose-argo.yaml) starts oracle-fleet/prod-diagnose with no argument. The
+    # responder also sees the alert on /alert.
+    kargo-prod-failed:
+      port: "12000"
+      endpoint: /kargo-prod-failed
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

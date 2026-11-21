@@ -156,7 +156,18 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP off — dnsmasq AND Kea, its HA hook too
    (since 2026-10-08; before that a standby node's Kea went unread) — ddclient/ACME renewal off, the switch
    armed and never tripped) and prod unharmed (`.1` at Big Data's MAC, Unbound answering, a
-   HAProxy name serving).
+   HAProxy name serving). Since 2026-11-21 it also asks the node's OWN Unbound (on its LAN
+   address), whatever its CARP role: `.1` answering says nothing about a BACKUP whose resolver is
+   down — the node that then took `.1` with a full disk (docs/incidents/2026-11-20-nx-02-boot-disk.md).
+
+**Disk size** (2026-11-21). Each node's disk (`size` in `tofu/opnsense-router.tf`) holds 30 days of
+logs — OPNsense's default ~31-day keep of `/var/log/filter` (~110 MB/day) plus `/var/log/haproxy` —
+and firmware headroom: 32 GB, a thin LV (only used blocks allocate). The 8 GB it was born with
+filled to 108 % and Unbound could not start after a cold boot (the incident above); the ruling was
+to keep the retention and size the disk for it. Growing `size` is an in-place tofu update; the guest
+filesystem (UFS straight on `da0`, label `ufs/OPNsense_Nano`, no partition table) then grows online
+with one command on the node: `growfs -y /dev/ufs/OPNsense_Nano`. The belt's disk reading
+(`mgmt_router_disk_*`, `MgmtRouterDiskLow` — docs/management-box.md §MB2) is what notices the next fill.
 
 **The CARP trial** (2026-09-30, both nodes standing). `ansible/opnsense-carp.yml` puts one `carp`
 VIP per `router_carp_vips` entry (`ansible/router-nodes/group_vars/opnsense.yml` — router nodes
