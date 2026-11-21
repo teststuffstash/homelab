@@ -83,7 +83,6 @@ don't.
 | TLS/certificate error from node-pg | the self-signed cert (FU-010); use `sslmode=require`, not `verify-*` |
 | one instance `Pending` — `didn't match pod anti-affinity rules` | only one zone is schedulable for it right now (a hypervisor down, nodes cordoned). By design: the cluster runs on the other instance until a second zone returns — never relax `required` to "fix" it |
 | you need a second *database* later | declare a `Database` CR (the CRD is live — `argocd/platform/cnpg-operator.yaml` pins the operator) — it does **not** mint another `-app` secret; that role/password is yours |
-| CNPG pod-status alerts stay silent for your cluster | the `CNPGInstanceNotReady`/`CNPGInstanceCrashLooping` belts pin namespaces in [`kube-prometheus-stack.yaml`](../argocd/platform/values/kube-prometheus-stack.yaml) — a platform one-liner adds yours (the metric-based belts cover you automatically once the PodMonitor is on) |
 
 ## Backups — on by default (ADR-147)
 
