@@ -1,1 +1,175 @@
-{}
+{
+ "teststuffstash/agent-coordinator": {
+  "node": [
+   "26-bookworm-slim"
+  ]
+ },
+ "teststuffstash/agent-runtime": {
+  "docker/dockerfile": [
+   "1"
+  ]
+ },
+ "teststuffstash/allure-behavior-snippets": {
+  "mcr.microsoft.com/playwright/python": [
+   "v1.65.2-noble"
+  ],
+  "nginx": [
+   "1.31-alpine"
+  ],
+  "python": [
+   "3.15-alpine",
+   "3.13-alpine",
+   "3.15"
+  ]
+ },
+ "teststuffstash/circles": {
+  "ghcr.io/astral-sh/uv": [
+   "0.13"
+  ],
+  "nginxinc/nginx-unprivileged": [
+   "1.31-alpine"
+  ],
+  "python": [
+   "3.15-alpine"
+  ]
+ },
+ "teststuffstash/homelab": {
+  "alpine": [
+   "3.24"
+  ],
+  "cloudflare/cloudflared": [
+   "2026.11.1"
+  ],
+  "code.forgejo.org/forgejo-helm/forgejo": [
+   "17.3.3"
+  ],
+  "code.forgejo.org/forgejo/runner": [
+   "13.2.2"
+  ],
+  "crossplane/crossplane": [
+   "v2.4.3"
+  ],
+  "docker": [
+   "29-dind"
+  ],
+  "docker.io/grafana/alloy": [
+   "v1.22.0"
+  ],
+  "docker.io/grafana/loki": [
+   "3.7.10"
+  ],
+  "docker.io/library/alpine": [
+   "3.24"
+  ],
+  "docker.io/library/busybox": [
+   "1.38.0"
+  ],
+  "docker.io/library/nginx": [
+   "1.31-alpine"
+  ],
+  "docker.io/library/python": [
+   "3.15-slim"
+  ],
+  "docker.io/library/registry": [
+   "3.1.2"
+  ],
+  "docker.io/nginxinc/nginx-unprivileged": [
+   "1.31-alpine"
+  ],
+  "docker.io/otel/opentelemetry-collector-contrib": [
+   "0.165.0"
+  ],
+  "docker.io/prom/pushgateway": [
+   "v1.11.5"
+  ],
+  "docker.io/prometheuscommunity/smartctl-exporter": [
+   "v0.15.0"
+  ],
+  "ghcr.io/actions/actions-runner": [
+   "2.338.2"
+  ],
+  "ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set": [
+   "0.15.1"
+  ],
+  "ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller": [
+   "0.15.1"
+  ],
+  "ghcr.io/akuity/kargo-charts/kargo": [
+   "1.12.6"
+  ],
+  "ghcr.io/astral-sh/uv": [
+   "0.13.9"
+  ],
+  "ghcr.io/lablabs/cloudflare_exporter": [
+   "0.2.3"
+  ],
+  "python": [
+   "3.15-slim"
+  ],
+  "quay.io/brancz/kube-rbac-proxy": [
+   "v0.23.1"
+  ],
+  "quay.io/prometheus/blackbox-exporter": [
+   "v0.29.1"
+  ]
+ },
+ "teststuffstash/openrouter-operator": {
+  "python": [
+   "3.15-slim"
+  ]
+ },
+ "teststuffstash/oracle-fleet": {
+  "dxflrs/garage": [
+   "v2.3.0"
+  ],
+  "grafana/grafana": [
+   "13.3.1"
+  ],
+  "nginx": [
+   "1.31-alpine"
+  ],
+  "postgres": [
+   "18-alpine"
+  ],
+  "prom/prometheus": [
+   "v3.15.1"
+  ],
+  "python": [
+   "3.15-slim-trixie",
+   "3.15-alpine"
+  ]
+ },
+ "teststuffstash/sleep-iac": {
+  "alpine/ansible": [
+   "2.20.0"
+  ]
+ },
+ "teststuffstash/sleep-tracking": {
+  "docker/dockerfile": [
+   "1"
+  ],
+  "dxflrs/garage": [
+   "v2.5.0"
+  ],
+  "ghcr.io/astral-sh/uv": [
+   "0.13.9"
+  ],
+  "grafana/grafana": [
+   "13.3.1"
+  ],
+  "mcr.microsoft.com/playwright/python": [
+   "1.65.2"
+  ],
+  "python": [
+   "3.15-slim-bookworm"
+  ]
+ },
+ "teststuffstash/snore-recorder": {
+  "docker/dockerfile": [
+   "1"
+  ],
+  "python": [
+   "3.15-slim-bookworm"
+  ]
+ }
+}
