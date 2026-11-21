@@ -18,13 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP FIRST (2026-11-21 morning — nx-02 boot-disk incident; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299).**
-  nx-02 is a ZOMBIE: its root SA400 detached 11-20 ~06:50Z. The operator reseated it 00:3xZ and it is back as `sdc`, but the
-  running kernel cannot rebind root to it. Guests are fine (NVMe). LXC 220 (backup Garage) is dead, so CNPG WAL archiving fails
-  and WAL grows ~200 MB/h per cluster. Volumes were grown for ~2 days (`85b7c85c`). A spare 480 G SA400 (wiped) sits in an nx-02 bay.
-  BEFORE the reboot the operator wants to discuss the lessons (draft §Lessons: WAL-vs-service, mirrored boot, backup target
-  fate-sharing, paging). THEN, attended: pull the spare, `qm shutdown` the guests, reboot, verify CARP / cp-02 / wk-04 /
-  LXC 220 / `ContinuousArchiving` / SMART. `dig-explained: LonghornBackupTargetDown, EndpointProbeFailing, PveMetricsStale, RouterWanGateSilent — nx-02 boot disk detached (incident 2026-11-20), reboot owed`
+- **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
+  The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
+  - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
+    backup target on two hosts, paging.
+  - Bay-swap test if the SA400 drops again.
+  - hp-01 Longhorn default disk at 79 % (`LonghornDiskBelowSchedulingFloor`, responder's).
+  - Gateway #3622 MERGED + LIVE 12:32Z (anthropic 5h/7d 0.95, `latch_scope: model`). The reloaded Fable latch holds the
+    anthropic rail until 21:59:59Z; read after that the first reviewer dispatch lands on opus. The new pod also logged
+    `catalog: docs parse failed (no Endpoints table)` — keeping the last good snapshot; check whether that is new.
+  - Open question: why reviewer sessions only ever land on anthropic (policy lists opencode + codex).
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
   FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
   unattended merge (#3565) all worked. STILL OWED: read #3533's release on the 11-21/22 05:00Z sitting (it and #3538
