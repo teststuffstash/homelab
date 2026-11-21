@@ -43,6 +43,14 @@ Options not taken:
 
 Unverified: nothing the edits depend on.
 
+## Experiment
+No ride pod of namespace `homelab` stays Pending for more than 15 minutes in the seven days after the merge, while at least 20 ride pods run and kube-state-metrics was scraped for over 95 % of the window — series `kube_pod_status_phase{namespace="homelab",pod=~"agent-.*"}`; baseline: 5 such pods among 91 ride pods over the 10 d to 2026-11-20T17:50Z.
+Written at intake, before the result. Not the ride's to change: no PR and no comment edits this section.
+
+```experiment
+{"id": "homelab-rides-not-pending", "requirement": "docs/intake/agent-loop.md ## Sources — a namespace's storage quota, live", "cases": [], "kpi": {"query": "(count(count_over_time((kube_pod_status_phase{namespace=\"homelab\",pod=~\"agent-.*\",phase=\"Pending\"} == 1)[$window:1m]) > 15) or vector(0)) and on() (min(avg_over_time(up{job=\"kube-state-metrics\"}[$window])) > 0.95)", "pass": "<= 0", "baseline": 5, "min_window": "7d", "max_window": "7d", "min_samples_query": "count(count by (pod) (max_over_time(kube_pod_status_phase{namespace=\"homelab\",pod=~\"agent-.*\"}[$window])))", "min_samples": 20}}
+```
+
 ## Out of scope
 - The janitor's grace (`agents/coordinator-scan.sh`) and `REPO_MAX_WIP` stay as they are.
 - `SERVICES.md` (its Longhorn row still says "≤20Gi×3 per docker repo") is not edited here.

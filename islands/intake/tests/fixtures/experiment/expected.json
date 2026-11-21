@@ -1,0 +1,370 @@
+{
+ "malformed-baseline-infinity.md": {
+  "exit": 2,
+  "fault": "the block holds Infinity, which is not a JSON number"
+ },
+ "malformed-baseline-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 401 digits, a number too large to read"
+ },
+ "malformed-baseline-not-number.md": {
+  "exit": 2,
+  "fault": "kpi.baseline is not a number"
+ },
+ "malformed-baseline-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds 1e999, a number too large to read"
+ },
+ "malformed-block-after-fence-only.md": {
+  "exit": 2,
+  "fault": "the experiment block comes before any prose line"
+ },
+ "malformed-block-and-none.md": {
+  "exit": 2,
+  "fault": "both an experiment block and an \"Experiment: none\" line"
+ },
+ "malformed-block-before-prose.md": {
+  "exit": 2,
+  "fault": "the experiment block comes before any prose line"
+ },
+ "malformed-block-not-json.md": {
+  "exit": 2,
+  "fault": "the block is not one JSON value (line 1 column 2 of the block)"
+ },
+ "malformed-block-not-object.md": {
+  "exit": 2,
+  "fault": "the block is not one JSON object"
+ },
+ "malformed-block-outside-section.md": {
+  "exit": 2,
+  "fault": "the experiment block is outside the \"## Experiment\" section"
+ },
+ "malformed-block-without-heading.md": {
+  "exit": 2,
+  "fault": "an experiment block outside a \"## Experiment\" section"
+ },
+ "malformed-case-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 4301 digits, a number too large to read"
+ },
+ "malformed-case-number-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds -1e999, a number too large to read"
+ },
+ "malformed-cases-nested-too-deep.md": {
+  "exit": 2,
+  "fault": "the block nests deeper than 32 levels"
+ },
+ "malformed-cases-not-array.md": {
+  "exit": 2,
+  "fault": "cases is not an array"
+ },
+ "malformed-fence-unclosed.md": {
+  "exit": 2,
+  "fault": "the experiment block's fence is never closed"
+ },
+ "malformed-guard-id-repeated.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].id \"error-rate\" is not unique"
+ },
+ "malformed-guard-key-missing.md": {
+  "exit": 2,
+  "fault": "missing key kpi.guards[0].pass"
+ },
+ "malformed-guard-pass-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].pass \">= \\u0661\\u0660\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-guard-pass-overflow.md": {
+  "exit": 2,
+  "fault": "kpi.guards[0].pass \"<= 1e999\" holds a number too large to read"
+ },
+ "malformed-guard-pass.md": {
+  "exit": 2,
+  "fault": "kpi.guards[0].pass \"0.01\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-guard-query-window-longer-name.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].query is not a string containing $window"
+ },
+ "malformed-query-window-longer-name.md": {
+  "exit": 2,
+  "fault": "kpi.query is not a string containing $window"
+ },
+ "malformed-guard-query-without-window.md": {
+  "exit": 2,
+  "fault": "kpi.guards[1].query is not a string containing $window"
+ },
+ "malformed-guards-not-array.md": {
+  "exit": 2,
+  "fault": "kpi.guards is not an array"
+ },
+ "malformed-id-empty.md": {
+  "exit": 2,
+  "fault": "id is not a non-empty string"
+ },
+ "malformed-key-repeated.md": {
+  "exit": 2,
+  "fault": "the block repeats the key \"id\""
+ },
+ "malformed-kpi-missing.md": {
+  "exit": 2,
+  "fault": "missing key kpi"
+ },
+ "malformed-max-window-digit-run.md": {
+  "exit": 2,
+  "fault": "kpi.max_window \"9999999999d\" is not a whole number followed by m, h or d"
+ },
+ "malformed-max-window-fraction.md": {
+  "exit": 2,
+  "fault": "kpi.max_window \"1.5d\" is not a whole number followed by m, h or d"
+ },
+ "malformed-max-window-over-7d.md": {
+  "exit": 2,
+  "fault": "kpi.max_window 169h is longer than 7d"
+ },
+ "malformed-min-samples-fraction.md": {
+  "exit": 2,
+  "fault": "kpi.min_samples is not a positive integer"
+ },
+ "malformed-min-samples-integer-overflow.md": {
+  "exit": 2,
+  "fault": "the block holds an integer of 301 digits, a number too large to read"
+ },
+ "malformed-min-samples-query-without-window.md": {
+  "exit": 2,
+  "fault": "kpi.min_samples_query is not a string containing $window"
+ },
+ "malformed-min-samples-zero.md": {
+  "exit": 2,
+  "fault": "kpi.min_samples is not a positive integer"
+ },
+ "malformed-min-window-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.min_window \"\\u0661m\" is not a whole number followed by m, h or d"
+ },
+ "malformed-min-window-over-max.md": {
+  "exit": 2,
+  "fault": "kpi.min_window 2d is longer than kpi.max_window 36h"
+ },
+ "malformed-min-window-trailing-newline.md": {
+  "exit": 2,
+  "fault": "kpi.min_window \"7d\\n\" is not a whole number followed by m, h or d"
+ },
+ "malformed-min-window-unit.md": {
+  "exit": 2,
+  "fault": "kpi.min_window \"1w\" is not a whole number followed by m, h or d"
+ },
+ "malformed-no-block.md": {
+  "exit": 2,
+  "fault": "the \"## Experiment\" section holds no experiment block"
+ },
+ "malformed-none-without-reason.md": {
+  "exit": 2,
+  "fault": "the \"Experiment: none\" line gives no reason (want \"Experiment: none \u2014 <why>\")"
+ },
+ "malformed-pass-no-space.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"<=0\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-non-ascii-digit.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"< \\u0665\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-not-number.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"< few\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-operator.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"== 0\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-pass-overflow.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"< 1e999\" holds a number too large to read"
+ },
+ "malformed-pass-trailing-newline.md": {
+  "exit": 2,
+  "fault": "kpi.pass \"<= 0.5\\n\" is not one of < <= > >=, a space, a number"
+ },
+ "malformed-query-without-window.md": {
+  "exit": 2,
+  "fault": "kpi.query is not a string containing $window"
+ },
+ "malformed-requirement-missing.md": {
+  "exit": 2,
+  "fault": "missing key requirement"
+ },
+ "malformed-two-blocks.md": {
+  "exit": 2,
+  "fault": "2 experiment blocks (want exactly one)"
+ },
+ "malformed-two-sections.md": {
+  "exit": 2,
+  "fault": "more than one \"## Experiment\" section"
+ },
+ "malformed-unknown-key-guard.md": {
+  "exit": 2,
+  "fault": "unknown key kpi.guards[1].severity"
+ },
+ "malformed-unknown-key-kpi.md": {
+  "exit": 2,
+  "fault": "unknown key kpi.control"
+ },
+ "malformed-unknown-key.md": {
+  "exit": 2,
+  "fault": "unknown key control"
+ },
+ "neither.md": {
+  "exit": 4
+ },
+ "none.md": {
+  "exit": 3,
+  "reason": "baseline too thin (1 in 10 d)"
+ },
+ "valid-edges.md": {
+  "exit": 0,
+  "out": {
+   "cases": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  1
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "id": "edge ]]]] [[[[ \\\" {{{{ of the format",
+   "kpi": {
+    "baseline": 100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+    "max_window": "168h",
+    "max_window_s": 604800,
+    "min_samples": 12,
+    "min_samples_query": "count(count by (job_id) (max_over_time(press_job_state[$window])))",
+    "min_window": "1m",
+    "min_window_s": 60,
+    "pass": "> -.5e-3",
+    "pass_op": ">",
+    "pass_value": -0.0005,
+    "query": "(count(count_over_time((press_job_state{state=\"waiting\"} == 1)[$window:1m]) > 10) or vector(0)) and on() (min(avg_over_time(up{job=\"press-exporter\"}[$window])) > 0.95)"
+   },
+   "requirement": "a lone surrogate \ud800 is carried"
+  }
+ },
+ "valid-guards.md": {
+  "exit": 0,
+  "out": {
+   "cases": [
+    {
+     "name": "carried, never run"
+    }
+   ],
+   "id": "press-latency-down",
+   "kpi": {
+    "baseline": 412.5,
+    "guards": [
+     {
+      "id": "error-rate",
+      "pass": "<= 0.01",
+      "pass_op": "<=",
+      "pass_value": 0.01,
+      "query": "sum(rate(press_errors_total[$window]))"
+     },
+     {
+      "id": "throughput",
+      "pass": ">= 100",
+      "pass_op": ">=",
+      "pass_value": 100.0,
+      "query": "sum(increase(press_jobs_total[$window]))"
+     }
+    ],
+    "max_window": "36h",
+    "max_window_s": 129600,
+    "min_samples": 12,
+    "min_samples_query": "count(count by (job_id) (max_over_time(press_job_state[$window])))",
+    "min_window": "90m",
+    "min_window_s": 5400,
+    "pass": "< 2.5e2",
+    "pass_op": "<",
+    "pass_value": 250.0,
+    "query": "quantile_over_time(0.95, press_wait_seconds[$window])"
+   },
+   "requirement": "docs/intake/example.md ## Sources \u2014 the press queue, live"
+  }
+ },
+ "valid.md": {
+  "exit": 0,
+  "out": {
+   "cases": [],
+   "id": "press-jobs-not-waiting",
+   "kpi": {
+    "baseline": 4,
+    "max_window": "7d",
+    "max_window_s": 604800,
+    "min_samples": 12,
+    "min_samples_query": "count(count by (job_id) (max_over_time(press_job_state[$window])))",
+    "min_window": "7d",
+    "min_window_s": 604800,
+    "pass": "<= 0",
+    "pass_op": "<=",
+    "pass_value": 0.0,
+    "query": "(count(count_over_time((press_job_state{state=\"waiting\"} == 1)[$window:1m]) > 10) or vector(0)) and on() (min(avg_over_time(up{job=\"press-exporter\"}[$window])) > 0.95)"
+   },
+   "requirement": "docs/intake/example.md ## Sources \u2014 the press queue, live"
+  }
+ }
+}

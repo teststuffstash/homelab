@@ -21,6 +21,8 @@ and evidence: [docs/spikes/island-intake.md](../../docs/spikes/island-intake.md)
 | [`scripts/listed-push.sh`](scripts/listed-push.sh) | the list step's gauge of which islands the full walk holds — the gate that keeps `IslandIntakeStale` quiet for an island that left the list |
 | [`scripts/facts-check.sh`](scripts/facts-check.sh) | the one test of "this facts file can carry a sitting", run by the launcher before any session and by the harness |
 | [`scripts/intake-wait-ledger.py`](scripts/intake-wait-ledger.py), [`scripts/intake-wait-cases.py`](scripts/intake-wait-cases.py) | the wait read's tally (which rule line is at the bar) and the recorded wait cases' validator |
+| [`scripts/experiment.py`](scripts/experiment.py) | the experiment block's loader: `load <file\|->` reads an issue body's `## Experiment` section and prints it as validated JSON, or exits with the first fault (`2` malformed, `3` `Experiment: none — <why>`, `4` neither) |
+| [`scripts/experiment-read.sh`](scripts/experiment-read.sh) | the scheduled read of the platform repo's open experiments (`experiment/open` issues): decides each, writes the verdict comment, reopens a failed one, uploads the report, pushes `island_intake_experiments_*` — the workflow's first step; `--dry-run` writes nothing |
 | `devbox.json`, `devbox.lock` | the two tools the pod image lacks — promtool, yq — which the manifest's bootstrap installs and runs the launcher with (`devbox run`); the pod image (the worker base image, agent-base) pre-bakes claude, git, curl, jq, gh, kubectl, s5cmd, python3, uv and devbox itself |
 | [`tests/island-intake-test.sh`](tests/island-intake-test.sh), `tests/fixtures/` | the hermetic harness and its recorded inputs (real dig and responder findings, the wait cases) |
 
@@ -37,6 +39,18 @@ prints: each island that has a membership row in the selector's table and a fact
 a selector row and a facts file, and no manifest edit; `commons` has no facts file and gets no
 sitting.
 
+- **The run reads experiments first** (Goal #3586). Before the island list, the workflow's `experiments`
+  step runs [`scripts/experiment-read.sh`](scripts/experiment-read.sh) through this island's devbox: every
+  closed issue labelled `experiment/open` has its `## Experiment` block decided from Prometheus
+  (`experiment.py read`; t0 = the merge of the PR that closed it, or — no closing PR, a child merged into `goal/<n>` — the Goal's assembly merge) and the verdict is written to the issue
+  (`pass` / `fail` / `no data` once, marker `<!-- experiment-verdict id=<id> -->`; `pending` writes nothing). A
+  failed experiment reopens its issue with the `agent/*` labels removed — or, under a Goal, goes to the Goal's
+  `post-launch:` sub-issue — so the same run's sitting reads it as an undecided input. The step is
+  `continueOn: failed` (the sittings still run) and a closing `experiments-failed` step fails the workflow if it
+  failed. Metrics: `island_intake_experiments_*` (job `island_intake_experiments`); alerts
+  `IntakeExperimentOverdue` and `IntakeExperimentReadStale`. **By hand, writing nothing:**
+  `bash islands/intake/scripts/experiment-read.sh --dry-run` (needs `gh`, and `PROMETHEUS` pointing at a
+  reachable Prometheus; it prints each comment, state change, report object and the metrics it would push).
 - **One sitting at a time.** The workflow's `list-islands` step emits the list, then the
   `intake-retry` template runs once per name, one pod per island; `workflowSpec.parallelism: 1`
   keeps them in sequence and every sitting still takes the `subscription-capacity` semaphore.
