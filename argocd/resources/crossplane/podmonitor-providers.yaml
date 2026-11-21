@@ -1,0 +1,27 @@
+# Every Crossplane provider's own managed-resource state metrics (crossplane-runtime's MR state
+# metrics, served on each provider pod's `metrics` port 8080): `crossplane_managed_resource_exists`,
+# `…_ready` and `…_synced`, one series per GVK the provider serves. Synced=False is the state where a
+# provider's API call is rejected while the resource stays Ready (the external object exists), so no
+# claim-level belt sees it: AgentStackNotSynced watches the claim, which renders fine. The selector is the
+# label Crossplane puts on every provider pod, so a new provider is scraped with no edit here.
+# Only the three state series are kept (each provider exports ~3 × its GVK count; the rest is controller
+# noise). Rule: prometheusrule.yaml beside this file.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: crossplane-providers
+  namespace: monitoring
+  labels: { app: crossplane-providers }
+spec:
+  namespaceSelector:
+    matchNames: [crossplane-system]
+  selector:
+    matchExpressions:
+      - { key: pkg.crossplane.io/provider, operator: Exists }
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 60s
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: crossplane_managed_resource_(exists|ready|synced)
+          action: keep

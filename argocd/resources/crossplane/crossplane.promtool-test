@@ -1,0 +1,70 @@
+# Behaviour fixture for prometheusrule.yaml (copy: crossplane.promtool-rules).
+rule_files: [crossplane.promtool-rules]
+evaluation_interval: 1m
+tests:
+  # (a) every managed resource synced — quiet.
+  - interval: 1m
+    name: "(a) exists == synced on every GVK stays quiet"
+    input_series:
+      - series: 'crossplane_managed_resource_exists{gvk="repo.github.upbound.io/v1alpha1, Kind=IssueLabels", pod="provider-upjet-github-x"}'
+        values: "12x120"
+      - series: 'crossplane_managed_resource_synced{gvk="repo.github.upbound.io/v1alpha1, Kind=IssueLabels", pod="provider-upjet-github-x"}'
+        values: "12x120"
+      - series: 'crossplane_managed_resource_exists{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+      - series: 'crossplane_managed_resource_synced{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+    alert_rule_test:
+      - { eval_time: 90m, alertname: CrossplaneManagedResourceNotSynced, exp_alerts: [] }
+      - { eval_time: 90m, alertname: CrossplaneProviderMetricsAbsent, exp_alerts: [] }
+  # (b) the 2026-11-21 shape: 12 IssueLabels, 5 refused by the upstream API from minute 10 on (Ready
+  # stays, Synced drops). Fires 30m later, on that GVK only; the healthy Workspace GVK stays quiet.
+  - interval: 1m
+    name: "(b) IssueLabels refused upstream fires after for:30m, per GVK"
+    input_series:
+      - series: 'crossplane_managed_resource_exists{gvk="repo.github.upbound.io/v1alpha1, Kind=IssueLabels", pod="provider-upjet-github-x"}'
+        values: "12x120"
+      - series: 'crossplane_managed_resource_synced{gvk="repo.github.upbound.io/v1alpha1, Kind=IssueLabels", pod="provider-upjet-github-x"}'
+        values: "12x9 7x110"
+      - series: 'crossplane_managed_resource_exists{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+      - series: 'crossplane_managed_resource_synced{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+    alert_rule_test:
+      - { eval_time: 35m, alertname: CrossplaneManagedResourceNotSynced, exp_alerts: [] }
+      - eval_time: 45m
+        alertname: CrossplaneManagedResourceNotSynced
+        exp_alerts:
+          - exp_labels:
+              gvk: "repo.github.upbound.io/v1alpha1, Kind=IssueLabels"
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "5 Crossplane managed resource(s) of repo.github.upbound.io/v1alpha1, Kind=IssueLabels not Synced for 30m"
+              description: "A Crossplane provider cannot apply 5 managed resource(s) of repo.github.upbound.io/v1alpha1, Kind=IssueLabels: its calls to the upstream API fail, so a change to what renders them (a composition, a claim, a manifest) is not live there, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False) and read the refusal in the resource's Synced condition message: `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`."
+  # (c) a transient upstream error (20 minutes unsynced, then recovered) never fires.
+  - interval: 1m
+    name: "(c) a 20-minute transient stays quiet"
+    input_series:
+      - series: 'crossplane_managed_resource_exists{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x120"
+      - series: 'crossplane_managed_resource_synced{gvk="tf.upbound.io/v1beta1, Kind=Workspace", pod="provider-terraform-x"}'
+        values: "23x9 22x19 23x90"
+    alert_rule_test:
+      - { eval_time: 29m, alertname: CrossplaneManagedResourceNotSynced, exp_alerts: [] }
+      - { eval_time: 60m, alertname: CrossplaneManagedResourceNotSynced, exp_alerts: [] }
+  # (d) no series at all (the scrape stopped) — the absent guard fires after for:30m.
+  - interval: 1m
+    name: "(d) no MR state series fires CrossplaneProviderMetricsAbsent"
+    input_series:
+      - series: 'up{job="something-else"}'
+        values: "1x120"
+    alert_rule_test:
+      - { eval_time: 20m, alertname: CrossplaneProviderMetricsAbsent, exp_alerts: [] }
+      - eval_time: 40m
+        alertname: CrossplaneProviderMetricsAbsent
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig }
+            exp_annotations:
+              summary: "No Crossplane managed-resource state series for 30m — the managed-resource belt is blind"
+              description: "Prometheus has no crossplane_managed_resource_exists series. Check the crossplane-providers PodMonitor (ns monitoring) still selects the provider pods (label pkg.crossplane.io/provider, ns crossplane-system), that their `metrics` port 8080 answers /metrics, and the scrape target's state in Prometheus."

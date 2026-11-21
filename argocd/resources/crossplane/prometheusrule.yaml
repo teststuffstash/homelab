@@ -1,0 +1,45 @@
+# Crossplane managed resources that a provider cannot reconcile. Source: the providers' own MR state
+# metrics (podmonitor-providers.yaml). One rule for every provider and kind: `exists − synced` per GVK,
+# so a provider-side rejection of ANY field (a vendor limit, a format, a permission) is seen without this
+# repo copying the vendor's rules. The case that made it: IssueLabels refused with a 422 on every repo
+# while each stayed Ready=True — no claim belt saw it. Fixture: crossplane.promtool-test.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: crossplane-managed-resources
+  namespace: monitoring
+  labels: { app: crossplane-providers }
+spec:
+  groups:
+    - name: crossplane-managed-resources
+      rules:
+        # `for: 30m` rides out a provider's own retry backoff on a transient upstream error.
+        - alert: CrossplaneManagedResourceNotSynced
+          expr: |
+            sum by (gvk) (crossplane_managed_resource_exists) - sum by (gvk) (crossplane_managed_resource_synced) > 0
+          for: 30m
+          # triage dig: the resource's Synced condition message names the upstream API's refusal
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "{{ $value }} Crossplane managed resource(s) of {{ $labels.gvk }} not Synced for 30m"
+            description: >-
+              A Crossplane provider cannot apply {{ $value }} managed resource(s) of {{ $labels.gvk }}:
+              its calls to the upstream API fail, so a change to what renders them (a composition, a
+              claim, a manifest) is not live there, though the resource may still read Ready. Find them
+              with `kubectl get managed` (SYNCED False) and read the refusal in the resource's Synced
+              condition message: `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`.
+        # The "green that saw nothing" guard: if the scrape stops (PodMonitor selector, port rename,
+        # providers gone), the belt above goes quiet rather than firing — this one says so.
+        - alert: CrossplaneProviderMetricsAbsent
+          expr: |
+            absent(crossplane_managed_resource_exists)
+          for: 30m
+          # triage dig: the PodMonitor, the provider pods' labels and their metrics port are readable in-cluster
+          labels: { severity: warning, triage: dig }
+          annotations:
+            summary: "No Crossplane managed-resource state series for 30m — the managed-resource belt is blind"
+            description: >-
+              Prometheus has no crossplane_managed_resource_exists series. Check the crossplane-providers
+              PodMonitor (ns monitoring) still selects the provider pods (label pkg.crossplane.io/provider,
+              ns crossplane-system), that their `metrics` port 8080 answers /metrics, and the scrape
+              target's state in Prometheus.

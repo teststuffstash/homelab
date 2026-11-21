@@ -1,0 +1,30 @@
+# CrossplaneManagedResourceNotSynced + CrossplaneProviderMetricsAbsent, lifted VERBATIM out of
+# prometheusrule.yaml (comments stripped — the manifest is its one home) — the rules file that
+# crossplane.promtool-test loads. Not a manifest: `promtool test rules` needs upstream-format rules.
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "crossplane-managed-resources", "rules": [.spec.groups[].rules[]]}]}' argocd/resources/crossplane/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: crossplane-managed-resources
+    rules:
+      - alert: CrossplaneManagedResourceNotSynced
+        expr: |
+          sum by (gvk) (crossplane_managed_resource_exists) - sum by (gvk) (crossplane_managed_resource_synced) > 0
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: '{{ $value }} Crossplane managed resource(s) of {{ $labels.gvk }} not Synced for 30m'
+          description: 'A Crossplane provider cannot apply {{ $value }} managed resource(s) of {{ $labels.gvk }}: its calls to the upstream API fail, so a change to what renders them (a composition, a claim, a manifest) is not live there, though the resource may still read Ready. Find them with `kubectl get managed` (SYNCED False) and read the refusal in the resource''s Synced condition message: `kubectl get <kind> <name> -o jsonpath=''{.status.conditions}''`.'
+      - alert: CrossplaneProviderMetricsAbsent
+        expr: |
+          absent(crossplane_managed_resource_exists)
+        for: 30m
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: No Crossplane managed-resource state series for 30m — the managed-resource belt is blind
+          description: Prometheus has no crossplane_managed_resource_exists series. Check the crossplane-providers PodMonitor (ns monitoring) still selects the provider pods (label pkg.crossplane.io/provider, ns crossplane-system), that their `metrics` port 8080 answers /metrics, and the scrape target's state in Prometheus.
