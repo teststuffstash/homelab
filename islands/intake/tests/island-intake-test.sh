@@ -2168,11 +2168,11 @@ rm -f "$EH"/parent-*.json
 # a state write that fails keeps the label (the next run redoes it) and counts the issue overdue past its bound
 issue_row 41 "experiment/open,agent/done" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 touch "$EH/reopen.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/reopen.fail"
-{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" && [ ! -s "$EH/s5.calls" ] \
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'remove-label experiment/open' "$EH/gh.calls" && [ "$(wc -l < "$EH/s5.calls")" = 1 ] \
     && [ "$(grep -n 'remove-label agent/done' "$EH/gh.calls" | cut -d: -f1)" -lt "$(grep -n 'issue reopen' "$EH/gh.calls" | cut -d: -f1)" ] \
     && grep -qx 'island_intake_experiments_open 1' "$EH/metrics.body" && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body" \
     && grep -qx 'island_intake_experiments_decided_total{verdict="fail"} 0' "$EH/metrics.body"; } \
-  && ok "fail whose reopen fails: the label stays, no upload, step non-zero, counted open and overdue (agent/* labels go before the reopen)" || bad "reopen fail" "rc=$rc $(cat "$EH/gh.calls" "$EH/metrics.body")"
+  && ok "fail whose reopen fails: the label stays (the report already uploaded), step non-zero, counted open and overdue (agent/* labels go before the reopen)" || bad "reopen fail" "rc=$rc $(cat "$EH/gh.calls" "$EH/metrics.body")"
 issue_row 41 "experiment/open,agent/done" "$B" '[{"body":"<!-- experiment-verdict id=press-waits-down -->\nold"}]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 erun fail $NOW_AFTER; rc=$?
 { [ "$rc" = 0 ] && ! grep -q 'issue comment' "$EH/gh.calls" && grep -q '^gh issue reopen 41 ' "$EH/gh.calls" && grep -q 'remove-label agent/done' "$EH/gh.calls" \
@@ -2257,6 +2257,11 @@ erun value-down $NOW_AFTER; rc=$?
 touch "$EH/s5.fail"; erun pass $NOW_AFTER; rc=$?; rm -f "$EH/s5.fail"
 { [ "$rc" != 0 ] && grep -q 'issue comment 41' "$EH/gh.calls" && grep -q 'FAILED to upload' "$EH/out.log"; } \
   && ok "a failed report upload fails the step, after the comment was written" || bad "upload fail" "rc=$rc $(cat "$EH/out.log")"
+issue_row 41 "experiment/open,agent/done" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+touch "$EH/s5.fail"; erun fail $NOW_AFTER; rc=$?; rm -f "$EH/s5.fail"
+{ [ "$rc" != 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'reopen' "$EH/gh.calls" && ! grep -q 'remove-label' "$EH/gh.calls" \
+    && grep -qx 'island_intake_experiments_oldest_overdue_seconds 86400' "$EH/metrics.body"; } \
+  && ok "…on a fail with no Goal the upload comes before the reopen: a failed upload leaves the issue closed and labelled (listed), counted overdue" || bad "fail upload order" "rc=$rc $(cat "$EH/gh.calls")"
 
 # --dry-run writes nothing and says what it would
 erun pass $NOW_AFTER --dry-run; rc=$?

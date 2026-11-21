@@ -18,7 +18,7 @@
 #            the label is removed either way
 #   no data  the comment (its reason line says which), label removed, no state change
 #   pending  nothing is written
-# The order of writes is: the comment, the state, the report upload, then the label LAST — the label's removal is
+# The order of writes is: the comment, the report upload, the state, then the label LAST — the label's removal is
 # what takes an issue off the list, so any earlier write that fails keeps it listed and the next run redoes it.
 # A run that died after the comment finds its marker next time and finishes the rest (the state writes are safe
 # to repeat; the Goal-side comment carries its own marker `<!-- experiment-verdict-goal issue=<n> id=<id> -->`)
@@ -213,7 +213,19 @@ for n in "${ORDER[@]}"; do
     [ "$DRY" = 1 ] && { say "[dry-run] #$n: $v"; cat "$W/$n.comment.md"; }
     gh_write "comment the verdict ($v) on #$n" issue comment "$n" --repo "$REPO" --body-file "$W/$n.comment.md" || { FAILED=1; continue; }
   fi
-  # 2. the state (fail only) — every step safe to repeat; any failure keeps the label so the next run redoes it
+  # 2. the report object — before ANY state write: a reopen takes the issue off the CLOSED list, so an upload after it
+  #    could never be retried; here a failed upload keeps the issue listed (an idempotent cp next run)
+  key="homelab/experiments/$n-${ID[$n]}.json"
+  jq --arg repo "$REPO" --argjson issue "$n" --arg goal "$goal" --arg target "$target" \
+    '. + {repo: $repo, issue: $issue, goal: (if $goal == "" then null else ($goal | tonumber) end), goal_comment_on: (if $target == "" then null else ($target | tonumber) end)}' \
+    "$W/$n.report" > "$W/$n.out.json"
+  if [ "$DRY" = 1 ]; then say "[dry-run] would upload s3://$BUCKET/$key"; cat "$W/$n.out.json"
+  elif [ -z "${AGENT_TS_ACCESS_KEY_ID:-}" ] || ! command -v s5cmd >/dev/null 2>&1 \
+      || ! AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="${AGENT_TS_SECRET_ACCESS_KEY:-}" \
+           s5cmd --endpoint-url "${AGENT_TS_ENDPOINT:-}" cp "$W/$n.out.json" "s3://$BUCKET/$key" > "$W/up.log" 2>&1; then
+    say "FAILED to upload the report of #$n to s3://$BUCKET/$key: $(head -c 200 "$W/up.log" 2>/dev/null) — the label stays"; FAILED=1; continue
+  fi
+  # 3. the state (fail only) — every step safe to repeat; any failure keeps the label so the next run redoes it
   ok_state=1
   if [ "$v" = fail ] && [ -z "$goal" ]; then
     # agent/* labels before the reopen: the list reads CLOSED issues only, so the reopen is the last state write
@@ -233,17 +245,6 @@ for n in "${ORDER[@]}"; do
     fi
   fi
   if [ "$ok_state" = 0 ]; then FAILED=1; say "#$n: a state write failed — the label stays, the next run redoes it"; continue; fi
-  # 3. the report object — before the label, so a failed upload is retried by the next run (an idempotent cp)
-  key="homelab/experiments/$n-${ID[$n]}.json"
-  jq --arg repo "$REPO" --argjson issue "$n" --arg goal "$goal" --arg target "$target" \
-    '. + {repo: $repo, issue: $issue, goal: (if $goal == "" then null else ($goal | tonumber) end), goal_comment_on: (if $target == "" then null else ($target | tonumber) end)}' \
-    "$W/$n.report" > "$W/$n.out.json"
-  if [ "$DRY" = 1 ]; then say "[dry-run] would upload s3://$BUCKET/$key"; cat "$W/$n.out.json"
-  elif [ -z "${AGENT_TS_ACCESS_KEY_ID:-}" ] || ! command -v s5cmd >/dev/null 2>&1 \
-      || ! AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="${AGENT_TS_SECRET_ACCESS_KEY:-}" \
-           s5cmd --endpoint-url "${AGENT_TS_ENDPOINT:-}" cp "$W/$n.out.json" "s3://$BUCKET/$key" > "$W/up.log" 2>&1; then
-    say "FAILED to upload the report of #$n to s3://$BUCKET/$key: $(head -c 200 "$W/up.log" 2>/dev/null) — the label stays"; FAILED=1; continue
-  fi
   # 4. the label, last — its removal is what takes the issue off the list
   gh_write "remove the label experiment/open from #$n" issue edit "$n" --repo "$REPO" --remove-label experiment/open || { FAILED=1; continue; }
   FINAL[$n]=1
