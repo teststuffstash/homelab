@@ -98,7 +98,7 @@ async def run_door(cworld, vendor, clock, door_state: str, call: str, tmp_path: 
             with quiet():
                 await app.state.catalog.refresh_source("config")
     clock.t = T0 + 90
-    routes = {} if door_state == "unreachable" else await snapshot(app)
+    routes = {} if door_state in ("unreachable", "no wire door") else await snapshot(app)
     door = Door(routes)
     url = silent_url() if door_state == "unreachable" else door.url
     argv = [a.replace("<dir>", str(tmp_path)) for a in call.split()]
@@ -125,6 +125,8 @@ READ_ROWS = [
                  id="a door with no record lists nothing"),
     pytest.param("unreachable", "show go-models-dev", 3, "nothing", "`wire: door unreachable: <url>`",
                  id="a silent door is an error that names the door ⚖"),
+    pytest.param("no wire door", "list", 3, "nothing", "`wire: door unreachable: <url> (GET /wire answered 404)`",
+                 id="a server with no wire door is a silent door, never an empty index ⚖"),
 ]
 
 
@@ -139,6 +141,10 @@ async def test_reading_the_door(cworld, vendor, clock, tmp_path, door, command, 
     if door == "unreachable":
         stdout = "nothing" if not out else f"MISMATCH {out!r}"
         stderr = "`wire: door unreachable: <url>`" if err == f"wire: door unreachable: {url}" else f"MISMATCH {err}"
+    elif door == "no wire door":
+        stdout = "nothing" if not out else f"MISMATCH {out!r}"
+        want = f"wire: door unreachable: {url} (GET /wire answered 404)"
+        stderr = "`wire: door unreachable: <url> (GET /wire answered 404)`" if err == want else f"MISMATCH {err!r}"
     elif command.startswith("show go-models-dev"):
         stdout = "the stored bytes, byte-identical" if out == stored_bytes() else f"MISMATCH {len(out)} bytes"
         stderr = ("`wire: source=go-models-dev class=public sha256=<…> fetched_at=T0`"

@@ -55,9 +55,13 @@ def get(path: str) -> tuple[int, dict[str, str], bytes]:
 
 
 def index() -> list[dict]:
+    """The door always answers its index (an empty `sources` when nothing is recorded), so any status
+    but 200 on `GET /wire` means no wire door at that URL — the silent door, never an empty index."""
     status, _, body = get("/wire")
+    if status != 200:
+        raise Exit(3, f"door unreachable: {door()} (GET /wire answered {status})")
     try:
-        return json.loads(body)["sources"] if status == 200 else []
+        return json.loads(body)["sources"]
     except (ValueError, KeyError, TypeError) as e:
         raise Exit(3, f"door unreachable: {door()} (no index answered)") from e
 

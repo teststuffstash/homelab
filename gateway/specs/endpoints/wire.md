@@ -294,7 +294,8 @@ line per source (name, class, status, age); `find --key <name>` prints each JSON
 path of every occurrence of that key; `cut <source> --path <a.b.c> --out <file>` writes that subtree of the
 recorded answer (values and key order as recorded — no wrapper key ⚖) to `<file>` and a sidecar
 `<file stem>.provenance.json` beside it (source, class, url, sha256 of the whole answer, fetched_at, path). A
-key containing a dot (`deepseek-v4.1-flash`) is matched whole. Exit codes ⚖: `3` the door is silent, `4` the
+key containing a dot (`deepseek-v4.1-flash`) is matched whole. Exit codes ⚖: `3` the door is silent — nothing answers, or `GET /wire` answers anything but 200 (the
+door always answers its index, so a 404 there means no door at that URL, never an empty index ⚖), `4` the
 source is not recorded, `5` the path is not in the answer or the member is not JSON, `6` the record is
 truncated (`complete: false`). Whatever the exit, a failed `cut` writes no file: the door not answering is
 never an empty or invented fixture. `devbox run wire-quarry -- <verb>` runs it from `gateway/`.
@@ -308,7 +309,8 @@ cuts its sanitised structure.
 
 #### Reading the door
 
-Legend: `door` = what the door holds (`unreachable` = nothing listens at its URL); `command` = the tool's
+Legend: `door` = what the door holds (`unreachable` = nothing listens at its URL; `no wire door` = an HTTP
+server listens there but answers 404 on every path, `/wire` included); `command` = the tool's
 arguments; `exit?`, `stdout?`, `stderr?` = what the process returns.
 
 | description | door | command | exit? | stdout? | stderr? |
@@ -320,6 +322,7 @@ arguments; `exit?`, `stdout?`, `stderr?` = what the process returns.
 | a door with no record lists nothing | `nothing recorded` | `list` | `0` | nothing | — |
 | a source nobody recorded is an error, never an empty answer | `go-models-dev at T0` | `show codex-models` | `4` | nothing | `wire: codex-models not recorded` |
 | a silent door is an error that names the door ⚖ | `unreachable` | `show go-models-dev` | `3` | nothing | `wire: door unreachable: <url>` |
+| a server with no wire door is a silent door, never an empty index ⚖ | `no wire door` | `list` | `3` | nothing | `wire: door unreachable: <url> (GET /wire answered 404)` |
 
 #### Cutting a fixture
 
