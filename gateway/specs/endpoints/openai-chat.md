@@ -372,7 +372,7 @@ relayed** — an upstream 5xx, a 429 on that endpoint, a connect failure or time
 is not one the dialect reads (`content-type` neither JSON nor SSE: an edge's page behind a 200), or a
 4xx whose JSON error names the provider that produced it (`error.metadata.provider_name` — OpenRouter's
 wrap of the provider's own refusal, a refused tool call among them) — strikes that `(model, provider)`
-cell (`provider-5xx` / `timeout` / `refused`; a 429 cools the cell instead) and **reissues the same
+cell (`provider-5xx` for a 5xx, a connect failure or an unreadable 2xx / `timeout` / `refused` for a provider-named 4xx; a 429 cools the cell instead) and **reissues the same
 request to the next provider in the order**, silently to the harness, ⚖ bounded by
 `providers.max_providers_per_request` (one pin + the failovers). Every attempt is a request row with its
 provider and status, and counts on `gateway_provider_requests_total{rail,model,provider,outcome}`; a
