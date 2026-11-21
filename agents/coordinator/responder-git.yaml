@@ -29,9 +29,9 @@ spec:
     contents: write                # a quick-fix branch on a stack's -iac repo (revert/bump PR)
     pull_requests: write           #   … and the PR itself
     actions: read                  # the failing run's log when the alert is a CI one
-  repositories:                    # mirrors coordinator-git's list VERBATIM (agents/coordinator/git-token.yaml) —
-                                   # the triage routes to any stack's repos; add/remove a stack repo in ALL the
-                                   # fleet lists (git-token.yaml, retro-git.yaml, reviewer-git.yaml, here).
+  # The repo list mirrors coordinator-git's VERBATIM (agents/coordinator/git-token.yaml): the triage
+  # routes to any stack's repos. agents-registration-lint holds it against agents/stacks.json.
+  repositories:
     - sleep-tracking
     - snore-recorder
     - sleep-iac

@@ -1738,7 +1738,8 @@ openrouter-operator, platform-agents]`, outcome `own`), `system:serviceaccount:o
 (`[oracle]`, `[prober]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:specs-review`
 (`[platform]`, `[reviewer, worker]`, `[]`, `own`), `system:serviceaccount:agent-coordinator:agent-coordinator`
 (`[platform]`, `[coordinator, responder, retro]`, `[openrouter-operator]`, `own`),
-`system:serviceaccount:agent-coordinator:island-intake` (`[platform]`, `[coordinator]`, `[]`, `own`) and
+`system:serviceaccount:agent-coordinator:island-intake` (`[platform]`, `[coordinator]`, `[]`, `own`),
+`system:serviceaccount:agent-coordinator:responder` (`[platform]`, `[responder]`, `[]`, `own`) and
 `system:serviceaccount:agent-coordinator:outcome-judge` (`[platform]`, `[]`, `[]`, outcome **`any`**).
 The platform
 stack's graduated coordinator pod (`agents/coordinator-session.sh --loop-ns`, SA `agentstack-loop`)
@@ -1758,9 +1759,11 @@ that will use it; until they do, the grant admits nothing new. ⚖ It also holds
 jail's `agents/research-fanout.sh` mints this SA's token (the entry canary's impersonation) and each
 platform arm is a worker-launcher ride bound into a platform repo namespace, as `researcher`. ⚖ **The coordinator namespace's
 shared SA** `agent-coordinator:agent-coordinator` holds `coordinator` + `responder`, no bind: the
-responder, the deep dig and the fix-debounce set-pass run as it
-(`agents/coordinator/{responder,deep-dig,fix-debounce}-argo.yaml`) and will admit
-ONE unbound session each, the specs reviewer's shape. ⚖ **Island intake** runs as its own SA,
+deep dig (which admits as `responder`) and the fix-debounce set-pass run as it
+(`agents/coordinator/{deep-dig,fix-debounce}-argo.yaml`) and will admit
+ONE unbound session each, the specs reviewer's shape. ⚖ **The responder** runs as its own SA,
+`agent-coordinator:responder` (`agents/coordinator/responder-argo.yaml`, homelab#3628): its entry
+holds `responder` only, no bind — one unbound triage session per alert. ⚖ **Island intake** runs as its own SA,
 `agent-coordinator:island-intake` (`agents/coordinator/island-intake-argo.yaml`; a read-only
 kube identity, homelab#3577): its entry holds `coordinator` only, no bind — the sitting admits
 `coordinator` sessions, one at a time (the author, each lens, the repair). ⚖ The shared SA also holds `retro`, bound into
