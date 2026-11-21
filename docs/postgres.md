@@ -102,6 +102,17 @@ bucket and key; no tenant can read another's backups.
 | a backup NOW (before a risky change) | the seat runs `devbox run pg-backup-now` — every cluster, waits, exit 0 only if all completed |
 | a namespace that has no store yet | ask the platform: a `store-<ns>.yaml` in `argocd/resources/pg-backup/` + the bucket. Until then the daily job reports your cluster UNCOVERED and fails, so it is seen |
 
+**When the backup target is down, the database is what fills up.** Postgres keeps every WAL segment
+it has not archived, and a segment is 16 MB however little was written. The platform therefore sets
+**`archive_timeout: 1h`** on every Cluster (admission policy `pg-archive-timeout-default`; CNPG's
+default is 5min, about 190 MB/h of WAL from a lightly written cluster while the target is down — on
+2026-11-20 that filled grafana-pg's 2 GiB in ~10 h, [incident](incidents/2026-11-20-nx-02-boot-disk.md)).
+At 1h a dead target costs about 16 MB/h, so a volume has days. The price is the archive's recovery
+point: a restore from the store may lack up to the last hour of writes. Write another value into
+`spec.postgresql.parameters.archive_timeout` to choose your own (anything but the literal `5min`, which
+the policy reads as CNPG's default). `CNPGWALArchivingFailing` fires 5 min after a primary's archiving
+starts failing — the target is the thing to fix, not the volume.
+
 Backups are taken **from the primary**: its `pg_backup_stop` waits until the backup's WAL is in the
 store, so a completed backup is restorable at once. A standby backup is not — on 2026-10-03 one
 reported `completed` four minutes before its WAL was archived, and one taken from a standby that had
