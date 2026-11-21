@@ -163,3 +163,21 @@ eventsource-name=agent-loop -o wide` lists one pod (on wk-04), and `get pdb` sho
 `eventbus-default-js`. After: two Running pods on two different nodes, `get endpoints
 agent-loop-eventsource-svc` lists both pod IPs, and `agent-loop-eventsource` reports `ALLOWED
 DISRUPTIONS 1`.
+
+## The `/kargo-prod-failed` endpoint and the oracle prod-diagnose start (homelab#3629)
+
+No fixture applies. The change adds one webhook endpoint to the `agent-loop` EventSource in
+`agents/coordinator/review-argo.yaml` (a ratchet clause file) and a new Sensor
+(`kargo-prod-diagnose-argo.yaml`) whose only trigger submits a Workflow that is a bare
+`workflowTemplateRef` to `oracle-fleet/prod-diagnose` — no script, no payload parameter, no
+`gh`/`kubectl` call the harness replays. Every existing endpoint, Sensor and WorkflowTemplate is
+unchanged, so every fixture asserts exactly what it asserted before. A fixture could only assert that
+the manifest contains the endpoint it contains, which is the cosmetic fixture this ratchet exists to
+prevent; the template's behaviour is oracle-iac's (#1192) and is tested there.
+
+What pins it is live. After the merge syncs: `kubectl -n agent-coordinator get eventsource agent-loop
+-o jsonpath='{.spec.webhook.kargo-prod-failed.endpoint}'` reads `/kargo-prod-failed`; the
+`workflow-template-start-guard` policy accepts a server dry-run create of the bare reference as
+`system:serviceaccount:agent-coordinator:sensor-review` in `oracle-fleet` and denies one with any
+other spec key; the first `KargoProdVerificationFailed` starts a `prod-diagnose-*` Workflow there.
+
