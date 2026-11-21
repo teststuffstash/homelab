@@ -1729,7 +1729,7 @@ Legend: `policy` = the one change to `policy-default`'s control-plane keys, or t
 | a caller entry missing a key refuses the load | policy-default | the platform loop without bind_namespaces | PolicyError |
 | a policy without control_plane_auth refuses the load ⚖ | policy-default | control_plane_auth absent | PolicyError |
 | a policy without callers refuses the load ⚖ | policy-default | callers absent | PolicyError |
-| the deployed callers are today's five dispatchers and the judge, under enforce ⚖ | policy-default | argocd/resources/agent-gateway/policy.json | loads: control_plane_auth enforce; callers = the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's shared SA, the island intake sitting, the outcome judge |
+| the deployed callers are today's six dispatchers and the judge, under enforce ⚖ | policy-default | argocd/resources/agent-gateway/policy.json | loads: control_plane_auth enforce; callers = the platform loop, the oracle prober, the specs-review tick, the coordinator namespace's shared SA, the island intake sitting, the responder, the outcome judge |
 
 The deployed entries are today's in-cluster callers, named by the SA they run as, and the deployed
 row holds exactly: `system:serviceaccount:platform-agents:agentstack-loop` (stacks `[platform]`, roles

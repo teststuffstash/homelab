@@ -1,0 +1,67 @@
+# Responder git token — the responder's OWN GitHub identity (rbac.yaml §responder; operator
+# 2026-11-21: the dig, intake and responder each get their own account and token, still in the
+# intake island). Same App, same installation and the SAME private-key Secret as coordinator-git
+# (agents/coordinator/git-token.yaml — read that file first): a second generator + a second minted
+# Secret, never a copy of the agents-github-app ExternalSecret. The retro-git.yaml shape.
+#
+# What the `respond` template does on GitHub, and nothing more: the shell and the session read,
+# file, edit, comment on and label issues across the agent repos (dedup is org-wide by `alert-fp:`),
+# and a GitOps quick fix — a revert/bump PR on a stack's -iac repo — is a sanctioned outcome of the
+# session (the brief's REMEDIATION-WOULD paragraph). Dropped against coordinator-git: actions:write
+# (the ci-red rerun is the coordinator's), workflows:write (the FU-1990 revert chain's) and
+# statuses/checks (review-reflex's rollup reads).
+#
+# Synced by the agent-coordinator ArgoCD app (registered in kustomization.yaml).
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: responder-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4150968"          # same App as coordinator-git (homelab-agents)
+  installID: "142724430"    # the teststuffstash installation
+  auth:
+    privateKey:
+      secretRef: { name: agents-github-app, key: privateKey }  # the SAME Secret git-token.yaml's ExternalSecret writes
+  permissions:
+    issues: write                  # file / edit / comment / label (the triage's one issue + the shell's markers)
+    contents: write                # a quick-fix branch on a stack's -iac repo (revert/bump PR)
+    pull_requests: write           #   … and the PR itself
+    actions: read                  # the failing run's log when the alert is a CI one
+  repositories:                    # mirrors coordinator-git's list VERBATIM (agents/coordinator/git-token.yaml) —
+                                   # the triage routes to any stack's repos; add/remove a stack repo in ALL the
+                                   # fleet lists (git-token.yaml, retro-git.yaml, reviewer-git.yaml, here).
+    - sleep-tracking
+    - snore-recorder
+    - sleep-iac
+    - openrouter-operator
+    - oracle-fleet
+    - oracle-iac
+    - agent-runtime
+    - agent-coordinator
+    - allure-behavior-snippets
+    - circles
+    - circles-iac
+    - homelab
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: responder-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 30m            # token lives 60m; 30m = never served older than ~30m (retro-git.yaml)
+  target:
+    name: responder-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: responder-git-gen

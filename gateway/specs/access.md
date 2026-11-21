@@ -84,11 +84,12 @@ gateway; granted ahead of the launchers, which adopt the shared admission helper
 `agents/gateway-admit.sh` one PR at a time — until then the inventory rows above stay as they are; the coordinator row has),
 plus `researcher` for the jail's research fan-out, which impersonates it;
 the coordinator namespace's shared SA (`agent-coordinator:agent-coordinator`) `coordinator` +
-`responder`, no bind — the responder, deep dig and fix-debounce lanes, each one
+`responder`, no bind — the deep dig and fix-debounce lanes, each one
 unbound session (the fix-debounce set-pass's `dispatch-unit` class maps to `coordinator`) — and
 `retro`, bound into `openrouter-operator`, for the retro cron's cells (worker-launcher rides in the
 platform retro's ride namespace); the island intake sitting's own SA (`agent-coordinator:island-intake`)
-`coordinator` only, no bind — it admits its sessions one at a time; the oracle loop's SA (`oracle-agents:agentstack-loop`) `prober` only, no bind —
+`coordinator` only, no bind — it admits its sessions one at a time; the responder's own SA
+(`agent-coordinator:responder`) `responder` only, no bind — one unbound triage session per alert; the oracle loop's SA (`oracle-agents:agentstack-loop`) `prober` only, no bind —
 the `probe-oracle` tick's nested mission child on the codex rail (operator ruling 2026-10-24); the specs reviewer's SA (`agent-coordinator:specs-review`) `reviewer` +
 `worker` — the tick and its shadow cell; the [judge](glossary.md#judge)'s SA
 (`agent-coordinator:outcome-judge`, the deploy-revert chain's judge step, FU-270 (b)) no role at

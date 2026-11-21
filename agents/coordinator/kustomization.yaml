@@ -33,6 +33,7 @@ resources:
   - rbac.yaml
   - reflexes-argo.yaml
   - responder-argo.yaml
+  - responder-git.yaml
   - deep-dig-argo.yaml
   - island-intake-argo.yaml
   - island-rules-digest-argo.yaml
