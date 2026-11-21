@@ -24,7 +24,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   and WAL grows ~200 MB/h per cluster. Volumes were grown for ~2 days (`85b7c85c`). A spare 480 G SA400 (wiped) sits in an nx-02 bay.
   BEFORE the reboot the operator wants to discuss the lessons (draft §Lessons: WAL-vs-service, mirrored boot, backup target
   fate-sharing, paging). THEN, attended: pull the spare, `qm shutdown` the guests, reboot, verify CARP / cp-02 / wk-04 /
-  LXC 220 / `ContinuousArchiving` / SMART. `dig-explained: LonghornBackupTargetDown, EndpointProbeFailing, PveMetricsStale, RouterWanGateSilent — nx-02 boot disk detached (incident 2026-11-20), reboot owed`
+  LXC 220 / `ContinuousArchiving`, and read the previous boot's journal for 06:45–06:50Z (SMART done 11-21, leans toward a drive-controller hang; draft §Disk or bus). `dig-explained: LonghornBackupTargetDown, EndpointProbeFailing, PveMetricsStale, RouterWanGateSilent — nx-02 boot disk detached (incident 2026-11-20), reboot owed`
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
   FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
   unattended merge (#3565) all worked. STILL OWED: read #3533's release on the 11-21/22 05:00Z sitting (it and #3538
