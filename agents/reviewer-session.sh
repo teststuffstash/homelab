@@ -12,8 +12,10 @@
 #     ref:agent-coordinator/coordinator-claude; the egress proxy injects the token — FU-066d): free at
 #     margin, a strong model, deliberately DECORRELATED from the cheap OpenRouter model that wrote the
 #     PR. Reviewer must be at least as capable as the author; same model = same blind spots. Review +
-#     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model (**sonnet**,
-#     the default) — NOT the cheap OpenRouter models the workers use. Don't cheap out on the reviewer.
+#     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model — NOT the cheap
+#     OpenRouter models the workers use. Don't cheap out on the reviewer. On the PLATFORM stack the gateway
+#     picks the model (policy.json roles.reviewer = tier `heavy` → anthropic `[opus, fable]`, so opus); the
+#     `sonnet` default below is the old-proxy path's (every other stack, and the gateway's fallback).
 #     (Proven live: on sleep-tracking#9 a *sonnet* reviewer caught the *coordinator's* own misjudgment —
 #     dispatching a review on a DIRTY, superseded PR — and recommended close. Sonnet is sufficient here;
 #     opus is available for a genuinely high-stakes PR via --model, but it is not the default.)

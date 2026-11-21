@@ -82,6 +82,7 @@ spec:
             - island-intake-read # homelab#3577 (see the ClusterRole above)
             - island-intake-read-app # homelab#3577: the same SA on agent-read-app
             - island-intake-read-infra # homelab#3577: the same SA on agent-read-infra
+            - responder-read-infra # homelab#3628: the responder's own SA (off agent-coordinator) on agent-read-infra (agents/coordinator/rbac.yaml)
             - kps-lease-crds # ADR-150 (see the ClusterRole above)
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
@@ -106,6 +107,7 @@ spec:
             - ValidatingAdmissionPolicyBinding
           names:
             - kargo-write-guard # argocd/resources/kargo/admission-policy.yaml: the belt over every kargo-SA write
+            - workflow-template-start-guard # homelab#3629 (agents/coordinator/kargo-prod-diagnose-argo.yaml): a guarded starter may create only a bare workflowTemplateRef to an allowed template
       - resources:
           kinds:
             - PriorityClass
