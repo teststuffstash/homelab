@@ -56,6 +56,7 @@ EXPY="$HERE/experiment.py"
 REPO="${EXPERIMENT_REPO:-teststuffstash/homelab}"
 PROM="${PROMETHEUS:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}"
 BUCKET="${AGENT_TS_BUCKET:-agent-transcripts}"
+UNSHIPPED_D="${EXPERIMENT_UNSHIPPED_D:-14}"   # a child merged into goal/** this long ago and still not shipped counts overdue
 DRY=0
 case "${1:-}" in
   --dry-run) DRY=1;;
@@ -111,8 +112,8 @@ while IFS= read -r row; do
   ID[$n]="$(sane "$(jq -r '.id' "$W/$n.block")")"
   # t0 = the merge that shipped the fix. First the merged PR that closed the issue (master-based work,
   # post-launch children, themed / Base: master Goals). Only when none exists and the issue has a Goal
-  # ancestor: its PR merged into goal/<n> (no closing reference — GitHub's shape), and the change reaches
-  # production with the Goal's ASSEMBLY merge (not merged yet = pending, nothing written). The Goal is read
+  # ancestor: its PR merged into goal/** (no closing reference — GitHub's shape), and the change reaches
+  # production when that branch merges on (below; not merged yet = pending, nothing written). The Goal is read
   # for every issue: a fail is routed by it.
   goal="$(goal_of "$n")"; grc=$?
   if [ "$grc" = 2 ]; then FAULT[$n]="__error__ the Goal lookup of #$n failed"; continue; fi
@@ -127,11 +128,33 @@ while IFS= read -r row; do
     [ -n "$m" ] && { [ -z "$merged" ] || [[ "$m" > "$merged" ]]; } && merged="$m"
   done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (if .repository.owner.login and .repository.name then "\(.repository.owner.login)/\(.repository.name)" else "" end)] | @tsv' <<<"$row")
   if [ -z "$merged" ] && [ -n "${GOAL[$n]:-}" ]; then
-    gh pr list --repo "$REPO" --state merged --search "Assembly-for: #$goal in:body" --json number,mergedAt,headRefName --limit 20 \
-      > "$W/$n.asm" 2> "$W/$n.asm.err" \
-      || die "GitHub did not answer for Goal #$goal's assembly (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
-    merged="$(jq -r --arg g "$goal" '[.[] | select((.headRefName // "") | test("^goal/" + $g + "(-|$)")) | .mergedAt | select(. != null)] | sort | last // ""' "$W/$n.asm")"
-    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: no merged closing PR and Goal #$goal's assembly is not merged — not in production yet"; continue; fi
+    # No closing reference: its PR merged into a goal/** branch, where the keyword is inert. Follow THAT branch:
+    # the merged PR that carried the child (closing keyword or fix/issue-<n>- head, base goal/**), then the merged
+    # PR whose head is that base, until one lands outside goal/** — a Goal assembly (Assembly-for:) or a themed
+    # Goal's theme branch merging on (ADR-126), whatever it is called. Each hop must merge after the one below it,
+    # so a sibling branch's older merge is never this child's t0.
+    gh pr list --repo "$REPO" --state merged --search "$n in:body" --json number,body,baseRefName,headRefName,mergedAt --limit 50 \
+      > "$W/$n.car" 2> "$W/$n.car.err" \
+      || die "GitHub did not answer for the PR that carried #$n — nothing decided: $(tr '\n' ' ' < "$W/$n.car.err" | cut -c1-300)"
+    carrier="$(jq -c --arg n "$n" '[.[] | select((.baseRefName // "") | startswith("goal/"))
+      | select(((.body // "") | test("(?i)(^|[^a-z])(fix(es|ed)?|close[sd]?|resolve[sd]?)[ \t]+#" + $n + "([^0-9]|$)"))
+               or ((.headRefName // "") | test("issue-" + $n + "(-|$)")))] | sort_by(.mergedAt) | last // empty' "$W/$n.car")"
+    if [ -z "$carrier" ]; then FAULT[$n]="no merged pull request closes or carries this issue, so there is no t0"; continue; fi
+    base="$(jq -r '.baseRefName' <<<"$carrier")"; after="$(jq -r '.mergedAt' <<<"$carrier")"; cm="$after"
+    for _ in 1 2 3 4; do
+      gh pr list --repo "$REPO" --state merged --head "$base" --json number,baseRefName,mergedAt --limit 10 > "$W/$n.up" 2> "$W/$n.up.err" \
+        || die "GitHub did not answer for the merge of $base (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.up.err" | cut -c1-300)"
+      up="$(jq -c --arg a "$after" '[.[] | select((.mergedAt // "") >= $a)] | sort_by(.mergedAt) | .[0] // empty' "$W/$n.up")"
+      [ -n "$up" ] || break
+      base="$(jq -r '.baseRefName' <<<"$up")"; after="$(jq -r '.mergedAt' <<<"$up")"
+      case "$base" in goal/*) ;; *) merged="$after"; break;; esac
+    done
+    if [ -z "$merged" ]; then
+      # not in production yet: pending, and an overdue bound UNSHIPPED_D days after the child merged, so a branch
+      # that never ships is seen (IntakeExperimentOverdue) instead of a label that sits forever
+      VERDICT[$n]=pending; BOUND[$n]=$(( $(date -u -d "$cm" +%s) + UNSHIPPED_D * 86400 ))
+      say "#$n: carried into $base, which has not reached the default branch — pending (overdue $UNSHIPPED_D d after $cm)"; continue
+    fi
   fi
   if [ -z "$merged" ]; then FAULT[$n]="no merged pull request closes this issue, so there is no t0"; continue; fi
   T0[$n]="$(date -u -d "$merged" +%s)"
