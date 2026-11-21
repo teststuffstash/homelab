@@ -385,8 +385,8 @@ answer's.
 #### A defer is 200, a transient fault is 503
 
 A well-formed request that must wait is a 200 `defer`; the kube API away while a credential is being
-resolved is a 503 `credential-transient` with a `retry-after` header of the resolver's negative-cache
-TTL (GW-CRED-RESOLVE's 20 s, re-used as the retry hint), the only transient HTTP error
+resolved is a 503 `credential-transient` with a `retry-after` header — the credential resolver's negative-cache window, 20 s
+(the [GW-CRED-RESOLVE](#gw-cred-resolve) miss TTL, reused rather than a separate transient value) ⚖ — the only transient HTTP error
 of admission ([GW-CRED-RESOLVE](#gw-cred-resolve)). **World: [policy-default](../worlds/README.md#policy-worlds)**.
 Legend: `active`, `credential` as in [§The policy walk](#the-policy-walk) (`anthropic_ref transient fault`
 = the Secret source answers 5xx / unreachable); `retry_after_header?` = the response's `retry-after`.
@@ -415,7 +415,7 @@ after it.
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: labels, urgency, budget class | body carries none, none read | — | the ADR-096 ladder's inputs; `tier` is the only size knob |
-| ⚑ gap: `POST /route` | any | 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
+| ⚑ gap: `POST /route` | `POST /route`, any body | 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -1581,8 +1581,8 @@ Bearer <the caller's projected ServiceAccount token>`**, audience **`agent-gatew
 `system:serviceaccount:<ns>:<sa>`, as the caller. The policy's **`callers`** map, keyed by that
 username, says what the caller may ask for: its admissions' `stacks` and `roles`, and the
 `bind_namespaces` a [`bind`](../glossary.md#bind) may name. Exact values only, every key required, a
-key that is not a ServiceAccount username refuses the policy load, and so does an entry whose
-`stacks` names a stack the policy does not define. So a wildcard can never be
+key that is not a ServiceAccount username refuses the policy load, and so does an entry naming a stack
+or role the policy does not hold. So a wildcard can never be
 written. The caller is stored on the session row (`caller`, returned by `GET`), and `GET` / `DELETE`
 belong to that caller. ⚖ A row stored with no caller (admitted with no bearer under `observe`) has no
 owner to check against: any listed caller may read it and may release it. The env pull is NOT caller-checked here: its caller is the bound pod, which

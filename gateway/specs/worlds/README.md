@@ -14,6 +14,7 @@ a single-world module declares it once in its docstring and omits it from row id
 | `policy-enforce` | [policy-enforce.json](policy-enforce.json) | `policy-default` with `control_plane_auth: enforce` and nothing else changed — for the GW-SESSIONS-AUTH enforce rows only |
 | `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30), its roles shaped as the 2026-10-23 ruling (every role lists `anthropic`, `opencode` and `codex`; `prober` = `anthropic`, `codex`) — the codex rows and the GW-SESSIONS-ADMIT §The harness follows the cell rows (its opencode `standard` list is `[deepseek-v4.1-flash, claude-haiku-5-5]`: both dialect shapes, so a cell row can skip the openai one and take the anthropic; its anthropic `heavy` list is `[claude/sonnet, claude/opus, claude/fable]` — three models, so a [§The preferred end of the list](../endpoints/sessions.md#the-preferred-end-of-the-list) row can tell the next-strongest from the list's head); the deployed policy's lists are its own |
 | `policy-go` | [policy-go.json](policy-go.json) | `policy-default` plus `rails.opencode.headroom` (120 s freshness, 0.95 ceiling, the named windows `rolling` / `weekly` / `monthly`, 30 s poll — ⚖ fixture values, not production policy), for the GW-SESSIONS-CAPACITY [Go account headroom](../endpoints/sessions.md#go-account-headroom) rows ONLY; the usage URL is the test's, the Go key is the fixture's |
+| `wire-codex` | [wire-codex.json](wire-codex.json) | not a policy: the **declarations world** of [GW-WIRE-PROBE](../endpoints/wire.md#gw-wire-probe), read from the path `GATEWAY_WIRE` names beside `policy-codex` — one probe, `codex-models` (rail `codex`, path `/models`, `client_version=0.155.0`, every 21600 s), no allowlisted key; fixture hosts only (byte-identical twin: `../../tests/fixtures/wire-codex.json`). The deployed declarations are `argocd/resources/agent-gateway/wire.json`, the codeowner's |
 
 Names in the test policy (namespaces, Secret names) are **fixture names**, not production
 ones; the production policy is the ConfigMap in `argocd/resources/agent-gateway/`. Model ids
@@ -34,6 +35,18 @@ Every policy world also carries the `tiers` block of the deployed policy (`score
 bands 0.9 / 0.75 / 0.5, cap 3 — [GW-MODEL-TIERS](../endpoints/catalog.md#gw-model-tiers)) so one
 loader shape holds everywhere, but its LISTS stay the fixture ids above: the derivation applies to
 the deployed policy only ⚖.
+
+## Where worlds come from
+
+A wire shape in a fixture is **mined from a recorded answer**, never hand-copied and never invented
+(Goal #3300). The gateway records what its vendors answered ([GW-WIRE-RECORD](../endpoints/wire.md#gw-wire-record))
+and serves it read-only ([GW-WIRE-VIEW](../endpoints/wire.md#gw-wire-view)); a fixture is cut from that
+answer with `devbox run wire-quarry -- cut <source> --path <a.b.c> --out tests/fixtures/<name>.json`
+([GW-WIRE-QUARRY](../endpoints/wire.md#gw-wire-quarry)). The sidecar it writes beside the fixture
+(`<name>.provenance.json`: source, class, url, sha256, fetched_at, path) is committed with it. A shape no source
+has recorded is not written: a missing record is the finding (the tool exits `4`), and the fixture waits for the
+gateway to record it. The fixtures cut by hand before the tool have no sidecar (the gap in the
+[index](../README.md#index)); they are not re-cut here.
 
 ## Upstream behaviours (fake upstreams)
 
