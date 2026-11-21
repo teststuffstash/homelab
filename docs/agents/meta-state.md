@@ -20,9 +20,10 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 - **⚑ PICKUP FIRST (2026-11-21 — nx-02 rebooted; ROUTER PARKED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md) §Recovery; FU-299, FU-297).**
   nx-02 is whole: guests up, archiving True, backup target up. **opnsense-nx02 sits in CARP MAINTENANCE (demotion 240,
-  dead-man DISARMED) and pve holds `.1` + the WAN ON PURPOSE.** nx-02's take-back at 08:54Z left the LAN with no internet for ~8 min:
-  lease and route set, SYNs out, no replies. Do NOT `carp-maintenance nx02 leave` (and do not run `host-maint up`, which
-  leaves) until a controlled, attended take-back test has run with a capture on nx-02 `eno2`. Lessons still to route
+  dead-man DISARMED) and pve holds `.1` + the WAN ON PURPOSE.** nx-02's take-back at 08:54Z left the LAN with no internet for ~8 min.
+  CAUSE: the nx-02 router's disk is full (108 %, filter logs 3.3 GB), so Unbound cannot start and `.1` gives no DNS (draft
+  §Recovery). Do NOT `carp-maintenance nx02 leave` (nor `host-maint up`) until `dig @192.168.2.70` answers. pve will fill the same
+  way as MASTER (44 % now). Lessons still to route
   (draft §Lessons); bay-swap test if the disk drops again; hp-01 Longhorn disk at 79 %.
 - **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
   FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
