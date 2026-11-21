@@ -63,6 +63,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
   oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
   `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
+- **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator).** Supersedes ADR-158: stack pins lead by
+  TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker the release clock Renovate lacks (first
+  sighting on the `image-clock` side branch, `allowedVersions` appended at run time). Touches `.github/workflows/` → `ci` red by
+  design: `/seat-review 3652` → the operator's admin merge. Proven by branch dry runs (44949949099: 36 pkgs, 0 failed, 52 rules,
+  no postgres 19 proposal). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
+  (postgres 19-alpine) should be autoclosed until 11-27. FU-323 = prod Postgres frozen at 18.3.
+  Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
+  security PRs that skip the cooldown — openrouter-operator#111 would land virtualenv 0.9 d old); close #110 (its target
+  virtualenv 21.14.9 is itself vulnerable; #113 closed 11-21); admin-merge #111 after ~11-28 once lock-intake-lint clears;
+  the scan routing armed non-major #111 to unarmed-major (second jail's claim, unchecked — a loop component: stop-and-ask).
 - **⚑ PICKUP (2026-11-21 — #3627 for the next session, operator).** `ci: run the scan, launch and retro island suites (#3391)`,
   opened 13:56Z under the operator login (not the primary seat's), UN-ARMED, no review, BEHIND master. It touches
   `.github/workflows/ci.yaml` (a governance path the bot cannot gate) + `scripts/diff-ci.sh`, so the path is

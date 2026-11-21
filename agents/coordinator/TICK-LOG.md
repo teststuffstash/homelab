@@ -15719,3 +15719,19 @@ updates or reverts as much as possible — mechanical revert or a responder."
   The Fable weekly drain is intake's `prefer: strongest` (FU-320, meta-state). The Go catalog warning is #3533.
 - Oracle asked about `.agents/intake.md` failing the claim's facts path grammar (no dot-led segment): advised to move it to
   `docs/intake.md`. The grammar stays shared, with no platform change for one caller.
+
+## 2026-11-21 (night) — seat: ADR-166 time offset + the Docker image clock; openrouter-operator #110/#111
+
+- Oracle asked when prod moves to Postgres 19. Found: CNPG's default image applies to new clusters only and every live
+  Cluster pins `imageName` 18.3 (only forgejo-pg from git) → no chart bump moves even a minor (FU-323). Postgres 19.0 GA on
+  Docker Hub 2026-11-20 (I first misread it as RC from an older announcement title; corrected).
+- Operator steered the window question: prod can jump two versions; version numbers don't line up across CNPG / raw image /
+  nix; "fixture = prod artifact" rejected; a 7-day stack cooldown kept (Trivy's Docker Hub images were overwritten ~3.5 d).
+  Ruling: platform minor/major 14 d, stacks 7 d → ADR-166 (#3652). "Otherwise the ADR is toothless" → the Docker clock built
+  in-session instead of an FU: Docker Hub tag dates are last-push (`18-alpine` re-pushed today), ghcr has none.
+  Branch dry runs found the dind mount (/tmp is the sidecar's) and the report EACCES; fixed; the final run applied 52 rules.
+- Renovate image: operator ruled it floats ("latest security"); I had claimed a delay would have caught 44.221's behaviour
+  change — wrong, corrected (a delay catches compromise only).
+- Second jail's openrouter-operator #110/#111: lock-intake-lint over the heads — #110's virtualenv 21.14.9 is vulnerable,
+  #111 brings virtualenv 0.9 d / python-discovery 3.8 d old. ADR-154 already routes structural dep edits to the operator's
+  admin merge. Closed #113 (operator). Rest → meta-state.
