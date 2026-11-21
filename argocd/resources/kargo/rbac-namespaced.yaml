@@ -32,6 +32,18 @@
 #    A pod spec names Secrets, never their values. The Loki tenant read for oracle-kargo
 #    (loki-tenant-grants.yaml) covers the same pods after they are GC'd.
 #
+#  - oracle's two FIXED prod workflows (oracle-iac#1192 `prod-diagnose`, #1193 `prod-step-back`;
+#    oracle-fleet#1094/#1095 rulings): each runs under its own SA in oracle-fleet (oracle-iac
+#    creates the SAs) and gets ONE Stage's `promote` here. Kargo checks `promote` per Stage by NAME
+#    (the Promotion webhook's SubjectAccessReview carries `Name: spec.stage`), so `resourceNames`
+#    binds it to that Stage; `create` on Promotions alone promotes nothing. A Promotion cannot carry
+#    its own steps — the webhook overwrites them from the Stage's promotionTemplate and the spec is
+#    immutable — so the SA can only run the Stage's own process. A Promotion it creates sets/lifts
+#    the Stage's auto-promotion hold exactly as a person's does (only Kargo-controlplane-created
+#    Promotions are exempt): promoting a non-candidate Freight holds, promoting the candidate
+#    resumes. prod-diagnose: shadow only (it promotes the failed and the previous Freight to the
+#    standing shadow, then the newest back) + AnalysisRuns read; prod-step-back: prod only.
+#
 # Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
 # Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
 # A NEW Kargo Project = one more copy of the oracle-kargo block (one Project today).
@@ -249,4 +261,69 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: oracle-workbench
+    namespace: oracle-fleet
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-prod-diagnose
+  namespace: oracle-kargo
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [stages, freights, promotions]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [analysisruns]
+    verbs: [get, list, watch]
+  - apiGroups: [kargo.akuity.io]
+    resources: [stages]
+    resourceNames: [shadow]
+    verbs: [promote]
+  - apiGroups: [kargo.akuity.io]
+    resources: [promotions]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-prod-diagnose
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-prod-diagnose
+subjects:
+  - kind: ServiceAccount
+    name: prod-diagnose
+    namespace: oracle-fleet
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-prod-step-back
+  namespace: oracle-kargo
+rules:
+  - apiGroups: [kargo.akuity.io]
+    resources: [stages, freights, promotions]
+    verbs: [get, list, watch]
+  - apiGroups: [kargo.akuity.io]
+    resources: [stages]
+    resourceNames: [prod]
+    verbs: [promote]
+  - apiGroups: [kargo.akuity.io]
+    resources: [promotions]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-prod-step-back
+  namespace: oracle-kargo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-prod-step-back
+subjects:
+  - kind: ServiceAccount
+    name: prod-step-back
     namespace: oracle-fleet

@@ -349,6 +349,14 @@ alertmanager:
         webhook_configs:
           - send_resolved: false
             url: http://chart-revert.agent-coordinator.svc.cluster.local:8080/alert
+      # oracle-iac#1192: KargoProdVerificationFailed (oracle-iac prometheusrule-kargo.yaml) STARTS the
+      # oracle stack's fixed WorkflowTemplate oracle-fleet/prod-diagnose — no argument, no session
+      # (agents/coordinator/kargo-prod-diagnose-argo.yaml). The responder triages the same alert and
+      # reads the finished record. send_resolved false: a resolve is not a second failure.
+      - name: kargo-prod-diagnose
+        webhook_configs:
+          - send_resolved: false
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/kargo-prod-failed
       - name: ha-webhook
         webhook_configs:
           - send_resolved: true
@@ -404,6 +412,14 @@ alertmanager:
           matchers:
             - alertname =~ "ArgoControllerSilent|AgentLoopWorkflowsFailing"
           receiver: chart-revert
+        # oracle-iac#1192: KargoProdVerificationFailed goes to BOTH kargo-prod-diagnose (starts the
+        # stack's fixed diagnosis workflow) AND the responder (triage: now, reads its record). The
+        # rule is transition-keyed and resolves after an hour, so the 3h repeat never re-delivers it.
+        - continue: true
+          matchers:
+            - alertname = "KargoProdVerificationFailed"
+            - stack = "oracle"
+          receiver: kargo-prod-diagnose
         # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
         # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
         # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts
