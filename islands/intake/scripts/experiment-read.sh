@@ -23,7 +23,8 @@
 # A run that died after the comment finds its marker next time and finishes the rest (the state writes are safe
 # to repeat; the Goal-side comment carries its own marker `<!-- experiment-verdict-goal issue=<n> id=<id> -->`)
 # — it never comments twice. A `fail` without a Goal reopens, unlabels and removes `experiment/open` in ONE PATCH.
-# An issue whose body has no loadable block, or that no merged PR closed, gets ONE comment (marker
+# An issue whose body has no loadable block, that no merged PR closed, or (a Goal child) whose carrying PR cannot be
+# found 2 days after it closed, gets ONE comment (marker
 # `<!-- experiment-fault -->`) naming the fault and keeps its label; the run counts it as `fault`.
 #
 # Overlap (pin 10): two experiments of this run whose windows [t0, t0 + max_window] overlap and whose `kpi.query`
@@ -56,6 +57,7 @@ EXPY="$HERE/experiment.py"
 REPO="${EXPERIMENT_REPO:-teststuffstash/homelab}"
 PROM="${PROMETHEUS:-http://kube-prometheus-stack-prometheus.monitoring.svc:9090}"
 BUCKET="${AGENT_TS_BUCKET:-agent-transcripts}"
+NOCARRY_AGE_S="${EXP_NOCARRY_AGE_S:-172800}"   # an item with no findable t0 is a fault comment after this long closed (2d)
 DRY=0
 case "${1:-}" in
   --dry-run) DRY=1;;
@@ -70,7 +72,7 @@ die() { say "$*"; exit 1; }
 
 # ── the list: ONE call ───────────────────────────────────────────────────────────────────────────
 gh issue list --repo "$REPO" --state closed --label experiment/open --limit 200 \
-  --json number,title,body,labels,comments,closedByPullRequestsReferences > "$W/list.json" 2> "$W/list.err" \
+  --json number,title,body,labels,comments,closedAt,closedByPullRequestsReferences > "$W/list.json" 2> "$W/list.err" \
   || die "GitHub did not answer the list of open experiments — nothing decided: $(tr '\n' ' ' < "$W/list.err" | cut -c1-300)"
 jq -e 'type == "array"' "$W/list.json" >/dev/null 2>&1 || die "the list is not an array — nothing decided"
 TOTAL="$(jq 'length' "$W/list.json")"
@@ -127,11 +129,32 @@ while IFS= read -r row; do
     [ -n "$m" ] && { [ -z "$merged" ] || [[ "$m" > "$merged" ]]; } && merged="$m"
   done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (if .repository.owner.login and .repository.name then "\(.repository.owner.login)/\(.repository.name)" else "" end)] | @tsv' <<<"$row")
   if [ -z "$merged" ] && [ -n "${GOAL[$n]:-}" ]; then
-    gh pr list --repo "$REPO" --state merged --search "Assembly-for: #$goal in:body" --json number,mergedAt,headRefName --limit 20 \
-      > "$W/$n.asm" 2> "$W/$n.asm.err" \
-      || die "GitHub did not answer for Goal #$goal's assembly (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
-    merged="$(jq -r --arg g "$goal" '[.[] | select((.headRefName // "") | test("^goal/" + $g + "(-|$)")) | .mergedAt | select(. != null)] | sort | last // ""' "$W/$n.asm")"
-    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: no merged closing PR and Goal #$goal's assembly is not merged — not in production yet"; continue; fi
+    # No closing reference: the child's own PR merged into a goal/** branch. t0 is the merge of the branch THAT PR
+    # merged into (the plain Goal's assembly and a theme's assembly alike) — followed up while that branch itself
+    # merged into another goal/** branch. Never a Goal-wide search: an earlier sibling's merge is not this child's.
+    gh pr list --repo "$REPO" --state merged --search "#$n in:body" --json number,baseRefName,body --limit 30 \
+      > "$W/$n.carry" 2> "$W/$n.carry.err" \
+      || die "GitHub did not answer for the PR that carried #$n — nothing decided: $(tr '\n' ' ' < "$W/$n.carry.err" | cut -c1-300)"
+    base="$(jq -r --arg n "$n" '[.[] | select((.baseRefName // "") | startswith("goal/")) | select((.body // "") | test("#" + $n + "([^0-9]|$)")) | .baseRefName] | first // ""' "$W/$n.carry")"
+    if [ -z "$base" ]; then
+      # no t0 can be found: pending for NOCARRY_AGE_S after the issue closed, then a fault comment (marker, label kept)
+      closed_at="$(jq -r '.closedAt // ""' <<<"$row")"; closed_s=""; [ -n "$closed_at" ] && closed_s="$(date -u -d "$closed_at" +%s 2>/dev/null)"
+      if [ -n "$closed_s" ] && [ $((NOW - closed_s)) -gt "$NOCARRY_AGE_S" ]; then
+        FAULT[$n]="no merged pull request that carried this issue into a goal/** branch was found $((NOW - closed_s))s after it closed, so there is no t0"; continue
+      fi
+      VERDICT[$n]=pending; say "#$n: no merged closing PR and no merged PR that carried it into a goal/** branch — pending (a fault after ${NOCARRY_AGE_S}s closed)"; continue
+    fi
+    for _ in 1 2 3 4; do
+      gh pr list --repo "$REPO" --state merged --head "$base" --json number,mergedAt,baseRefName --limit 10 \
+        > "$W/$n.asm" 2> "$W/$n.asm.err" \
+        || die "GitHub did not answer for the merge of $base (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
+      hop="$(jq -c '[.[] | select(.mergedAt != null)] | first // empty' "$W/$n.asm")"
+      [ -n "$hop" ] || break
+      nb="$(jq -r '.baseRefName // ""' <<<"$hop")"
+      case "$nb" in goal/*) base="$nb"; continue;; esac
+      merged="$(jq -r '.mergedAt' <<<"$hop")"; break
+    done
+    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: no merged closing PR and its branch $base is not merged yet — not in production yet"; continue; fi
   fi
   if [ -z "$merged" ]; then FAULT[$n]="no merged pull request closes this issue, so there is no t0"; continue; fi
   T0[$n]="$(date -u -d "$merged" +%s)"

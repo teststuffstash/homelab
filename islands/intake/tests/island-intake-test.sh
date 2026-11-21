@@ -2084,7 +2084,9 @@ case "$1 $2" in
       */comments*) n="${2#repos/*/issues/}"; n="${n%%/comments*}"; f="$EH/comments-$n.json"; [ -f "$f" ] && cat "$f" || echo '[]';;
       */sub_issues*) n="${2#repos/*/issues/}"; n="${n%%/sub_issues*}"; cat "$EH/sub-$n.json";;
     esac;;
-  "pr list") f="$EH/prlist.json"; [ -f "$f" ] && cat "$f" || echo '[]';;
+  "pr list") h=""; for ((i=1; i<=$#; i++)); do [ "${!i}" = --head ] && { j=$((i+1)); h="${!j}"; }; done
+    if [ -n "$h" ]; then f="$EH/prhead-${h//\//_}.json"; else f="$EH/prlist.json"; fi
+    [ -f "$f" ] && cat "$f" || echo '[]';;
   "issue comment"|"issue reopen"|"issue edit") [ -f "$EH/write.fail" ] && { echo "HTTP 403" >&2; exit 1; }
     [ "$2" = reopen ] && [ -f "$EH/reopen.fail" ] && { echo "HTTP 403" >&2; exit 1; }
     [ "$2" = comment ] && [ -f "$EH/comment-$3.fail" ] && { echo "HTTP 403" >&2; exit 1; }; :;;
@@ -2122,8 +2124,11 @@ erun() { # <scenario> <now> [args] — a fresh world per call: $EH/list.json (se
 writes() { grep -cE '^gh issue (comment|reopen|edit)' "$EH/gh.calls"; }
 for n in 90 91; do echo '{"mergedAt":"2026-11-01T00:00:05Z"}' > "$EH/pr-$n.json"; done
 echo '[]' > "$EH/sub-1.json"
-# Goal #1's merged assembly (a Goal child's t0) — and an unrelated merged PR the head filter must skip
-echo '[{"number":96,"mergedAt":"2026-11-02T00:00:00Z","headRefName":"goal/12-other"},{"number":95,"mergedAt":"2026-11-01T00:00:05Z","headRefName":"goal/1-experiments"}]' > "$EH/prlist.json"
+# the merged PR that carried child #41 into goal/1-experiments (body names it), a sibling's PR into goal/12-other, and the
+# merges by head: goal/1-experiments merged into master at 2026-11-01T00:00:05Z, the earlier-sibling branch later
+echo '[{"number":96,"baseRefName":"goal/12-other","body":"Fixes #77"},{"number":94,"baseRefName":"goal/1-experiments","body":"Fixes #41\n"}]' > "$EH/prlist.json"
+echo '[{"number":95,"mergedAt":"2026-11-01T00:00:05Z","baseRefName":"master"}]' > "$EH/prhead-goal_1-experiments.json"
+echo '[{"number":97,"mergedAt":"2026-10-20T00:00:00Z","baseRefName":"master"}]' > "$EH/prhead-goal_12-other.json"
 NOW_AFTER=1794182405; NOW_INSIDE=1793577605
 B="$EXPFX/body.md"
 
@@ -2186,12 +2191,42 @@ echo '{"number":1,"labels":[{"name":"task/goal"}]}' > "$EH/parent-41.json"; rm -
 issue_row 41 "experiment/open" "$B" '[]' - > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 erun fail $NOW_AFTER; rc=$?
 { [ "$rc" = 0 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && ! grep -q 'experiment-fault' "$EH/gh.bodies" && ! grep -q '^gh pr view' "$EH/gh.calls" \
-    && grep -q '^gh pr list --repo o/r --state merged --search Assembly-for: #1 in:body' "$EH/gh.calls" && grep -q 'from t0 2026-11-01T00:00:05Z' "$EH/gh.bodies"; } \
-  && ok "a Goal child with NO closing reference (its PR merged into goal/<n>, GitHub's real shape) takes t0 from the Goal's merged assembly (goal/1-*, not goal/12-*), never a fault" || bad "goal t0" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
-mv "$EH/prlist.json" "$EH/prlist.keep"; erun fail $NOW_AFTER; rc=$?; mv "$EH/prlist.keep" "$EH/prlist.json"
-{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && grep -q 'assembly is not merged' "$EH/out.log" && grep -qx 'island_intake_experiments_fault 0' "$EH/metrics.body" \
+    && grep -q '^gh pr list --repo o/r --state merged --head goal/1-experiments ' "$EH/gh.calls" && grep -q 'from t0 2026-11-01T00:00:05Z' "$EH/gh.bodies"; } \
+  && ok "a Goal child with NO closing reference (its PR merged into goal/<n>, GitHub's real shape) takes t0 from the merge of the branch its own PR merged into (goal/1-experiments, not the sibling goal/12-other), never a fault" || bad "goal t0" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+mv "$EH/prhead-goal_1-experiments.json" "$EH/prhead.keep"; erun fail $NOW_AFTER; rc=$?; mv "$EH/prhead.keep" "$EH/prhead-goal_1-experiments.json"
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && grep -q 'is not merged yet' "$EH/out.log" && grep -qx 'island_intake_experiments_fault 0' "$EH/metrics.body" \
     && grep -qx 'island_intake_experiments_oldest_overdue_seconds 0' "$EH/metrics.body"; } \
   && ok "…and while the assembly is not merged the experiment is pending: nothing written, no fault, not overdue" || bad "goal unshipped" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+# theme shape: the child's PR merged into goal/1-theme; the theme assembly (→ master, `Fixes #<level-2>`, no Assembly-for:) is the t0;
+# an EARLIER sibling branch's merge (goal/1-early, merged before) must not become t0
+echo '[{"number":90,"baseRefName":"goal/1-theme","body":"Fixes #41"}]' > "$EH/prlist.json"
+echo '[{"number":93,"mergedAt":"2026-11-01T06:00:00Z","baseRefName":"master"}]' > "$EH/prhead-goal_1-theme.json"
+echo '[{"number":92,"mergedAt":"2026-10-25T00:00:00Z","baseRefName":"master"}]' > "$EH/prhead-goal_1-early.json"
+issue_row 41 "experiment/open" "$B" '[]' - > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q 'from t0 2026-11-01T06:00:00Z' "$EH/gh.bodies" && ! grep -q 'experiment-fault' "$EH/gh.bodies" \
+    && ! grep -q -- '--search Assembly-for' "$EH/gh.calls" && grep -q -- '--head goal/1-theme ' "$EH/gh.calls" && ! grep -q -- '--head goal/1-early' "$EH/gh.calls"; } \
+  && ok "a themed Goal's child (no closing reference, carried into goal/1-theme, assembly = Fixes #<level-2> without Assembly-for:) takes t0 from that theme's merge" || bad "theme t0" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+# sibling-branch: the child's branch has not merged; a sibling's earlier merge is on the same Goal and must not become t0
+rm -f "$EH/prhead-goal_1-theme.json"; echo '[{"number":90,"baseRefName":"goal/1-theme","body":"Fixes #41"},{"number":89,"baseRefName":"goal/1-early","body":"Fixes #40"}]' > "$EH/prlist.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && grep -q 'is not merged yet' "$EH/out.log" && ! grep -q 'from t0 2026-10-25' "$EH/gh.bodies"; } \
+  && ok "…an earlier sibling branch's merge is never the child's t0: its own branch unmerged = pending, nothing written" || bad "sibling t0" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+# no carrying PR at all: pending while young (nothing written), a fault comment (marker) past the stated age (2 days after close), once
+echo '[]' > "$EH/prlist.json"
+jq -s '[.[] | . + {closedAt:"2026-11-08T12:00:00Z"}]' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && grep -q 'pending' "$EH/out.log"; } \
+  && ok "a Goal child whose carrying PR cannot be found is pending (nothing written) while it closed under two days ago" || bad "no-t0 young" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+jq -s '[.[] | . + {closedAt:"2026-11-05T00:00:00Z"}]' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && [ "$(writes)" = 1 ] && grep -q '^gh issue comment 41 ' "$EH/gh.calls" && grep -q '^<!-- experiment-fault -->$' "$EH/gh.bodies" \
+    && grep -q 'no t0' "$EH/gh.bodies" && ! grep -q 'remove-label' "$EH/gh.calls" && grep -qx 'island_intake_experiments_fault 1' "$EH/metrics.body"; } \
+  && ok "…and past two days closed it gets ONE fault comment (the label kept, counted in island_intake_experiments_fault) — never silent" || bad "no-t0 old" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+jq -s '[.[] | . + {closedAt:"2026-11-05T00:00:00Z", comments:[{body:"<!-- experiment-fault -->\nold"}]}]' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER
+[ "$(writes)" = 0 ] && ok "…and a second run finds the fault marker and writes nothing" || bad "no-t0 repeat" "$(cat "$EH/gh.calls")"
+echo '[{"number":96,"baseRefName":"goal/12-other","body":"Fixes #77"},{"number":94,"baseRefName":"goal/1-experiments","body":"Fixes #41\n"}]' > "$EH/prlist.json"
 echo '{"mergedAt":"2026-11-01T12:00:05Z"}' > "$EH/pr-91.json"
 issue_row 41 "experiment/open" "$B" '[]' 91 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 erun fail $NOW_AFTER; rc=$?

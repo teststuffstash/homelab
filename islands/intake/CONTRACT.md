@@ -274,9 +274,10 @@ gate; nothing waits for it and nothing is rolled back by it.
   carry it. It runs as the scheduled workflow's first step, before the sittings, and decides
   nothing if it cannot reach Prometheus or GitHub.
 - **The window.** It starts at t0, the merge instant of the pull request that closed the issue. An issue
-  no merged PR closes but with a `task/goal` ancestor merged into `goal/<n>` (GitHub records no closing
-  reference there): its t0 is that Goal's assembly merge, when the change reaches production, and it is
-  `pending` until then. The window
+  no merged PR closes but with a `task/goal` ancestor (GitHub records no closing reference for a child merged
+  into a `goal/**` branch): its t0 is the merge of the branch the child's own PR merged into — the plain Goal's
+  assembly and a theme's assembly alike — and it is `pending` until that branch merges. A child whose carrying
+  PR cannot be found gets one fault comment two days after it closed, never silence. The window
   ends at the bound, `max_window` after t0 (at most `7d`); a later deploy or restart neither ends nor
   resets it ([`scripts/experiment.py`](scripts/experiment.py), header, `decide`).
 - **The four verdicts.** `pass`, `fail`, `pending` (short of samples before the bound) and `no data`
