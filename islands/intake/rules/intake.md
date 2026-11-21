@@ -287,7 +287,7 @@ own body carries none.
   the section — not a re-read, not the worker.
 - **Window.** Long enough that the baseline rate expects at least three events in it, and at most
   `7d`. When `7d` expects fewer: `Experiment: none — baseline too thin (<n> in <range>)`. It starts at the merge that
-  ships the fix: the closing PR's, or for a child under a Goal the Goal's assembly merge ([`CONTRACT.md`](../CONTRACT.md) §Experiments).
+  ships the fix: the closing PR's, or for a child merged into `goal/<n>` the Goal's assembly merge ([`CONTRACT.md`](../CONTRACT.md) §Experiments).
 - **"Stays at zero".** A claim that a count stays at zero sets `min_window` = `max_window` and
   joins one `and on() (<the source was observable over $window>)` term to its `query` (the
   exporter was scraped, the series existed), so that silence answers nothing instead of zero. The

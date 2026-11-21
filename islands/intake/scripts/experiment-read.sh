@@ -109,21 +109,16 @@ while IFS= read -r row; do
     FAULT[$n]="the body has no loadable experiment block ($(head -c 300 "$W/$n.load.err" | tr '\n' ' '))"; continue
   fi
   ID[$n]="$(sane "$(jq -r '.id' "$W/$n.block")")"
-  # t0. A Goal child's own PR merged into goal/<n>, which is not production and leaves no closing reference;
-  # its change reaches production when the Goal's ASSEMBLY merges, so that merge is its t0 (an assembly not
-  # merged yet = pending, nothing written). Anything else: the merged PR that closed the issue.
+  # t0 = the merge that shipped the fix. First the merged PR that closed the issue (master-based work,
+  # post-launch children, themed / Base: master Goals). Only when none exists and the issue has a Goal
+  # ancestor: its PR merged into goal/<n> (no closing reference — GitHub's shape), and the change reaches
+  # production with the Goal's ASSEMBLY merge (not merged yet = pending, nothing written). The Goal is read
+  # for every issue: a fail is routed by it.
   goal="$(goal_of "$n")"; grc=$?
   if [ "$grc" = 2 ]; then FAULT[$n]="__error__ the Goal lookup of #$n failed"; continue; fi
+  [ "$grc" = 0 ] && GOAL[$n]="$goal"
   merged=""
-  if [ "$grc" = 0 ]; then
-    GOAL[$n]="$goal"
-    gh pr list --repo "$REPO" --state merged --search "Assembly-for: #$goal in:body" --json number,mergedAt,headRefName --limit 20 \
-      > "$W/$n.asm" 2> "$W/$n.asm.err" \
-      || die "GitHub did not answer for Goal #$goal's assembly (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
-    merged="$(jq -r --arg g "$goal" '[.[] | select((.headRefName // "") | test("^goal/" + $g + "(-|$)")) | .mergedAt | select(. != null)] | sort | last // ""' "$W/$n.asm")"
-    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: Goal #$goal's assembly is not merged — not in production yet"; continue; fi
-  fi
-  [ -n "$merged" ] || while IFS=$'\t' read -r pn prepo; do
+  while IFS=$'\t' read -r pn prepo; do
     [ -n "$pn" ] || continue
     gh pr view "$pn" --repo "${prepo:-$REPO}" --json mergedAt > "$W/$n.pr" 2> "$W/$n.pr.err" \
       || die "GitHub did not answer for PR #$pn (closing #$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.pr.err" | cut -c1-300)"
@@ -131,6 +126,13 @@ while IFS= read -r row; do
     # the latest merged closing PR is the one that closed the issue last
     [ -n "$m" ] && { [ -z "$merged" ] || [[ "$m" > "$merged" ]]; } && merged="$m"
   done < <(jq -r '(.closedByPullRequestsReferences // [])[] | [.number, (if .repository.owner.login and .repository.name then "\(.repository.owner.login)/\(.repository.name)" else "" end)] | @tsv' <<<"$row")
+  if [ -z "$merged" ] && [ -n "${GOAL[$n]:-}" ]; then
+    gh pr list --repo "$REPO" --state merged --search "Assembly-for: #$goal in:body" --json number,mergedAt,headRefName --limit 20 \
+      > "$W/$n.asm" 2> "$W/$n.asm.err" \
+      || die "GitHub did not answer for Goal #$goal's assembly (#$n) — nothing decided: $(tr '\n' ' ' < "$W/$n.asm.err" | cut -c1-300)"
+    merged="$(jq -r --arg g "$goal" '[.[] | select((.headRefName // "") | test("^goal/" + $g + "(-|$)")) | .mergedAt | select(. != null)] | sort | last // ""' "$W/$n.asm")"
+    if [ -z "$merged" ]; then VERDICT[$n]=pending; say "#$n: no merged closing PR and Goal #$goal's assembly is not merged — not in production yet"; continue; fi
+  fi
   if [ -z "$merged" ]; then FAULT[$n]="no merged pull request closes this issue, so there is no t0"; continue; fi
   T0[$n]="$(date -u -d "$merged" +%s)"
   BOUND[$n]=$(( ${T0[$n]} + $(jq -r '.kpi.max_window_s' "$W/$n.block") ))

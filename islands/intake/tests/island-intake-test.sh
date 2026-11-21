@@ -2192,6 +2192,13 @@ mv "$EH/prlist.json" "$EH/prlist.keep"; erun fail $NOW_AFTER; rc=$?; mv "$EH/prl
 { [ "$rc" = 0 ] && [ "$(writes)" = 0 ] && grep -q 'assembly is not merged' "$EH/out.log" && grep -qx 'island_intake_experiments_fault 0' "$EH/metrics.body" \
     && grep -qx 'island_intake_experiments_oldest_overdue_seconds 0' "$EH/metrics.body"; } \
   && ok "…and while the assembly is not merged the experiment is pending: nothing written, no fault, not overdue" || bad "goal unshipped" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+echo '{"mergedAt":"2026-11-01T12:00:05Z"}' > "$EH/pr-91.json"
+issue_row 41 "experiment/open" "$B" '[]' 91 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
+erun fail $NOW_AFTER; rc=$?
+{ [ "$rc" = 0 ] && grep -q 'from t0 2026-11-01T12:00:05Z' "$EH/gh.bodies" && ! grep -q '^gh pr list' "$EH/gh.calls" \
+    && grep -q '^gh issue comment 8 \|^gh issue comment 1 ' "$EH/gh.calls"; } \
+  && ok "…a Goal descendant with a merged closing PR (a post-launch child, a themed Goal's child, based on master) takes THAT merge as t0, no assembly lookup; its fail still routes to the Goal" || bad "goal descendant closing pr" "rc=$rc $(cat "$EH/gh.calls" "$EH/out.log")"
+echo '{"mergedAt":"2026-11-01T00:00:05Z"}' > "$EH/pr-91.json"
 issue_row 41 "experiment/open" "$B" '[]' 90 > "$EH/one.json"; jq -s '.' "$EH/one.json" > "$EH/list.json"
 rm -f "$EH"/parent-*.json
 
