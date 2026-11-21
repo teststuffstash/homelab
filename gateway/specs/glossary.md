@@ -382,8 +382,9 @@ takes the tier list's next model; a 429 writes no [strike](#strike)
 ## latch
 
 A whole [rail](#rail) held after an upstream 429, because the policy declares the rail one account
-whose limits are account windows (`latch_scope: account` — the anthropic subscription, the Go rail
-since 2026-11-01): the 429 cools its cell AND latches the rail for the same reset, or the rail's
+whose limits are account windows (`latch_scope: account` — the Go rail since 2026-11-01, and the
+anthropic rail in the worlds; the deployed anthropic rail declares `latch_scope: model`, so its 429
+only cools the cell): the 429 cools its cell AND latches the rail for the same reset, or the rail's
 `latch_429_hold_s` when none was named; any 2xx on the rail clears it. A rail that declares no latch
 (openrouter) is never latched — its 429s are per-model facts, a [cooldown](#cooldown) each
 ([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
