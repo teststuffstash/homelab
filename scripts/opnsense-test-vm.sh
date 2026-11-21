@@ -247,7 +247,8 @@ api_first() { # GET the first endpoint spelling that answers JSON (snake_case vs
 }
 vm_ssh() { ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
              -o UserKnownHostsFile="$WORK/known_hosts" "root@$OPN_TEST_HOST" "$@"; }
-pve_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+pve_ssh() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$ROOT/machines/hypervisor_known_hosts" "root@$PVE" "$@"; }   # pinned host key
 
 # ---------------------------------------------------------------- refs -----------------------
 if [ -n "$PR" ]; then
