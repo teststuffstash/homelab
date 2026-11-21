@@ -219,8 +219,9 @@ class Capacity:
     def _reload(self, now: float) -> None:
         """Load the stored marks a restart must keep, dropping (and deleting) the ones the in-memory
         logic would have let go by `now`: an expired cooldown or latch, a no-probe rail's rejection
-        past its half-open (the hold row stays: a repeat still doubles), anything on a rail the
-        policy no longer names. A probe rail's rejection past its due time is kept — the first
+        past its half-open (the hold row stays: a repeat still doubles), a latch on a rail that no
+        longer latches (no `latch_429_hold_s`, or a scope other than account), anything on a rail
+        the policy no longer names. A probe rail's rejection past its due time is kept — the first
         re-probe pass sends it."""
         kept: dict[str, int] = {"cooled": 0, "latched": 0, "rejected": 0, "hold": 0}
         dropped = 0
@@ -232,6 +233,10 @@ class Capacity:
                 keep = rp is not None and kind in kept
                 if keep and kind in ("cooled", "latched"):
                     keep = until is not None and until > now
+                if keep and kind == "latched":
+                    # observe()'s own predicate: a rail that no longer latches (no latch_429_hold_s,
+                    # or a scope other than account) would never have set this mark
+                    keep = bool(rp.admission.latch_429_hold_s) and rp.admission.latch_scope == "account"
                 if keep and kind == "rejected":
                     keep = until is not None and (rp.credential_probe is not None or until > now)
                 if not keep:

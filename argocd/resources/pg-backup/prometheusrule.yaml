@@ -1,4 +1,4 @@
-# CNPG availability belt that the instance belts cannot see (the rest of the CNPG rules live in
+# CNPG belts that the instance belts cannot see (the rest of the CNPG rules live in
 # argocd/platform/values/kube-prometheus-stack.yaml; this one is a CR so its fixture is drift-pinned —
 # cnpg-availability.promtool-{rules,test}).
 #
@@ -39,3 +39,32 @@ spec:
               endpoint for 3m — the CNPG cluster has no writable primary and its apps cannot write.
               Read the Cluster status (currentPrimary vs targetPrimary, phase) and the operator log;
               a switchover waiting on the old primary is the known shape (docs/postgres.md §Backups).
+
+        # WAL archiving is failing on a primary. Postgres keeps every unarchived segment, so a dead
+        # backup target fills the data volume and then stops the database (incident
+        # 2026-11-20-nx-02-boot-disk: grafana-pg down ~8 h, nothing alerted on the cause). The expr is
+        # upstream's (cloudnative-pg docs/src/samples/monitoring/prometheusrule.yaml,
+        # LastFailedArchiveTime) — the operator chart ships no rules, the cluster chart has no archive
+        # rule. Ours: every namespace (the instance rules' namespace list misses stacks), `for: 5m`
+        # instead of 1m (the 11-21 reboot left two 1-minute blips). Replay 11-03→11-21: fires
+        # 06:51Z on 11-20 on forgejo/infisical/grafana-pg (the target died 06:50Z), nothing else
+        # beyond the blips. A cluster with no completed segment has nothing to fail on, so it joins
+        # late (oracle-pg 02:17Z next day) — correct: nothing is lost until a segment waits.
+        - alert: CNPGWALArchivingFailing
+          expr: |
+            (cnpg_pg_stat_archiver_last_failed_time - cnpg_pg_stat_archiver_last_archived_time) > 1
+            and on (namespace, pod) cnpg_pg_replication_in_recovery == 0
+          for: 5m
+          labels:
+            severity: warning
+            # triage: the WAL is piling up on the volume now; the backup target (docs/postgres.md
+            # §Backups) and the primary's archiver log say why — a fix is "bring the target back"
+            triage: now
+          annotations:
+            summary: "WAL archiving failing on {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: >-
+              The primary {{ $labels.pod }} has failed to archive WAL since its last success, so every
+              new segment stays on its volume until the archive works again — at about 16 MB per
+              archive_timeout it fills the volume, and a full volume stops the database. Check the
+              backup Garage (docs/postgres.md §Backups, docs/longhorn-backup.md §The target) and the
+              Cluster's ContinuousArchiving condition.
