@@ -19,7 +19,10 @@ PUSH=0
 OUT="${1:-}"
 [ -n "$OUT" ] || { echo "claims-read: usage: claims-read.sh [--push] <out file>" >&2; exit 2; }
 ok=1
-kubectl get agentstacks.platform.teststuff.net --request-timeout=30s -o json > "$OUT" 2> "$OUT.err" || ok=0
+# Bounded by `timeout`, never a kubectl flag: ANY client override (--request-timeout included) makes the
+# merged kubeconfig non-default, so kubectl skips the in-pod ServiceAccount config and dials localhost:8080
+# — every in-cluster read failed that way until the first stack-island dry run (2026-11-21).
+timeout 40 kubectl get agentstacks.platform.teststuff.net -o json > "$OUT" 2> "$OUT.err" || ok=0
 if [ "$ok" = 1 ]; then
   jq -e '(.items | type) == "array" and (.items | length) > 0' "$OUT" >/dev/null 2>&1 || { ok=0; echo "the answer holds no claim" >> "$OUT.err"; }
 fi
