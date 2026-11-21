@@ -10,9 +10,10 @@ Three per-rail checks the admission walk consults after the slot count, each dri
   (`retry-after`, else OpenRouter's `x-ratelimit-reset` in epoch ms, else the rail's
   `latch_429_hold_s`, else the policy `defer_retry_s`); admission skips a cooled cell and any 2xx
   on that cell clears it. A 429 is a model's fact unless the rail is one account.
-- **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` (the
-  subscription rails, one account each) is latched by a 429 for the same reset; any 2xx on the
-  rail clears it.
+- **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` with
+  `latch_scope: account` (one account whose limits are account windows) is latched by a 429 for
+  the same reset; any 2xx on the rail clears it. Under `latch_scope: model` the 429 only cools
+  the cell.
 - **credential rejected** — an upstream 401, or a 403 whose error names a credential reason, marks
   THAT credential (rail + sha256 of the value, never the value) rejected. It RECOVERS WITHOUT
   TRAFFIC: a rail with a policy `credential_probe` is re-verified by the gateway itself on a

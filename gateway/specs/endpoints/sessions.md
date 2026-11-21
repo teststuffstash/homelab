@@ -614,7 +614,8 @@ blocks lifts.
   `upstream_provider_shared_pool` 105, `openrouter_shared_capacity` 3,
   `openrouter_free_tier_per_minute` 7), while two other models on the same key served 200s
   throughout; an experiment rail latch on one model's 429 deferred a different model.
-- **429 [latch](../glossary.md#latch)** (`anthropic`, `opencode`): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
+- **429 [latch](../glossary.md#latch)** (a rail declaring `latch_scope: account` — `opencode` deployed, `anthropic` in the
+  worlds; the deployed `anthropic` declares `model`, so its 429 only cools the cell): the ACCOUNT-scope signal. ⚖ Scope is a property the policy
   declares, never inferred from a count: a rail whose policy sets `latch_429_hold_s` with
   `latch_scope: account` (the default) is one subscription account whose limits are account
   windows (the subscription's 5h/7d), so a 429 there latches the whole rail as well as cooling its
