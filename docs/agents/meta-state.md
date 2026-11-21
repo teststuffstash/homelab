@@ -24,11 +24,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
     backup target on two hosts, paging.
   - Bay-swap test if the SA400 drops again.
   - hp-01 Longhorn default disk at 79 % (`LonghornDiskBelowSchedulingFloor`, responder's).
-  - Gateway #3622 MERGED + LIVE 12:32Z (anthropic 5h/7d 0.95, `latch_scope: model`). The reloaded Fable latch holds the
-    anthropic rail until 21:59:59Z; read after that the first reviewer dispatch lands on opus. The new pod also logged
-    `catalog: docs parse failed (no Endpoints table)` — keeping the last good snapshot. Not new: the Go page dropped
-    its per-model tables, tracked as #3533 (blocked on one operator ruling: may the `docs` source read the rail's
-    public `/go/v1/models` for limits only).
+  - Gateway #3622 LIVE (anthropic 5h/7d 0.95, `latch_scope: model`); the rail was unlatched from the second jail on 11-21 and
+    reviews flow. The `catalog: docs parse failed (no Endpoints table)` warning is #3533 (blocked on one operator ruling:
+    may the `docs` source read the rail's public `/go/v1/models` for limits only).
   - Fable weekly limit spent 11-21 (second jail: role `coordinator`, 45 sessions / ~1.2M output tokens in 7 d vs 3
     reviewer sessions). The only `--prefer strongest` caller is the intake sitting (`islands/intake/scripts/sitting.sh`,
     tier heavy → Fable), so this is FU-320's spend. It also killed the seat's Fable subagents. `latch_scope: model`
@@ -57,16 +55,19 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `.claude/skills/intake/SKILL.md` step 4 stale (operator-direct path); nothing bumps the agent-base tag in
   `agents/coordinator/kustomization.yaml` (agent-runtime deploy-pin needs one sed); the island devbox lock has no update lane
   and pins a newer nixpkgs than the image (harmless in the dry run); three facts-file reads are seat-only.
-  GOAL #3586 LAUNCHED (operator: "launch the next goal while I am gone"): intake writes one `## Experiment` block (the oracle
-  stack's format unchanged, no added key — `kpi.control` dropped on oracle's read), a deterministic read in the intake
-  workflow decides it from Prometheus, a fail reopens to intake, nothing rolls back; NOT Kargo (ruled 11-20). Branch
-  `goal/3586-intake-experiments` cut; children #3602 A loader → #3603 B verdict + read → #3604 C the scheduled step and its
-  writes; #3605 D rules (after A); #3606 E contract section (after C, D). None `agent/queued`; seat subagents build them in
-  that order, each a PR into the goal branch (clones under `/workspace/homelab-clones/exp-<n>`). A's PR is #3608.
-  #3563 CARRIES THE FIRST LIVE EXPERIMENT (`homelab-rides-not-pending`, baseline 5 of 91 ride pods Pending > 15 min in 10 d;
-  window 7 d from the #3573 merge → decided 2026-11-27T13:09Z); the label `experiment/open` does not exist yet (child C says
-  where labels are declared). oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
+  GOAL #3586 ASSEMBLED + ON MASTER 11-21 (assembly #3637 admin-merged 18:30Z on the operator's word, `a330c03f`; children
+  A–E #3608 #3610 #3611 #3624 #3632 + assembly fixes #3642 #3645). LIVE: `island-intake` runs `experiments → islands →
+  sitting → experiments-failed`; label `experiment/open` provisioned (quickfix `50634967`: its 174-char description
+  422'd every repo's IssueLabels — alert for that class is #3650); #3563 labelled, dry-run read = `pending`.
+  NEXT: the Production-leg read — #3563 decided at its bound (2026-11-27T13:14Z with the 5-min settle): exactly ONE
+  verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
+  oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
   `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
+- **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650).** If merged: `CrossplaneManagedResourceNotSynced`
+  must fire for `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
+  Workspace `pr-oracle-fleet-minutark` (Synced=False, "failed to make http request"; the oracle stack's). Not firing = the
+  PodMonitor or the expr is wrong. Coordinator scan fix #3636 LIVE (a gateway stack's goal lane no longer defers on the old
+  proxy's latch; proven 16:10Z by #3586's checkpoint opening #3637).
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
   window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
   on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.
