@@ -246,6 +246,41 @@ PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test 
 # The same exclusion for `-- <cmd>` rows, which have no task name to list above: a prefix per line.
 PUSH_HEAVY_CMDS="-- bash islands/scripts/specs-site.sh "
 
+# EGRESS_NEEDS — `task:host`, space-separated: the one host a task cannot run without (the task is
+# the first word of its MAP row). The run loop below probes the host before the task and SKIPS the
+# task, by name, when the host does not answer: behind an egress allowlist (an agent ride's pod —
+# homelab#3088) these gates cannot tell "the tree is wrong" from "the network said no", and their
+# red made pr-open refuse every PR touching argocd/. A skip is printed and summed up, never
+# counted as a failure. pr-open prints the gate's output only on red, so on a green ride the
+# skip is in its gate.log, not on the worker's screen. CI does not go through this loop:
+#   argocd-validate-pins  the version-set leg: `helm show chart --repo` at prometheus-community.
+#                         CI runs it as its own step (--ci-outputs): a skip here loses nothing.
+#   component-check       the kyverno-policies chart, rendered first (exit 2 without it). It has
+#                         no CI step (see its MAP row) and is report-only: skipped here, it runs
+#                         nowhere for that PR.
+# The probe asks only for the host a task cannot start without: a task whose host answers runs
+# as before, whatever its other hosts do.
+# DIFF_CI_EGRESS_PROBE replaces the probe command (it gets the host as its one argument) — the
+# seam scripts/diff-ci-test.sh drives; `--egress-probe` prints what the loop would decide now.
+EGRESS_NEEDS="argocd-validate-pins:prometheus-community.github.io component-check:kyverno.github.io"
+egress_ok() {
+  if [ -n "${DIFF_CI_EGRESS_PROBE:-}" ]; then "$DIFF_CI_EGRESS_PROBE" "$1" >/dev/null 2>&1; return; fi
+  curl -s -o /dev/null --connect-timeout 5 -m 10 "https://$1/"
+}
+# egress_need <task> — the host the task needs, or nothing
+egress_need() {
+  local en
+  for en in $EGRESS_NEEDS; do
+    if [ "${en%%:*}" = "${1%% *}" ]; then printf '%s\n' "${en#*:}"; fi
+  done
+}
+if [ "${1:-}" = "--egress-probe" ]; then
+  for en in $EGRESS_NEEDS; do
+    if egress_ok "${en#*:}"; then echo "${en%%:*} RUN (${en#*:} answers)"; else echo "${en%%:*} SKIP (${en#*:} does not answer)"; fi
+  done
+  exit 0
+fi
+
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
 COVERAGE_ONLY=false
@@ -413,7 +448,7 @@ changed=$( { git diff --name-only "$base"; git diff --name-only --cached; git st
 [ -n "$changed" ] || { echo "diff-ci: no changes vs $BASE — nothing to run"; exit 0; }
 echo "diff-ci: $(printf '%s\n' "$changed" | grep -c .) changed file(s) vs $BASE"
 
-run=0; skipped=0; failed=""
+run=0; skipped=0; failed=""; egress_skipped=""
 if grep -qE '^devbox\.(json|lock)$' <<< "$changed"; then
   echo "diff-ci: devbox pins changed — running EVERYTHING"
   match_all=true
@@ -426,6 +461,12 @@ for entry in "${MAP[@]}"; do
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"
+  need="$(egress_need "$task")"
+  if [ -n "$need" ] && ! egress_ok "$need"; then
+    echo "   SKIP (${task%% *}: $need does not answer from here — an egress fact, not a finding about the diff)"
+    egress_skipped="$egress_skipped ${task%% *}"
+    continue
+  fi
   t0=$SECONDS
   # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along)
   if devbox run $task; then
@@ -437,4 +478,5 @@ for entry in "${MAP[@]}"; do
   run=$((run+1))
 done
 echo "diff-ci: $run task(s) run, $skipped skipped (PR-context gates run only in CI)"
+[ -z "$egress_skipped" ] || echo "diff-ci: NOT RUN — egress:$egress_skipped (their hosts do not answer from here)"
 [ -z "$failed" ] || { echo "diff-ci: FAILED:$failed" >&2; exit 1; }

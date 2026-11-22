@@ -69,5 +69,24 @@ sel nope docs/ci.md
 is docs-only xr-render false
 is docs-only follow-ups-lint true
 
+# 7. the egress skip (homelab#3088): a task whose host does not answer is skipped by name
+out=$(DIFF_CI_EGRESS_PROBE=false bash scripts/diff-ci.sh --egress-probe)
+n=$((n+1)); [ "$(printf '%s\n' "$out" | grep -c ' SKIP ')" = 2 ] || { echo "diff-ci-test: FAIL [egress-skip] expected 2 SKIP lines, got: $out" >&2; fail=1; }
+out=$(DIFF_CI_EGRESS_PROBE=true bash scripts/diff-ci.sh --egress-probe)
+n=$((n+1)); [ "$(printf '%s\n' "$out" | grep -c ' RUN ')" = 2 ] || { echo "diff-ci-test: FAIL [egress-run] expected 2 RUN lines, got: $out" >&2; fail=1; }
+
+# 8. the run loop itself: an argocd/ diff and a probe that says no -> both tasks skipped by name,
+#    the summary line printed, exit 0. A scratch repo and a stub devbox: no real task runs.
+R="$T/loop"; mkdir -p "$R/scripts" "$R/.github/workflows" "$R/argocd" "$T/bin"
+cp scripts/diff-ci.sh "$R/scripts/"; cp .github/workflows/ci.yaml "$R/.github/workflows/"
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/devbox"; chmod +x "$T/bin/devbox"
+git -C "$R" init -q; git -C "$R" add scripts .github
+git -C "$R" -c user.name=diff-ci-test -c user.email=diff-ci-test@localhost commit -q -m base
+: >"$R/argocd/x.yaml"
+rc=0; out=$(PATH="$T/bin:$PATH" DIFF_CI_EGRESS_PROBE=false bash "$R/scripts/diff-ci.sh" HEAD 2>&1) || rc=$?
+n=$((n+1)); [ "$rc" = 0 ] || { echo "diff-ci-test: FAIL [egress-loop] expected exit 0, got $rc: $out" >&2; fail=1; }
+n=$((n+1)); [ "$(printf '%s\n' "$out" | grep -c '^   SKIP (')" = 2 ] || { echo "diff-ci-test: FAIL [egress-loop] expected 2 loop SKIP lines, got: $out" >&2; fail=1; }
+n=$((n+1)); grep -q '^diff-ci: NOT RUN — egress: argocd-validate-pins component-check (' <<< "$out" || { echo "diff-ci-test: FAIL [egress-loop] no NOT RUN summary line, got: $out" >&2; fail=1; }
+
 [ "$fail" -eq 0 ] || exit 1
 echo "diff-ci-test: ok ($n assertions over the --ci-outputs selection)"
