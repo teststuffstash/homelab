@@ -303,6 +303,8 @@
     },
     {
       "slug": "homelab-intake",
+      "app_id": 5877266,
+      "install_id": 184743579,
       "purpose": "Island intake's own identity — homelab-intake[bot] is the sitting (agents/coordinator/ island-intake-argo.yaml, rules islands/intake/rules/intake.md) and nothing else. Split from homelab-agents on purpose (operator, 2026-11-22): that App carries workers, the coordinator and the loop, so its writes do not say who acted and its mint holds grants no rule of a sitting writes (merges, reruns, workflow pushes). DECLARED ahead of creation: no app_id until `scripts/github-app-bootstrap.sh homelab-intake register`. The permission set is the least the sitting's acts need, act by act.",
       "permissions": {
         "metadata": {

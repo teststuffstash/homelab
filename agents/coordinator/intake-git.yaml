@@ -1,11 +1,12 @@
-# SCAFFOLD — parked until `scripts/github-app-bootstrap.sh homelab-intake register` fills the two ids,
-# moves this file up one directory and lists it in kustomization.yaml (trim this banner in that PR).
-#
 # Island intake's git token: mints the `intake-git` Secret the island intake CronWorkflow
 # (island-intake-argo.yaml) will read as GH_TOKEN — the sitting's OWN identity,
 # homelab-intake[bot] (docs/github-apps.yaml). Until the cutover PR the workflow keeps reading
 # `coordinator-git`; this chain only makes the Secret exist. Same ESO chain shape as
 # specs-reviewer-git.yaml.
+#
+# Registered 2026-11-22 by `scripts/github-app-bootstrap.sh homelab-intake register` (the ids below +
+# docs/github-apps.yaml; key in Infisical INTAKE_GH_APP_PRIVATE_KEY + the wallet). ArgoCD-managed
+# through kustomization.yaml like the sibling *-git.yaml chains.
 ---
 # 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
 apiVersion: external-secrets.io/v1
@@ -35,8 +36,8 @@ metadata:
   name: intake-git-gen
   namespace: agent-coordinator
 spec:
-  appID: ""       # FILL-AFTER register
-  installID: ""   # FILL-AFTER register
+  appID: "5877266"       # homelab-intake App
+  installID: "184743579"   # the teststuffstash installation of homelab-intake
   auth:
     privateKey:
       secretRef: { name: intake-github-app, key: privateKey }

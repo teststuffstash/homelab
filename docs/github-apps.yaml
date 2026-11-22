@@ -160,6 +160,8 @@ apps:
     bootstrap: { redirect_port: 8772, cred_dir: "~/.claude/homelab-github-specs-reviewer", mint_site: agents/coordinator/specs-reviewer-git.yaml, wallet: true }
 
   - slug: homelab-intake
+    app_id: 5877266
+    install_id: 184743579
     purpose: >-
       Island intake's own identity — homelab-intake[bot] is the sitting (agents/coordinator/
       island-intake-argo.yaml, rules islands/intake/rules/intake.md) and nothing else. Split from
