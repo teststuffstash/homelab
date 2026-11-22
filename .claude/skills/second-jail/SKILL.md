@@ -22,7 +22,7 @@ not to you. Everything else in it (safety, prior-art, design routing) still appl
 **Invoked mid-session?** Before anything else, list what this session already wrote as the primary
 — `git -C /workspace/homelab status` + `git -C /workspace/homelab log origin/master..HEAD` — and
 either finish each item under the old role (push the direct commit) or hand it to the primary in
-your final message; only then do the rules below start (promoted 2026-10-26, GAPS second-jail-G3).
+your wind-down handoff (rule 6); only then do the rules below start (promoted 2026-10-26, GAPS second-jail-G3).
 
 1. **Work only in a clone.** Before your first write:
    ```bash
@@ -41,8 +41,8 @@ your final message; only then do the rules below start (promoted 2026-10-26, GAP
 2. **Write no shared record.** Not yours: `docs/follow-ups.md` + archive (never mint an FU id —
    the counter is the primary's), `docs/agents/meta-state.md`, `agents/coordinator/TICK-LOG.md`,
    `.claude/skills/GAPS.md`, the auto-memory directory (read it, don't write it). No direct push
-   to master; no merging other PRs, no codeowner reads, no `major/awaiting-human` merges. A loose
-   end you find goes into your final message (and the PR body), for the primary to file. This list
+   to master; no merging other PRs, no codeowner reads, no `major/awaiting-human` merges. What you
+   would have written to one of them goes into your wind-down handoff (rule 6). This list
    is HOMELAB's records; another repo's records (the hardware repo's purchases file, a stack repo's
    trackers) follow that repo's own protocol, not this rule (promoted 2026-10-26, GAPS
    second-jail-G2).
@@ -55,6 +55,12 @@ your final message; only then do the rules below start (promoted 2026-10-26, GAP
 5. **Taking over.** If a shared record genuinely needs writing, do not do it while the primary
    runs. Ask the operator; once they confirm the primary jail has exited, finish or remove your
    clone work, then work in `/workspace/homelab` under the normal seat card (`git status` first —
-   leave what isn't yours). From then on you are the primary; this skill no longer applies.
-6. **Close out.** Before the session ends: push anything you keep, then `rm -rf` the clone. The
-   final message lists branches/PRs, what was abandoned, and any proposed tracker entries.
+   leave what isn't yours), and file every seat handoff waiting in `/workspace/.handoff/seat/`,
+   your own included. From then on you are the primary; this skill no longer applies.
+6. **Close out: the one-time wind-down handoff.** Before the session ends: push anything you
+   keep, `rm -rf` the clone, then write ONE file of typed records for the primary, in
+   `/workspace/.handoff/seat/`: branches/PRs, what was abandoned, a `log`, and an `fu-new` /
+   `fu-update` / `pickup` / `gap` / `memory` / `act` record for everything a shared record or the
+   primary's authority would carry. The types and their fields are in
+   [`../handoff/seat-records.md`](../handoff/seat-records.md). The file is one-way: write it
+   complete, because nothing comes back to this session. The final message gives its path.
