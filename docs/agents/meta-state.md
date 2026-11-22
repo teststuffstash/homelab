@@ -75,7 +75,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator).** Supersedes ADR-158: stack pins lead by
   TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker the release clock Renovate lacks (first
   sighting on the `image-clock` side branch, `allowedVersions` appended at run time). Touches `.github/workflows/` → `ci` red by
-  design: rebased 11-22 + seat review APPROVE (head 4d3164d3, comment on the PR) → the operator's admin merge. Proven by branch dry runs (44949949099: 36 pkgs, 0 failed, 52 rules,
+  design: rebased 11-22 + seat review APPROVE + full CI by workflow_dispatch green (run 45045460749, head c746bbe9; PR comments) → the operator's admin merge. Proven by branch dry runs (44949949099: 36 pkgs, 0 failed, 52 rules,
   no postgres 19 proposal). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
   (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
