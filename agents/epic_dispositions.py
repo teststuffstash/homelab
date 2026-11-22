@@ -41,11 +41,12 @@ the qualified form to write instead. A QUALIFIED member (`repo#n`) is taken as t
 wrote it: the caller named the repo, so there is nothing to resolve (FIX #1451).
 
 THE RESOLUTION, AND WHY IT IS CHEAP. The tree is walked breadth-first (the budget walk's
-shape, `agents/goal-budget.sh`) and the walk STOPS at the first level that holds the wanted
-number: within that level the entries carrying it name the repos it lives in — one repo means
-the number resolves there, two means it is ambiguous and the bare form is refused. The cost of
-a ruling is therefore proportional to the DEPTH of its member, not to the size of the tree
-(Goal #1640's tree is 34 members; a member at depth 1 costs ONE GET). The tree, not the
+shape, `agents/goal-budget.sh`) and the walk stops early ONLY on an own-repo hit. A level
+holding only foreign repos keeps the walk going, and every repo carrying the number along the
+way is collected: one repo resolves (or is refused as single-foreign, naming it), two or more
+is ambiguous and the bare form is refused, naming each qualified form. Cost: an own-repo
+member is proportional to its DEPTH; a foreign or absent number costs the full bounded walk
+(Goal #1640: 34 members, about 34 GETs). The tree, not the
 direct children: a minted child binds to its finding's ORIGIN issue (ADR-106 (2)), so members
 sit at depth 2, and #1640's cross-repo members sat at depths 1–4 — a direct-children read
 would call a legitimate member "not a member" and refuse a legitimate ruling.
