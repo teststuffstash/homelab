@@ -159,6 +159,32 @@ apps:
     key_locations: [Infisical SPECS_REVIEWER_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-specs-reviewer/"]
     bootstrap: { redirect_port: 8772, cred_dir: "~/.claude/homelab-github-specs-reviewer", mint_site: agents/coordinator/specs-reviewer-git.yaml, wallet: true }
 
+  - slug: homelab-intake
+    app_id: 5877266
+    install_id: 184743579
+    purpose: >-
+      Island intake's own identity — homelab-intake[bot] is the sitting (agents/coordinator/
+      island-intake-argo.yaml, rules islands/intake/rules/intake.md) and nothing else. Split from
+      homelab-agents on purpose (operator, 2026-11-22): that App carries workers, the coordinator
+      and the loop, so its writes do not say who acted and its mint holds grants no rule of a
+      sitting writes (merges, reruns, workflow pushes). The permission set is the least the
+      sitting's acts need, act by act. Until the cutover the workflow still reads
+      `coordinator-git`; this App's token (`intake-git`) has no consumer yet.
+    permissions:
+      metadata: { level: read, why: "baseline" }
+      contents: { level: write, why: "cut a Goal's branch (`POST git/refs` for `refs/heads/goal/<n>-<slug>`, intake.md §A bot-authored Goal) — the ONE write; the clones need read only. Broader than the act: write also pushes to any unprotected branch — the rulesets bound it, not this grant" }
+      issues: { level: write, why: "the sitting's outcomes: labels, comments, close, file an issue or a Goal with its bound children (sub-issue + blockedBy edges)" }
+      pull_requests: { level: read, why: "read a covering PR (state, base, closing references) — the already-owned check and the experiment read's carrier walk" }
+      checks: { level: read, why: "a covering PR's check runs (statusCheckRollup; a fine-grained PAT cannot read Checks — App only)" }
+      statuses: { level: read, why: "statusCheckRollup mixes check runs with commit STATUSES; one written by another App is forbidden without this and GraphQL fails the whole PR list (the homelab-specs-reviewer lesson)" }
+      actions: { level: read, why: "the status rollup's workflow run behind a covering PR's red check" }
+    absent:
+      workflows: "a sitting never pushes a workflow file"
+      administration: "a sitting never edits a ruleset or a repository setting"
+    installs: selected   # homelab + every repo a live claim declares under repos[].intake.facts (today: oracle-fleet)
+    key_locations: [Infisical INTAKE_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-intake/"]
+    bootstrap: { redirect_port: 8773, cred_dir: "~/.claude/homelab-github-intake", mint_site: agents/coordinator/intake-git.yaml, wallet: true }
+
   - slug: homelab-labels
     app_id: 4314419
     install_id: 146964959
