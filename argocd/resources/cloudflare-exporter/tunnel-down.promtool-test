@@ -1,0 +1,136 @@
+# Behaviour fixture for CloudflaredTunnelDown (the PublicRoute tunnel-down record).
+#
+#   devbox run -- promtool test rules argocd/resources/cloudflare-exporter/tunnel-down.promtool-test
+#
+# CI runs it through `devbox run prometheus-rules-lint` (every *.promtool-test under argocd/).
+# Series labels are the live shape (PodMonitor monitoring/cloudflared, 60s scrape; kube-state-metrics
+# kube_deployment_spec_replicas). Two connector Deployments in oracle-fleet in most cases: the
+# decoy proves the alert is per Deployment, not per namespace.
+rule_files:
+  - tunnel-down.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1/5 — every connection of one Deployment gone: fires after 2m, per Deployment ───────────
+  # Both mcp pods drop to 0 at t=3m and stay there; `for: 2m` → pending 3m–4m, firing at 5m.
+  # The landing-page Deployment (decoy) keeps 4+4 and stays silent.
+  - interval: 1m
+    name: "summed ha_connections = 0 for 2m fires, labelled by namespace + deployment"
+    input_series:
+      - series: 'cloudflared_tunnel_ha_connections{container="cloudflared",endpoint="metrics",instance="10.244.0.145:2000",job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-vs7gz"}'
+        values: "4 4 4 0x20"
+      - series: 'cloudflared_tunnel_ha_connections{container="cloudflared",endpoint="metrics",instance="10.244.0.61:2000",job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-8h4zl"}'
+        values: "4 4 4 0x20"
+      - series: 'cloudflared_tunnel_ha_connections{container="cloudflared",endpoint="metrics",instance="10.244.2.154:2000",job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-minutark-cloudflared-77c874bbbc-dqw4m"}'
+        values: "4x23"
+      - series: 'cloudflared_tunnel_ha_connections{container="cloudflared",endpoint="metrics",instance="10.244.0.35:2000",job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-minutark-cloudflared-77c874bbbc-9tzhk"}'
+        values: "4x23"
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="oracle-fleet",deployment="pr-oracle-fleet-mcp-minutark-cloudflared"}'
+        values: "2x23"
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="oracle-fleet",deployment="pr-oracle-fleet-minutark-cloudflared"}'
+        values: "2x23"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CloudflaredTunnelDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              namespace: oracle-fleet
+              deployment: pr-oracle-fleet-mcp-minutark-cloudflared
+
+  # ── 2/5 — a dip is not an outage: one pod at 1/4, the other at 0, for 20m ──────────────────
+  # The 2026-11-21 low (one mcp pod at 1/4). The sum stays ≥ 1 — the hostname is still served.
+  - interval: 1m
+    name: "a dip to 1/4 (sum ≥ 1) stays silent"
+    input_series:
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-vs7gz"}'
+        values: "4 4 1x20"
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-8h4zl"}'
+        values: "4 4 0x20"
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="oracle-fleet",deployment="pr-oracle-fleet-mcp-minutark-cloudflared"}'
+        values: "2x22"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+
+  # ── 3/5 — a CARP handover: every connection drops at once, re-registers within ~20 s ────────
+  # At a 60s scrape that is at most ONE 0 sample per pod; it holds as the instant value for one
+  # evaluation, never the two `for: 2m` needs. Three handovers in 30m (the 2026-11-21 shape).
+  - interval: 1m
+    name: "a ~6 s CARP gap (one 0 sample) stays silent"
+    input_series:
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-vs7gz"}'
+        values: "4x8 0 4x9 0 4x9 0 4x3"
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-8h4zl"}'
+        values: "4x8 0 4x9 0 4x9 0 4x3"
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="oracle-fleet",deployment="pr-oracle-fleet-mcp-minutark-cloudflared"}'
+        values: "2x34"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+
+  # ── 4/5 — the Deployment wants replicas but no pod exports the series ───────────────────────
+  # Connectors crash-looping (or unscrapeable) from the start: arm 2 fires after 2m.
+  - interval: 1m
+    name: "replicas wanted, no ha_connections series at all: fires after 2m"
+    input_series:
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="home-assistant",deployment="pr-home-assistant-ha-cloudflared"}'
+        values: "2x10"
+      # an unrelated, non-PublicRoute Deployment never matches arm 2
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="home-assistant",deployment="home-assistant"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: CloudflaredTunnelDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: CloudflaredTunnelDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              namespace: home-assistant
+              deployment: pr-home-assistant-ha-cloudflared
+
+  # ── 5/5 — the condition moves between arms without restarting `for:` ────────────────────────
+  # A WAN loss: both pods at 0 from t=1m; at t=4m both stop exporting (liveness restart, stale
+  # markers) and come back at 0 at t=6m. Arm 1 → arm 2 → arm 1 share {namespace, deployment}, so
+  # the alert fires at 3m and is still firing through the swap.
+  - interval: 1m
+    name: "a liveness restart mid-outage keeps the alert firing (same identity on both arms)"
+    input_series:
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-vs7gz"}'
+        values: "4 0 0 0 stale _ 0x6"
+      - series: 'cloudflared_tunnel_ha_connections{job="monitoring/cloudflared",namespace="oracle-fleet",pod="pr-oracle-fleet-mcp-minutark-cloudflared-6c98446f8b-8h4zl"}'
+        values: "4 0 0 0 stale _ 0x6"
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics",namespace="oracle-fleet",deployment="pr-oracle-fleet-mcp-minutark-cloudflared"}'
+        values: "2x12"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: CloudflaredTunnelDown
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, namespace: oracle-fleet, deployment: pr-oracle-fleet-mcp-minutark-cloudflared }
+      - eval_time: 5m
+        alertname: CloudflaredTunnelDown
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, namespace: oracle-fleet, deployment: pr-oracle-fleet-mcp-minutark-cloudflared }
+      - eval_time: 8m
+        alertname: CloudflaredTunnelDown
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: dig, namespace: oracle-fleet, deployment: pr-oracle-fleet-mcp-minutark-cloudflared }

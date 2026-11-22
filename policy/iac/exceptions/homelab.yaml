@@ -31,6 +31,7 @@ spec:
             - circles-iac
             - dummy-apps # tests/kind-kargo/fixtures/apps.yaml — the kind e2e's target namespace, never synced to prod
             - homelab
+            - jail-clusters # ADR-167: the throwaway kata+dind pods a jail session starts (argocd/resources/jail-clusters/)
             - node-maintenance
             - oracle-fleet
             - oracle-iac
@@ -106,10 +107,12 @@ spec:
             - ValidatingAdmissionPolicy
             - ValidatingAdmissionPolicyBinding
           names:
+            - jail-clusters-pod-guard # ADR-167 (argocd/resources/jail-clusters/admission-policy.yaml): every pod in jail-clusters is kata on nx-01 with the pinned dind, no host access
             - kargo-write-guard # argocd/resources/kargo/admission-policy.yaml: the belt over every kargo-SA write
             - workflow-template-start-guard # homelab#3629 (agents/coordinator/kargo-prod-diagnose-argo.yaml): a guarded starter may create only a bare workflowTemplateRef to an allowed template
       - resources:
           kinds:
             - PriorityClass
           names:
+            - jail-clusters # ADR-167: below every workload, preemptionPolicy Never — jail pods lose to rides and CI
             - node-maintenance # the node-pinned maintenance CronJobs (node-fstrim) — preempt instead of OutOfcpu at kubelet admission (2026-10-09)

@@ -12,7 +12,9 @@
 #
 # The operator-lane half: classify_touches() reads CODEOWNERS at runtime. If CODEOWNERS is
 # unreadable, non-❌ paths default to machine-merge; the ❌ set (`.github/`, `.agents/`,
-# `devbox.json|lock`, `mgmt/scripts/` + the box verbs) is hardcoded in classify_touches() and works regardless.
+# `devbox.json|lock`, `mgmt/scripts/`, the box verbs, `policy/`, `CODEOWNERS`) is read by
+# classify_touches() from scripts/governance-lint.sh through its OWN path override
+# (CLASSIFY_GOVERNANCE_LINT, unset here), so it works regardless of the scan's GOVERNANCE_LINT.
 #
 # THE THREE CASES (hold order: operator-lane-hold runs first, governance-hold second; a hold
 # `continue`s, so each case reaches at most one message):
@@ -21,7 +23,7 @@
 #        governance probe-fail: with GOVERNANCE_PATHS unreadable the scan cannot tell, so it
 #        defers (rule #6 — never fail INTO a dispatch). Master's strongest-statement case.
 #   #1005 homelab, `devbox.json` — a ❌ path, HELD by the operator-lane hold. The ❌ set is
-#        hardcoded and works with CODEOWNERS unreadable; `continue` means the governance
+#        read independently of both broken probes and works with CODEOWNERS unreadable; `continue` means the governance
 #        probe-fail never double-reports it.
 #   #1008 oracle-fleet, `argocd/resources/loki/` — DISPATCHED. Both holds are $GUARDED_REPO-
 #        gated: a broken read in this checkout must not wedge every stack's fixer lane.
