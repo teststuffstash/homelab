@@ -90,7 +90,7 @@ experiment-authoring brief.
 - The replay runner and the edit-PR leg — FU-320 "Next" (not read further).
 - What may release a `pr-hold` wait is unruled (`rules/intake.md` step R); `INTAKE_PR_HOLDS` is off by default — nothing filed.
 - `CONTRACT.md` currency against the live claim walk — nothing filed.
-- The fresh build of intake (with the deep dig and the responder) — nothing filed; islands/README says it waits.
+- The fresh build of intake (with the [deep dig](../../glossary.md) and the responder) — nothing filed; islands/README says it waits.
 
 ## In flight
 

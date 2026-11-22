@@ -142,7 +142,7 @@ its roadmap is the carve list — which family goes to which island, in what ord
 
 ## The island's own items
 
-- dependency-upgrades: the S9 stint #1985 and its children #1988, #1991; #2605 (xr-render vs
+- dependency-upgrades: the S9 [stint](../../glossary.md) #1985 and its children #1988, #1991; #2605 (xr-render vs
   Renovate bumps); #3663. Majors stay `seat`.
 - mgmt-box: `mgmt/nixos/**` has no PR build gate — nothing filed.
 - router-pair: the box has refused the BACKUP converge since 2026-10-31 (FU-297); MASTER converge
