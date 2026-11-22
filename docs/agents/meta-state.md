@@ -84,10 +84,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   docs/renovate.md's own: `[tool.uv] exclude-newer` ≥7 d back + `uv lock` (fixed ≥21.14.13 exists aged, e.g. 21.15.6
   of 11-06), or admin-merge whichever head lock-intake-lint passes. Scan routing armed non-major #111 to unarmed-major:
   unchecked, a loop component → stop-and-ask.
-- **⚑ PICKUP (2026-11-21 — #3627 for the next session, operator).** `ci: run the scan, launch and retro island suites (#3391)`,
-  opened 13:56Z under the operator login (not the primary seat's), UN-ARMED, no review, BEHIND master. It touches
-  `.github/workflows/ci.yaml` (a governance path the bot cannot gate) + `scripts/diff-ci.sh`, so the path is
-  `/seat-review 3627` → the operator's admin merge. Rebase onto master first.
+- **⚑ PICKUP (2026-11-21 — #3627) — MERGED 2026-11-22 17:18Z `0ca0809f3` by the operator's admin merge** (no seat review, merged BEHIND; landed 3 min after #3652, both touch `scripts/diff-ci.sh`). Master CI runs 45048463020 (#3652) + 45048719148 (#3627) are the check — drop this bullet once both are green.
 - **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650 MERGED 19:54Z `31491512`).** Scrape live (3/3 providers
   `up=1`); `CrossplaneManagedResourceNotSynced` was PENDING at 19:56Z — confirm it FIRED `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
   Workspace `pr-oracle-fleet-minutark` (Synced=False, "failed to make http request"; the oracle stack's). Not firing = the
