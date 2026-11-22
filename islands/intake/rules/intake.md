@@ -127,8 +127,8 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
 
 | Outcome | When | Writes (apply mode) |
 |---|---|---|
-| **queue** | one ride finishes it: ONE deliverable, one PR, a bounded `Touches` (≲ 5 paths — paths the island's facts file adds to every issue, its bookkeeping files, do not count), key rows on ≤ 2 requirements, every path `machine-merge` | body rewritten to the shape below (§A queue-ready body); then §Review and repair; then labels `agent-fix` + `task/fix` or `task/build` + `agent/queued` (+ `experiment/open` when the body carries a block — §Experiment); one `intake: queue — <reason>` comment |
-| **goal** | real work the island wants that no single ride finishes (≥ 2 deliverables, or a design pin children elaborate), and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; then §Review and repair; then `agent/queued` on the CHILDREN only (+ `experiment/open` on a child that carries a block — §Experiment); one `intake: goal — <reason>` comment on each absorbed input |
+| **queue** | one ride finishes it: ONE deliverable with no nameable split (step 4), one PR, every path `machine-merge`. Counts are hints, never the test: ≲ 5 paths in `Touches` (paths that follow the code — tests, spec page, baselines, the facts file's per-issue paths, bookkeeping — do not count), key rows on ≤ 2 requirements | body rewritten to the shape below (§A queue-ready body); then §Review and repair; then labels `agent-fix` + `task/fix` or `task/build` + `agent/queued` (+ `experiment/open` when the body carries a block — §Experiment); one `intake: queue — <reason>` comment |
+| **goal** | real work the island wants that no single ride finishes — a nameable split (step 4) or a design pin children elaborate — and the whole fits the Goal ceiling (§A bot-authored Goal) | the Goal + its branch + 2–5 bound children (each queue-shaped) + dispositions + `goal-lint` PASS; then §Review and repair; then `agent/queued` on the CHILDREN only (+ `experiment/open` on a child that carries a block — §Experiment); one `intake: goal — <reason>` comment on each absorbed input |
 | **seat** (the operator) | an entry of step 3's closed list holds — or the item waits only on an open issue or PR (step 3) | labels `agent-fix` + `agent/blocked`; ONE comment: `intake: seat — <the entry: the one fact needed>` and, on its own line, `blocked-on: human` — or `blocked-on: issue=<n>` / `pr=<n>` when no entry holds and the wait is that item (the scan's suppression grammar, README §Blocked-on marker). **Comment only, no labels, when the body itself keeps the item out of the loop** ("not an agent-loop item", "the seat sequences it") — a human's lineage line outranks your label set |
 | **fold** | two or more inputs are one change (same requirement, same fix) | the SURVIVOR takes the merged body and its outcome; the others get `intake: fold → #<survivor>` and close as duplicate (§Hard limits — whose issue it is) |
 | **close** | the claim no longer holds (live-verified), the work merged since filing, or the honest answer is "leave the `⚑ gap` standing" and nothing live depends on it | `intake: close — <evidence: the line, the PR, the date>` and close (`not planned` for standing gaps; §Hard limits — whose issue it is) |
@@ -213,8 +213,14 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
    sibling has. The filed part and its origin are disjoint: step 2 never folds one into the
    other, and a re-read of the origin treats its parity issue as filed. No sibling set in the
    facts, no parity check.
-4. **How big is it?** One ride → `queue`. More → `goal` within the ceiling, else `seat` (entry
-   (c)) with the draft Goal below the comment's first line — breaker #1 is the operator's. A
+4. **How big is it? The test is a nameable split, not a count.** Name two or more parts that each
+   merge alone, leave master correct and carry their own Acceptance (`part A = …, part B = …`,
+   why each stands alone) → `goal` within the ceiling, else `seat` (entry (c)) with the draft Goal
+   below the comment's first line — breaker #1 is the operator's. No such split → `queue`, however
+   long it looks: numbered Deliverable items are steps, a requirement counts only where its rows
+   gain behaviour for their own reason, and paths that follow the code do not count. One unit
+   larger than a ride's budget is a budget tier (`agent-budget/<tier>`; above the top tier the
+   estimator's own escalation answers), never a Goal and never `seat`. A
    `seat` whose body now argues for an option the operator ruled out gets its body rewritten to
    what stays open (§Hard limits — whose issue it is).
 5. **Is it worth a ride now?** A gap row that is honest, read by nobody live, and whose fix would
