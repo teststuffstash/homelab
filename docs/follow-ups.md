@@ -153,6 +153,7 @@ six OVERSIZE items pointer-ized into
       installed live on both runners).
       (c) `tests/kind-kargo/` is the first platform-component gate on the VM runner (ROADMAP P1 / ADR-082 cover
       stack gates only) — generalise when a second component needs one. Prod install: the PR after #2798.
+      #2798 (draft) overlaps the Kargo RBAC file #3629 edited (2026-11-21) — rebase before it resumes.
 - [ ] **FU-299** — **Backups: Longhorn target LIVE + drilled; every CNPG Cluster backed up by default (ADR-147) + drilled.**
       Longhorn → [`longhorn-backup.md`](longhorn-backup.md); Postgres → [`postgres.md`](postgres.md) §Backups (plugin,
       admission-wired, daily + `pg-backup-now`; infisical-pg restore 85 s, 704/704 tables). Rollout incident:

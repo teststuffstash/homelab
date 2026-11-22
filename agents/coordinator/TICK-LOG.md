@@ -15767,3 +15767,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
     claude-jail#15 (merges keep git's default message).
   - seat-side Loki read path → `docs/loki-tenancy.md` quickfix (port-forward svc/loki + `X-Scope-OrgID`; proven
     against oracle-fleet, 3 streams).
+
+## 2026-11-22 (afternoon) — seat: filed second-jail handoff `20261121-1700-responder-prod-step-back.md` (ADR-165, Ask 4)
+
+- Second jail's arc (2026-11-21): oracle's Ask 4 → **ADR-165** (the responder may start a stack's fixed
+  WorkflowTemplate the alert names; the admission guard is the boundary). Merged **#3628** + **#3629** (responder's
+  own identity + the workflow start guard; direct policy/iac baseline push 36ac7d5b) and **#3639** (f9ae287b, first
+  grant oracle-fleet/prod-step-back). Live dry-run creates in oracle-fleet: responder — plain `prod-step-back` ref
+  admitted; `prod-diagnose`, `prod-step-back` with an argument / another SA / inline steps denied. Sensor —
+  `prod-diagnose` admitted, `prod-step-back` denied. Oracle notified (`oracle/done/20261121-1655-ask4-…`): oracle
+  must name `prod-step-back` as the remedy (alert description or prod-diagnose report); the template takes no params.
+- Records filed: identity residuals (agent-coordinator cluster-wide pod create/exec; `coordinator-git` mounted by
+  ~12 lanes, deep dig + intake split next — #3624 now merged; responder kube-system exec until the image ships
+  hubble) → one issue **#3675**. #2798 ↔ #3629 Kargo RBAC overlap → FU-318 line. ADR numbering: next free is 166
+  (none on master yet).
+- Dropped: "flaky test_codex_sqlite crash test" — no run id given, and the second jail's two red CI runs
+  (44912746004, 44912737472) were the ADR-103 replay ratchet, not that test. Refile on a resight with a run.
+- Noted only: the #818 dial binds `agentstack-loop` with no reader; ADR-165 §Considered already records it.
