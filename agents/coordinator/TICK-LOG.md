@@ -15735,3 +15735,15 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Second jail's openrouter-operator #110/#111: lock-intake-lint over the heads — #110's virtualenv 21.14.9 is vulnerable,
   #111 brings virtualenv 0.9 d / python-discovery 3.8 d old. ADR-154 already routes structural dep edits to the operator's
   admin merge. Closed #113 (operator). Rest → meta-state.
+
+## 2026-11-22 (morning) — seat: who filed #3656, the #1941 un-latch, the island ladder spike
+
+- #3656 (scan checkpoint (b) Goal) was filed by the 05:00 UTC `island-intake` cron (run `island-intake-1795323600`, the
+  scan sitting 05:27–05:43), from #3550 once its wait on #3491 went stale. Parked: its goal branch does not exist (422).
+- #1941's `agent/error` came off by the un-latch rule (#1539) after intake closed the fleet-strike cause #3095; the
+  coordinator dispatched it 07:05, PR #3670 opened, reviewer requested changes, r3 riding. #2589 released the same way.
+- Operator direction: each island has its own roadmap, mostly one shared maturity ladder; sort items into common /
+  platform-common / stack-common. Seven opus subagents wrote one page per island (+ the replay-to-specs map) in a
+  clone; the seat wrote the README. PR #3672, unarmed. Glossary row for the two spike terms.
+- Seat corrections on the way: the gateway DOES have a wire recorder (#3300's assembly #3615 merged) — unused, not
+  absent; oracle-fleet's feedback loop is built but no release carries a claim yet. Rest → meta-state.
