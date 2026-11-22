@@ -1,0 +1,23 @@
+# jail clusters (ADR-167, docs/jail-clusters.md): throwaway kata+dind pods on nx-01 that a jail
+# session or its subagents start with scripts/jail-cluster.sh to run a kind/k3d gate it cannot run
+# on the jail host. Everything that bounds them lives in this directory:
+#   priorityclass.yaml     lowest priority, never preempts — rides and CI win every contest
+#   resourcequota.yaml     at most 2 concurrent pods (+ their scratch PVCs)
+#   admission-policy.yaml  every pod here: kata, nx-01, the pinned dind, no host access
+#   egress-cnp.yaml        registry mirrors + package caches + DNS only (the docker-ride legs)
+#   rbac.yaml              the namespace-scoped ServiceAccount subagents get a token for
+#
+# PodSecurity stays at the cluster-default baseline: the privileged dind is admitted only because
+# the apiserver exempts the kata runtimeClass (FU-077, tofu/talos.tf) — a privileged runc pod is
+# still refused here, and admission-policy.yaml refuses anything that is not kata on top.
+# Cluster-scoped: baselined by name in policy/iac/exceptions/homelab.yaml (iac-no-cluster-scoped).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jail-clusters
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -1,0 +1,37 @@
+# The jail-cluster identity (ADR-167): what a subagent or a stack jail holds instead of the seat's
+# admin kubeconfig. Minted short-lived by the seat — `devbox run jail-cluster -- token --out <file>
+# --duration 2h` (kubectl create token; nothing long-lived is stored). Namespace-scoped: it can
+# create, exec into, read and delete pods in jail-clusters and nothing else. Pod CONTENT is bounded
+# by admission-policy.yaml, not by this Role — RBAC cannot say "kata only".
+# No pods/ephemeralcontainers, no pods/attach, no secrets: the verb needs none of them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jail-cluster
+  namespace: jail-clusters
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jail-cluster
+  namespace: jail-clusters
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, create, delete, deletecollection]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+  - apiGroups: [""]
+    resources: [pods/log, events, persistentvolumeclaims]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jail-cluster
+  namespace: jail-clusters
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: jail-cluster }
+subjects:
+  - { kind: ServiceAccount, name: jail-cluster, namespace: jail-clusters }

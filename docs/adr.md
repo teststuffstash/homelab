@@ -3149,3 +3149,24 @@ minor, Cilium) are floored by the offset, never faster. Docker has no release ti
 use, so the platform runs its own first-seen clock ([renovate.md §The image
 clock](renovate.md#the-image-clock)); a prod pin absent from git gives the stacks nothing to read
 (Postgres, FU-323). Revisit: shrink to 10 days if stacks routinely land the bump within a few.
+
+### ADR-167 — Jail clusters: a jail's kind/k3d gate runs in a throwaway kata+dind pod on nx-01, never on the jail host (2026-11-22)
+**Status:** Proposed (2026-11-22; cap, priority and egress are defaults for the operator to confirm).
+**Decision:** a jail session or its subagent that needs a Docker daemon runs `scripts/jail-cluster.sh`:
+one pod per run in namespace `jail-clusters` — a kata microVM pinned to nx-01 with the docker-mode
+ride's dind sidecar (extracted from `agents/agent-session.sh`, one home) and an agent-base runner. The
+verb ships the working tree in, runs the gate there, copies evidence out and deletes the pod. Bounds:
+a ResourceQuota cap of 2 pods, a PriorityClass below every workload that never preempts, a mandatory
+admission policy (kata, nx-01, pinned dind, no host access), the docker-ride egress legs, and a
+namespace-scoped ServiceAccount whose short-lived token subagents hold. Mechanism:
+[`jail-clusters.md`](jail-clusters.md).
+**Considered:** a Docker daemon in the jail (rejected: a 16 GB laptop, several subagents at once);
+waiting for CI after a push (kept as the fallback, too slow as the only loop); runc pods (rejected:
+privileged runc is root on the node); a PriorityClass for rides first (rejected: ADR-159 deferred it;
+one class below the default 0 ranks jail pods last and changes nothing else).
+**Why:** the island test tier needs a pre-merge cluster run from the seat's own loop, and nx-01 has
+the memory the jail host lacks. **The rig is OPTIONAL (ADR-108: the jail must be able to fix the
+cluster, so nothing in its toolchain may require it):** no pre-push gate and no required check may
+depend on a jail cluster; push and wait for CI stays the fallback.
+**Consequences:** the per-pod size (~4 GiB) is an estimate until the first run records it; the dind pin
+lives twice (images.env + the policy), held equal by the verb's self-test.
