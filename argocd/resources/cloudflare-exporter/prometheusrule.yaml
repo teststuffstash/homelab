@@ -190,6 +190,37 @@ spec:
           annotations:
             summary: "Cloudflare edge: {{ $labels.host }} is answering {{ $value | humanizePercentage }} 5xx"
             description: "More than a quarter of {{ $labels.host }}'s edge responses over 30m were 5xx (and more than 20 of them), for 15m — the Cloudflare edge is failing requests to this host. SYMPTOM ONLY: a 52x/530 with origin status 0 is the edge↔tunnel hop (connector dead, wedged QUIC connection, Cloudflare incident); an origin-generated 5xx shows in the origin's own response counters. Check: the claim's cloudflared pods + logs and cloudflared_tunnel_* in its namespace, the origin pods, then the GraphQL read of originResponseStatus by hour (docs/cloudflare.md §Observability). Sized so the 2026-10-28/29 trickle (≤13 edge 520s per 30m, ≤12 %) stays silent — that rate is not actionable."
+    # ── tunnel-down record (oracle handoff 2026-11-21) ──────────────────────────────────────────
+    # Per PublicRoute connector Deployment, from the cloudflared PodMonitor beside this file: every
+    # claim gets it by construction (the PodMonitor selects every namespace; the composition names
+    # the Deployment `pr-<ns>-<claim>-cloudflared`, recovered here from the pod name). NOT rendered
+    # per claim by the composition: the composition renders no monitoring objects today, and one
+    # rule over a cluster-wide PodMonitor already reaches every claim with no per-stack edit.
+    # Routing: `namespace` is the claim's namespace, which the responder resolves to the owning
+    # stack (namespace → claim ownership lookup, IAC-T07) — no explicit `stack` label needed.
+    # Arm 1: the Deployment's summed `ha_connections` is 0. Arm 2: the Deployment wants replicas
+    # but none of its pods exports the series (connectors crash-looping on the liveness probe, or
+    # unscrapeable) — the CronJobNeverSucceeded `unless on` shape. Both arms carry the same
+    # {namespace, deployment} identity, so a liveness restart moving the condition from one arm to
+    # the other does not restart `for:`. `for: 2m` over a 60s scrape: a CARP handover (~6 s, all
+    # connections re-register within ~20 s) leaves at most one 0 sample and stays silent.
+    # Behaviour fixture: tunnel-down.promtool-{rules,test} beside this file.
+    - name: cloudflared-tunnel
+      rules:
+        - alert: CloudflaredTunnelDown
+          expr: |
+            sum by (namespace, deployment) (label_replace(cloudflared_tunnel_ha_connections, "deployment", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]+")) == 0
+            or
+            (sum by (namespace, deployment) (kube_deployment_spec_replicas{deployment=~"pr-.+-cloudflared"}) > 0
+              unless on (namespace, deployment) label_replace(cloudflared_tunnel_ha_connections, "deployment", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]+"))
+          for: 2m
+          labels:
+            severity: warning
+            # triage: connector pods, their logs and the PublicRoute claim are readable in-cluster
+            triage: dig
+          annotations:
+            summary: "PublicRoute tunnel {{ $labels.namespace }}/{{ $labels.deployment }} has no edge connection"
+            description: "No connector pod of {{ $labels.namespace }}/{{ $labels.deployment }} has held a Cloudflare edge connection for 2m (summed cloudflared_tunnel_ha_connections is 0, or no pod exports it) — the public hostname this PublicRoute serves is unreachable through its tunnel. During a WAN loss this alert arrives late, over the same link: it RECORDS the outage and its length; the live outside check is Cloudflare's own tunnel health notification (docs/cloudflare.md §Observability). An in-cluster probe of a public URL never stands in for a public-path check — it puts cluster DNS, the router's Unbound and our egress into the path. Check: the claim's cloudflared pods + logs in {{ $labels.namespace }}, then WAN/DNS reachability of region1.v2.argotunnel.com."
     # ── credential-expiry belt (FU-156) — docs/secrets.md §Credential expiry is telemetry ───────
     # Series: `credential_expiry_timestamp_seconds{provider, credential}` from
     # cloudflare-credential-expiry-probe (credential-expiry-probe.py beside this file) — one per
