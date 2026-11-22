@@ -171,6 +171,12 @@ MAP=(
   # as rule()-labelled cases + the stub control; enters the island's own devbox). CI runs it as the
   # "Launch island suite" step (#3391). Island-only trigger: an agents/replay/ change does not re-run it.
   "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
+  # island intake's SPEC ROOT gate (islands/intake/scripts/ci.sh: uv sync, ruff, the access page's
+  # rule()-labelled cases; enters islands/intake/specs-tests/'s own devbox). Its inputs are the island's
+  # spec root + tests root and the declared records the access rows read: the rulesets, the sitting's
+  # workflow and the token's mint site, the App declaration, the gateway policy. Not in GitHub CI yet
+  # (a ci.yaml step is an operator-direct change, the #3627 pattern).
+  "-- bash islands/intake/scripts/ci.sh:^(islands/intake/(specs/|specs-tests/|scripts/ci\.sh$)|tofu/github/|agents/coordinator/(island-intake-argo|git-token)\.yaml$|docs/github-apps\.yaml$|argocd/resources/agent-gateway/policy\.json$)"
   # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
   # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "specs-review-self-test:^agents/specs-reviewer-session\.sh$"
