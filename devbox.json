@@ -360,6 +360,12 @@
       "runner-maint-self-test": [
         "bash scripts/runner-maintenance-self-test.sh"
       ],
+      "jail-cluster": [
+        "bash scripts/jail-cluster.sh \"$@\""
+      ],
+      "jail-cluster-self-test": [
+        "bash scripts/jail-cluster-test.sh"
+      ],
       "cp-upgrade": [
         "bash scripts/controlplane-upgrade.sh \"$@\""
       ],
