@@ -121,16 +121,21 @@ Each page's "Next steps, in order" is the full list. The first steps:
 | scan | proving | required gate (PR #3627) → the remaining rows over worlds (#3448) → Goal #3656 → spec gate and ratchets for its root → remaining families ruled (#3389) → switch-over of the two compared members |
 | retro | proving | required gate → Prometheus world and recorder (#3487) → guard rows from the page, ruled (#3488, #3489) → fix the join |
 | launch | proving | required gate → gateway-seam worlds (#3483) → rows from the page, in Python (#3484) → ruled comparison (#3485) |
-| intake | operating | the branch-cut identity → first experiment verdicts (#3607) → its own facts file → a dashboard → specs only when a fresh build starts |
+| intake | both (since 2026-11-22) | done: the branch-cut identity, its first spec page and tests, its own App (see §Direction since the spike) → spec pages for the deterministic scripts (selector, facts check, launcher, wait ledger, experiment reader) → its own facts file and sitting → the deployment test tier → first experiment verdicts (#3607) → a dashboard |
 | oracle-fleet | both | read its first sitting → settle the experiment reader → the four proposed loop briefs get their codeowner read → first release carrying a claim |
 | infrastructure (4) | operating | no ladder roadmap; close the named gaps (alerts routed by rule file, `node-fstrim` rules untested, no gate for `mgmt/nixos/**` and `ansible/**`) |
 | agent-loop | shrinking | the carve list: 98–105 replay families no island claims, mostly the reviewer, the responder and the revert chains |
 
-**Order across islands.** Three things block several islands at once and come first: PR #3627
-(the required gate for scan, launch and retro), the Goal branch cut (three Goals), and #3088
-(the gateway's metrics). After those, retro before launch (retro has Python components and its
-first world needs no supplier schema), and #3448 before #3656 on scan (the scan page's
-recommendation: #3656's child #3660 rules rows on the page #3448 re-sources).
+**Order across islands** (revised 2026-11-22, see §Direction since the spike). The live islands
+come first: intake, then the gateway. Both already run and can block work when they misbehave, so
+a stall on a rebuilt island would otherwise be debugged on the wrong island. Each stops at the same
+line: the island reports its own faults and its feedback loop has run once. For the gateway that is
+its metrics (#3501, #3504, #3503, waiting on #3088), the first claim to a verdict (#3505) and the
+parity record against the old router with the caller switch-over (FU-269 first). Then the rebuilt
+islands: one member taken all the way to live before widening (scan's two ruled members), retro
+before launch (retro has Python components and its first world needs no supplier schema), and
+#3448 before #3656 on scan (the scan page's recommendation: #3656's child #3660 rules rows on the
+page #3448 re-sources). PR #3627, the required gate for scan, launch and retro, merged 2026-11-22.
 
 ## What intake would do with it
 
@@ -148,6 +153,34 @@ plugs into the procedure:
 It also needs R7 and R8 on the island it decides for: the rules' "you decide, feedback corrects"
 assumes an alert row and an experiment exist. Only the gateway has an alert row today, so every
 other island's bodies carry `Experiment: none`.
+
+## Direction since the spike
+
+Operator, 2026-11-22, after reading this page. These overturn parts of the text above; the island
+pages are left as read on that day.
+
+- **Live islands first.** Intake, then the gateway, before scan, launch and retro (§Roadmap per
+  island, the order paragraph).
+- **Intake gets specs now, over the running code.** The pages above say "specs only when a fresh
+  build starts"; that conflated specs with a rebuild. The rule files a sitting reads stay out of the
+  spec; they improve through the wait and escape records.
+- **Non-functional requirements are spec rows.** The missing rung in §What the pages change, item 6
+  ("the identity can do what the rules write") is now a page:
+  [`islands/intake/specs/access.md`](../../../islands/intake/specs/access.md) — one row per act a
+  sitting performs with the credential and permission it needs, and the acts it must be refused.
+  Its first failing row was the Goal branch cut; the fix (creation of `goal/**` is not check-gated)
+  is applied and proven by a recorded answer.
+- **Each identity is its own App.** Intake runs as `homelab-intake`, with a second read-only token
+  for a stack's source repo ([`islands/intake/CONTRACT.md`](../../../islands/intake/CONTRACT.md)).
+- **A deployment test tier.** An island's image and manifests are deployed to a throwaway cluster
+  with mocked external services before merge. No island has it: the gateway's tests run in-process
+  and its "e2e" covers only the specs site. The rig that lets jail sessions run such a cluster is
+  proposed in PR #3678 and unmerged. It belongs on the proving side, between Worlds and Gates, and
+  is common to software islands.
+
+Not started, in order for intake: spec pages for the deterministic scripts; its own facts file and
+sitting; the GitHub stand-in and the deployment tier's first slice (cluster rows of the access
+page); the first experiment verdict (#3607).
 
 ## What would settle it
 
