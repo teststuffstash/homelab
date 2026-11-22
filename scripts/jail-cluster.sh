@@ -279,8 +279,8 @@ cmd_run() {
 
 cmd_list() {
   KCFG="$(kubeconfig)"
-  k get pods -l app=jail-cluster -L jail-cluster/session,jail-cluster/name \
-    -o custom-columns='NAME:.metadata.name,SESSION:.metadata.labels.jail-cluster/session,PHASE:.status.phase,DEADLINE:.spec.activeDeadlineSeconds,CREATED:.metadata.creationTimestamp'
+  k get pods -l app=jail-cluster \
+    -o custom-columns='NAME:.metadata.name,RUN:.metadata.labels.jail-cluster/name,SESSION:.metadata.labels.jail-cluster/session,PHASE:.status.phase,DEADLINE:.spec.activeDeadlineSeconds,CREATED:.metadata.creationTimestamp'
 }
 
 cmd_reap() {
