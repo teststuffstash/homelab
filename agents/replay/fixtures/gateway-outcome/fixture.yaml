@@ -13,6 +13,9 @@
 #     AGENT_GATEWAY_ATTEMPT + 1, and exits with the re-entry's code; otherwise one line, no retry.
 #     An `oom` strike's salvage is `unknown` (finalize died with the container — homelab#3094), so
 #     it never re-admits.
+#   • a worker's DELIBERATE stop (the pod's stats line: exit_status blocked-deliberate, error_class
+#     worker-stop-report, strike_by_pod true) → `clean` with `worker-stop-report` as `subclass`: a
+#     decision is no cell fault, so no strike and no re-admission (homelab#3309).
 #   A failed report is non-fatal: a WARN line, the release, no retry.
 #
 # `curl` is the gateway seam (recorded with its body; `$GW_OUTCOME_HTTP` 22 = curl -f's failure),

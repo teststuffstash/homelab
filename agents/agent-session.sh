@@ -3781,7 +3781,7 @@ if [ -n "$RUN_CMD" ]; then
     #     member (quota → harness-gave-up: the harness gave up on a limited upstream; harness-fault →
     #     itself, a harness-scoped strike: the walk moves to another harness, not another model;
     #     anything else → unknown, its own class riding as `subclass` — `oom` → unknown/oom); a tasked ride that did not strike → clean (a CHANGES_REQUESTED round is not a
-    #     strike — rounds are the scan's);
+    #     strike — rounds are the scan's), and so does a worker's deliberate stop (clean/worker-stop-report);
     #   • an AD-HOC ride → clean when agent-finalize's stats line says `exit_status: clean` or its pod
     #     Succeeded, else NOTHING: its task key is shared by every ad-hoc ride, and a strike there would
     #     exclude cells for all of them. (The stats line first: right after the log follow returns the
@@ -3803,6 +3803,11 @@ if [ -n "$RUN_CMD" ]; then
           case "${ERR_CLASS:-unknown}" in
             harness-death|harness-fault|auth-storm|timeout|provider-5xx|no-pr|unknown|turn-cap|tool-loop) GW_OUTCOME="${ERR_CLASS:-unknown}";;
             quota) GW_OUTCOME="harness-gave-up";;
+            # homelab#3309: agent-finalize's deliberate stop (exit_status blocked-deliberate,
+            # error_class worker-stop-report) sets strike_by_pod only to suppress the launcher's
+            # fallback strike — the worker DECIDED, the cell did not fail. clean (its class rides as
+            # `subclass`): no strike counted, hence no automatic re-admission below.
+            worker-stop-report) GW_OUTCOME="clean";;
             *) GW_OUTCOME="unknown";;
           esac
         elif [ -z "${KEY_RETRY_LINE:-}" ]; then
