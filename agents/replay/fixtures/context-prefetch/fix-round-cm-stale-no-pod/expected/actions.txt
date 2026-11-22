@@ -68,6 +68,7 @@ STDIN     ## Inline comments (file:line)
 STDIN     
 STDIN     - **reviewer-bot** at agents/agent-session.sh:1280 (2026-09-02T10:05:00Z)
 STDIN       Consider adding error handling for the ConfigMap creation fallback.CALL kubectl -n agent-runs get pod agent-test-project-issue-1175-r1 --ignore-not-found -o jsonpath={.status.phase}
+CALL kubectl -n agent-runs get configmap agent-test-project-issue-1175-r1-context --ignore-not-found -o jsonpath={.metadata.ownerReferences[?(@.kind=="Pod")].name}
 CALL kubectl -n agent-runs delete configmap agent-test-project-issue-1175-r1-context --ignore-not-found
 CALL kubectl create -f -
 STDIN apiVersion: v1
@@ -130,7 +131,7 @@ STDIN     ## Inline comments (file:line)
 STDIN     
 STDIN     - **reviewer-bot** at agents/agent-session.sh:1280 (2026-09-02T10:05:00Z)
 STDIN       Consider adding error handling for the ConfigMap creation fallback.CALL kubectl -n agent-runs delete configmap agent-test-project-issue-1175-r1-context --ignore-not-found
-OUT → context pre-fetch: ConfigMap agent-test-project-issue-1175-r1-context already exists (same-key pod agent-test-project-issue-1175-r1 absent) — a stale bundle; deleting it and recreating once
+OUT → context pre-fetch: ConfigMap agent-test-project-issue-1175-r1-context already exists (same-key pod agent-test-project-issue-1175-r1 absent, bundle owned by it) — a stale bundle; deleting it and recreating once
 OUT → context pre-fetch: bundle written to ConfigMap agent-test-project-issue-1175-r1-context in ns agent-runs (off argv)
 OUT → context pre-fetch: issue #1175 + comments materialized (homelab#1175, #1205)
 OUT → prelude prepend verified: RUN_CMD starts with mkdir -p /work/context

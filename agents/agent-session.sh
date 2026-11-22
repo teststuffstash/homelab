@@ -2165,9 +2165,15 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
         PF_CM_PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" --ignore-not-found -o jsonpath='{.status.phase}' 2>/dev/null)" || PF_CM_PHASE="unreadable"
         case "$PF_CM_PHASE" in
           ""|Succeeded|Failed)
-            echo "→ context pre-fetch: ConfigMap ${PF_CM_NAME} already exists (same-key pod ${POD} ${PF_CM_PHASE:-absent}) — a stale bundle; deleting it and recreating once"
-            "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true
-            PF_CM_ERR="$(pf_cm_create)" && PF_CM_OK=1;;
+            # Pod absent is also what a CONCURRENT same-key launcher's fresh bundle looks like (its pod is
+            # created ~1250 lines later). Only a bundle whose pod was created carries the Pod ownerReference
+            # (patched at pod-create), so require it to name ${POD}; unreadable/no owner = delete nothing.
+            PF_CM_OWNER="$("$KUBECTL" $KUBE -n "$NS" get configmap "${PF_CM_NAME}" --ignore-not-found -o jsonpath='{.metadata.ownerReferences[?(@.kind=="Pod")].name}' 2>/dev/null)" || PF_CM_OWNER=""
+            if [ "$PF_CM_OWNER" = "$POD" ]; then
+              echo "→ context pre-fetch: ConfigMap ${PF_CM_NAME} already exists (same-key pod ${POD} ${PF_CM_PHASE:-absent}, bundle owned by it) — a stale bundle; deleting it and recreating once"
+              "$KUBECTL" $KUBE -n "$NS" delete configmap "${PF_CM_NAME}" --ignore-not-found >/dev/null 2>&1 || true
+              PF_CM_ERR="$(pf_cm_create)" && PF_CM_OK=1
+            fi;;
         esac
       fi
       if [ -n "$PF_CM_OK" ]; then
