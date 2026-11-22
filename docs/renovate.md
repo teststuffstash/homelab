@@ -119,7 +119,9 @@ Docker Hub answers only the 1000 most recently updated tags; anything older stay
 docker dependency gets one unclocked run (it arrived by a human/agent commit, not an update). A
 per-repo `renovate.json` rule setting `allowedVersions` on the same package overrides the clock's
 (repo config merges after global). Digest moves of a tag already pinned are not clocked: the pin
-cannot be overwritten under us, and a digest PR rides CI + the revert.
+cannot be overwritten under us, and a digest PR rides CI + the revert. The clock dates a tag NAME
+once: a tag re-pushed after its first sighting (a mutable tag, or an overwrite of an admitted one)
+is not re-dated — the clock holds back new tags, not new content under an old name.
 
 ## The automerge vs review split — "is there anything a human can actually review?"
 
