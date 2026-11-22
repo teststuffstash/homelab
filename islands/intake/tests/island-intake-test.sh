@@ -681,7 +681,7 @@ run_script() { # <mode>
   ( cd "$TMP" && H="$TMP" PATH="${RUN_PATH:-$BIN}:$PATH" HOME="$TMP/home" MODE="$1" ISLAND=gateway \
       INTAKE_WAIT_MAX="${WAIT_MAX:-0}" INTAKE_REFS_JSON="${REFS_JSON:-$TMP/refs-empty.json}" \
       INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" INTAKE_PRS_JSON="${PRS_JSON:-$TMP/pile-empty.json}" \
-      INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
+      INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x INTAKE_READ_GH_TOKEN=y AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
       AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" env ${RUN_ENV:-} bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
 }
 cat > "$TMP/claude.out" <<EOF
@@ -831,6 +831,12 @@ mkdir -p "$TMP/badbin"; printf '#!/bin/bash\nexit 1\n' > "$TMP/badbin/git"; chmo
 run_list all "$TMP/badbin:$BIN"; rc=$?
 { [ "$rc" = 1 ] && [ ! -s "$LIST_OUT" ] && grep -q 'clone failed (the island list)' "$TMP/list.log"; } \
   && ok "island=all with a failed clone: exit 1 and no list — never an empty walk that passes" || bad "list step, clone failed" "rc=$rc $(tail -2 "$TMP/list.log")"
+# no token: the step refuses before any clone — never an anonymous clone, never another identity
+printf '#!/bin/bash\necho "git $*" >> "%s/notoken.git"\nexit 0\n' "$TMP" > "$TMP/badbin/git"; rm -f "$TMP/notoken.git"
+rm -rf "$TMP/work" "$TMP/run"/*; mkdir -p "$TMP/work"
+( cd "$TMP" && H="$TMP" PATH="$TMP/badbin:$BIN:$PATH" HOME="$TMP/home" ISLAND=all env -u GH_TOKEN bash "$TMP/list.sh" ) > "$TMP/list.log" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && [ ! -s "$LIST_OUT" ] && [ ! -e "$TMP/notoken.git" ] && grep -q 'GH_TOKEN is empty — Secret intake-git' "$TMP/list.log"; } \
+  && ok "island=all with no GH_TOKEN (Secret intake-git absent): exit 1 before any clone, naming the Secret" || bad "list step, no token" "rc=$rc $(tail -2 "$TMP/list.log")"
 # a selector that lists nothing (no facts file in the clone): exit 1
 cat > "$TMP/badbin/git" <<EOF
 #!/bin/bash
@@ -1526,7 +1532,7 @@ case "\$p" in
   *"REPAIR PASS"*) s=repair;; *"ISLAND INTAKE sitting"*) s=author;; *"Unit review"*) s=unit;;
   *"PASS 1 of a staged read"*) s=pass1;; *"PASS 2 of a staged read"*) s=pass2;; *) s=other;;
 esac
-echo "\$s cwd=\$PWD gh_token=\${GH_TOKEN:+set} allow=\$allow" >> "\$T/r.calls"
+echo "\$s cwd=\$PWD gh_token=\${GH_TOKEN:+set} allow=\$allow read_token=\${INTAKE_READ_GH_TOKEN:+set}" >> "\$T/r.calls"
 printf '%s' "\$p" > "\$T/prompt-\$s.txt"
 out="\$(printf '%s' "\$p" | grep -oE '/[^ ]*/review/out/[a-z]+-[0-9]+\.md' | head -1)"
 case "\$s" in
@@ -1632,6 +1638,11 @@ case "$line" in *"cwd=$TMP/run/review/case-unit-0 gh_token= "*"Read(/$TMP/run/re
   && ! grep -rq SECRET-DESCRIPTION "$TMP/run/review/rows-pass1-1/" && grep -q '| r1.1 |' "$TMP/run/review/rows-pass1-1/masked/9.md" \
   && ok "rows pass 1 sees masked/ + process/ only: the description is keyed (r1.1), the body is out of reach" || bad "pass 1 world" "$(cat "$TMP/pass1-world.txt" | head -12)"
 grep -q "^pass2 cwd=$TMP/run/review/case-rows-1 gh_token= .*Bash(git -C $TMP/work/homelab show:\*)" "$TMP/r.calls" && ok "rows pass 2 runs in its case dir, the base through git -C, no token" || bad "pass 2" "$(grep pass2 "$TMP/r.calls")"
+# the read-only source token (INTAKE_READ_GH_TOKEN, Secret intake-read-git) reaches the author and the repair the
+# way GH_TOKEN does — the pod env through devbox run and `env "${GW_LLM_ENV[@]}"` — and never a confined lens
+{ grep -q '^author .* read_token=set$' "$TMP/r.calls" && grep -q '^repair .* read_token=set$' "$TMP/r.calls" \
+    && [ -z "$(grep -E '^(unit|pass1|pass2) ' "$TMP/r.calls" | grep -v ' read_token=$')" ]; } \
+  && ok "INTAKE_READ_GH_TOKEN reaches the author and the repair sessions; no lens gets it (env -i)" || bad "read token reach" "$(cat "$TMP/r.calls")"
 grep -q -- '- 9/r1.1' "$TMP/run/review/out/rows-1.md" && grep -q 'R10/9/r1.1' "$TMP/run/review/out/rows-1.md" \
   && ok "the rows file keeps its frozen Pass 1 and gains pass 2's findings" || bad "rows file" "$(cat "$TMP/run/review/out/rows-1.md")"
 grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LENS FINDINGS FILE: rows-1.md' "$TMP/prompt-repair.txt" && grep -q 'Review units' "$TMP/prompt-repair.txt" \
@@ -2341,6 +2352,22 @@ leaf() { yq -o=json -I=0 ".spec.workflowSpec.templates[] | select(.name == \"$1\
 { [ -n "$(leaf experiments)" ] && [ "$(leaf experiments)" = "$(leaf intake)" ]; } \
   && ok "the experiments leaf's image, command, mounts, token, writer key, bucket, HOME and nix env equal a sitting's" || bad "leaf identity (env)" "experiments: $(leaf experiments | cut -c1-300)
        intake:      $(leaf intake | cut -c1-300)"
+# the GitHub identity: every GH_TOKEN in the workflow is the homelab-intake App's (Secret intake-git), and every
+# leaf that clones refuses an empty token before its clone
+[ "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .valueFrom.secretKeyRef.name" "$YAML" | sort -u | tr '\n' ' ')" = "intake-git " ] \
+  && [ "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .name" "$YAML" | grep -c .)" = 3 ] \
+  && ok "every GH_TOKEN (experiments, list-islands, intake) reads Secret intake-git — the homelab-intake App, no other identity" || bad "GH_TOKEN secret" "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .valueFrom.secretKeyRef.name" "$YAML" | tr '\n' ' ')"
+nt=0; for t in experiments list-islands intake; do
+  yq -r "$SPEC.templates[] | select(.name == \"$t\") | .container.args[0]" "$YAML" > "$TMP/tok-$t.sh"
+  g="$(grep -n 'GH_TOKEN is empty' "$TMP/tok-$t.sh" | head -1 | cut -d: -f1)"; c="$(grep -n 'git clone' "$TMP/tok-$t.sh" | head -1 | cut -d: -f1)"
+  { [ -n "$g" ] && [ -n "$c" ] && [ "$g" -lt "$c" ]; } || nt=$((nt + 1))
+done
+[ "$nt" = 0 ] && ok "…and each of the three leaves refuses an empty GH_TOKEN before its clone" || bad "token guard" "$nt leaf(s) without the guard before the clone"
+# the read-only source token: the sitting leaf alone, optional, from intake-read-git; no leaf refuses its absence
+{ [ "$(yq -r "$SPEC.templates[] | select(.container.env[]?.name == \"INTAKE_READ_GH_TOKEN\") | .name" "$YAML" | sort -u | tr '\n' ' ')" = "intake " ] \
+    && [ "$(yq -r "$SPEC.templates[] | select(.name == \"intake\") | .container.env[] | select(.name == \"INTAKE_READ_GH_TOKEN\") | .valueFrom.secretKeyRef | [.name, .key, .optional] | join(\",\")" "$YAML")" = "intake-read-git,GH_TOKEN,true" ] \
+    && ! grep -q 'INTAKE_READ_GH_TOKEN' "$TMP/tok-intake.sh"; } \
+  && ok "INTAKE_READ_GH_TOKEN: the sitting leaf only, Secret intake-read-git, optional, no startup refusal" || bad "read token env" "$(yq -c "$SPEC.templates[].container.env[]? | select(.name == \"INTAKE_READ_GH_TOKEN\")" "$YAML")"
 # the identity: the ServiceAccount is the workflow's (one for every template), the token and the writer key are the sitting's
 [ "$(yq -r "$SPEC.serviceAccountName" "$YAML")" = island-intake ] && [ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName // \"\"" "$YAML")" = "" ] \
   && ok "…under the workflow's island-intake ServiceAccount (the leaf names none of its own)" || bad "leaf identity" "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName" "$YAML")"

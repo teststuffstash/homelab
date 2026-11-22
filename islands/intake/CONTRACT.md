@@ -22,15 +22,24 @@ nothing on this page has been observed running against a stack repo.
 
 ## To turn it on
 
-1. **The `homelab-agents` GitHub App is installed on the repo.** The sitting reads and writes with
-   the platform's own token, minted from that App
-   ([`agents/coordinator/git-token.yaml`](../../agents/coordinator/git-token.yaml)). You provide no
-   token and no secret.
+1. **The `homelab-intake` GitHub App is installed on the repo** — island intake's own App, used
+   by nothing else ([`docs/github-apps.yaml`](../../docs/github-apps.yaml)). The sitting reads and
+   writes with its token, minted from that App
+   ([`agents/coordinator/intake-git.yaml`](../../agents/coordinator/intake-git.yaml)); its writes
+   show as `homelab-intake[bot]`. You provide no token and no secret.
 2. **The repo is in that token's `repositories` list** (the same file). This is a homelab change:
    ask for it through the platform-request lane
    ([`docs/agents/platform-and-stacks.md`](../../docs/agents/platform-and-stacks.md) §Cross-stack
-   demand & escalation). A repo the App does not cover must not be added: the file's own comment
-   says token generation then fails for every repo in the list.
+   demand & escalation). It lands only after the install: a token request naming a repo the App is
+   not installed on fails for every repo in the list.
+   **A private source repo** your facts file reads that is not the island's repo (your deployment
+   repo) is read with a separate read-only token: the row says
+   `GH_TOKEN="$INTAKE_READ_GH_TOKEN" gh api repos/<org>/<repo>/…` (or clones with it). That token
+   is minted with `contents: read` only
+   ([`agents/coordinator/intake-read-git.yaml`](../../agents/coordinator/intake-read-git.yaml)), so
+   the sitting cannot write there, whatever the App's grant. To enable it: the operator installs
+   `homelab-intake` on that repo, then the repo is added to that file's `repositories` — in that
+   order. Until then the row is `seat-only`.
 3. **A facts file on the repo's default branch**, with the parts §What you provide lists. Check it
    from any homelab checkout before you declare it:
 
@@ -72,7 +81,8 @@ nothing on this page has been observed running against a stack repo.
 | Item | Where it lives | Required |
 |---|---|---|
 | The App installation | GitHub, on your repo | yes |
-| The repo's name in the token's list | [`agents/coordinator/git-token.yaml`](../../agents/coordinator/git-token.yaml) `repositories` — a homelab change you ask for | yes |
+| The repo's name in the token's list | [`agents/coordinator/intake-git.yaml`](../../agents/coordinator/intake-git.yaml) `repositories` — a homelab change you ask for | yes |
+| A source repo's install and its name in the read-only token's list | GitHub, on that repo; [`agents/coordinator/intake-read-git.yaml`](../../agents/coordinator/intake-read-git.yaml) `repositories` — a homelab change you ask for | only if your facts file reads one |
 | The claim line | your claim, `repos[].intake.facts` | yes |
 | The facts file | your repo, at the path the claim names | yes |
 
@@ -182,7 +192,7 @@ your repo's.
 
 ## What a sitting does to your issues
 
-Every write goes to your repo, under the platform's token.
+Every write goes to your repo, under the intake App's token (author `homelab-intake[bot]`).
 
 | Write | When |
 |---|---|
@@ -234,8 +244,11 @@ The limits, quoted from [`rules/intake.md`](rules/intake.md):
 
 — §The procedure.
 
-These limits are rules the sessions follow, not a narrower credential: the token's permissions are
-the ones [`agents/coordinator/git-token.yaml`](../../agents/coordinator/git-token.yaml) lists.
+These limits are rules the sessions follow, not a narrower credential. The credential is narrow in
+its own right: the token's permissions are the ones
+[`agents/coordinator/intake-git.yaml`](../../agents/coordinator/intake-git.yaml) lists — it writes
+issues and creates branches; it reviews, merges, re-runs and administers nothing
+([`specs/access.md`](specs/access.md)).
 
 ## What a sitting will not do
 

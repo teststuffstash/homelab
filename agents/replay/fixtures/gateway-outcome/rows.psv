@@ -14,3 +14,4 @@ report-fails           |       |       |                         | report-fails 
 adhoc-stats-clean      |       |       |                         | adhoc-succeeded      |
 harness-fault          |       |       |                         | harness-fault        |
 oom-no-readmit         |       |       |                         | oom-no-readmit       |
+deliberate-stop        |       |       |                         | deliberate-stop      |

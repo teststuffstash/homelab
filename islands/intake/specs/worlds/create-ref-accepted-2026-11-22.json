@@ -1,0 +1,36 @@
+{
+  "provenance": {
+    "recorded_at": "2026-11-22T18:02:24Z",
+    "source": "a jail probe after `tofu/github` was applied with `do_not_enforce_on_create = true` (11 `required-checks` rulesets changed in place): `curl -D` against the REST API",
+    "identity": "the island intake sitting's GH_TOKEN (Secret coordinator-git in namespace agent-coordinator, read at call time — a GitHub App installation token)",
+    "captured": "status, the response headers listed here (all others dropped; none carries a token) and the whole body. The probe ref was deleted right after by the same identity (`DELETE …/git/refs/heads/goal/0-access-probe` answered 204)"
+  },
+  "request": {
+    "method": "POST",
+    "path": "repos/teststuffstash/homelab/git/refs",
+    "fields": {
+      "ref": "refs/heads/goal/0-access-probe",
+      "sha": "09d97654927c78bbb5520b7e1d311915c6ee46a1"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "date": "Sun, 22 Nov 2026 18:02:24 GMT",
+      "x-github-request-id": "49A6:CD37D:13A3D4FA:1D9E70B1:6B032E30",
+      "x-accepted-github-permissions": "contents=write; contents=write,workflows=write",
+      "x-github-api-version-selected": "2022-11-28",
+      "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "ref": "refs/heads/goal/0-access-probe",
+      "node_id": "MDM6UmVmMjMwMjk2NzcwOnJlZnMvaGVhZHMvZ29hbC8wLWFjY2Vzcy1wcm9iZQ==",
+      "url": "https://api.github.com/repos/teststuffstash/homelab/git/refs/heads/goal/0-access-probe",
+      "object": {
+        "sha": "09d97654927c78bbb5520b7e1d311915c6ee46a1",
+        "type": "commit",
+        "url": "https://api.github.com/repos/teststuffstash/homelab/git/commits/09d97654927c78bbb5520b7e1d311915c6ee46a1"
+      }
+    }
+  }
+}
