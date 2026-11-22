@@ -344,8 +344,9 @@ name regardless of the session's model: claude-code makes small calls on the hai
 session's family **and** `claude/haiku` (seat ruling, 2026-10-16); the key lives in policy because
 no model id lives in code, and a rail that declares none (the Go rail today) keeps the exact check.
 An absent `model` is filled with the wire id. The dispatch answer's `model` is the policy id — the
-first id of `rails.<rail>.models.<tier>` (an ordered list; a bare string is one item) when nothing
-is struck or cooled ([tier](../glossary.md#tier)). The ADR-096 ladder — classes, label tiers — is
+first id of the rail's derived list for the tier (the rail's last good derivation,
+[GW-MODEL-TIERS](catalog.md#gw-model-tiers)) when nothing is struck or cooled
+([tier](../glossary.md#tier)). The ADR-096 ladder — classes, label tiers — is
 a gap ([below](#gaps-the-adr-096-ladder)); strikes and cooldowns are
 [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s, and the provider pin is
 [GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)'s

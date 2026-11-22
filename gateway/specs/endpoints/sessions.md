@@ -284,8 +284,8 @@ A boot refresh that does not come back `ok` still derives from the stored snapsh
 
 | description | world | store_state | boot_refresh | derivation? | next_sleep_s? |
 |---|---|---|---|---|---|
-| a failed boot refresh derives from the stored snapshot, then waits the interval ⚖ | policy-default | no derivation, stored snapshots that derive | fetch-failed | exists | 21600 |
-| a failed boot refresh that cannot derive retries on the short wait ⚖ | policy-default | no derivation, stored snapshots that cannot derive | fetch-failed | none | 60 |
+| a failed boot refresh derives from the stored snapshot, then waits the interval ⚖ | policy-default | no derivation; an OpenRouter snapshot with benched rows | fetch-failed | exists | 21600 |
+| a failed boot refresh that cannot derive retries on the short wait ⚖ | policy-default | no derivation; an OpenRouter snapshot with no benched rows | fetch-failed | none | 60 |
 
 #### The policy without the priced rails' lists
 
@@ -1824,12 +1824,13 @@ deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, 
 
 #### What the log says
 
-Legend: `holds?` = a fragment some log line of the call holds; `never_holds?` = a value no line holds.
+Legend: `lines?` = how many log lines of the call name the route (`—` = not counted); `holds?` = a
+fragment some log line of the call holds; `never_holds?` = a value no line holds.
 
-| description | world | sequence | holds? | never_holds? |
-|---|---|---|---|---|
-| a dispatch line names the caller, never its token | policy-enforce | the platform loop admits | caller=system:serviceaccount:platform-agents:agentstack-loop | the presented token |
-| an unauthenticated call is one line naming the route and the reason | policy-default | POST /sessions with no bearer | exactly one line: control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe | — |
+| description | world | sequence | lines? | holds? | never_holds? |
+|---|---|---|---|---|---|
+| a dispatch line names the caller, never its token | policy-enforce | the platform loop admits | — | caller=system:serviceaccount:platform-agents:agentstack-loop | the presented token |
+| an unauthenticated call is one line naming the route and the reason | policy-default | POST /sessions with no bearer | 1 | control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe | — |
 
 #### Named gaps — auth
 

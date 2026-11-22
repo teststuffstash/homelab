@@ -515,9 +515,9 @@ async def test_a_restart_without_a_derivation_refreshes_at_once(gw, app, setting
 
 # ── A failed boot refresh still derives, and retries soon ─────────────────────────────────────
 BOOT_FAIL_ROWS = [
-    pytest.param("policy-default", "no derivation, stored snapshots that derive", "fetch-failed", "exists", "21600",
+    pytest.param("policy-default", "no derivation; an OpenRouter snapshot with benched rows", "fetch-failed", "exists", "21600",
                  id="a failed boot refresh derives from the stored snapshot, then waits the interval ⚖"),
-    pytest.param("policy-default", "no derivation, stored snapshots that cannot derive", "fetch-failed", "none", "60",
+    pytest.param("policy-default", "no derivation; an OpenRouter snapshot with no benched rows", "fetch-failed", "none", "60",
                  id="a failed boot refresh that cannot derive retries on the short wait ⚖"),
 ]
 
@@ -528,22 +528,16 @@ BOOT_FAIL_ROWS = [
 async def test_a_failed_boot_refresh_still_derives(app, monkeypatch, world, store_state, boot_refresh, expected_derivation,
                                                    expected_next_sleep_s):
     from agent_gateway import orcatalog as orc
+    from agent_gateway.providers import SNAPSHOT_SOURCE
 
     enter_world(world)
     inputs(store_state=store_state)
     cat = app.state.orcatalog
     td = app.state.tier_derivation
-    can_derive = "that derive" in store_state
-    td.derived_at = None
     sleeps: list[float] = []
 
     async def failed_refresh() -> str:
         return boot_refresh
-
-    def derive() -> bool:
-        if can_derive:
-            td.derived_at = 1.0
-        return can_derive
 
     class Stop(Exception):
         pass
@@ -553,8 +547,16 @@ async def test_a_failed_boot_refresh_still_derives(app, monkeypatch, world, stor
         raise Stop
 
     with given(f"store_state = {store_state}; the boot refresh returns {boot_refresh}"):
+        hook, cat.on_refresh = cat.on_refresh, None
+        with quiet():  # one good refresh stores the OpenRouter snapshot (benched rows and all); no derivation runs
+            assert await cat.refresh() == "ok"
+        cat.on_refresh = hook
+        stored = app.state.store.snapshot_load(SNAPSHOT_SOURCE)
+        if "no benched rows" in store_state:
+            app.state.store.snapshot_save(SNAPSHOT_SOURCE, stored[0], {**stored[1], "benchmarks": {}})
+        td.derived_at, td.body = None, {}
+        attach_json("the stored OpenRouter snapshot", {"benched rows": len(app.state.store.snapshot_load(SNAPSHOT_SOURCE)[1].get("benchmarks") or {})})
         monkeypatch.setattr(cat, "refresh", failed_refresh)
-        monkeypatch.setattr(cat, "on_refresh", derive)
         monkeypatch.setattr(cat, "startup_delay", lambda now: 0.0)
         monkeypatch.setattr(orc.asyncio, "sleep", fake_sleep)
         assert cat.refresh_s > 60

@@ -1129,7 +1129,8 @@ gateway derives the lists itself, at each good catalog refresh, from evidence in
 - **The derivation** (the store, on `GET /catalog/tiers`) — `agent_gateway.tiers` (`derive`,
   `join_aa_id`, `same_model`, `cost_per_clean_ride`, `undecided`, `unscored`), run by the gateway
   at each good catalog refresh ([§The derivation at a refresh](#the-derivation-at-a-refresh)); the
-  last good derivation is kept and is the list the admission walks. ⚖ A tier whose derivation is
+  last good derivation is kept and is the list the admission walks. A list is ordered by cost per
+  clean ride; ties break by input price, then score descending, then id. ⚖ A tier whose derivation is
   **empty** — no benched, priced candidate reaches its band (the openrouter rail before its first
   eligible cell) — is **undecided**: its last derived list stands and the view names it. ⚖ A
   benched candidate with **no value on the score axis** — the feed scores a row on some axes and
@@ -1280,7 +1281,7 @@ Legend: `feed` = the benched rows the candidate rows are assembled from (`id = i
 manual file's rows (`id = intelligence`, each read at `https://bench.example/fx` on `2027-01-10`;
 `none` = no file); `policy_id` = the one anthropic candidate; `aa_id?` / `intelligence?` = its
 candidate row; `score_source?` = `manual · <score_source_url> · <score_read_at>` when the row carries
-the three keys, `feed` when it carries none of them; `retired?` = `sources.capability.manual.retired`
+the three keys, `feed` when it carries none of them; `retired?` = `tiers_output` `manual.retired`
 (`none` = empty, or no file).
 
 | description | feed | manual | policy_id | aa_id? | intelligence? | score_source? | retired? |
@@ -1617,20 +1618,18 @@ trimmed to the ineligible endpoints` = `openrouter-endpoints-ineligible`; `every
 = the production state of 2026-10-20); `tier` = the worker's tier (`standard` names MG and
 `deepseek/deepseek-v4-flash` — no twin); `rail_choice?` = the answer's `{rail} over {over}:
 {reason}` (`null` = no twin; `none` = a defer); `counted?` = the `gateway_rail_choice_total{model=M,…}`
-series after (`none` = no series).
+series after (`none` = no series); `reason?` / `retry_after_s?` = the defer's `reason` and
+`retry_after_s` (`—` = a dispatch, which carries neither).
 
-| description | arrange | tier | decision? | rail? | model? | rail_choice? | counted? |
-|---|---|---|---|---|---|---|---|
-| Go wins with free headroom and an equal clean rate ⚖ | nothing | light | dispatch | opencode | MG | opencode over openrouter: price | rail="opencode",reason="price" 1 |
-| openrouter wins when Go's window is near its share ⚖ | the Go window near its share | light | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 |
-| openrouter wins when Go's clean rate is lower ⚖ | six judged Go rides on MG, one clean | light | dispatch | openrouter | M | openrouter over opencode: clean-rate | rail="openrouter",reason="clean-rate" 1 |
-| no eligible openrouter endpoint: Go ⚖ | the snapshot trimmed to the ineligible endpoints | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 |
-| no openrouter cell has passed the entry canary yet: Go ⚖ | every cell of M candidate | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 |
-| both twins held: no choice, the walk defers with the hold that lifts first ⚖ | the Go window near its share; the snapshot trimmed to the ineligible endpoints; the task's earlier ride struck no-verdict on deepseek/deepseek-v4-flash | light | defer | none | none | none | none |
-| no twin at the tier: the role's order, no choice | nothing | standard | dispatch | opencode | MG | null | none |
-
-The defer of the both-held row carries `reason: no-eligible-provider`, `retry_after_s: 60` — the
-hold that lifts first.
+| description | arrange | tier | decision? | rail? | model? | rail_choice? | counted? | reason? | retry_after_s? |
+|---|---|---|---|---|---|---|---|---|---|
+| Go wins with free headroom and an equal clean rate ⚖ | nothing | light | dispatch | opencode | MG | opencode over openrouter: price | rail="opencode",reason="price" 1 | — | — |
+| openrouter wins when Go's window is near its share ⚖ | the Go window near its share | light | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 | — | — |
+| openrouter wins when Go's clean rate is lower ⚖ | six judged Go rides on MG, one clean | light | dispatch | openrouter | M | openrouter over opencode: clean-rate | rail="openrouter",reason="clean-rate" 1 | — | — |
+| no eligible openrouter endpoint: Go ⚖ | the snapshot trimmed to the ineligible endpoints | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 | — | — |
+| no openrouter cell has passed the entry canary yet: Go ⚖ | every cell of M candidate | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 | — | — |
+| both twins held: no choice, the walk defers with the hold that lifts first ⚖ | the Go window near its share; the snapshot trimmed to the ineligible endpoints; the task's earlier ride struck no-verdict on deepseek/deepseek-v4-flash | light | defer | none | none | none | none | no-eligible-provider | 60 |
+| no twin at the tier: the role's order, no choice | nothing | standard | dispatch | opencode | MG | null | none | — | — |
 
 #### The choice survives a failover
 
