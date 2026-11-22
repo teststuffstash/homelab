@@ -1,8 +1,8 @@
-# homelab#1941 — fix round, ConfigMap create refused AlreadyExists by a STALE bundle: a struck or crashed
-# earlier attempt at this (task, round) left the ConfigMap behind and no same-key pod exists (the kubectl
-# read answers empty). The launcher must delete that bundle and recreate it ONCE, so the run takes the
-# ConfigMap channel and never the argv fallback. The first create is refused (alreadyexists), the
-# retry lands. Context = ../fix-round (pr.md + reviews.md fetch OK).
+# homelab#1941 — fix round, ConfigMap create refused AlreadyExists, same-key pod absent, but the existing
+# ConfigMap carries NO Pod ownerReference: that is a CONCURRENT launcher's fresh bundle (the owner is patched
+# on only after pod-create), not a stale one. The launcher must delete nothing and retry nothing; the run
+# takes the argv fallback and its fallback line names AlreadyExists. The create is refused (alreadyexists)
+# on every call. Context = ../fix-round (pr.md + reviews.md fetch OK).
 name: context-prefetch/fix-round-cm-stale-no-owner
 mode: actions
 source: agents/agent-session.sh
