@@ -68,6 +68,7 @@ spec:
             - { port: "80", protocol: TCP }
     - toFQDNs:
         - { matchName: ghcr.io }
+        - { matchName: pkg-containers.githubusercontent.com } # ghcr.io answers blob GETs with a redirect here; without it every layer pull hangs
       toPorts:
         - ports:
             - { port: "443", protocol: TCP }
