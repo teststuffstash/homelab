@@ -10,6 +10,8 @@ rules) — nothing of it is rewritten here; only where its inputs come from and 
 CUT OVER (GW-SESSIONS-ADMIT): the admission walks `walk()`; the policy's priced-rail lists order nothing.
 `GET /catalog/tiers` shows the derivation and `equals_walked` (true wherever a list is derived). The last good derivation is kept in the store (`catalog_snapshots`,
 source `tier-derivation`) and survives a restart; a refresh whose derivation cannot run keeps it.
+`evidence_age` is `gateway_tier_evidence_age_seconds`: seconds since the benched set's `as_of` behind the
+walked derivation (the OpenRouter snapshot's `fetched_at` when the feed names none); absent with no derivation.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import TIERS, Policy
@@ -41,6 +44,17 @@ def _iso(ts: float | None) -> str | None:
     from .store import iso
 
     return iso(ts)
+
+
+def _ts(v) -> float | None:
+    """An ISO-8601 stamp as epoch seconds (a stamp without a zone is UTC); None when absent or unreadable."""
+    if not isinstance(v, str) or not v:
+        return None
+    try:
+        at = datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (at if at.tzinfo else at.replace(tzinfo=UTC)).timestamp()
 
 
 class TierDerivation:
@@ -169,6 +183,18 @@ class TierDerivation:
         if v is None:
             return None
         return tuple(((v.get("tiers") or {}).get(tier) or {}).get("list") or ())
+
+    def evidence_age(self, now: float) -> float | None:
+        """`gateway_tier_evidence_age_seconds`: seconds since the benched set's `as_of` behind the walked
+        derivation (⚖ the OpenRouter snapshot's `fetched_at` when the feed names no `as_of`). None — no
+        series — while no derivation exists; a kept derivation keeps ageing while refreshes fail."""
+        if self.derived_at is None:
+            return None
+        stamps = self.body.get("stamps") or {}
+        at = _ts(stamps.get("benchmarks_as_of"))
+        if at is None:
+            at = _ts(stamps.get("openrouter_fetched_at"))
+        return None if at is None else max(0.0, now - at)
 
     # -- the view ---------------------------------------------------------------------------------
     def view(self) -> dict:
