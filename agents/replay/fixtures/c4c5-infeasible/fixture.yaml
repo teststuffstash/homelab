@@ -42,6 +42,13 @@
 #     child the terminal parked this tick is NOT "undecidable" — the `c4c5-derivations` hold keys
 #     off the terminal's own `infeas_done` set, so the strike-driven resumable path cannot re-ride
 #     it in the same tick (the marker is read in ONE place; no second regex).
+#   • A CLAIM THE CLASSIFIER CAN CHECK IS CHECKED (homelab#3309): on GUARDED_REPO, a payload whose
+#     first token is a path in this checkout goes through `classify_touches_repo` before the park.
+#     Any verdict but `codeowner-author` refutes it — no park, ONE anchored
+#     `<!-- agent-infeasible-refuted -->` comment (never re-posted for the same marker), a
+#     `↺ INFEASIBLE REFUTED` report line, and the issue falls through to its C4/C5 handling. One
+#     refutation per issue (an older one → park); another repo, a non-path payload, or an
+#     unsourceable classifier parks as before (the `refuted*`/`devbox-root`/`resource-slash` rows).
 #   • AN UNREADABLE PROBE is the other way round (rule #6, never fail INTO a write): an
 #     unreadable comments probe keeps today's behaviour — belt and unit included — plus one
 #     report line naming the issue. `STUB_GH=fail` is the harness's own failure-mode seam
