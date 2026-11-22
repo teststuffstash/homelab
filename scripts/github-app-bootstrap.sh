@@ -169,6 +169,11 @@ cmd_secrets() {
       say "Pushing the specs-reviewer App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "SPECS_REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
       echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register   (ADR-155: the Secret appearing ends shadow mode)" ;;
+    homelab-intake)
+      need gh; _resolve_install_id
+      say "Pushing the intake App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "INTAKE_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register   (then the workflow's token cutover — a separate PR)" ;;
     homelab-merge)
       # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
       say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"

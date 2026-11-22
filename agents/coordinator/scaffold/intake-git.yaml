@@ -1,0 +1,74 @@
+# SCAFFOLD — parked until `scripts/github-app-bootstrap.sh homelab-intake register` fills the two ids,
+# moves this file up one directory and lists it in kustomization.yaml (trim this banner in that PR).
+#
+# Island intake's git token: mints the `intake-git` Secret the island intake CronWorkflow
+# (island-intake-argo.yaml) will read as GH_TOKEN — the sitting's OWN identity,
+# homelab-intake[bot] (docs/github-apps.yaml). Until the cutover PR the workflow keeps reading
+# `coordinator-git`; this chain only makes the Secret exist. Same ESO chain shape as
+# specs-reviewer-git.yaml.
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: intake-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: intake-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: INTAKE_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: an installation token with the sitting's acts and nothing more — the
+# declaration's whole set (docs/github-apps.yaml homelab-intake carries each permission's why).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: intake-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: ""       # FILL-AFTER register
+  installID: ""   # FILL-AFTER register
+  auth:
+    privateKey:
+      secretRef: { name: intake-github-app, key: privateKey }
+  permissions:
+    contents: write          #   cut a Goal's branch — the one write; clones need read
+    issues: write            #   labels, comments, close, file an issue / a Goal with its children
+    pull_requests: read      #   a covering PR's state, base and closing references
+    checks: read             #   a covering PR's check runs
+    statuses: read           #   the same rollup's commit statuses
+    actions: read            #   the run behind a red check
+  repositories:              #   the install FIRST: a token request naming an uninstalled repo fails for all
+    - homelab
+    - oracle-fleet           #   the one stack claim declaring repos[].intake.facts today
+---
+# 3) Drive the generator → the Secret the CronWorkflow will read (key `token` → GH_TOKEN).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: intake-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: intake-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: intake-git-gen
