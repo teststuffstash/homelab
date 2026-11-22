@@ -72,11 +72,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
   oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
   `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
-- **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator).** Supersedes ADR-158: stack pins lead by
-  TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker the release clock Renovate lacks (first
-  sighting on the `image-clock` side branch, `allowedVersions` appended at run time). Touches `.github/workflows/` → `ci` red by
-  design: rebased 11-22 + seat review APPROVE + full CI by workflow_dispatch green (run 45045460749, head c746bbe9; PR comments) → the operator's admin merge. Proven by branch dry runs (44949949099: 36 pkgs, 0 failed, 52 rules,
-  no postgres 19 proposal). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
+- **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator) — MERGED 2026-11-22 17:15Z `812b016f3`** (seat review + full CI by dispatch, run 45045460749). Supersedes ADR-158: stack pins lead by TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker a release clock (first sighting on the `image-clock` side branch). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
   (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
   security PRs that skip the cooldown; worker `uv lock` additions are the other un-aged intake — 2 versions <7 d in ~4
