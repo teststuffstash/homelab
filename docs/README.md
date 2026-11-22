@@ -30,6 +30,7 @@ first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 | [longhorn-backup.md](longhorn-backup.md) | Longhorn's backup target (single-node Garage LXC on nx-02, outside Longhorn), the per-volume backup classes, the restore recipe (FU-299) |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
+| [jail-clusters.md](jail-clusters.md) | **Jail clusters** (ADR-167) — a jail's kind/k3d gate in a throwaway kata+dind pod on nx-01: the verb, the token, the cap/priority/admission/egress bounds; optional by rule |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
 | [dependency-upgrades.md](dependency-upgrades.md) | **homelab's own dependency lifecycle** — propose → review → test/lint → rollout → monitor, per dependency class; the **generated dependency coverage table** (one row per pin × proposer/gate/edge/detector/revert/canary/last proven — rulings in [`dependency-classes.yaml`](dependency-classes.yaml), `devbox run dependency-coverage`; homelab#1992) and what Renovate has *measurably* done here (FU-097/FU-051) |
 | [renovate.md](renovate.md) | The **org-wide Renovate policy** — threat model (Trivy-style compromise), cooldown/SHA-pinning/OSV, the automerge-vs-review split, coordinator × Renovate verbs |
