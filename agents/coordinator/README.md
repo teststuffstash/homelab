@@ -1399,6 +1399,20 @@ handed out every tick. Same rule as above: the marker is machine-written, never 
 If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
 finding is the terminal ride (pod, launcher, budget), not another fix round.
 
+**Every ci-red ride ends in a play that moves the PR or holds it.** The debounce above holds only
+once a round has completed: while no round has posted stats since the scan's marker, the gate
+re-arms on every tick (FU-199, below). So a ruling that dispatches no round and re-runs nothing
+must park — `agent/blocked`, the reason, and a `blocked-on:` marker line in the same comment
+(§Blocked-on marker below) — or the same red is handed to a new ride every tick (PR #3400,
+2026-11-14: twelve rides in 55 minutes and no round, until the twelfth ruling wrote the marker).
+There is no wait play: a red that a date would clear is still a red the diff can fix. A
+`lock-intake-lint` red of the form `too new <package>@<version>` on a lock file the PR itself adds
+or re-resolves is **content**: re-dispatch a fix round that sets the resolver's age cutoff in the
+project file and re-locks, without pinning a version — for a uv project the `[tool.uv]` block
+`gateway/pyproject.toml` carries (`exclude-newer = "<a date at least 7 days back>"`). That is
+ADR-143 (1)'s own mechanism applied at lock time, not the override ADR-143 (3) forbids (operator
+ruling on PR #3400, 2026-11-15).
+
 > **FU-199 (2026-09-03): two blind spots closed.** The state-fp debounce had two silent stalls
 > that the board could not see:
 > 1. **Arbitrate no-op-after-directive** — a completed no-op round (stats posted, HEAD unchanged)
@@ -1911,6 +1925,8 @@ A ci-red terminal ruling (rounds exhausted, escalated to arbitrate) that identif
 blocker should write a `blocked-on:` marker. The scan's ci-red clause checks for this marker
 before dispatching a fix round: if the marker is present and the blocker is still unresolved,
 the clause emits a report line instead of a unit.
+The same holds for any ci-red ruling that dispatches no round and re-runs nothing: it carries the
+marker in the ruling comment itself (the `ci-red` clause above says why).
 
 ### §changes-requested — when to write it
 
