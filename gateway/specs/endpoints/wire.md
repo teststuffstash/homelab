@@ -59,8 +59,8 @@ flowchart LR
 
 Every vendor read the gateway makes registers a [wire source](../glossary.md#wire-source) and a class,
 and hands its answer to the recorder before its parser reads it; the parser, the snapshots and the
-views read exactly what they read before. The registered sources are `go-models-dev`, `go-console-config`
-and `go-docs` (the Go catalog's three reads), `openrouter-endpoints`, `openrouter-mcp-rankings` and
+views read exactly what they read before. The registered sources are `go-models-dev`, `go-console-config`,
+`go-docs` and `go-limits` (the Go catalog's four reads), `openrouter-endpoints`, `openrouter-mcp-rankings` and
 `openrouter-mcp-benchmarks` (the OpenRouter catalog's reads — `openrouter-endpoints` is one read per
 candidate model, so it keeps the last model's answer) and `codex-usage` (the usage poll).
 
@@ -80,7 +80,7 @@ The `sha256` is the answer's digest as the vendor sent it.
 Unverified — expected to hold, no row yet: an `account` answer over the bound records `over-bound`;
 a recorder fault never takes a read down; the parsers, snapshots and views are unchanged; the sources
 `go-docs`, `openrouter-endpoints`, `openrouter-mcp-rankings` and `openrouter-mcp-benchmarks` record as
-described.
+described; a failed `go-limits` read records the failure as any source's does.
 
 **World: [policy-codex](../worlds/README.md#policy-worlds)** — every world's gateway starts from the Go
 catalog's fakes; the codex usage fake answers the observed shape (synthetic values, dummy identity — the codex credential's account id is `dummy-account`).
@@ -96,6 +96,7 @@ the record's time.
 | a public read's bytes are kept verbatim | `go-models-dev` | `catalog-ok at T0` | none (no credential, no account header) | `public` | the fake's bytes, byte-identical | the bytes' sha256 | `T0` |
 | a later answer replaces it | `go-models-dev` | `catalog-ok at T0, then catalog-trimmed at T0 + 21600 s` | none (no credential, no account header) | `public` | the later bytes | the later bytes' sha256 | `T0 + 21600 s` |
 | a shape the parser refuses is still recorded ⚖ | `go-models-dev` | `catalog-malformed at T0` | none (no credential, no account header) | `public` | the malformed bytes | their sha256 | `T0` |
+| the Go limits read's bytes are kept verbatim | `go-limits` | `limits-ok at T0` | none (no credential, no account header) | `public` | the fake's bytes, byte-identical | the bytes' sha256 | `T0` |
 | an account read keeps its structure and no string value ⚖ | `codex-usage` | `the observed usage shape at T0` | the codex bearer and account header | `account` | every key, number and boolean; every string `{"len": n}` | the raw bytes' sha256 | `T0` |
 
 #### A failed read, a bound, a restart

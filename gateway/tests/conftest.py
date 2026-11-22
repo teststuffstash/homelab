@@ -724,6 +724,7 @@ SELF_URL = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 GO_CATALOG_URL = "https://models.dev.test/api.json"
 GO_CONFIG_URL = "https://console.opencode.test/console/api/v2/config"
 GO_DOCS_URL = "https://raw.vendor.test/anomalyco/opencode/dev/go.mdx"
+GO_LIMITS_URL = "https://inference.opencode.test/inference/go/v1/models"
 GO_KEY = "go-key-for-tests-only"
 ANTHROPIC_TOKEN = "sk-ant-oat-test-subscription-token"
 OPENROUTER_KEY = "sk-or-v1-test-openrouter-key"
@@ -794,6 +795,7 @@ def settings(tmp_path) -> Settings:
             "GATEWAY_GO_CATALOG_URL": GO_CATALOG_URL,
             "GATEWAY_GO_CONFIG_URL": GO_CONFIG_URL,
             "GATEWAY_GO_DOCS_URL": GO_DOCS_URL,
+            "GATEWAY_GO_LIMITS_URL": GO_LIMITS_URL,
             "GATEWAY_OR_MCP_URL": "https://mcp.openrouter.test/mcp",
         }
     )

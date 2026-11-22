@@ -96,9 +96,9 @@ Headroom reports enter through the in-process seam (`app.state.codex.headroom.ob
 
 ## The Go catalog's fakes
 
-`tests/_catalog_world.py`'s `FakeVendor` answers the three reads of
+`tests/_catalog_world.py`'s `FakeVendor` answers the four reads of
 [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go) in process, on fixture hosts
-(`models.dev.test`, `console.opencode.test`, `raw.vendor.test`). `tests/fixtures/go-catalog/models-dev.json`
+(`models.dev.test`, `console.opencode.test`, `raw.vendor.test`, and `inference.opencode.test` for the limits read). `tests/fixtures/go-catalog/models-dev.json`
 is models.dev's `api.json` cut to the `opencode-go` provider and six of its models — the five
 listed (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`, `longcat-2.5-preview-free`,
 `step-5-preview`) plus `step-5-preview-free`, a live `status: deprecated` row — from the **live
@@ -148,6 +148,9 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `docs-no-plan-table` | the Plan table (the fee's home) removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |
 | `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
+| `limits-ok` | 200, `{"object": "list", "data": [], "synthetic": "not a vendor answer"}` — the limits read's answer (the `limits` knob; fixture host `inference.opencode.test`) |
+| `limits-503` | the limits read answers 503 |
+| `limits-down` | a connect failure on the limits read |
 
 ## The openrouter-endpoints world
 

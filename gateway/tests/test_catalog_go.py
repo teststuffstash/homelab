@@ -278,20 +278,59 @@ async def test_docs_refresh(cworld, vendor, clock, caplog, last_good, docs, expe
             assert body["bonus"].get("gemini-4-argon") is None
 
 
+# ── The limits read changes nothing the source keeps ─────────────────────────────────────────
+LIMITS_ROWS = [
+    pytest.param("none", "docs-ok", "limits-ok", "ok", 5, 1, id="the limits read goes out with the page read"),
+    pytest.param("none", "docs-ok", "limits-503", "ok", 5, 1, id="a failed limits read changes nothing the source keeps ⚖"),
+    pytest.param("none", "docs-ok", "limits-down", "ok", 5, 1, id="an unreachable limits host changes nothing either"),
+    pytest.param("5", "docs-header-drift", "limits-ok", "parse-failed", 5, 1, id="a page the parser refuses still sends the limits read ⚖"),
+    pytest.param("5", "docs-404", "limits-ok", "fetch-failed", 5, 1, id="a page that cannot be fetched still sends the limits read"),
+]
+
+
+@pytest.mark.parametrize(("last_good", "docs", "limits", "expected_outcome", "expected_models", "expected_limits_requests"), LIMITS_ROWS,
+                         ids=[p.id for p in LIMITS_ROWS])
+async def test_limits_read(cworld, vendor, vendor_transport, clock, last_good, docs, limits, expected_outcome, expected_models,
+                           expected_limits_requests):
+    world(upstream=f"{docs} · {limits}")
+    app = cworld.build()
+    with given(f"last_good = {last_good} (docs-ok at T0)" if last_good != "none" else "last_good = none"):
+        if last_good != "none":
+            vendor.docs = "docs-ok"
+            with quiet():
+                assert await app.state.catalog.refresh_source("docs") == "ok"
+    clock.advance(60)
+    with given(f"docs = {docs} · limits = {limits}"):
+        vendor.docs, vendor.limits = docs, limits
+        if limits.endswith("-down"):
+            vendor_transport.down.add("limits")
+        vendor_transport.attempts.clear()
+    with when(f"the docs source refreshes at T0 + 60 s (docs = {docs}, limits = {limits})"), quiet():
+        got = await app.state.catalog.refresh_source("docs")
+        v = await _view(app)
+    attempted = vendor_transport.attempts.get("limits", 0)
+    verdict(f"outcome = {expected_outcome} · models = {expected_models} · limits_requests = {expected_limits_requests}",
+            expected_outcome={"expected": expected_outcome, "actual": got},
+            expected_models={"expected": expected_models, "actual": v["sources"]["docs"]["models"]},
+            expected_limits_requests={"expected": expected_limits_requests, "actual": attempted},
+            last_good={"actual": last_good}, docs={"actual": docs}, limits={"actual": limits})
+
+
 # ── What a fetch sends ───────────────────────────────────────────────────────────────────────
 SEND_ROWS = [
     pytest.param("config", "Bearer <the Go key>", UA_CELL, "a UUID, new on every fetch", id="the console read carries the key and a client identity"),
     pytest.param("catalog", "absent", UA_CELL, "absent", id="the catalog read carries no credential"),
     pytest.param("docs", "absent", UA_CELL, "absent", id="the docs fetch carries no credential"),
+    pytest.param("limits", "absent", UA_CELL, "absent", id="the limits read carries no credential ⚖"),
 ]
 
 
 @pytest.mark.parametrize(("read", "expected_authorization", "expected_user_agent", "expected_x_opencode_session"), SEND_ROWS,
                          ids=[p.id for p in SEND_ROWS])
 async def test_fetch_sends(cworld, vendor, read, expected_authorization, expected_user_agent, expected_x_opencode_session):
-    world(upstream="catalog-ok · config-ok · docs-ok")
+    world(upstream="catalog-ok · config-ok · docs-ok · limits-ok")
     app = cworld.build()
-    source = "docs" if read == "docs" else "config"
+    source = "docs" if read in ("docs", "limits") else "config"
     with when(f"the {source} source refreshes twice; the vendor's journal of the {read} read"):
         await app.state.catalog.refresh_source(source)
         await app.state.catalog.refresh_source(source)
