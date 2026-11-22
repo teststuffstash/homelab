@@ -196,6 +196,13 @@ MAP=(
   "docs-graph-lint:."
   "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
   "lock-intake-lint-test:^scripts/lock-intake-lint"
+  # the OFFLINE half of lock-intake-lint's 7-day floor, for uv projects (homelab#3425): every uv.lock
+  # the change touches carries `[options] exclude-newer` at least 7 days old. The full lint stays PR_ONLY below (it needs
+  # the PR's base, api.osv.dev and the registries — a worker pod reaches none of the last two), so
+  # without this row a ride's pr-gate was green on a fresh lock that `ci` then refused (PR #3400).
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author; no ci.yaml step — `ci`
+  # runs the full lint.
+  "-- python3 scripts/lock-intake-lint.py --uv-floor:(^|/)uv\.lock$"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which
