@@ -1,5 +1,5 @@
 # Mints the least-privilege `homelab-tofu-apply` write token that tofu/cloudflare/ uses.
-# Two policies: zone-scoped (DNS/SSL/WAF/Settings/Single Redirects) + account-scoped (Tunnel). Permission-group IDs
+# Two policies: zone-scoped (DNS/SSL/WAF/Settings/Single Redirects) + account-scoped (Tunnel, Notifications). Permission-group IDs
 # are resolved by name so we don't hard-code opaque UUIDs. Names are URL-encoded per the
 # data-source contract; scope disambiguates same-named account vs zone groups.
 
@@ -56,6 +56,14 @@ data "cloudflare_api_token_permission_groups_list" "dynamic_url_redirects_write"
   scope = "com.cloudflare.api.account.zone"
 }
 
+# Notifications Write (oracle handoff 2026-11-21): the account's Tunnel Health Alert policy
+# (cloudflare_notification_policy, tofu/cloudflare/notifications.tf) — the outside-vantage
+# public-path check. Account-scoped; covers the policies list the root reads for its destination.
+data "cloudflare_api_token_permission_groups_list" "notifications_write" {
+  name  = "Notifications%20Write"
+  scope = "com.cloudflare.api.account"
+}
+
 data "cloudflare_api_token_permission_groups_list" "tunnel_write" {
   name  = "Cloudflare%20Tunnel%20Write"
   scope = "com.cloudflare.api.account"
@@ -77,12 +85,14 @@ resource "cloudflare_api_token" "tofu_apply" {
   # provider 5.19.1 compares policies positionally; zone-first = perpetual swap-diff + four
   # "inconsistent result" errors per apply (see observability-read.tf for the full record).
   policies = [
-    # Account-scoped: the Cloudflare Tunnel + its remote config.
+    # Account-scoped: the Cloudflare Tunnel + its remote config, and the notification policies.
     {
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.tunnel_write.result[0].id },
-      ]
+      # sort(): API returns permission_groups ascending by id (see observability-read.tf).
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.tunnel_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.notifications_write.result[0].id,
+      ]) : { id = gid }]
       resources = jsonencode(local.account_resource)
     },
     {
