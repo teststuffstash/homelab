@@ -275,7 +275,11 @@ curl -sk -H "Authorization: Bearer $TOKEN" -H "X-Scope-OrgID: oracle-fleet" \
   --data-urlencode 'limit=100'
 ```
 
-Four things decide whether a call works, and each has a distinct failure signature:
+**The mono jail (the seat, a second jail)** holds the cluster-admin kubeconfig, so it skips the door:
+`devbox run -- kubectl --kubeconfig tofu/kubeconfig -n loki port-forward svc/loki 3100:3100`, then the
+same query against `http://localhost:3100` with only the `X-Scope-OrgID: <tenant>` header (no token).
+
+Four things decide whether a call through the door works, and each has a distinct failure signature:
 
 | you get | it means |
 |---|---|

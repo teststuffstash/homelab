@@ -152,8 +152,8 @@ MAP=(
   "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
   # the scan island's gate (homelab#3389, islands/scan/): ruff + pytest incl. the replay-family adapter.
-  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
-  # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). CI runs it
+  # as the "Scan island suite" step (#3391).
   "-- bash islands/scan/scripts/ci.sh:^(islands/scan/|agents/replay/(fixtures/(major-handoff|updater)/|stubs/|run\.sh$)|agents/(major-handoff|update-pr-branch|renovate-currency|machine-comment)\.sh$)"
   # the scan island's browsable specs site (islands/scripts/specs-site.sh: the suite for its evidence,
   # the mkdocs build, the mirror to the scan-specs bucket; soft-skips the upload without
@@ -168,9 +168,8 @@ MAP=(
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
   # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
-  # as rule()-labelled cases + the stub control; enters the island's own devbox). GitHub CI has no step
-  # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
-  # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
+  # as rule()-labelled cases + the stub control; enters the island's own devbox). CI runs it as the
+  # "Launch island suite" step (#3391). Island-only trigger: an agents/replay/ change does not re-run it.
   "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
   # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
   # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
@@ -180,8 +179,7 @@ MAP=(
   "pr-open-self-test:^agents/pr-open\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   # the retro island's tests root (Goal #3384): uv sync --frozen + ruff + pytest over the replay oracle.
-  # No ci.yaml step runs it yet (ci.yaml is pin-only-guarded; the step lands operator-direct, like the
-  # specs-review-self-test row) — so pr-gate is the only place it runs today.
+  # CI runs it as the "Retro island suite" step (#3391).
   "-- bash islands/retro/scripts/ci.sh:^islands/retro/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
@@ -203,6 +201,7 @@ MAP=(
   # The `-- <cmd>` form because the root devbox.json is codeowner-author; no ci.yaml step — `ci`
   # runs the full lint.
   "-- python3 scripts/lock-intake-lint.py --uv-floor:(^|/)uv\.lock$"
+  "image-clock-test:^scripts/image-clock"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which

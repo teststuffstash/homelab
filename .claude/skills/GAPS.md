@@ -50,13 +50,14 @@ bounded build); handoff-G4 waits on claude-jail#11.
       2026-09-05 → 10-21 still sat in `inbox/` (6 of them long resolved) — the promoted step holds
       only when the skill is invoked on EVERY inbox file, not the ones the operator named; done by
       a fork that day.
-- [ ] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
+- [x] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
       10-19, ~10-22): OUTBOUND mono→stack notices written to `<stack>/done/`, and a second jail's
       durable record (step 6 collides with second-jail rule 2). Operator 2026-10-26: expand the
       protocol for now; the direction is stack↔platform comms that need no live seat
       (`platform-request` label); "a useful antipattern to keep an eye on". The skill half landed
-      (step 6, mission line); the protocol half is claude-jail#11 (`tools/handoff.md`) — close
-      this entry when it merges.
+      (step 6, mission line); the protocol half is claude-jail#11 (`tools/handoff.md`), merged
+      2026-11-22. **promoted→** a second jail's durable records ride a typed one-time wind-down
+      handoff (`handoff/seat-records.md`, homelab#3673).
 
 ## meta-coordinate
 

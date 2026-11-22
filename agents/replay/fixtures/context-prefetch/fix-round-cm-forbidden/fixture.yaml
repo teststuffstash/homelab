@@ -1,0 +1,11 @@
+# homelab#1941 — fix round, ConfigMap create refused Forbidden: a cause a delete cannot fix, so the launcher
+# must NOT delete anything and must NOT retry. The argv fallback runs, and its line names Forbidden.
+name: context-prefetch/fix-round-cm-forbidden
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_KUBECTL_create=forbidden
