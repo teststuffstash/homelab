@@ -284,7 +284,11 @@ resource "helm_release" "longhorn" {
     # FU-224 (2026-09-08): manager cpu 150m → 300m (req==limit kept, Guaranteed QoS per FU-112b) — the
     # 150m was sized for memory, and the throttling panel read 9–21 % of CFS periods throttled per
     # manager pod (attach/rebuild/scheduling plane, not the data path — instance-manager is unlimited).
-    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "300m", memory = "512Mi" }, limits = { cpu = "300m", memory = "512Mi" } } }
+    # 2026-11-22 (homelab#3653): manager memory 512Mi → 768Mi (req==limit kept, Guaranteed). hp-01's
+    # manager (32 replicas, the most of any node) read 466Mi = 91 % of 512Mi, 7 d peak 493Mi.
+    # 768Mi is ~1.56× that peak: the manager now departs from the "~2× observed peaks (manager
+    # ~352Mi" sizing in the FU-112(b) comment above, on purpose (1Gi = 2× was not needed).
+    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "300m", memory = "768Mi" }, limits = { cpu = "300m", memory = "768Mi" } } }
     # ⚠ Only the toleration on this line reaches anything: `longhornDriver` maps to the chart's
     # longhorn-driver-deployer Deployment (longhorn-1.12.0 templates/deployment-driver.yaml consumes
     # .Values.longhornDriver.{log.format,priorityClass,tolerations,nodeSelector} — and nothing else).
