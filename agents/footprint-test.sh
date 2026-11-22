@@ -136,6 +136,20 @@ expect_classify "codeowner-author" "devbox.lock"             "devbox.lock"
 expect_classify "codeowner-author" "box-verb"                "scripts/node-maintenance.sh"
 expect_classify "codeowner-author" "box-verb-cp"             "scripts/controlplane-upgrade.sh"
 expect_classify "codeowner-author" "mgmt-scripts"            "mgmt/scripts/mgmt-lib.sh"
+# The set is scripts/governance-lint.sh's GOVERNANCE= line (one list): policy/ and CODEOWNERS
+# are in it — a worker PR touching them is red in CI, so no worker can deliver them.
+expect_classify "codeowner-author" "policy"                  "policy/iac/rule.yaml"
+expect_classify "codeowner-author" "policy-bare-dir"         "policy"
+expect_classify "codeowner-author" "codeowners"              "CODEOWNERS"
+expect_classify "codeowner-author" "dot-github-bare-dir"     ".github"
+# Root anchor: only the REPO-ROOT devbox files are in the set; a sub-project's devbox.json is an
+# ordinary path (a worker read gateway/devbox.json as never-touch from a prose list).
+expect_classify "machine-merge"    "sub-project-devbox"      "gateway/devbox.json"
+expect_classify "machine-merge"    "sub-project-devbox-lock" "gateway/devbox.lock"
+expect_classify "machine-merge"    "non-box-script"          "scripts/goal-lint.sh"
+# An unreadable set fails CLOSED: every path holds, never releases.
+_r="$(CLASSIFY_GOVERNANCE_LINT=/no/such/governance-lint.sh CLASSIFY_CODEOWNERS="$HERE/../CODEOWNERS" classify_touches "argocd/resources/loki/" 2>/dev/null || true)"
+[ "$_r" = "codeowner-author" ] || { echo "FAIL: classify_touches set-unreadable (want=codeowner-author got=$_r)"; fails=$((fails + 1)); }
 
 # Tier 1 — machine-merge (CI gate, unowned)
 expect_classify "machine-merge"    "argocd-resources"        "argocd/resources/loki/"
@@ -155,7 +169,6 @@ expect_classify "machine-merge"    "machines"                "machines/wk-01.yam
 
 # Tier 3 — codeowner-merge (loop's own machinery)
 expect_classify "codeowner-merge"  "agents"                  "agents/coordinator-scan.sh"
-expect_classify "codeowner-merge"  "policy"                  "policy/iac/rule.yaml"
 expect_classify "codeowner-merge"  "tofu-github"             "tofu/github/main.tf"
 expect_classify "machine-merge"    "tofu-cloudflare"         "tofu/cloudflare/dns.tf"
 
