@@ -28,7 +28,7 @@ if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
   # Per-call failure injection (homelab#1386): STUB_KUBECTL_<slug>=<mode> refuses ONE named write —
   # a clause with a create-then-fallback branch (context-prefetch's ConfigMap) needs to observe a
   # REFUSED write, and writes otherwise always succeed unconditionally. Modes (homelab#1941):
-  #   fail               refused, generic error
+  #   fail               refused, silently (no stderr — the launcher's bare-fallback line)
   #   alreadyexists      refused every time with AlreadyExists (a stale bundle a retry cannot fix)
   #   alreadyexists-once refused with AlreadyExists on the FIRST create of the run, then succeeds — the
   #                      count reads the action stream, which _rp_record has just appended to
@@ -36,7 +36,6 @@ if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
   PC_OVERRIDE="$(_rp_per_call_override "$(_rp_slug "$WORDS")")" || PC_OVERRIDE=''
   case "$PC_OVERRIDE" in
     fail)
-      printf 'error: the server could not find the requested resource\n' >&2
       exit 1 ;;
     alreadyexists)
       printf 'Error from server (AlreadyExists): configmaps already exists\n' >&2

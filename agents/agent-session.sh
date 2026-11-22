@@ -2158,7 +2158,7 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
       # or crashed earlier attempt at this (task, round) left its bundle behind, and nothing reaped it
       # (the pod's ownerReference only GCs once the pod is deleted). Only the same-key pod can say whether
       # a bundle is still mounted, so the delete is gated on that pod being absent or terminal.
-      pf_cm_create() { printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - 2>&1 >/dev/null; }
+      pf_cm_create() { { printf '%s' "$PF_CM_MANIFEST" | "$KUBECTL" $KUBE create -f - >/dev/null; } 2>&1; }
       PF_CM_CREATED=""; PF_CM_MOUNT=""; PF_CM_VOLUME=""
       PF_CM_OK=""; PF_CM_ERR="$(pf_cm_create)" && PF_CM_OK=1
       if [ -z "$PF_CM_OK" ] && [ "${PF_CM_ERR#*AlreadyExists}" != "$PF_CM_ERR" ]; then
@@ -2188,7 +2188,7 @@ $(printf '%s' "$PF_CI_FAILURE_MD" | sed 's/^/    /')"
         # The prelude just creates the mount point (ConfigMap is mounted by the pod manifest)
         PF_CONTEXT_PRELUDE="mkdir -p /work/context; "
       else
-        PF_CM_ERR1="$(printf '%s\n' "$PF_CM_ERR" | head -n1)"
+        PF_CM_ERR1="$(sed -n 1p <<< "$PF_CM_ERR")"
         echo "→ context pre-fetch: ConfigMap creation failed — falling back to argv delivery${PF_CM_ERR1:+: $PF_CM_ERR1}" >&2
         PF_CM_CREATED=""
         # Fall back to argv delivery: TWO files (base64-encode each, prepend to RUN_CMD) — the
