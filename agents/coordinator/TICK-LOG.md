@@ -15795,3 +15795,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Already homed, nothing new filed: the renovate.md transitive-OSV correction and the "renovate:44 floats" ruling
   (pin rejected, operator 11-21) are in #3652; lock-intake-lint-into-stacks is an open operator call in meta-state.
   Updated that meta-state pickup (hold #110, the non-converging floor, the worker-intake + reviewer-line notes).
+
+## 2026-11-22 (evening) — seat: codeowner reads; #3676's tofu/github applied
+
+- Codeowner reads (no corpus, operator's ask): #3669 (bare cross-repo dispositions member refused) and #3670 (stale
+  context-ConfigMap recovery, owner-gated) admin-merged by the seat on the operator's word → dbb13594e, 09d976549.
+  #3671 (ci-red park rule in the coordinator brief): history stripped (briefs carry rules + ADR ids only), pushed
+  11a206f6f, back to the bots then the codeowner. #3627 (operator admin merge, behind, unreviewed) + #3652: master CI
+  green on both (45048463020, 45048719148).
+- #3676 (intake access spec): its `tofu/github` change (`do_not_enforce_on_create = true` on `required-checks`) applied
+  by the operator from the host on the PR branch, checked out in the shared tree on request and switched back to
+  master. Live ruleset read: `do_not_enforce_on_create: true`. The PR still has to land.
