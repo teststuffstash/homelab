@@ -1403,15 +1403,13 @@ finding is the terminal ride (pod, launcher, budget), not another fix round.
 once a round has completed: while no round has posted stats since the scan's marker, the gate
 re-arms on every tick (FU-199, below). So a ruling that dispatches no round and re-runs nothing
 must park — `agent/blocked`, the reason, and a `blocked-on:` marker line in the same comment
-(§Blocked-on marker below) — or the same red is handed to a new ride every tick (PR #3400,
-2026-11-14: twelve rides in 55 minutes and no round, until the twelfth ruling wrote the marker).
+(§Blocked-on marker below) — or the same red is handed to a new ride every tick.
 There is no wait play: a red that a date would clear is still a red the diff can fix. A
 `lock-intake-lint` red of the form `too new <package>@<version>` on a lock file the PR itself adds
 or re-resolves is **content**: re-dispatch a fix round that sets the resolver's age cutoff in the
 project file and re-locks, without pinning a version — for a uv project the `[tool.uv]` block
 `gateway/pyproject.toml` carries (`exclude-newer = "<a date at least 7 days back>"`). That is
-ADR-143 (1)'s own mechanism applied at lock time, not the override ADR-143 (3) forbids (operator
-ruling on PR #3400, 2026-11-15).
+ADR-143 (1)'s own mechanism applied at lock time, not the override ADR-143 (3) forbids.
 
 > **FU-199 (2026-09-03): two blind spots closed.** The state-fp debounce had two silent stalls
 > that the board could not see:
