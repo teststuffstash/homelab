@@ -18,6 +18,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-22 — island ladder spike, PR #3672 UNARMED, the operator reads it first; FU-320).**
+  `docs/spikes/island-ladder/` on branch `fix/island-ladder`: a position page per
+  island, the replay-to-specs map, and the README's three-group sort. Owed, all the operator's:
+  - Rule the README §What would settle it (the rung list, where a roadmap lives, replay retirement, the experiment reader).
+  - Cut `goal/3656-scan-checkpoint-b` (and the launch/retro Goal branches for #3480, #3482) — the intake identity is
+    refused with HTTP 422; the class is still untracked. Before the cut, read #3656 pins 9 and 10 (intake's own picks).
+  - `/seat-review 3627`, then admin-merge: until then no required check gates the scan, launch or retro suites.
+  - Loop state at wind-down: #1941 (PR #3670, r3 after a changes-requested) and #2589 (PR #3669) riding; both
+    un-latched by intake closing #3095 at 06:39 UTC.
 - **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
   The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
   - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
