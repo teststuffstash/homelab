@@ -49,5 +49,5 @@ What this island adds, by rule:
 | [INTAKE-ACCESS-GATEWAY](access.md#intake-access-gateway) | access | the gateway admits the sitting's sessions |
 | [INTAKE-ACCESS-TRANSCRIPTS](access.md#intake-access-transcripts) | access | ride records read, receipts written |
 | [INTAKE-ACCESS-METRICS](access.md#intake-access-metrics) | access | alerts and gauges read, the sitting's gauges pushed |
-| [INTAKE-ACCESS-DENIED](access.md#intake-access-denied) | access | no bypass, no unchecked update, no unreviewed change, no administration |
-| [INTAKE-ACCESS-OWN-APP](access.md#intake-access-own-app) | access | the ruled target: a dedicated App and its least permission set |
+| [INTAKE-ACCESS-DENIED](access.md#intake-access-denied) | access | no bypass, no unchecked update, no unreviewed change, no administration, no workflow push, no PR write, no rerun |
+| [INTAKE-ACCESS-OWN-APP](access.md#intake-access-own-app) | access | the sitting's own App: one mint site, one consumer, exactly the least permission set |

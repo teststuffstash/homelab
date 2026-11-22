@@ -1,0 +1,25 @@
+# The jail-cluster cap (ADR-167): at most 2 concurrent pods. `pods` is the cap; the memory and
+# storage lines are belts sized from it. One pod requests ~4 GiB: dind 2560Mi (the standard ride's
+# envelope, agents/agent-session.sh REPLAY:ride-size) + runner 1Gi + kata overhead 512Mi (the
+# RuntimeClass podFixed, which quota counts) — an ESTIMATE until the first real run records the
+# true peak (docs/jail-clusters.md §Sizing). Over the cap, CREATE fails with "exceeded quota" and
+# the verb says so; nothing queues. Raise the cap only with nx-01 headroom measured, never as a
+# convenience. Node disk: every container carries ephemeral-storage requests/limits (limitrange.yaml
+# defaults + max; the runner sets its own), every emptyDir a sizeLimit (the admission policy), and
+# the two ephemeral-storage lines below cap the namespace. Each pod's dind layer store is one 20Gi longhorn-scratch block PVC that dies with
+# the pod (ephemeral volume).
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: jail-clusters
+  namespace: jail-clusters
+spec:
+  hard:
+    pods: "2"
+    requests.memory: 10Gi
+    limits.memory: 10Gi
+    persistentvolumeclaims: "2"
+    requests.storage: 40Gi
+    longhorn-scratch.storageclass.storage.k8s.io/requests.storage: 40Gi
+    requests.ephemeral-storage: 8Gi
+    limits.ephemeral-storage: 24Gi

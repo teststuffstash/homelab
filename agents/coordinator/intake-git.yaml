@@ -1,8 +1,7 @@
 # Island intake's git token: mints the `intake-git` Secret the island intake CronWorkflow
-# (island-intake-argo.yaml) will read as GH_TOKEN — the sitting's OWN identity,
-# homelab-intake[bot] (docs/github-apps.yaml). Until the cutover PR the workflow keeps reading
-# `coordinator-git`; this chain only makes the Secret exist. Same ESO chain shape as
-# specs-reviewer-git.yaml.
+# (island-intake-argo.yaml) reads as GH_TOKEN in every leaf — the sitting's OWN identity,
+# homelab-intake[bot] (docs/github-apps.yaml), and nothing else's (islands/intake/specs/access.md
+# INTAKE-ACCESS-OWN-APP). Same ESO chain shape as specs-reviewer-git.yaml.
 #
 # Registered 2026-11-22 by `scripts/github-app-bootstrap.sh homelab-intake register` (the ids below +
 # docs/github-apps.yaml; key in Infisical INTAKE_GH_APP_PRIVATE_KEY + the wallet). ArgoCD-managed

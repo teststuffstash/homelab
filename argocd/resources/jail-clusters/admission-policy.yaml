@@ -1,0 +1,124 @@
+# jail-clusters-pod-guard — MANDATORY companion of the jail-cluster grant (ADR-167). The namespace
+# lets a token holder create pods that run a PRIVILEGED dind container; PodSecurity admits it only
+# because the apiserver exempts the kata runtimeClass. Without this policy that grant is root on a
+# node. With it, every pod in jail-clusters is a kata microVM on nx-01 whose only images are the
+# pinned dind and a release-tagged agent-base, with no host-access field and no API credential.
+# That the microVM then contains a privileged container is an ASSUMPTION about the kata build on
+# this cluster (the Talos extension's default config), checked by scripts/jail-cluster-smoke.sh's
+# first step before anyone is handed a token (ADR-167):
+#   (a) runtimeClassName == kata
+#   (b) nodeSelector hostname == nx-01                (nodeName, if set, must be nx-01 too)
+#   (c) an initContainer `dind` with the pinned image the docker-mode ride's sidecar
+#   (d) every image ∈ {pinned dind, agent-base:<release tag>} — agent-base is NOT pinned to one
+#       tag: its pin in agents/images.env is bumped by the auto-merging deploy-pin lane, and CEL
+#       cannot read that file, so a copy here would refuse every jail pod after each bump. The
+#       tag SHAPE is pinned (YYYY.M.D-g<sha>[.N]: no :latest, no digest-less floating tag), and
+#       only the releaser identity can push to registry.teststuff.net
+#   (e) privileged / added capabilities only on the pinned dind image
+#   (f) no hostNetwork / hostPID / hostIPC, no hostPort
+#   (g) volumes ⊆ emptyDir, ephemeral, configMap, downwardAPI — no hostPath (kata shares a
+#       hostPath into the guest from the host), and no projected (its serviceAccountToken source
+#       would mint a pod-bound token of any lifetime)
+#   (h) no ephemeral containers
+#   (i) activeDeadlineSeconds set, ≤ 14400 (leak control)
+#   (j) priorityClassName == jail-clusters (they lose to rides and CI)
+#   (k) automountServiceAccountToken == false        no API token inside the pod
+#   (l) serviceAccountName == jail-cluster-runner    an empty SA (no bindings, automount off) —
+#       never jail-cluster, whose Role creates pods: a pod running as it would carry, or could
+#       project, a token that outlives the minted one. Dedicated rather than `default`: `default`
+#       exists implicitly in every namespace, and a later binding to it would silently arm every
+#       pod; one named, empty SA makes the grant (none) explicit and reviewable
+#   (m) label app == jail-cluster                    `list` and `reap` select on it — no pod in
+#       the namespace can hide from them
+#   (n) every emptyDir has sizeLimit <= 1Gi          node disk is bounded (the quota bounds the
+#       containers' ephemeral-storage; a LimitRange gives each container a default + max)
+# Native ValidatingAdmissionPolicy — the repo's in-cluster admission shape (kargo-write-guard,
+# ADR-147's pg-backup-default); there is no Kyverno controller. failurePolicy Fail: a broken policy
+# blocks only jail-cluster pods. Pods/ephemeralcontainers are matched so (h) cannot be added later.
+#
+# ⚠ The dind pin below is a SECOND copy of agents/images.env AGENT_DIND_IMAGE (CEL cannot read a
+# file). scripts/jail-cluster-test.sh fails when they differ; a dind bump edits both. A stale pin
+# here fails closed (jail pods refused), never open.
+# Fixtures: scripts/fixtures/jail-cluster/ (run by scripts/jail-cluster-test.sh).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: jail-clusters-pod-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/ephemeralcontainers]
+  matchConditions:
+    - name: jail-clusters-namespace-only
+      expression: "request.namespace == 'jail-clusters'"
+  variables:
+    - name: dindImage
+      expression: "'ghcr.io/k3d-io/k3d:5-dind@sha256:ee3872700ed070566d3680e4926d8d60b1f0d3a948e595fec52103c2ae758921'"
+    - name: containers
+      expression: >-
+        object.spec.containers
+        + (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    - expression: "has(object.spec.runtimeClassName) && object.spec.runtimeClassName == 'kata'"
+      messageExpression: "'jail-clusters-pod-guard (a): pod ' + object.metadata.name + ' must set runtimeClassName: kata'"
+    - expression: >-
+        has(object.spec.nodeSelector) && 'kubernetes.io/hostname' in object.spec.nodeSelector
+        && object.spec.nodeSelector['kubernetes.io/hostname'] == 'nx-01'
+        && (!has(object.spec.nodeName) || object.spec.nodeName == 'nx-01')
+      messageExpression: "'jail-clusters-pod-guard (b): pod ' + object.metadata.name + ' must be pinned to nx-01 by nodeSelector kubernetes.io/hostname'"
+    - expression: >-
+        has(object.spec.initContainers)
+        && object.spec.initContainers.exists(c, c.name == 'dind' && c.image == variables.dindImage)
+      messageExpression: "'jail-clusters-pod-guard (c): pod ' + object.metadata.name + ' must carry the dind sidecar with the pinned image ' + variables.dindImage"
+    - expression: >-
+        variables.containers.all(c, c.image == variables.dindImage
+          || c.image.matches('^registry\\.teststuff\\.net/agent-base:[0-9]{4}\\.[0-9]{1,2}\\.[0-9]{1,2}-g[0-9a-f]{7,40}(\\.[0-9]+)?$'))
+      messageExpression: "'jail-clusters-pod-guard (d): pod ' + object.metadata.name + ' runs an image other than the pinned dind or agent-base'"
+    - expression: >-
+        variables.containers.all(c, c.image == variables.dindImage || !has(c.securityContext)
+          || ((!has(c.securityContext.privileged) || !c.securityContext.privileged)
+              && (!has(c.securityContext.capabilities) || !has(c.securityContext.capabilities.add)
+                  || size(c.securityContext.capabilities.add) == 0)))
+      messageExpression: "'jail-clusters-pod-guard (e): pod ' + object.metadata.name + ' grants privilege or capabilities outside the pinned dind'"
+    - expression: >-
+        !(has(object.spec.hostNetwork) && object.spec.hostNetwork)
+        && !(has(object.spec.hostPID) && object.spec.hostPID)
+        && !(has(object.spec.hostIPC) && object.spec.hostIPC)
+        && variables.containers.all(c, !has(c.ports)
+          || c.ports.all(p, !has(p.hostPort) || p.hostPort == 0))
+      messageExpression: "'jail-clusters-pod-guard (f): pod ' + object.metadata.name + ' uses a host namespace or a hostPort'"
+    - expression: >-
+        !has(object.spec.volumes) || object.spec.volumes.all(v, has(v.emptyDir) || has(v.ephemeral)
+          || has(v.configMap) || has(v.downwardAPI))
+      messageExpression: "'jail-clusters-pod-guard (g): pod ' + object.metadata.name + ' mounts a volume type outside emptyDir/ephemeral/configMap/downwardAPI (no hostPath, no projected)'"
+    - expression: "!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0"
+      messageExpression: "'jail-clusters-pod-guard (h): no ephemeral containers in jail-clusters (pod ' + object.metadata.name + ')'"
+    - expression: "has(object.spec.activeDeadlineSeconds) && object.spec.activeDeadlineSeconds <= 14400"
+      messageExpression: "'jail-clusters-pod-guard (i): pod ' + object.metadata.name + ' must set activeDeadlineSeconds <= 14400'"
+    - expression: "has(object.spec.priorityClassName) && object.spec.priorityClassName == 'jail-clusters'"
+      messageExpression: "'jail-clusters-pod-guard (j): pod ' + object.metadata.name + ' must use priorityClassName jail-clusters'"
+    - expression: "has(object.spec.automountServiceAccountToken) && object.spec.automountServiceAccountToken == false"
+      messageExpression: "'jail-clusters-pod-guard (k): pod ' + object.metadata.name + ' must set automountServiceAccountToken: false'"
+    - expression: "has(object.spec.serviceAccountName) && object.spec.serviceAccountName == 'jail-cluster-runner'"
+      messageExpression: "'jail-clusters-pod-guard (l): pod ' + object.metadata.name + ' must run as serviceAccountName jail-cluster-runner (the empty SA)'"
+    - expression: >-
+        has(object.metadata.labels) && 'app' in object.metadata.labels
+        && object.metadata.labels['app'] == 'jail-cluster'
+      messageExpression: "'jail-clusters-pod-guard (m): pod ' + object.metadata.name + ' must carry the label app=jail-cluster'"
+    - expression: >-
+        !has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.emptyDir)
+          || (has(v.emptyDir.sizeLimit)
+              && quantity(string(v.emptyDir.sizeLimit)).compareTo(quantity('1Gi')) <= 0))
+      messageExpression: "'jail-clusters-pod-guard (n): pod ' + object.metadata.name + ' has an emptyDir without a sizeLimit <= 1Gi'"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: jail-clusters-pod-guard
+spec:
+  policyName: jail-clusters-pod-guard
+  validationActions: [Deny]

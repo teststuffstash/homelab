@@ -1,0 +1,25 @@
+# jail clusters (ADR-167, docs/jail-clusters.md) — the namespace, cap, priority, admission guard,
+# egress and token identity for the throwaway kata+dind pods scripts/jail-cluster.sh starts on
+# nx-01. Raw manifests in argocd/resources/jail-clusters/. Optional tooling: nothing depends on it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jail-clusters
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/jail-clusters
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jail-clusters
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
