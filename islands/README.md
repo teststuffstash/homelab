@@ -25,7 +25,7 @@ section — not on master) measured as separable pieces of the agent loop. They 
 | [scan](scan/README.md) | `SCAN-` | [specs/](scan/specs/README.md) | [scan.md](../docs/intake/scan.md) | the coordinator scan's decision + dispatch, the GitHub grammar, the updater, the review reflex, the major handoff, liveness signals |
 | [launch](launch/README.md) | `LAUNCH-` | [specs/](launch/specs/README.md) | [launch.md](../docs/intake/launch.md) | the ride: dispatch params × recipe × claim → gateway admission → context bundle → pod env → outcome |
 | [retro](retro/README.md) | `RETRO-` | [specs/](retro/specs/README.md) | [retro.md](../docs/intake/retro.md) | the weekly retro series: guard, pipeline, activity, cells, harvest, findings |
-| [intake](intake/README.md) | — | — (no spec root) | — (its items ride the gateway's sitting) | island intake as it runs today, moved into one directory (#3575): the rules, the selector, the launcher script, the tests |
+| [intake](intake/README.md) | `INTAKE-` | [specs/](intake/specs/README.md) — one page, `access` (not under `extraSpecs` yet) | — (its items ride the gateway's sitting) | island intake as it runs today, moved into one directory (#3575): the rules, the selector, the launcher script, the tests; its spec root holds what the sitting's identity must and must not be able to do |
 
 Not started: `review` (the code and specs reviewers, the IAC-G04 sentinel) and a fresh build of
 `intake` (island intake, the deep dig, the responder) — the spike drafted both; they wait. The
