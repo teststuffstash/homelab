@@ -26,8 +26,8 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
     `goal/3656-…` and the #3480/#3482 Goal branches (or said why not). Then weigh a create+delete rule on `goal/**` with
     homelab-intake the only non-admin bypass (it can delete a goal ref today — gap row on the access page); fix
     `meta-throughput.sh` (counts intake writes by the old author) and the stale coordinator-git cell in `gateway/specs/access.md`.
-  - #3683 (ladder README order, ARMED) — let it land. #3678 (jail-cluster rig, ADR-167, UNARMED): the operator reads it;
-    its baseline commit d4c71f09a (three names in `policy/iac/exceptions/homelab.yaml`) goes direct to master first.
+  - #3683 and #3678 (jail-cluster rig, ADR-167) MERGED 11-22; #3688 fixed the rig's ghcr blob egress + `list`; smoke PASSED
+    (SERVICES row LIVE). Operator: k3d is not a goal (kind is proven) — if k3d breaks again, document it unsupported, no rework.
 - **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
   The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
   - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
@@ -71,8 +71,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   422'd every repo's IssueLabels — alert for that class is #3650); #3563 labelled, dry-run read = `pending`.
   NEXT: the Production-leg read — #3563 decided at its bound (2026-11-27T13:14Z with the 5-min settle): exactly ONE
   verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
-  oracle inbox holds two unclaimed tasks (`20261116-2130-intake-size-test-nameable-split`,
-  `20261120-1819-oracle-prod-diagnose-step-back-grants` — the second asks for grants: the operator's).
 - **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator) — MERGED 2026-11-22 17:15Z `812b016f3`** (seat review + full CI by dispatch, run 45045460749). Supersedes ADR-158: stack pins lead by TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker a release clock (first sighting on the `image-clock` side branch). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
   (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
@@ -127,8 +125,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `~/.claude/oracle-mining-2026-11-16/` (seat prep list vs the loop's Goal are both in there) — release identity on
   `/healthz`, a synthetic-traffic label, outcome alerts, its dashboard as code (it has none), the claims file + judge, loop
   self-metrics; and the open question from 11-16: the gateway path dropped the per-session OpenRouter budget key with no
-  ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: adopt the nameable-split size test (handoff
-  `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `islands/intake/rules/intake.md`; the specs-reviewer rule tally, THEN
+  ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: split the gateway's FACTS out of `islands/intake/rules/intake.md`; the specs-reviewer rule tally, THEN
   rule #3495 (the escape read's first filing against intake's own rules); a `wait: stalled` re-read kind in `intake-select.sh`.
   OVERNIGHT TRIAL (operator: "lets see in the morning how it went"): five operator-origin gateway inputs filed 11-16
   ~21:00Z — #3501 (release on /healthz), #3502 (real vs synthetic traffic), #3503 (dashboard as code), #3504 (outcome
@@ -192,7 +189,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The next ci-runner template change is the first unattended
   recreate expected to need no seat close (#3372): read its journal for "window closed by the verb" + `management-apply=success`.
 - **⚑ HANDOFF INBOX (2026-11-16; oracle ×2, circles empty).** Grafana plugin handoff CLOSED (the chart already defaulted
-  `preinstall_auto_update` off; #3499 states it explicitly). NEW, unread: `20261116-2130-intake-size-test-nameable-split.md`.
+  `preinstall_auto_update` off; #3499 states it explicitly). Both 11-16/11-21 oracle tasks answered 11-22 (#3685; #3686/#3687).
   `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
   `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `islands/intake/rules/intake.md` or oracle-only;
   (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.

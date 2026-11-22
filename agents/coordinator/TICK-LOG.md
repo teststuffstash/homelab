@@ -15825,3 +15825,25 @@ updates or reverts as much as possible — mechanical revert or a responder."
   read of #3678 — not pushed.
 - hardware-r630-note (session e33e46b8): hardware repo only — a Dell R630 256 GB auction note (cleared €700, operator
   did not bid; hardware main b723b7a + fix). No homelab record.
+
+## 2026-11-22 (late) — seat: #3590 stall fixed by class; oracle handoffs answered; jail-cluster rig LIVE
+
+- #3590 / #3309 root cause (Loki): a duplicate launch under `timeout 590`, then pod 2's deliberate AGENT_INFEASIBLE
+  (worker-stop-report, strike=False) was sent to the gateway as `unknown` → strike → attempt=2 on another model; the
+  claim itself ("gateway/devbox.json is never-touch") was a misread of prose. Unblocked #3309; operator picked all four
+  fixes. MERGED: #3679 (deliberate stop → `clean`, no re-admission), #3680 (ground rules defer to `classify_touches`;
+  one operator-author list read from governance-lint's GOVERNANCE= line; `policy/**` + CODEOWNERS now codeowner-author;
+  iac-lane + ADR-128 consequence; responder prose list dropped), #3681 (scan classifies an AGENT_INFEASIBLE path before
+  parking; canonicalises `./`, `/./`, backticks; one refutation per issue). Each had one bot BLOCKING round, fixed in-PR.
+  Open: `.agents/fix.yaml` still lists `policy/**` as MAY AUTHOR (operator-direct); `timeout 590` double-launch untracked.
+- Oracle handoffs (inbox → done with Results): nameable-split size test → #3685 MERGED (intake step 4; oversized unit
+  queues, the estimator picks the tier; bot round fixed an `agent-budget/*` ambiguity). Public-path reachability →
+  #3686 MERGED (`CloudflaredTunnelDown`, replay silent on 11-21) + #3687 MERGED (Tunnel Health notification as code;
+  operator applied tofu/cloudflare-token from the PR branch in the shared tree — stored token values unchanged, both
+  verified active with Notifications read; seat applied tofu/cloudflare: 1 create, policy live, email). minutark.ee is
+  on the free plan: no standalone Health Checks. Incident draft 2026-11-20: 08:54–09:02 relabelled LAN DNS.
+- #3678 (jail-cluster rig) admin-merged on the operator's word after its policy baseline went direct (8fd37cebb).
+  First smoke: step 0 (kata guest devices) PASSED; k3d hung — ghcr blob redirect host denied (Hubble). #3688 MERGED
+  (pkg-containers.githubusercontent.com + `jail-cluster list` fix). Second smoke PASSED (k3d Ready in 24 s);
+  SERVICES row → LIVE. Operator: k3d is not a goal; kind is proven — abandon + document if it breaks again.
+- Renovate post-#3652 check still pending (no scheduled run since 17:16Z) — meta-state pickup stands.

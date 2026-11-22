@@ -87,10 +87,10 @@ why the admission policy must exist.
 
 ## Limits — what the bounds do NOT give
 
-- **The kata boundary is an assumption until the smoke's step 0 passes.** The policy guarantees the
+- **The kata boundary: step 0 passed on 2026-11-22** (a privileged container saw only the guest's vda/vdb — first run after #3678). It stays a per-run check, never a one-time proof. The policy guarantees the
   privileged dind runs in a kata microVM; that a privileged container in that guest cannot reach
-  nx-01 is a property of the kata build (the Talos extension's default config) nobody has checked on
-  this cluster. `scripts/jail-cluster-smoke.sh` step 0 lists what a privileged container sees and
+  nx-01 is a property of the kata build (the Talos extension's default config), first checked on this
+  cluster by that run. `scripts/jail-cluster-smoke.sh` step 0 lists what a privileged container sees and
   fails on any block device that is not the guest's own; no token is handed out before it passes.
 - **Exfiltration channels stay open, as on rides:** DNS (the kube-dns leg allows any name, so data can
   leave in queries) and `ghcr.io:443` (an authenticated push is possible with a credential brought
