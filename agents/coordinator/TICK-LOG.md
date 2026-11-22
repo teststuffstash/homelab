@@ -15747,3 +15747,23 @@ updates or reverts as much as possible — mechanical revert or a responder."
   clone; the seat wrote the README. PR #3672, unarmed. Glossary row for the two spike terms.
 - Seat corrections on the way: the gateway DOES have a wire recorder (#3300's assembly #3615 merged) — unused, not
   absent; oracle-fleet's feedback loop is built but no release carries a claim yet. Rest → meta-state.
+
+## 2026-11-22 (afternoon) — seat: typed second-jail wind-down handoff; the goal/3300 handoff filed
+
+- Operator asked for a handoff type system for second jails; ruled the handoff one-way and one-time at wind-down
+  (nothing goes back to the second jail). Shipped **#3673** (`handoff/seat-records.md`: one file per session in
+  `/workspace/.handoff/seat/`, sections `log` / `fu-new` / `fu-update` / `pickup` / `gap` / `memory` / `act`, each
+  with its destination and the primary's check). claude-jail#11 (outbound notices + second-jail records) merged by the
+  operator → GAPS handoff-G4 closed.
+- First handoff, written by the seat from an older second-jail session's final message
+  (`20261121-1943-goal-3300-wire-record.md`, deleted after filing). Second jail's arc: Goal #3300 assembly **#3615**
+  merged 2026-11-21 19:43Z (7190d761) — three master merges, one empty commit to re-trigger the reviewers, the
+  GW-MODEL-TIERS "tiers block optional" sentence, the wire-quarry fix (404 on GET /wire exits 3 naming the URL, spec
+  row + test). The code reviewer missed that 404 bug in two approvals and caught it on the third (one sighting).
+- Records filed, no FU (operator: avoid FUs where possible):
+  - merge detection by title (hand-titled merges stalled #3615: specs reviewer = content, code reviewer = merge) →
+    scan-island issue **#3674** (the pages define a merge by message shape and `src/scan_island/` copies it; parent
+    count from a REST-recorded world). The old `agents/` copies stay until switch-over; stopgap card line
+    claude-jail#15 (merges keep git's default message).
+  - seat-side Loki read path → `docs/loki-tenancy.md` quickfix (port-forward svc/loki + `X-Scope-OrgID`; proven
+    against oracle-fleet, 3 streams).
