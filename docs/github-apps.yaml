@@ -168,11 +168,11 @@ apps:
       homelab-agents on purpose (operator, 2026-11-22): that App carries workers, the coordinator
       and the loop, so its writes do not say who acted and its mint holds grants no rule of a
       sitting writes (merges, reruns, workflow pushes). The permission set is the least the
-      sitting's acts need, act by act. Until the cutover the workflow still reads
-      `coordinator-git`; this App's token (`intake-git`) has no consumer yet.
+      sitting's acts need, act by act (islands/intake/specs/access.md). Its token, Secret
+      `intake-git`, is read by the island-intake workflow alone, in every leaf.
     permissions:
       metadata: { level: read, why: "baseline" }
-      contents: { level: write, why: "cut a Goal's branch (`POST git/refs` for `refs/heads/goal/<n>-<slug>`, intake.md §A bot-authored Goal) — the ONE write; the clones need read only. Broader than the act: write also pushes to any unprotected branch — the rulesets bound it, not this grant" }
+      contents: { level: write, why: "cut a Goal's branch (`POST git/refs` for `refs/heads/goal/<n>-<slug>`, intake.md §A bot-authored Goal) — the ONE write; the clones need read only. Broader than the act: write also pushes to any unprotected branch — the rulesets bound it, not this grant. The sitting holds write only on the island repos (intake-git.yaml); a stack's source repos (its deployment repo) get a second, contents:read-only token (intake-read-git.yaml) — read-only by the mint, not by this grant" }
       issues: { level: write, why: "the sitting's outcomes: labels, comments, close, file an issue or a Goal with its bound children (sub-issue + blockedBy edges)" }
       pull_requests: { level: read, why: "read a covering PR (state, base, closing references) — the already-owned check and the experiment read's carrier walk" }
       checks: { level: read, why: "a covering PR's check runs (statusCheckRollup; a fine-grained PAT cannot read Checks — App only)" }
@@ -181,7 +181,7 @@ apps:
     absent:
       workflows: "a sitting never pushes a workflow file"
       administration: "a sitting never edits a ruleset or a repository setting"
-    installs: selected   # homelab + every repo a live claim declares under repos[].intake.facts (today: oracle-fleet)
+    installs: selected   # homelab + every repo a live claim declares under repos[].intake.facts (today: oracle-fleet) + each stack's read-only source repo intake-read-git.yaml lists (today: oracle-iac) — install BEFORE listing
     key_locations: [Infisical INTAKE_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-intake/"]
     bootstrap: { redirect_port: 8773, cred_dir: "~/.claude/homelab-github-intake", mint_site: agents/coordinator/intake-git.yaml, wallet: true }
 

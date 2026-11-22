@@ -17,12 +17,11 @@ the App declaration ([`docs/github-apps.yaml`](../../../docs/github-apps.yaml)) 
 policy ([`argocd/resources/agent-gateway/policy.json`](../../../argocd/resources/agent-gateway/policy.json))
 — and never restate them. How a sitting judges is the rules' business, not this page's.
 
-**The sitting's identity.** Rows name "the sitting's identity", never an App. Today it is whatever
-the workflow's `GH_TOKEN` resolves to: the Secret `coordinator-git`, minted from the
-`homelab-agents` App ([INTAKE-ACCESS-IDENTITY](#intake-access-identity)) — an App with many other
-users and responsibilities. The ruled target (operator, 2026-11-22) is a dedicated intake App used
-by nothing else ([INTAKE-ACCESS-OWN-APP](#intake-access-own-app)). The cluster identity (the
-gateway caller, the kube API) is the workflow's ServiceAccount.
+**The sitting's identity.** Rows name "the sitting's identity", never an App. It is whatever the
+workflow's `GH_TOKEN` resolves to: the Secret `intake-git`, minted from the `homelab-intake` App
+([INTAKE-ACCESS-IDENTITY](#intake-access-identity)), an App used by nothing else
+([INTAKE-ACCESS-OWN-APP](#intake-access-own-app)). The cluster identity (the gateway caller, the
+kube API) is the workflow's ServiceAccount.
 
 ## Interface — the machine half
 
@@ -32,27 +31,27 @@ gateway caller, the kube API) is the workflow's ServiceAccount.
 | [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | rulesets covering `refs/heads/goal/**`; the mint's `contents` | a static join + a recorded world |
 | [INTAKE-ACCESS-ISSUES](#intake-access-issues) | the mint's `issues`, `repositories` | a static join |
 | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | the mint's `pull_requests`, `checks`, `statuses`, `actions` | a static join |
-| [INTAKE-ACCESS-CLONE](#intake-access-clone) | the mint's `contents`, `repositories` | a static join (homelab only) |
+| [INTAKE-ACCESS-CLONE](#intake-access-clone) | the mint's `contents`, `repositories`; the source token's env → Secret → mint | a static join (homelab; source repos) |
 | [INTAKE-ACCESS-GATEWAY](#intake-access-gateway) | `policy.json` `callers` | a static join |
 | [INTAKE-ACCESS-TRANSCRIPTS](#intake-access-transcripts) | the manifest's `agent-transcripts-s3` keys | — |
 | [INTAKE-ACCESS-METRICS](#intake-access-metrics) | the manifest's `PROMETHEUS`, `PUSHGATEWAY` | — |
 | [INTAKE-ACCESS-DENIED](#intake-access-denied) | every ruleset's `bypass_actors` and rules; the mint | a static join |
-| [INTAKE-ACCESS-OWN-APP](#intake-access-own-app) | — (no such App yet) | — |
+| [INTAKE-ACCESS-OWN-APP](#intake-access-own-app) | the App's mint sites and its Secret's consumers; its declared permissions | a static join |
 
 ## Requirement index
 
 | Requirement | section | Status |
 |---|---|---|
 | [INTAKE-ACCESS-IDENTITY](#intake-access-identity) | who acts | 🚧 WIP — no evidence publisher for this root (rule-labelled tests in `specs-tests/tests/test_access.py` pass locally against the declared records) |
-| [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | what the rules write | 🚧 WIP — no evidence publisher for this root (`create-goal-ref`, `refused-2026-11-22` and `accepted-after-the-fix` pass locally against `tofu/github/repo_rulesets.tf` and the two recorded worlds; the accepted answer was recorded after the 2026-11-22 apply). ⚑ gap — the same identity may also delete a `goal/**` ref (the probe's `204`); no row says whether it should |
+| [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | what the rules write | 🚧 WIP — no evidence publisher for this root (`create-goal-ref`, `refused-2026-11-22` and `accepted-after-the-fix` pass locally against `tofu/github/repo_rulesets.tf` and the two recorded worlds; the accepted answer was recorded after the 2026-11-22 apply, under the previous identity `coordinator-git` — for `homelab-intake` the creation rests on the static join: its `contents: write` against the same rulesets). ⚑ gap — the same identity may also delete a `goal/**` ref (the probe's `204`); no row says whether it should |
 | [INTAKE-ACCESS-ISSUES](#intake-access-issues) | what the rules write | 🚧 WIP — no evidence publisher for this root (`issue-acts` passes locally against the mint site and `docs/github-apps.yaml`); unverified — a stack repo's write: the stack islands' repos come from the live claims, which no test reads |
 | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | what the rules write | 🚧 WIP — no evidence publisher for this root (`pr-and-checks-read` passes locally against the mint site and `docs/github-apps.yaml`) |
-| [INTAKE-ACCESS-CLONE](#intake-access-clone) | what the rules write | 🚧 WIP — no evidence publisher for this root (`clone-homelab` passes locally); unverified — `clone-stack-repo`: no test joins the live claims' `repos[].intake.facts` repos to the mint's `repositories` |
+| [INTAKE-ACCESS-CLONE](#intake-access-clone) | what the rules write | 🚧 WIP — no evidence publisher for this root (`clone-homelab`, `read-source-repo` pass locally); unverified — `read-source-repo` live: the source token mints only once the App is installed on each listed repo; unverified — `clone-stack-repo`: no test joins the live claims' `repos[].intake.facts` repos to the mint's `repositories` |
 | [INTAKE-ACCESS-GATEWAY](#intake-access-gateway) | what the rules write | 🚧 WIP — no evidence publisher for this root (`admit-coordinator-platform` passes locally against `policy.json`) |
 | [INTAKE-ACCESS-TRANSCRIPTS](#intake-access-transcripts) | what the rules write | 🚧 WIP — no evidence pipeline yet: missing proof — the reader and writer keys' bucket grants are not read from a declared record by any test |
 | [INTAKE-ACCESS-METRICS](#intake-access-metrics) | what the rules write | 🚧 WIP — no evidence pipeline yet: missing proof — no test reads the egress the sitting's pod has to Prometheus, Alertmanager and the Pushgateway |
-| [INTAKE-ACCESS-DENIED](#intake-access-denied) | what the identity must not do | 🚧 WIP — no evidence publisher for this root (`on-no-bypass-list`, `update-without-checks`, `merge-without-review`, `administer-repo` pass locally against `tofu/github/` and the mint site); unverified — rulesets made outside `tofu/github/` (none is expected) |
-| [INTAKE-ACCESS-OWN-APP](#intake-access-own-app) | the ruled target | 🚧 WIP — no issue yet (operator ruling 2026-11-22; the App does not exist, nothing is declared): missing proof — the App, its declaration, its mint site and the workflow's switch to it |
+| [INTAKE-ACCESS-DENIED](#intake-access-denied) | what the identity must not do | 🚧 WIP — no evidence publisher for this root (`on-no-bypass-list`, `update-without-checks`, `merge-without-review`, `administer-repo`, `write-source-repo`, `push-workflow-file`, `review-or-merge-pr`, `rerun-a-workflow` pass locally against `tofu/github/`, the mint site and `docs/github-apps.yaml`); unverified — rulesets made outside `tofu/github/` (none is expected) |
+| [INTAKE-ACCESS-OWN-APP](#intake-access-own-app) | its own App | 🚧 WIP — no evidence publisher for this root (`used-by-nothing-else`, `least-set` pass locally against the mint sites, the manifests and `docs/github-apps.yaml`); the live token was not read by this root's tests — its world is the declared records |
 
 ## Who acts
 
@@ -75,7 +74,7 @@ Legend: `record` = the declared record read; `expected?` = what it resolves to.
 | description | record | expected? |
 |---|---|---|
 | sitting-runs-as-island-intake | the workflow's `serviceAccountName` | `island-intake` |
-| token-is-homelab-agents | the `GH_TOKEN` Secret refs → `ExternalSecret` → `GithubAccessToken` → `appID` | Secret `coordinator-git`, App `homelab-agents` |
+| token-is-homelab-intake | the `GH_TOKEN` Secret refs → `ExternalSecret` → `GithubAccessToken` → `appID` | Secret `intake-git`, App `homelab-intake` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -166,7 +165,11 @@ workflow run behind a check suite (which `gh`'s status rollup reaches) are separ
 
 Every sitting clones homelab; a stack island's sitting also clones the stack's repo
 ([../README.md](../README.md) §Stack islands) with the same token. A clone needs `contents: read`
-on a repo the mint's `repositories` lists.
+on a repo the mint's `repositories` lists. A stack's read-only **source repo** — a private repo
+its facts file reads that is not the island's own, such as its deployment repo — is read with a
+second token of the same App (`INTAKE_READ_GH_TOKEN`, the sitting's leaf only), minted with
+`contents: read` alone and naming no repo the main token names: the sitting can read there and
+cannot write, by the mint, whatever the App's grant.
 
 **World:** the declared records.
 
@@ -176,6 +179,7 @@ on a repo the mint's `repositories` lists.
 |---|---|---|
 | clone-homelab | `teststuffstash/homelab` | allowed |
 | clone-stack-repo | a repo a live claim declares under `repos[].intake.facts` | allowed |
+| read-source-repo | a repo the source token's mint lists | allowed, read only (the token's mint is `contents: read`; no main-token repo) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -253,8 +257,10 @@ addresses the manifest sets.
 The sitting's identity is on no ruleset's bypass list: every `Integration` bypass actor resolves to
 another App, and an App token never holds the `OrganizationAdmin` role. So every update of the
 default branch or a `goal/**` ref waits on the required checks (only a creation is exempt), and
-every change to them comes by an approved pull request. It holds no `administration` permission,
-so no ruleset or repository setting is its to change.
+every change to them comes by an approved pull request. It holds no `administration` and no
+`workflows` permission — both decided non-grants of its App — so no ruleset, repository setting or
+workflow file is its to change; and it reads pull requests and workflow runs without writing them,
+so it reviews, merges and re-runs nothing.
 
 > **External:** the `OrganizationAdmin` bypass actor matches org owners' user identities, never an
 > App installation token; a ruleset's `pull_request` rule refuses a direct push or merge that did
@@ -270,6 +276,10 @@ so no ruleset or repository setting is its to change.
 | update-without-checks | push to or merge into the default branch or `goal/**` without the required checks | refused |
 | merge-without-review | change the default branch or `goal/**` without an approved pull request | refused |
 | administer-repo | edit or delete a ruleset or a repository setting | refused (no `administration`) |
+| write-source-repo | any write to a stack's source repo | refused — the sitting holds no write token there |
+| push-workflow-file | push a change under `.github/workflows/` | refused (no `workflows`) |
+| review-or-merge-pr | review, merge, edit or comment on a pull request (Pulls API) | refused (`pull_requests` read only) |
+| rerun-a-workflow | re-run or cancel a workflow run | refused (`actions` read only) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -277,12 +287,14 @@ so no ruleset or repository setting is its to change.
 
 </details>
 
-## The ruled target
+## Its own App
 
 ### INTAKE-ACCESS-OWN-APP
 
-The sitting runs as its own GitHub App, used by nothing else. Its permissions are the least the
-positive rows above need:
+The sitting runs as its own GitHub App, used by nothing else: the App mints at two sites — the
+sitting's token and its read-only source token ([INTAKE-ACCESS-CLONE](#intake-access-clone)) — and
+each site's Secret is read by the sitting's workflow alone. Its permissions are exactly the
+least the positive rows above need — a grant no row needs, or a need the App lacks, breaks the row:
 
 | permission | level | needed by | broader than the act? |
 |---|---|---|---|
@@ -294,12 +306,15 @@ positive rows above need:
 | `statuses` | read | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | — |
 | `actions` | read | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) (the status rollup's run) | yes — also reads run logs |
 
-Installed on homelab and on each repo a live claim declares under `repos[].intake.facts`. Today's
-identity holds more than this set: the mint requests `pull_requests`, `workflows` and `actions` at
-`write` (the coordinator's merges and reruns) — grants no rule of the sitting writes, and the
-second half of this page's principle.
+**World:** the declared records. The live token (its repositories, a read, a refused pull-request
+write) was read once by the seat when the App went live; no world records it.
 
-**World:** none — the App does not exist.
+#### One App, one consumer
+
+| description | record | expected? |
+|---|---|---|
+| used-by-nothing-else | every mint site of the App's id; every manifest reading their Secrets | two sites (`intake-git.yaml`, `intake-read-git.yaml`); one consumer each (the island-intake workflow) |
+| least-set | the App's declared permissions and the mint's requested ones | equal to the table above |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
