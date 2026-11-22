@@ -69,6 +69,8 @@
 #                in every leaf. The Secret ref is `optional` so the pod starts and the bootstrap refuses an
 #                empty token loudly (exit 1; the sitting leaf pushes its metrics first) — never a
 #                CreateContainerConfigError that hangs until the deadline, never another identity.
+#                The sitting leaf also carries INTAKE_READ_GH_TOKEN (Secret `intake-read-git`, contents:read on
+#                stacks' source repos only, intake-read-git.yaml) — optional, never a fallback.
 #   toolchain  = the worker base image (agent-base — its tag is the one kustomization.yaml line)
 #                + the island's own devbox (islands/intake/devbox.json): the bootstrap installs it
 #                and runs the launcher through `devbox run` there. The devbox adds only promtool and
@@ -414,6 +416,11 @@ spec:
             - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=coordinator,lane=intake,stack=platform" }
             - name: GH_TOKEN
               valueFrom: { secretKeyRef: { name: intake-git, key: GH_TOKEN, optional: true } }
+            # A stack's read-only SOURCE repos (a deployment repo its facts file reads): the same App,
+            # a contents:read token (agents/coordinator/intake-read-git.yaml). Only this leaf runs a
+            # sitting's reads. Absent is normal — no refusal, and nothing falls back to or from it.
+            - name: INTAKE_READ_GH_TOKEN
+              valueFrom: { secretKeyRef: { name: intake-read-git, key: GH_TOKEN, optional: true } }
             - { name: AWS_REGION, value: "garage" }
             - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
             - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }

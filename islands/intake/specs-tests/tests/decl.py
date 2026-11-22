@@ -252,12 +252,12 @@ def sitting_workflow() -> dict:
     return docs[0]
 
 
-def token_secret_refs(workflow: dict) -> set[str]:
-    """The Secret names every `GH_TOKEN` env entry of the workflow reads."""
+def token_secret_refs(workflow: dict, env: str = "GH_TOKEN") -> set[str]:
+    """The Secret names every `<env>` entry of the workflow reads (default the sitting's GH_TOKEN)."""
     refs = {n["valueFrom"]["secretKeyRef"]["name"] for n in _walk(workflow)
-            if n.get("name") == "GH_TOKEN" and "valueFrom" in n}
+            if n.get("name") == env and "valueFrom" in n}
     if not refs:
-        raise RuntimeError("the island-intake workflow carries no GH_TOKEN env entry")
+        raise RuntimeError(f"the island-intake workflow carries no {env} env entry")
     return refs
 
 

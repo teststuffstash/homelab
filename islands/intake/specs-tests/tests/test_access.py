@@ -166,6 +166,28 @@ def test_clone_homelab(row: str) -> None:
     assert "homelab" in ident.repositories
 
 
+def _source_identity() -> decl.Identity:
+    (secret,) = decl.token_secret_refs(decl.sitting_workflow(), "INTAKE_READ_GH_TOKEN")
+    return decl.identity_of(secret)
+
+
+@pytest.mark.parametrize("row", [pytest.param("read-source-repo", marks=rule("INTAKE-ACCESS-CLONE"),
+                                              id="read-source-repo")])
+def test_read_source_repo(row: str) -> None:
+    # A stack's read-only source repo (a deployment repo its facts file reads) is read with a second
+    # token of the same App that can only read: its mint requests contents:read alone, and it names
+    # no repo the sitting's main token names (an island repo, where the sitting writes).
+    allure.dynamic.title(row)
+    main, src = _identity(), _source_identity()
+    allure.dynamic.parameter("generator", src.generator)
+    allure.dynamic.parameter("repositories", ", ".join(src.repositories))
+    assert src.app_id == main.app_id, (src.slug, main.slug)
+    assert src.minted == {"contents": "read"}, src.minted
+    assert src.repositories, "the source token names no repo"
+    shared = sorted(set(src.repositories) & set(main.repositories))
+    assert not shared, f"the source token shares {shared} with the sitting's main token"
+
+
 # ── INTAKE-ACCESS-GATEWAY ──────────────────────────────────────────────────────────────────────
 
 
@@ -239,6 +261,18 @@ def test_no_administration(row: str) -> None:
     assert "administration" in ident.absent, ident.absent
 
 
+@pytest.mark.parametrize("row", [pytest.param("write-source-repo", marks=rule("INTAKE-ACCESS-DENIED"),
+                                              id="write-source-repo")])
+def test_no_write_on_source_repo(row: str) -> None:
+    # No token the sitting holds writes to a source repo: the source token's every grant is a read,
+    # and the main token (contents/issues write) does not name the repo.
+    allure.dynamic.title(row)
+    main, src = _identity(), _source_identity()
+    for repo in src.repositories:
+        assert all(decl.LEVELS[v] < decl.LEVELS["write"] for v in src.minted.values()), src.minted
+        assert repo not in main.repositories, repo
+
+
 @pytest.mark.parametrize("row", [pytest.param("push-workflow-file", marks=rule("INTAKE-ACCESS-DENIED"),
                                               id="push-workflow-file")])
 def test_no_workflows(row: str) -> None:
@@ -280,15 +314,17 @@ NEEDS = {"metadata": "read", "contents": "write", "issues": "write",
 @pytest.mark.parametrize("row", [pytest.param("used-by-nothing-else", marks=rule("INTAKE-ACCESS-OWN-APP"),
                                               id="used-by-nothing-else")])
 def test_own_app(row: str) -> None:
-    # The App mints at exactly one site, and that site's Secret is read by the sitting's workflow alone.
+    # The App mints at two sites only — the sitting's token and its read-only source token — and each
+    # site's Secret is read by the sitting's workflow alone.
     allure.dynamic.title(row)
-    ident = _identity()
-    sites = decl.mint_sites_of(ident.app_id)
-    consumers = decl.secret_consumers(ident.secret)
+    main, src = _identity(), _source_identity()
+    sites = decl.mint_sites_of(main.app_id)
     allure.dynamic.parameter("mint sites", ", ".join(sites))
-    allure.dynamic.parameter("consumers", ", ".join(consumers))
-    assert sites == ["agents/coordinator/intake-git.yaml"], sites
-    assert consumers == ["agents/coordinator/island-intake-argo.yaml"], consumers
+    assert sites == ["agents/coordinator/intake-git.yaml", "agents/coordinator/intake-read-git.yaml"], sites
+    for ident in (main, src):
+        consumers = decl.secret_consumers(ident.secret)
+        allure.dynamic.parameter(f"{ident.secret} consumers", ", ".join(consumers))
+        assert consumers == ["agents/coordinator/island-intake-argo.yaml"], (ident.secret, consumers)
 
 
 @pytest.mark.parametrize("row", [pytest.param("least-set", marks=rule("INTAKE-ACCESS-OWN-APP"), id="least-set")])

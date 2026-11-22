@@ -31,7 +31,7 @@ kube API) is the workflow's ServiceAccount.
 | [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | rulesets covering `refs/heads/goal/**`; the mint's `contents` | a static join + a recorded world |
 | [INTAKE-ACCESS-ISSUES](#intake-access-issues) | the mint's `issues`, `repositories` | a static join |
 | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | the mint's `pull_requests`, `checks`, `statuses`, `actions` | a static join |
-| [INTAKE-ACCESS-CLONE](#intake-access-clone) | the mint's `contents`, `repositories` | a static join (homelab only) |
+| [INTAKE-ACCESS-CLONE](#intake-access-clone) | the mint's `contents`, `repositories`; the source token's env → Secret → mint | a static join (homelab; source repos) |
 | [INTAKE-ACCESS-GATEWAY](#intake-access-gateway) | `policy.json` `callers` | a static join |
 | [INTAKE-ACCESS-TRANSCRIPTS](#intake-access-transcripts) | the manifest's `agent-transcripts-s3` keys | — |
 | [INTAKE-ACCESS-METRICS](#intake-access-metrics) | the manifest's `PROMETHEUS`, `PUSHGATEWAY` | — |
@@ -46,11 +46,11 @@ kube API) is the workflow's ServiceAccount.
 | [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | what the rules write | 🚧 WIP — no evidence publisher for this root (`create-goal-ref`, `refused-2026-11-22` and `accepted-after-the-fix` pass locally against `tofu/github/repo_rulesets.tf` and the two recorded worlds; the accepted answer was recorded after the 2026-11-22 apply, under the previous identity `coordinator-git` — for `homelab-intake` the creation rests on the static join: its `contents: write` against the same rulesets). ⚑ gap — the same identity may also delete a `goal/**` ref (the probe's `204`); no row says whether it should |
 | [INTAKE-ACCESS-ISSUES](#intake-access-issues) | what the rules write | 🚧 WIP — no evidence publisher for this root (`issue-acts` passes locally against the mint site and `docs/github-apps.yaml`); unverified — a stack repo's write: the stack islands' repos come from the live claims, which no test reads |
 | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | what the rules write | 🚧 WIP — no evidence publisher for this root (`pr-and-checks-read` passes locally against the mint site and `docs/github-apps.yaml`) |
-| [INTAKE-ACCESS-CLONE](#intake-access-clone) | what the rules write | 🚧 WIP — no evidence publisher for this root (`clone-homelab` passes locally); unverified — `clone-stack-repo`: no test joins the live claims' `repos[].intake.facts` repos to the mint's `repositories` |
+| [INTAKE-ACCESS-CLONE](#intake-access-clone) | what the rules write | 🚧 WIP — no evidence publisher for this root (`clone-homelab`, `read-source-repo` pass locally); unverified — `read-source-repo` live: the source token mints only once the App is installed on each listed repo; unverified — `clone-stack-repo`: no test joins the live claims' `repos[].intake.facts` repos to the mint's `repositories` |
 | [INTAKE-ACCESS-GATEWAY](#intake-access-gateway) | what the rules write | 🚧 WIP — no evidence publisher for this root (`admit-coordinator-platform` passes locally against `policy.json`) |
 | [INTAKE-ACCESS-TRANSCRIPTS](#intake-access-transcripts) | what the rules write | 🚧 WIP — no evidence pipeline yet: missing proof — the reader and writer keys' bucket grants are not read from a declared record by any test |
 | [INTAKE-ACCESS-METRICS](#intake-access-metrics) | what the rules write | 🚧 WIP — no evidence pipeline yet: missing proof — no test reads the egress the sitting's pod has to Prometheus, Alertmanager and the Pushgateway |
-| [INTAKE-ACCESS-DENIED](#intake-access-denied) | what the identity must not do | 🚧 WIP — no evidence publisher for this root (`on-no-bypass-list`, `update-without-checks`, `merge-without-review`, `administer-repo`, `push-workflow-file`, `review-or-merge-pr`, `rerun-a-workflow` pass locally against `tofu/github/`, the mint site and `docs/github-apps.yaml`); unverified — rulesets made outside `tofu/github/` (none is expected) |
+| [INTAKE-ACCESS-DENIED](#intake-access-denied) | what the identity must not do | 🚧 WIP — no evidence publisher for this root (`on-no-bypass-list`, `update-without-checks`, `merge-without-review`, `administer-repo`, `write-source-repo`, `push-workflow-file`, `review-or-merge-pr`, `rerun-a-workflow` pass locally against `tofu/github/`, the mint site and `docs/github-apps.yaml`); unverified — rulesets made outside `tofu/github/` (none is expected) |
 | [INTAKE-ACCESS-OWN-APP](#intake-access-own-app) | its own App | 🚧 WIP — no evidence publisher for this root (`used-by-nothing-else`, `least-set` pass locally against the mint sites, the manifests and `docs/github-apps.yaml`); the live token was not read by this root's tests — its world is the declared records |
 
 ## Who acts
@@ -165,7 +165,11 @@ workflow run behind a check suite (which `gh`'s status rollup reaches) are separ
 
 Every sitting clones homelab; a stack island's sitting also clones the stack's repo
 ([../README.md](../README.md) §Stack islands) with the same token. A clone needs `contents: read`
-on a repo the mint's `repositories` lists.
+on a repo the mint's `repositories` lists. A stack's read-only **source repo** — a private repo
+its facts file reads that is not the island's own, such as its deployment repo — is read with a
+second token of the same App (`INTAKE_READ_GH_TOKEN`, the sitting's leaf only), minted with
+`contents: read` alone and naming no repo the main token names: the sitting can read there and
+cannot write, by the mint, whatever the App's grant.
 
 **World:** the declared records.
 
@@ -175,6 +179,7 @@ on a repo the mint's `repositories` lists.
 |---|---|---|
 | clone-homelab | `teststuffstash/homelab` | allowed |
 | clone-stack-repo | a repo a live claim declares under `repos[].intake.facts` | allowed |
+| read-source-repo | a repo the source token's mint lists | allowed, read only (the token's mint is `contents: read`; no main-token repo) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -271,6 +276,7 @@ so it reviews, merges and re-runs nothing.
 | update-without-checks | push to or merge into the default branch or `goal/**` without the required checks | refused |
 | merge-without-review | change the default branch or `goal/**` without an approved pull request | refused |
 | administer-repo | edit or delete a ruleset or a repository setting | refused (no `administration`) |
+| write-source-repo | any write to a stack's source repo | refused — the sitting holds no write token there |
 | push-workflow-file | push a change under `.github/workflows/` | refused (no `workflows`) |
 | review-or-merge-pr | review, merge, edit or comment on a pull request (Pulls API) | refused (`pull_requests` read only) |
 | rerun-a-workflow | re-run or cancel a workflow run | refused (`actions` read only) |
@@ -285,8 +291,9 @@ so it reviews, merges and re-runs nothing.
 
 ### INTAKE-ACCESS-OWN-APP
 
-The sitting runs as its own GitHub App, used by nothing else: the App mints at exactly one site,
-and that site's Secret is read by the sitting's workflow alone. Its permissions are exactly the
+The sitting runs as its own GitHub App, used by nothing else: the App mints at two sites — the
+sitting's token and its read-only source token ([INTAKE-ACCESS-CLONE](#intake-access-clone)) — and
+each site's Secret is read by the sitting's workflow alone. Its permissions are exactly the
 least the positive rows above need — a grant no row needs, or a need the App lacks, breaks the row:
 
 | permission | level | needed by | broader than the act? |
@@ -306,7 +313,7 @@ write) was read once by the seat when the App went live; no world records it.
 
 | description | record | expected? |
 |---|---|---|
-| used-by-nothing-else | every mint site of the App's id; every manifest reading its Secret | one site (`intake-git.yaml`); one consumer (the island-intake workflow) |
+| used-by-nothing-else | every mint site of the App's id; every manifest reading their Secrets | two sites (`intake-git.yaml`, `intake-read-git.yaml`); one consumer each (the island-intake workflow) |
 | least-set | the App's declared permissions and the mint's requested ones | equal to the table above |
 
 <details markdown="1"><summary>Evidence — latest run</summary>

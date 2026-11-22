@@ -26,13 +26,20 @@ nothing on this page has been observed running against a stack repo.
    by nothing else ([`docs/github-apps.yaml`](../../docs/github-apps.yaml)). The sitting reads and
    writes with its token, minted from that App
    ([`agents/coordinator/intake-git.yaml`](../../agents/coordinator/intake-git.yaml)); its writes
-   show as `homelab-intake[bot]`. You provide no token and no secret. Any other private repo your
-   facts file's `## Sources` reads through `gh` needs the same install, or the row is `seat-only`.
+   show as `homelab-intake[bot]`. You provide no token and no secret.
 2. **The repo is in that token's `repositories` list** (the same file). This is a homelab change:
    ask for it through the platform-request lane
    ([`docs/agents/platform-and-stacks.md`](../../docs/agents/platform-and-stacks.md) §Cross-stack
    demand & escalation). It lands only after the install: a token request naming a repo the App is
    not installed on fails for every repo in the list.
+   **A private source repo** your facts file reads that is not the island's repo (your deployment
+   repo) is read with a separate read-only token: the row says
+   `GH_TOKEN="$INTAKE_READ_GH_TOKEN" gh api repos/<org>/<repo>/…` (or clones with it). That token
+   is minted with `contents: read` only
+   ([`agents/coordinator/intake-read-git.yaml`](../../agents/coordinator/intake-read-git.yaml)), so
+   the sitting cannot write there, whatever the App's grant. To enable it: the operator installs
+   `homelab-intake` on that repo, then the repo is added to that file's `repositories` — in that
+   order. Until then the row is `seat-only`.
 3. **A facts file on the repo's default branch**, with the parts §What you provide lists. Check it
    from any homelab checkout before you declare it:
 
@@ -75,6 +82,7 @@ nothing on this page has been observed running against a stack repo.
 |---|---|---|
 | The App installation | GitHub, on your repo | yes |
 | The repo's name in the token's list | [`agents/coordinator/intake-git.yaml`](../../agents/coordinator/intake-git.yaml) `repositories` — a homelab change you ask for | yes |
+| A source repo's install and its name in the read-only token's list | GitHub, on that repo; [`agents/coordinator/intake-read-git.yaml`](../../agents/coordinator/intake-read-git.yaml) `repositories` — a homelab change you ask for | only if your facts file reads one |
 | The claim line | your claim, `repos[].intake.facts` | yes |
 | The facts file | your repo, at the path the claim names | yes |
 
