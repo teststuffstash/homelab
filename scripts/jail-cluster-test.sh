@@ -42,6 +42,9 @@ check "pinned to nx-01"                             [ "$(y '.spec.nodeSelector."
 check "priority class jail-clusters"                [ "$(y .spec.priorityClassName)" = "jail-clusters" ]
 check "default deadline 3600 s"                     [ "$(y .spec.activeDeadlineSeconds)" = "3600" ]
 check "no SA token in the pod"                      [ "$(y .spec.automountServiceAccountToken)" = "false" ]
+check "runs as the empty SA jail-cluster-runner"    [ "$(y .spec.serviceAccountName)" = "jail-cluster-runner" ]
+check "every emptyDir has a sizeLimit"              [ "$(y '[.spec.volumes[] | select(has("emptyDir")) | select(.emptyDir.sizeLimit == null)] | length')" = "0" ]
+check "runner bounds its ephemeral-storage"         [ "$(y '.spec.containers[0].resources.limits."ephemeral-storage"')" = "10Gi" ]
 check "dind image = agents/images.env pin"          [ "$(y '.spec.initContainers[] | select(.name == "dind") | .image')" = "$PIN" ]
 check "dind is a native sidecar"                    [ "$(y '.spec.initContainers[] | select(.name == "dind") | .restartPolicy')" = "Always" ]
 # the standard docker ride's dind envelope — 2560Mi request == limit (docs/agents/agentstack.md, rideSize)
@@ -108,7 +111,9 @@ case "$1" in
     script="$*"
     case "$script" in
       *"tar -xzf - -C /work/tree"*) tar -tzf - | sort > "$FAKE/shipped" ;;
-      *"tar -czf - ."*) mkdir -p "$FAKE/evsrc"; echo proof > "$FAKE/evsrc/nodes.txt"; tar -C "$FAKE/evsrc" -czf - . ;;
+      *"tar -czf - ."*)
+        if [ -f "$FAKE/evidence.tgz" ]; then cat "$FAKE/evidence.tgz"
+        else mkdir -p "$FAKE/evsrc"; echo proof > "$FAKE/evsrc/nodes.txt"; tar -C "$FAKE/evsrc" -czf - .; fi ;;
       *) [ -z "$stdin" ] || { echo "fake kubectl: the gate exec must not take stdin" >&2; exit 8; }
          echo "GATE-OUTPUT for $pod: ${*: -1}"; exit "$(cat "$FAKE/gate-rc" 2>/dev/null || echo 0)" ;;
     esac ;;
@@ -133,14 +138,41 @@ printf 'ignored.txt\n' > "$T/.gitignore"
 echo a > "$T/tracked.sh"; echo gone > "$T/deleted.txt"; echo k > "$T/tofu/kubeconfig"
 git -C "$T" add -A && git -C "$T" commit -qm init && rm "$T/deleted.txt"
 echo b > "$T/sub/untracked.py"; echo c > "$T/ignored.txt"; echo d > "$T/.devbox/gen/x"
-echo e > "$T/main.tfstate"; echo f > "$T/.env"; echo g > "$T/id.pem"
+# one of each never_ship class (scripts/jail-cluster.sh NEVER_SHIP), none gitignored …
+NEVER="tofu/kubeconfig .jail-kubeconfig sub/my-kubeconfig.yaml talosconfig id_ed25519 id_rsa.pub .ssh/id_ecdsa
+  .netrc .git-credentials .npmrc .pypirc .env .env.local x.tfvars x.tfvars.json main.tfstate main.tfstate.backup
+  id.pem tls.key a.p12 store.kdbx store.keyx .devbox/gen/x"
+for f in $NEVER; do mkdir -p "$T/$(dirname "$f")"; echo secret > "$T/$f"; done
+# … the kubeconfig in use, under a name the predicate does not know …
+mkdir -p "$T/tokens"; echo fake > "$T/tokens/sa.conf"
+# … and near-misses that MUST still ship
+for f in id_utils.py src/keyboard.py envoy.yaml docs/kube-notes.md; do mkdir -p "$T/$(dirname "$f")"; echo ok > "$T/$f"; done
+# (tokens/sa.conf ships when it is NOT the kubeconfig in use — the in-use rule is tested separately)
+SHIP_OK=".gitignore docs/kube-notes.md envoy.yaml id_utils.py src/keyboard.py sub/untracked.py tokens/sa.conf tracked.sh"
 
 run_verb() { : > "$FAKE/calls"; bash "$SUT" run --name a --tree "$T" -- devbox run smoke > "$TMP/out" 2>&1 < /dev/null; }
 run_verb; rc=$?
 check "run → gate exit 0 passes through"            [ "$rc" -eq 0 ]
 check "gate output streamed"                        grep -q "GATE-OUTPUT for jc-selftest-a: smoke" "$TMP/out"
 check "created manifest = the dry-run render"       cmp -s "$FAKE/created.yaml" "$M"
-check "shipped: tracked + untracked, sorted"        diff -q <(grep -vE '/$' "$FAKE/shipped") <(printf '%s\n' .gitignore sub/untracked.py tracked.sh)
+check "shipped: tracked + untracked + near-misses"  diff -q <(grep -vE '/$' "$FAKE/shipped") <(printf '%s\n' $SHIP_OK | sort)
+for f in $NEVER; do check "  never shipped: $f" nogrep -xF "$f" "$FAKE/shipped"; done
+: > "$FAKE/calls"; JAIL_CLUSTER_KUBECONFIG="$T/tokens/sa.conf" bash "$SUT" run --name a --tree "$T" -- true > "$TMP/out" 2>&1 < /dev/null
+check "  the kubeconfig in use is not shipped"       all 'nogrep -xF tokens/sa.conf "$FAKE/shipped"' 'grep -q "NOT shipping tokens/sa.conf" "$TMP/out"'
+run_verb
+check "finished rig pods reaped before create"      all 'grep -q "delete pods -l app=jail-cluster --field-selector=status.phase==Failed" "$FAKE/calls"' 'grep -q "delete pods -l app=jail-cluster --field-selector=status.phase==Succeeded" "$FAKE/calls"' '[ "$(grep -n "field-selector=status.phase==Failed" "$FAKE/calls" | cut -d: -f1)" -lt "$(grep -n " create -f -" "$FAKE/calls" | cut -d: -f1)" ]'
+# evidence: a symlink out of the dir is dropped; a tar with a .. member is refused whole
+mkdir -p "$TMP/evl"; echo proof > "$TMP/evl/nodes.txt"; ln -s /etc/passwd "$TMP/evl/leak"; tar -C "$TMP/evl" -czf "$FAKE/evidence.tgz" .
+rm -rf "$TMP"/ev/*; run_verb; ev="$(ls -d "$TMP"/ev/jc-selftest-a-* | head -1)"
+check "evidence symlink dropped, file kept"         all '[ ! -e "$ev/evidence/leak" ] && [ ! -L "$ev/evidence/leak" ]' '[ "$(cat "$ev/evidence/nodes.txt")" = proof ]'
+python3 -c 'import io,sys,tarfile
+t=tarfile.open(sys.argv[1],"w:gz")
+for n in ("nodes.txt","../escape.txt"):
+    d=b"x\n"; i=tarfile.TarInfo(n); i.size=len(d); t.addfile(i,io.BytesIO(d))
+t.close()' "$FAKE/evidence.tgz"
+rm -rf "$TMP"/ev/*; run_verb; ev="$(ls -d "$TMP"/ev/jc-selftest-a-* | head -1)"
+check "evidence with a .. member refused whole"     all '[ ! -e "$ev/escape.txt" ]' '[ ! -e "$ev/evidence/nodes.txt" ]' 'grep -q "evidence REFUSED" "$TMP/out"'
+rm -f "$FAKE/evidence.tgz"; rm -rf "$TMP"/ev/*; run_verb
 check "pod deleted after the run"                   grep -q "delete pod jc-selftest-a" "$FAKE/calls"
 ev="$(ls -d "$TMP"/ev/jc-selftest-a-* 2>/dev/null | head -1)"
 check "evidence copied back"                        [ "$(cat "$ev/evidence/nodes.txt" 2>/dev/null)" = proof ]
@@ -150,7 +182,7 @@ check "run → gate exit 3 passes through"            [ "$rc" -eq 3 ]
 check "pod deleted after a failing gate too"        grep -q "delete pod jc-selftest-a" "$FAKE/calls"
 rm -f "$FAKE/gate-rc"
 : > "$FAKE/calls"; bash "$SUT" run --name a --keep --tree "$T" -- true >/dev/null 2>&1 < /dev/null
-check "--keep leaves the pod"                       nogrep "delete pod" "$FAKE/calls"
+check "--keep leaves the pod"                       nogrep "delete pod jc-" "$FAKE/calls"
 echo 'Error from server (Forbidden): pods "jc-selftest-a" is forbidden: exceeded quota: jail-clusters, requested: pods=1, used: pods=2, limited: pods=2' > "$FAKE/create-err"
 run_verb; rc=$?
 check "quota refusal → exit 2, named as the cap"    all '[ "$rc" -eq 2 ]' 'grep -q "cap is reached" "$TMP/out"'
@@ -173,9 +205,46 @@ check "reap --all deletes every jail pod"           grep -q "delete pods -l app=
 : > "$FAKE/calls"; bash "$SUT" token --out "$TMP/sa.kubeconfig" --duration 30m 2>/dev/null; rc=$?
 check "token writes a kubeconfig"                   all '[ "$rc" -eq 0 ]' "grep -q 'token: \"fake-sa-token\"' \"\$TMP/sa.kubeconfig\""
 check "  …scoped to jail-clusters, mode 600"        all "grep -q 'namespace: jail-clusters' \"\$TMP/sa.kubeconfig\"" '[ "$(stat -c %a "$TMP/sa.kubeconfig")" = 600 ]' 
-check "  …minted for the SA with the duration"      grep -q "create token jail-cluster --duration 30m" "$FAKE/calls"
-bash "$SUT" token >/dev/null 2>&1; rc=$?
-check "token without --out refused (never printed)" [ "$rc" -eq 2 ]
+check "  …minted for the SA with the duration"      grep -q "create token jail-cluster --duration 1800s" "$FAKE/calls"
+bash "$SUT" token --out "$TMP/long.kubeconfig" --duration 5h >/dev/null 2>&1; rc=$?
+check "token over 4h refused"                       all '[ "$rc" -eq 2 ]' '[ ! -e "$TMP/long.kubeconfig" ]'
+bash "$SUT" token --out "$T/.jail-kubeconfig-new" >/dev/null 2>&1; rc=$?
+check "token --out inside a git work tree refused"  all '[ "$rc" -eq 2 ]' '[ ! -e "$T/.jail-kubeconfig-new" ]'
+JAIL_CLUSTER_TOKEN_DIR="$TMP/tokdir" bash "$SUT" token >/dev/null 2>&1; rc=$?
+# shellcheck disable=SC2034  # read inside the all '…' strings below
+tf="$(ls "$TMP"/tokdir/selftest-*.kubeconfig 2>/dev/null | head -1)"
+check "token default --out: outside the tree, 600"  all '[ "$rc" -eq 0 ]' '[ -n "$tf" ]' '[ "$(stat -c %a "$tf")" = 600 ]' 
+
+echo "4. smoke step 0 (fake docker/k3d): a host disk visible to a privileged container fails the smoke"
+SMOKE="$ROOT/scripts/jail-cluster-smoke.sh"
+cat > "$TMP/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  info) echo "fake info" ;;
+  version) echo 27.0 ;;
+  run) cat "$FAKE/devices" ;;
+  exec) echo "node Ready" ;;
+esac
+EOF
+printf '#!/usr/bin/env bash\necho "fake k3d $*"\n' > "$TMP/bin/k3d"; chmod +x "$TMP/bin/docker" "$TMP/bin/k3d"
+guest='BLK loop0 0
+BLK pmem0 524288
+BLK vda 262144
+BLK vdb 41943040
+--- mounts (pid 1)
+kataShared /run/kata-containers/shared virtiofs rw 0 0'
+printf '%s\n' "$guest" > "$FAKE/devices"
+JAIL_EVIDENCE_DIR="$TMP/sm1" bash "$SMOKE" > "$TMP/sm1.out" 2>&1; rc=$?
+check "guest-only devices → smoke passes"           all '[ "$rc" -eq 0 ]' 'grep -q JAIL-CLUSTER-SMOKE-PASSED "$TMP/sm1.out"' '[ -s "$TMP/sm1/guest-devices.txt" ]'
+printf '%s\nBLK nvme0n1 2000409264\n' "$guest" > "$FAKE/devices"
+JAIL_EVIDENCE_DIR="$TMP/sm2" bash "$SMOKE" > "$TMP/sm2.out" 2>&1; rc=$?
+check "a host-sized disk → smoke FAILS (exit 4)"    all '[ "$rc" -eq 4 ]' 'grep -q "nvme0n1 (2000409264 sectors)" "$TMP/sm2.out"' 'nogrep JAIL-CLUSTER-SMOKE-PASSED "$TMP/sm2.out"'
+printf 'BLK vda 41943040000\n' > "$FAKE/devices"
+JAIL_EVIDENCE_DIR="$TMP/sm3" bash "$SMOKE" > "$TMP/sm3.out" 2>&1; rc=$?
+check "a big virtio disk → smoke FAILS (exit 4)"    [ "$rc" -eq 4 ]
+: > "$FAKE/devices"
+JAIL_EVIDENCE_DIR="$TMP/sm4" bash "$SMOKE" > "$TMP/sm4.out" 2>&1; rc=$?
+check "an empty probe → smoke FAILS (never a pass)" [ "$rc" -eq 4 ]
 
 echo
 [ "$fails" -eq 0 ] || { echo "jail-cluster-test: $fails of $n check(s) FAILED"; exit 1; }

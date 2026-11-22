@@ -11,6 +11,17 @@ metadata:
   namespace: jail-clusters
 automountServiceAccountToken: false
 ---
+# The identity jail PODS run as (admission-policy.yaml (l)): no Role, no binding, no token mounted.
+# Pods never run as jail-cluster above — that SA creates pods, so a pod carrying its token could
+# outlive the minted one. Nothing may bind to this SA; the admission policy cannot see bindings, so
+# that rule lives here and in review.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jail-cluster-runner
+  namespace: jail-clusters
+automountServiceAccountToken: false
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

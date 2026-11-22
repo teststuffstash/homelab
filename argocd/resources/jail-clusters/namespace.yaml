@@ -2,10 +2,11 @@
 # session or its subagents start with scripts/jail-cluster.sh to run a kind/k3d gate it cannot run
 # on the jail host. Everything that bounds them lives in this directory:
 #   priorityclass.yaml     lowest priority, never preempts — rides and CI win every contest
-#   resourcequota.yaml     at most 2 concurrent pods (+ their scratch PVCs)
-#   admission-policy.yaml  every pod here: kata, nx-01, the pinned dind, no host access
+#   resourcequota.yaml     at most 2 concurrent pods (+ their scratch PVCs, ephemeral storage)
+#   limitrange.yaml        per-container ephemeral-storage default + max (node disk)
+#   admission-policy.yaml  every pod here: kata, nx-01, the pinned dind, no host access, no API token
 #   egress-cnp.yaml        registry mirrors + package caches + DNS only (the docker-ride legs)
-#   rbac.yaml              the namespace-scoped ServiceAccount subagents get a token for
+#   rbac.yaml              the token SA (jail-cluster) and the empty SA pods run as (jail-cluster-runner)
 #
 # PodSecurity stays at the cluster-default baseline: the privileged dind is admitted only because
 # the apiserver exempts the kata runtimeClass (FU-077, tofu/talos.tf) — a privileged runc pod is

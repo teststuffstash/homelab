@@ -11,7 +11,8 @@
 #   jail-cluster run [--name <n>] [--deadline <s>] [--tree <dir>] [--keep] [--dry-run] -- <command…>
 #   jail-cluster list
 #   jail-cluster reap [--all | <name>]          (no argument: this session's pods)
-#   jail-cluster token --out <file> [--duration <d>]   (admin kubeconfig: mint a namespace-scoped kubeconfig)
+#   jail-cluster token [--out <file>] [--duration <d>]  (admin kubeconfig: mint a namespace-scoped
+#                                    kubeconfig, ≤ 4h, written OUTSIDE any git work tree)
 #
 # Inside the pod: cwd = the shipped tree; $JAIL_EVIDENCE_DIR is copied back; docker is on PATH
 # (DOCKER_HOST = the dind sidecar), and the registry-mirror / nix-cache env of a docker ride is set.
@@ -33,6 +34,7 @@ NODE=nx-01                    # the ride tier (ADR-159 `large` lives here too); 
 PRIORITY_CLASS=jail-clusters  # value < 0, preemptionPolicy Never (argocd/resources/jail-clusters/)
 DEADLINE_DEFAULT=3600
 DEADLINE_MAX=14400            # = the admission policy's ceiling and a ride's own 4 h wall clock
+TOKEN_MAX_S=14400             # the verb's own ceiling on a minted token (the apiserver sets none here)
 SRC="$ROOT/agents/agent-session.sh"
 
 die()  { echo "jail-cluster: $*" >&2; exit 2; }
@@ -77,6 +79,8 @@ render() {   # render <pod> <name> <deadline> → manifest on stdout
   case "$KATA_BLOCK" in *"runtimeClassName: kata"*) ;; *) die "extracted KATA_BLOCK is not kata — refusing";; esac
   case "$DIND_CONTAINER" in *"- name: dind"*"image: ${AGENT_DIND_IMAGE}"*) ;; *) die "extracted DIND_CONTAINER lacks the pinned dind";; esac
   case "$DIND_CONTAINER" in *__*__*) die "extracted DIND_CONTAINER has an unsubstituted placeholder";; esac
+  # every emptyDir gets a sizeLimit (admission policy (n)); the ride's docker-run holds a socket + a toml
+  case "$DOCKER_VOLUMES" in *"emptyDir: {}"*) DOCKER_VOLUMES="${DOCKER_VOLUMES//emptyDir: \{\}/emptyDir: { sizeLimit: 64Mi \}}" ;; esac
   cat <<EOF
 apiVersion: v1
 kind: Pod
@@ -88,6 +92,7 @@ spec:
   restartPolicy: Never
   activeDeadlineSeconds: ${deadline}
   priorityClassName: ${PRIORITY_CLASS}
+  serviceAccountName: jail-cluster-runner
   automountServiceAccountToken: false
   enableServiceLinks: false
   terminationGracePeriodSeconds: 5
@@ -109,8 +114,8 @@ ${DIND_CONTAINER}
           if command -v kubectl >/dev/null; then cp "\$(command -v kubectl)" /jail-tools/; fi
       securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
       resources:
-        requests: { cpu: "50m", memory: "64Mi" }
-        limits:   { cpu: "500m", memory: "64Mi" }
+        requests: { cpu: "50m", memory: "64Mi", ephemeral-storage: "64Mi" }
+        limits:   { cpu: "500m", memory: "64Mi", ephemeral-storage: "256Mi" }
       volumeMounts:
         - { name: jail-tools, mountPath: /jail-tools }
   containers:
@@ -136,13 +141,13 @@ ${DOCKER_ENV}
         capabilities: { drop: ["ALL"] }
         seccompProfile: { type: RuntimeDefault }
       resources:   # an ESTIMATE (ADR-167): record the first real run's peak and resize
-        requests: { cpu: "500m", memory: "1Gi" }
-        limits:   { cpu: "4", memory: "1Gi" }
+        requests: { cpu: "500m", memory: "1Gi", ephemeral-storage: "2Gi" }
+        limits:   { cpu: "4", memory: "1Gi", ephemeral-storage: "10Gi" }
       volumeMounts:${DOCKER_MOUNT}
         - { name: jail-tools, mountPath: /jail-tools }
   volumes:${DOCKER_VOLUMES}
     - name: jail-tools
-      emptyDir: {}
+      emptyDir: { sizeLimit: 512Mi }
 EOF
 }
 
@@ -162,18 +167,45 @@ i=0; until docker info >/dev/null 2>&1; do
 done
 cd /work/tree && exec "$@"'
 
+# never_ship <repo-relative path> — THE one predicate for what never leaves the jail, whatever
+# .gitignore says (scripts/jail-cluster-test.sh builds a tree holding one of each and asserts the tar
+# has none): devbox state and .git; any *kubeconfig* / *talosconfig* name; ssh private keys
+# (id_rsa, id_ed25519, … — the .pub halves too, they are not gate input); .netrc, .git-credentials,
+# .npmrc, .pypirc; .env and every .env*; tofu state and vars (*.tfstate*, *.tfvars*); key files
+# (*.pem, *.key, *.p12, *.pfx, *.kdbx, *.keyx).
+NEVER_SHIP='(^|/)\.devbox/|(^|/)\.git/|(^|/)[^/]*(kubeconfig|talosconfig)[^/]*$|(^|/)id_(rsa|dsa|ecdsa|ed25519)(_sk)?(\.pub)?$|(^|/)(\.netrc|\.git-credentials|\.npmrc|\.pypirc)$|(^|/)\.env[^/]*$|\.tfstate[^/]*$|\.tfvars[^/]*$|\.(pem|key|p12|pfx|kdbx|keyx)$'
+never_ship() { grep -Eq "$NEVER_SHIP" <<<"$1"; }
 # ship_tree <dir> → tar.gz on stdout: tracked + untracked-not-ignored files (.gitignore honoured),
-# minus the never-ship set (devbox state, tofu state/vars, kubeconfigs, key material, .env).
-NEVER_SHIP='(^|/)\.devbox/|(^|/)\.git/|\.tfstate|\.tfvars$|(^|/)(kubeconfig|talosconfig)$|(^|/)\.env$|\.(pem|key|p12|pfx|kdbx|keyx)$'
+# minus never_ship, minus the kubeconfig this verb is using (whatever its name) when it sits inside
+# the tree.
 ship_tree() {
-  local dir="$1"
+  local dir="$1" kc="" f
+  kc="$(realpath -m "${JAIL_CLUSTER_KUBECONFIG:-${KUBECONFIG:-}}" 2>/dev/null || true)"
   git -C "$dir" ls-files -z -c -o --exclude-standard --deduplicate \
     | while IFS= read -r -d '' f; do
         [ -e "$dir/$f" ] || [ -L "$dir/$f" ] || continue     # tracked but deleted in the worktree
-        grep -Eq "$NEVER_SHIP" <<<"$f" && continue
+        never_ship "$f" && continue
+        if [ -n "$kc" ] && [ "$(realpath -m "$dir/$f")" = "$kc" ]; then
+          echo "jail-cluster: NOT shipping $f — it is the kubeconfig in use" >&2; continue
+        fi
         printf '%s\0' "$f"
       done \
     | tar -C "$dir" --null --no-recursion -T - -czf -
+}
+
+# extract_evidence <tgz> <dir> — the pod's tar is untrusted: refuse it whole if any member is
+# absolute or has a `..` segment, extract without owners/permissions, then delete every symlink
+# (nothing in the evidence dir may point outside it).
+extract_evidence() {
+  local tgz="$1" dir="$2" bad
+  bad="$(tar -tzf "$tgz" 2>/dev/null | grep -E '^/|(^|/)\.\.(/|$)' | head -3)" || true
+  if [ -n "$bad" ] || ! tar -tzf "$tgz" >/dev/null 2>&1; then
+    echo "jail-cluster: WARN evidence REFUSED (absolute or .. member, or unreadable): ${bad:-unreadable}" >&2
+    return 0
+  fi
+  tar -xzf "$tgz" -C "$dir" --no-same-owner --no-same-permissions
+  find "$dir" -type l -print -delete | sed 's/^/jail-cluster: dropped evidence symlink /' >&2
+  rm -f "$tgz"
 }
 
 cmd_run() {
@@ -205,6 +237,11 @@ cmd_run() {
   ev="${JAIL_CLUSTER_EVIDENCE_DIR:-${TMPDIR:-/tmp}/jail-cluster}/${pod}-$(date -u +%Y%m%dT%H%M%SZ)"
   mkdir -p "$ev/evidence"
 
+  # A pod past its deadline (or done) stays as an object with its scratch PVC, and still holds the
+  # PVC quota until deleted. Clear every finished rig pod first — the PVC is the pod's ephemeral
+  # volume (owned by it), so the garbage collector removes it after the pod.
+  k delete pods -l app=jail-cluster --field-selector=status.phase==Failed --wait=false >/dev/null 2>&1 || true
+  k delete pods -l app=jail-cluster --field-selector=status.phase==Succeeded --wait=false >/dev/null 2>&1 || true
   if ! err="$(printf '%s\n' "$manifest" | k create -f - 2>&1 >/dev/null)"; then
     case "$err" in
       *"exceeded quota"*) die "the jail-cluster cap is reached (ResourceQuota $NS) — \`jail-cluster list\`, wait or reap. $err" ;;
@@ -232,7 +269,7 @@ cmd_run() {
   rc="${PIPESTATUS[0]}"
   set -e
   if k exec "$pod" -c runner -- sh -c 'cd "$JAIL_EVIDENCE_DIR" && tar -czf - .' > "$ev/evidence.tgz" 2>/dev/null; then
-    tar -xzf "$ev/evidence.tgz" -C "$ev/evidence" && rm -f "$ev/evidence.tgz"
+    extract_evidence "$ev/evidence.tgz" "$ev/evidence"
   else
     echo "jail-cluster: WARN evidence copy-back failed (the gate's exit stands)" >&2
   fi
@@ -266,14 +303,26 @@ cmd_token() {
       *) die "token: unknown argument '$1'" ;;
     esac
   done
-  [ -n "$out" ] || die "token: --out <file> is required (the token is never printed)"
+  local secs
+  case "$dur" in
+    *[0-9]h) secs=$(( ${dur%h} * 3600 )) ;; *[0-9]m) secs=$(( ${dur%m} * 60 )) ;; *[0-9]s) secs=${dur%s} ;;
+    *) die "token: --duration takes <n>h, <n>m or <n>s" ;;
+  esac 2>/dev/null || die "token: --duration takes <n>h, <n>m or <n>s"
+  [ "$secs" -ge 600 ] && [ "$secs" -le "$TOKEN_MAX_S" ] || die "token: --duration must be 10m..4h"
+  out="${out:-${JAIL_CLUSTER_TOKEN_DIR:-$HOME/.jail-cluster}/${SESSION}-$(date -u +%Y%m%dT%H%M%SZ).kubeconfig}"
+  # never inside a git work tree: `run` ships work trees, and a token there would ride along
+  local outdir; outdir="$(dirname "$out")"
+  mkdir -p "$outdir" && chmod 700 "$outdir" 2>/dev/null || true
+  if git -C "$outdir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    die "token: --out $out is inside a git work tree — write it outside any checkout (default \$HOME/.jail-cluster/)"
+  fi
   KCFG="$(kubeconfig)"
   local server ca tok
   server="$(kubectl --kubeconfig "$KCFG" config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')"
   ca="$(kubectl --kubeconfig "$KCFG" config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
-  tok="$(k create token jail-cluster --duration "$dur")"
+  tok="$(k create token jail-cluster --duration "${secs}s")"
   [ -n "$server" ] && [ -n "$ca" ] && [ -n "$tok" ] || die "token: could not read server/CA or mint the token"
-  ( umask 077; cat > "$out" <<EOF
+  ( umask 077; rm -f "$out"; cat > "$out" <<EOF
 apiVersion: v1
 kind: Config
 clusters:
