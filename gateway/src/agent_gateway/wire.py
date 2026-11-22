@@ -47,6 +47,7 @@ SOURCES: dict[str, str] = {
     "go-models-dev": PUBLIC,            # models.dev api.json — no header beyond the User-Agent
     "go-console-config": ACCOUNT,       # the Go console's V2 config — the Go key as a bearer
     "go-docs": PUBLIC,                  # the vendor's Go page source
+    "go-limits": PUBLIC,                # the vendor's Go models list — no credential; recorded, parsed by nothing
     "openrouter-endpoints": PUBLIC,     # /v1/models/<id>/endpoints — the latest model's answer
     "openrouter-mcp-rankings": ACCOUNT,   # MCP tools/call list-daily-model-rankings — the account key
     "openrouter-mcp-benchmarks": ACCOUNT,  # MCP tools/call list-benchmarks — the account key

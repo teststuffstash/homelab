@@ -70,6 +70,8 @@ GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
+    # the docs source's second read (GW-CATALOG-GO, the limits read): the Go models list, public; recorded, parsed by nothing
+    "limits": "https://opencode.ai/inference/go/v1/models",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
@@ -829,7 +831,8 @@ class Settings:
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
             go_catalog_urls={"catalog": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["catalog"]),
                              "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
-                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
+                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"]),
+                             "limits": e.get("GATEWAY_GO_LIMITS_URL", GO_CATALOG_URLS["limits"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
             opencode_usage_url=e.get("OPENCODE_USAGE_URL", "").strip(),

@@ -23,7 +23,7 @@ from agent_gateway.metrics import Metrics
 from agent_gateway.wire import WireDeclarationError, parse_declarations
 
 from ._catalog_rows import T0, at_offset
-from ._catalog_world import catalog_doc
+from ._catalog_world import LIMITS_BODY, catalog_doc
 from ._codex_rows import row, verdicts
 from ._codex_world import CODEX_BASE, CODEX_POLICY
 from .conftest import GO_KEY, attach_json, given, quiet, rule, when, world
@@ -91,6 +91,8 @@ KEPT_ROWS = [
                  "T0 + 21600 s", id="a later answer replaces it"),
     pytest.param("go-models-dev", "catalog-malformed at T0", NOCRED, "public", "the malformed bytes", "their sha256", "T0",
                  id="a shape the parser refuses is still recorded ⚖"),
+    pytest.param("go-limits", "limits-ok at T0", NOCRED, "public", "the fake's bytes, byte-identical", "the bytes' sha256", "T0",
+                 id="the Go limits read's bytes are kept verbatim"),
     pytest.param("codex-usage", "the observed usage shape at T0", "the codex bearer and account header", "account", "every key, number and boolean; every string `{\"len\": n}`",
                  "the raw bytes' sha256", "T0", id="an account read keeps its structure and no string value ⚖"),
 ]
@@ -113,6 +115,11 @@ async def test_a_reads_answer_is_kept(cworld, vendor, vendor_transport, clock, c
             await poll.poll()
         await client.aclose()
         want_bytes = None
+    elif source == "go-limits":
+        app = cworld.build()
+        with when(f"the docs source refreshes: {read}"), quiet():
+            await app.state.catalog.refresh_source("docs")
+        want_bytes = JSONResponse(LIMITS_BODY).body
     else:
         with when(f"the config source refreshes: {read}"):
             app = await _read(cworld, vendor, vendor_transport, clock, read)

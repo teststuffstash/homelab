@@ -29,6 +29,7 @@ from .conftest import (
     GO_CONFIG_URL,
     GO_DOCS_URL,
     GO_KEY,
+    GO_LIMITS_URL,
     POLICY_FIXTURE,
     SELF_URL,
     UPSTREAM_BASES,
@@ -43,7 +44,9 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "go-catalog"
 CATALOG_URL = GO_CATALOG_URL
 CONFIG_URL = GO_CONFIG_URL
 DOCS_URL = GO_DOCS_URL
-HOSTS = {httpx.URL(u).host: read for read, u in (("catalog", CATALOG_URL), ("config", CONFIG_URL), ("docs", DOCS_URL))}
+LIMITS_URL = GO_LIMITS_URL
+LIMITS_BODY = {"object": "list", "data": [], "synthetic": "not a vendor answer"}
+HOSTS = {httpx.URL(u).host: read for read, u in (("catalog", CATALOG_URL), ("config", CONFIG_URL), ("docs", DOCS_URL), ("limits", LIMITS_URL))}
 SHRUNK = ("deepseek-v4-pro", "deepseek-v4.1-flash")
 TRIMMED = ("claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash")
 SHRUNK_NAMES = ("DeepSeek V4.1 Flash", "DeepSeek V4 Pro")
@@ -190,11 +193,13 @@ class FakeVendor:
         self.catalog = "catalog-ok"
         self.config = "config-ok"
         self.docs = "docs-ok"
+        self.limits = "limits-ok"
         self.calls: list[dict] = []
         self.app = Starlette(routes=[
             Route("/api.json", self._catalog, methods=["GET"]),
             Route("/console/api/v2/config", self._config, methods=["GET"]),
             Route("/anomalyco/opencode/dev/go.mdx", self._docs, methods=["GET"]),
+            Route("/inference/go/v1/models", self._limits, methods=["GET"]),
         ])
 
     def _reply(self, request: Request, behaviour: str, response: Response) -> Response:
@@ -229,6 +234,12 @@ class FakeVendor:
             return self._reply(request, b, PlainTextResponse("404: Not Found", status_code=404))
         return self._reply(request, b, PlainTextResponse(docs_text(b), media_type="text/plain"))
 
+    async def _limits(self, request: Request) -> Response:
+        b = self.limits
+        if b == "limits-503":
+            return self._reply(request, b, JSONResponse({"error": "unavailable"}, status_code=503))
+        return self._reply(request, b, JSONResponse(LIMITS_BODY))
+
 
 def _redacted(h: dict) -> dict:
     """The fake's own attachment never carries the key either (the GW-REDACT discipline in evidence)."""
@@ -241,11 +252,13 @@ class VendorTransport(httpx.AsyncBaseTransport):
     def __init__(self, vendor: FakeVendor, rails: RailTransport):
         self.vendor = httpx.ASGITransport(app=vendor.app)
         self.rails = rails
-        self.down: set[str] = set()  # `catalog-down` / `config-down` / `docs-down`: a connect failure on that read
+        self.attempts: dict[str, int] = {}
+        self.down: set[str] = set()  # `catalog-down` / `config-down` / `docs-down` / `limits-down`: a connect failure on that read
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         read = HOSTS.get(request.url.host)
         if read is not None:
+            self.attempts[read] = self.attempts.get(read, 0) + 1  # an answered request and a refused connection each count one
             if read in self.down:
                 raise httpx.ConnectError(f"{read} vendor unreachable (fake)", request=request)
             return await self.vendor.handle_async_request(request)
@@ -256,7 +269,7 @@ def catalog_settings(db_path: str, key: str | None = GO_KEY) -> Settings:
     env = {"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": db_path, "GATEWAY_SELF_URL": SELF_URL,
            "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
            "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"], "GATEWAY_GO_CATALOG_URL": CATALOG_URL,
-           "GATEWAY_GO_CONFIG_URL": CONFIG_URL, "GATEWAY_GO_DOCS_URL": DOCS_URL}
+           "GATEWAY_GO_CONFIG_URL": CONFIG_URL, "GATEWAY_GO_DOCS_URL": DOCS_URL, "GATEWAY_GO_LIMITS_URL": LIMITS_URL}
     if key:
         env["OPENCODE_GO_API_KEY"] = key
     return Settings.from_env(env)

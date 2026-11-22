@@ -44,7 +44,7 @@ from .store import Store, iso
 log = logging.getLogger("gateway.catalog")
 
 SOURCES = ("config", "docs")
-WIRE_SOURCES = {"catalog": "go-models-dev", "config": "go-console-config", "docs": "go-docs"}  # GW-WIRE-RECORD: a read's source name
+WIRE_SOURCES = {"catalog": "go-models-dev", "config": "go-console-config", "docs": "go-docs", "limits": "go-limits"}  # GW-WIRE-RECORD: a read's source name
 READS = {"config": ("catalog", "config"), "docs": ("docs",)}  # a source's reads, in order; each read has a URL
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 # ⚖ #2933 (operator ruling 2026-10-26): a LISTED model whose dialect the parser does not know is
@@ -575,6 +575,24 @@ class GoCatalog:
                              r.headers.get("content-type", "") if r is not None else "",
                              secrets=(self.api_key or "",))
 
+    async def _limits_read(self) -> None:
+        """The docs source's second read: sent at every refresh whatever the page read's outcome, recorded
+        (GW-WIRE-RECORD, `go-limits`), parsed by nothing — its failure changes no outcome, snapshot or metric."""
+        headers = self._headers("limits")
+        try:
+            r = await self.client.get(self.urls["limits"], headers=headers, timeout=FETCH_TIMEOUT_S)
+        except httpx.HTTPError as e:
+            self._wire("limits", None, None, headers)
+            log.warning("catalog: docs limits read failed (%s) — recorded, nothing parses it", type(e).__name__)
+            return
+        except Exception:  # noqa: BLE001 — a read nothing parses never fails the source
+            log.exception("catalog: docs limits read raised")
+            return
+        try:
+            self._wire("limits", r.status_code, r, headers)
+        except Exception:  # noqa: BLE001
+            log.exception("catalog: docs limits record raised")
+
     async def refresh_source(self, source: str) -> str:
         now = self.clock()
         self.last_attempt[source] = now
@@ -589,6 +607,8 @@ class GoCatalog:
         if source == "config" and not self.api_key:
             log.error("catalog: %s fetch skipped — no OPENCODE_GO_API_KEY (no request is sent)", source)
             return "fetch-failed"
+        if source == "docs":
+            await self._limits_read()
         parts: dict[str, dict] = {}
         dropped: list[dict] = []
         for read in READS[source]:

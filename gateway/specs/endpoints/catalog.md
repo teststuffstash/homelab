@@ -182,7 +182,12 @@ each with its own snapshot:
   **model id** through the page's own Endpoints table (display name → Model ID); the fees by the
   Plan table's plan names. ⚖ `go-models.ts` (the spike's second file) is not read: it keys rows by
   family (`deepseek-flash`), and limits are per model (ruling 3); `go.mdx` carries every fact the
-  leg needs.
+  leg needs. A second read, the **limits read** — `GET https://opencode.ai/inference/go/v1/models`,
+  the endpoint the Go page's own §Models names, sent with no credential — goes out at every docs
+  refresh whatever the page read's outcome; its answer is recorded
+  ([GW-WIRE-RECORD](wire.md#gw-wire-record), source `go-limits`) and parsed by nothing: a failed
+  limits read changes no outcome, snapshot or metric of the source (the metrics: unverified —
+  expected, no row).
 
 The parse is **strict**: a shape the parser does not know is a parse failure, never a guess —
 whatever the parser raises on it is counted `parse-failed`, and one source's failure never skips
@@ -207,8 +212,8 @@ start: the gateway starts as with no snapshot of that source (no age, the first 
 
 ⚖ **The rail serving an id is not an allowance** ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677)). *Listed* is the
 vendor's client view — models.dev minus its deprecated rows, under the workspace's overrides —
-never the Go rail's own model list. The leg does not read that list (`/zen/go/v1/models`): its
-reads are the three under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
+never the Go rail's own model list. The leg never lists from that list (`/zen/go/v1/models`, the same answer the limits read fetches at `/inference/go/v1/models`): its
+reads are the four under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
 `served` flag and no reference price (unverified — expected, no row). An id the rail serves and the catalog does not list — a
 deprecated row the vendor still serves, a pay-as-you-go model with no Go row, an id with no vendor
 row at all (the kinds: unverified — expected, no row) — is unlisted like any other: an admission naming it defers `not-in-catalog`
@@ -346,14 +351,27 @@ Plan-table rows the refresh's log names as passed over.
 
 #### What a fetch sends
 
-Legend: `read` = which of the three reads (`config` = the console, `catalog` = models.dev, `docs` =
-the page); `x_opencode_session?` = the `x-opencode-session` header over two fetches.
+Legend: `read` = which of the four reads (`config` = the console, `catalog` = models.dev, `docs` =
+the page, `limits` = the Go models list); `x_opencode_session?` = the `x-opencode-session` header over two fetches.
 
 | description | read | authorization? | user_agent? | x_opencode_session? |
 |---|---|---|---|---|
 | the console read carries the key and a client identity | config | `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
 | the catalog read carries no credential | catalog | absent | `agent-gateway/<version> (go-catalog)` | absent |
 | the docs fetch carries no credential | docs | absent | `agent-gateway/<version> (go-catalog)` | absent |
+| the limits read carries no credential ⚖ | limits | absent | `agent-gateway/<version> (go-catalog)` | absent |
+
+#### The limits read changes nothing the source keeps
+
+Legend: `limits` = what the fake answers on the limits read (`limits-ok` = 200 with the body `{"object": "list", "data": [], "synthetic": "not a vendor answer"}`; `limits-503` = that read answers 503; `limits-down` = a connect failure on that read); `last_good`, `docs`, `outcome?`, `models?` as in the docs tables above (the refresh runs at T0 + 60 s; `docs-404` and `docs-header-drift` are those tables' knobs); `limits_requests?` = the limits reads the gateway attempted during the refresh, as the fake counts them (a request it answered and a connection it refused each count one).
+
+| description | last_good | docs | limits | outcome? | models? | limits_requests? |
+|---|---|---|---|---|---|---|
+| the limits read goes out with the page read | none | docs-ok | limits-ok | ok | 5 | 1 |
+| a failed limits read changes nothing the source keeps ⚖ | none | docs-ok | limits-503 | ok | 5 | 1 |
+| an unreachable limits host changes nothing either | none | docs-ok | limits-down | ok | 5 | 1 |
+| a page the parser refuses still sends the limits read ⚖ | 5 | docs-header-drift | limits-ok | parse-failed | 5 | 1 |
+| a page that cannot be fetched still sends the limits read | 5 | docs-404 | limits-ok | fetch-failed | 5 | 1 |
 
 #### No key, no fetch; the key never logged
 
@@ -424,7 +442,7 @@ plausibility floor holds it).
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
-| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are ([#3293](https://github.com/teststuffstash/homelab/issues/3293)); the rail's own `/models` answer stays unread |
+| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are ([#3293](https://github.com/teststuffstash/homelab/issues/3293)); the rail's own `/models` answer is never a listing source |
 | ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed; the account's windows and their reset are the headroom Goal's read ([#3118](https://github.com/teststuffstash/homelab/issues/3118)) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
