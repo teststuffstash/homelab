@@ -201,7 +201,8 @@ Both lanes keep the standing discipline:
   coordinator/worker pods `git clone --depth 1 master`, so a loop-relevant commit left local
   is a commit the loop never saw.
 - Uncommitted work from a previous session may be in the tree — check `git status` before you
-  start and leave what isn't yours alone.
+  start and leave what isn't yours alone. A second jail's wind-down handoff may be waiting in
+  `/workspace/.handoff/seat/` — file it ([`seat-records.md`](../.claude/skills/handoff/seat-records.md)).
 - **Never pipe-filter a gate's exit** (`lint | tail -1 &&` masked a failing lint once); verify
   pushes by fetch-compare.
 

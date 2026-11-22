@@ -1,0 +1,12 @@
+# homelab#1941 — as ../fix-round-cm-stale-no-pod, but the same-key pod is TERMINAL (Failed): the stale
+# bundle is deleted and recreated, the same as with no pod at all. The delete happens before the same-key
+# reap gate deletes the pod, so the bundle is not left to the ownerReference GC (which is async).
+name: context-prefetch/fix-round-cm-stale-failed-pod
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_KUBECTL_create=alreadyexists-once

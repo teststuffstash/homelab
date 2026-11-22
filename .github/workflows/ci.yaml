@@ -566,6 +566,9 @@ jobs:
       - name: lock-intake-lint self-test (devbox run lock-intake-lint-test)
         if: steps.diff.outputs.lock-intake-lint-test != 'false'
         run: devbox run lock-intake-lint-test
+      - name: image-clock self-test (devbox run image-clock-test)
+        if: steps.diff.outputs.image-clock-test != 'false'
+        run: devbox run image-clock-test
 
       # #2072: the coverage belt at the top of scripts/diff-ci.sh — every `devbox run <task>` in
       # THIS file must have a MAP row (or a PR_ONLY exemption) — used to run only in the local
@@ -782,11 +785,24 @@ jobs:
       - name: Gateway specs-site e2e (devbox run gateway-specs-site-e2e)
         if: steps.diff.outputs.gateway-specs-site-e2e != 'false'
         run: devbox run gateway-specs-site-e2e
+      # The islands' own gates (homelab#3391): each runs its island's scripts/ci.sh (uv sync, ruff,
+      # pytest over the rule()-labelled rows) — the same diff-ci MAP rows a ride's pr-gate runs, so
+      # the ride's gates and CI's gates stay one set. Triggers are the MAP rows' (scan also re-runs
+      # on its replay-family inputs under agents/).
+      - name: Scan island suite (islands/scan/scripts/ci.sh)
+        if: steps.diff.outputs.bash-islands-scan-scripts-ci-sh != 'false'
+        run: devbox run -- bash islands/scan/scripts/ci.sh
+      - name: Launch island suite (islands/launch/scripts/ci.sh)
+        if: steps.diff.outputs.bash-islands-launch-scripts-ci-sh != 'false'
+        run: devbox run -- bash islands/launch/scripts/ci.sh
+      - name: Retro island suite (islands/retro/scripts/ci.sh)
+        if: steps.diff.outputs.bash-islands-retro-scripts-ci-sh != 'false'
+        run: devbox run -- bash islands/retro/scripts/ci.sh
       # The scan island's browsable specs site (islands/scripts/specs-site.sh): the island's suite for
       # its evidence, the mkdocs build, the mirror to the `scan-specs` bucket → master runs
       # https://scan-specs.homelab.teststuff.net, PR runs …/pr-<N>/ (purged on close by
       # gateway-specs-pr-purge.yaml). A red island suite does not fail this step — it publishes
-      # what the suite left; the suite's own gate step is #3391. The writer key is the gateway-specs
+      # what the suite left; the gate is the "Scan island suite" step above. The writer key is the gateway-specs
       # pair (granted on the bucket in argocd/resources/agent-gateway/garage-workspace.yaml). A
       # failed upload fails the step (verify-own-write), deliberately no continue-on-error.
       - name: Scan specs site publish (islands/scripts/specs-site.sh publish scan)
