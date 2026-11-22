@@ -480,7 +480,7 @@ after it.
 | description | input | v0 answer | the gap |
 |---|---|---|---|
 | ⚑ gap: labels, urgency, budget class | body carries none, none read | — | the ADR-096 ladder's inputs; `tier` is the only size knob |
-| ⚑ gap: `POST /route` | any | 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
+| ⚑ gap: `POST /route` | `POST /route`, any body | 404 | not served by this gateway — consumers move to `/sessions`; the old proxy keeps serving it |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
