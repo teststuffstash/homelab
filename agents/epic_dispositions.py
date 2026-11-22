@@ -305,19 +305,19 @@ def _member_repo(item: dict) -> str:
 
 
 def _resolve_in_tree(slug: str, issue: int, want: int) -> "list[str]":
-    """→ the repos the container's TREE holds `want` in, at the FIRST level that holds it.
+    """→ the repos the container's TREE holds `want` in, up to the own-repo hit.
 
     Breadth-first over the container's NATIVE sub-issue edges — the same walk the budget gate
     does (agents/goal-budget.sh): the edges are repo-qualified, so a cross-repo member is a
     member exactly like an own-repo one and a bare number can never alias a foreign one.
     Cycle-safe by the seen-set, bounded at MEMBER_WALK_DEPTH.
 
-    The walk STOPS at the first level that holds the wanted number, and within that level every
-    entry carrying it is reported: a number that names a member in ONE repo resolves to that
-    repo, and a number that names members in TWO repos is ambiguous — the caller refuses it.
-    Stopping there is also what keeps the read CHEAP: the cost of a ruling is proportional to
-    the depth of its member, not to the size of the tree (Goal #1640's tree is 34 members; a
-    member at depth 1 costs ONE GET, a member at depth 4 costs the four levels above it).
+    The walk stops early ONLY on an own-repo hit (the bare key's one meaning, at any depth);
+    a foreign-only level keeps it walking, so an own-repo member sitting deeper than a
+    same-numbered foreign one is still found. Every repo that carries the number along the way
+    is reported: ONE repo resolves there, TWO is ambiguous — the caller refuses it, naming both.
+    An own-repo member at depth 1 still costs ONE GET; a number absent from the tree costs the
+    whole bounded walk.
 
     An EMPTY list means the tree does not hold the number at all — the container has no such
     member, so a bare row for it would be a row nobody reads.
@@ -326,6 +326,7 @@ def _resolve_in_tree(slug: str, issue: int, want: int) -> "list[str]":
     in, and guessing is the defect this read exists to prevent (rule #6).
     """
     seen: "set[tuple[str, int]]" = set()
+    found: "set[str]" = set()
     frontier = [(slug, int(issue), 0)]
     while frontier:
         repo, num, depth = frontier.pop(0)
@@ -342,13 +343,14 @@ def _resolve_in_tree(slug: str, issue: int, want: int) -> "list[str]":
                 raise Unreadable(
                     f"sub-issue payload under {repo}#{num} holds an item with no number/repo")
             kids.append((crepo, cnum))
-        hits = sorted({crepo for (crepo, cnum) in kids if cnum == want})
-        if hits:
-            return hits                 # the first level that holds it decides
+        level = {crepo for (crepo, cnum) in kids if cnum == want}
+        found |= level
+        if slug in level:
+            return sorted(found)        # an own-repo hit is the bare key's meaning — stop here
         if depth < MEMBER_WALK_DEPTH:
             for (crepo, cnum) in kids:
                 frontier.append((crepo, cnum, depth + 1))
-    return []
+    return sorted(found)
 
 
 # ── the importable API the CLI wraps ──────────────────────────────────────────────────────────
@@ -630,8 +632,14 @@ def self_test() -> int:
              "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
             {"number": 777,
              "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
+            # #555 is the CROSS-LEVEL collision: a foreign member at depth 1 and the own-repo
+            # member at depth 2 (under 1768) — the bare key means the own-repo one.
+            {"number": 555,
+             "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
         ],
         ("teststuffstash/homelab", 1768): [
+            {"number": 555,
+             "repository_url": "https://api.github.com/repos/teststuffstash/homelab"},
             {"number": 136,
              "repository_url": "https://api.github.com/repos/teststuffstash/agent-runtime"},
         ],
@@ -686,6 +694,19 @@ def self_test() -> int:
             check("…and names the qualified form", "agent-runtime#777" in str(e), True)
         else:
             raise AssertionError("set accepted an ambiguous bare number")
+        check("…and still writes NOTHING", wrote, [])
+        # …and a foreign #555 at depth 1 with the own-repo #555 at depth 2 is AMBIGUOUS too:
+        # the walk must not stop at the foreign hit and name only it.
+        try:
+            set_disposition("teststuffstash/homelab", 1640, "555", "adopted", "checkpoint")
+        except Refused as e:
+            n += 1
+            print("  ✓ set REFUSES a cross-level collision as AMBIGUOUS, naming both forms")
+            check("…and names the foreign form", "agent-runtime#555" in str(e), True)
+            check("…and the own-repo form", "homelab#555" in str(e), True)
+            check("…and says ambiguous", "ambiguous" in str(e), True)
+        else:
+            raise AssertionError("set accepted a cross-level colliding bare number")
         check("…and still writes NOTHING", wrote, [])
         # …and the QUALIFIED form writes the row the readers match.
         rows = set_disposition("teststuffstash/homelab", 1640, "agent-runtime#134",
