@@ -41,19 +41,19 @@ def test_sitting_service_account(row: str) -> None:
     assert wf["spec"]["workflowSpec"]["serviceAccountName"] == "island-intake"
 
 
-@pytest.mark.parametrize("row", [pytest.param("token-is-homelab-agents", marks=rule("INTAKE-ACCESS-IDENTITY"),
-                                              id="token-is-homelab-agents")])
+@pytest.mark.parametrize("row", [pytest.param("token-is-homelab-intake", marks=rule("INTAKE-ACCESS-IDENTITY"),
+                                              id="token-is-homelab-intake")])
 def test_token_identity(row: str) -> None:
-    # agents/coordinator/README.md §Git token: `coordinator-git` "is minted from the same
-    # `homelab-agents` GitHub App as the worker token". Every GH_TOKEN of the workflow reads that
-    # one Secret, and the chain Secret → ExternalSecret → GithubAccessToken → appID lands on it.
+    # docs/github-apps.yaml `homelab-intake` purpose: "homelab-intake[bot] is the sitting". Every GH_TOKEN
+    # of the workflow reads one Secret, and the chain Secret → ExternalSecret → GithubAccessToken →
+    # appID lands on that App (mint site agents/coordinator/intake-git.yaml).
     allure.dynamic.title(row)
     refs = decl.token_secret_refs(decl.sitting_workflow())
-    assert refs == {"coordinator-git"}, refs
-    ident = decl.identity_of("coordinator-git")
+    assert refs == {"intake-git"}, f"the sitting's GH_TOKEN reads {sorted(refs)}, not the intake App's Secret intake-git"
+    ident = decl.identity_of("intake-git")
     allure.dynamic.parameter("generator", ident.generator)
     allure.dynamic.parameter("app", f"{ident.slug} ({ident.app_id})")
-    assert ident.slug == "homelab-agents"
+    assert ident.slug == "homelab-intake"
 
 
 # ── INTAKE-ACCESS-GOAL-BRANCH ──────────────────────────────────────────────────────────────────
@@ -166,6 +166,28 @@ def test_clone_homelab(row: str) -> None:
     assert "homelab" in ident.repositories
 
 
+def _source_identity() -> decl.Identity:
+    (secret,) = decl.token_secret_refs(decl.sitting_workflow(), "INTAKE_READ_GH_TOKEN")
+    return decl.identity_of(secret)
+
+
+@pytest.mark.parametrize("row", [pytest.param("read-source-repo", marks=rule("INTAKE-ACCESS-CLONE"),
+                                              id="read-source-repo")])
+def test_read_source_repo(row: str) -> None:
+    # A stack's read-only source repo (a deployment repo its facts file reads) is read with a second
+    # token of the same App that can only read: its mint requests contents:read alone, and it names
+    # no repo the sitting's main token names (an island repo, where the sitting writes).
+    allure.dynamic.title(row)
+    main, src = _identity(), _source_identity()
+    allure.dynamic.parameter("generator", src.generator)
+    allure.dynamic.parameter("repositories", ", ".join(src.repositories))
+    assert src.app_id == main.app_id, (src.slug, main.slug)
+    assert src.minted == {"contents": "read"}, src.minted
+    assert src.repositories, "the source token names no repo"
+    shared = sorted(set(src.repositories) & set(main.repositories))
+    assert not shared, f"the source token shares {shared} with the sitting's main token"
+
+
 # ── INTAKE-ACCESS-GATEWAY ──────────────────────────────────────────────────────────────────────
 
 
@@ -231,8 +253,85 @@ def test_merges_need_review(row: str) -> None:
 @pytest.mark.parametrize("row", [pytest.param("administer-repo", marks=rule("INTAKE-ACCESS-DENIED"),
                                               id="administer-repo")])
 def test_no_administration(row: str) -> None:
-    # Editing or deleting a ruleset (or a repo setting) needs `administration`; the token has none.
+    # Editing or deleting a ruleset (or a repo setting) needs `administration`; the token has none,
+    # and the App declares it a decided non-grant (`absent:` — over-grant is drift too).
     allure.dynamic.title(row)
     ident = _identity()
     assert ident.level("administration") == 0, ident.minted
+    assert "administration" in ident.absent, ident.absent
 
+
+@pytest.mark.parametrize("row", [pytest.param("write-source-repo", marks=rule("INTAKE-ACCESS-DENIED"),
+                                              id="write-source-repo")])
+def test_no_write_on_source_repo(row: str) -> None:
+    # No token the sitting holds writes to a source repo: the source token's every grant is a read,
+    # and the main token (contents/issues write) does not name the repo.
+    allure.dynamic.title(row)
+    main, src = _identity(), _source_identity()
+    for repo in src.repositories:
+        assert all(decl.LEVELS[v] < decl.LEVELS["write"] for v in src.minted.values()), src.minted
+        assert repo not in main.repositories, repo
+
+
+@pytest.mark.parametrize("row", [pytest.param("push-workflow-file", marks=rule("INTAKE-ACCESS-DENIED"),
+                                              id="push-workflow-file")])
+def test_no_workflows(row: str) -> None:
+    # A push that adds or changes .github/workflows/** needs `workflows: write`; none, decided absent.
+    allure.dynamic.title(row)
+    ident = _identity()
+    assert ident.level("workflows") == 0, ident.minted
+    assert "workflows" in ident.absent, ident.absent
+
+
+@pytest.mark.parametrize("row", [pytest.param("review-or-merge-pr", marks=rule("INTAKE-ACCESS-DENIED"),
+                                              id="review-or-merge-pr")])
+def test_no_pr_write(row: str) -> None:
+    # Reviewing, merging, editing or commenting on a pull request through the Pulls API needs
+    # `pull_requests: write`; the token reads only.
+    allure.dynamic.title(row)
+    ident = _identity()
+    assert ident.level("pull_requests") == decl.LEVELS["read"], ident.minted
+
+
+@pytest.mark.parametrize("row", [pytest.param("rerun-a-workflow", marks=rule("INTAKE-ACCESS-DENIED"),
+                                              id="rerun-a-workflow")])
+def test_no_actions_write(row: str) -> None:
+    # Re-running or cancelling a workflow run needs `actions: write`; the token reads only.
+    allure.dynamic.title(row)
+    ident = _identity()
+    assert ident.level("actions") == decl.LEVELS["read"], ident.minted
+
+
+# ── INTAKE-ACCESS-OWN-APP ──────────────────────────────────────────────────────────────────────
+
+# The least set the page's positive rows need, act by act (specs/access.md INTAKE-ACCESS-OWN-APP):
+# contents write — create-goal-ref; issues write — issue-acts; pull_requests, checks, statuses, actions
+# read — pr-and-checks-read; metadata read — every App.
+NEEDS = {"metadata": "read", "contents": "write", "issues": "write",
+         "pull_requests": "read", "checks": "read", "statuses": "read", "actions": "read"}
+
+
+@pytest.mark.parametrize("row", [pytest.param("used-by-nothing-else", marks=rule("INTAKE-ACCESS-OWN-APP"),
+                                              id="used-by-nothing-else")])
+def test_own_app(row: str) -> None:
+    # The App mints at two sites only — the sitting's token and its read-only source token — and each
+    # site's Secret is read by the sitting's workflow alone.
+    allure.dynamic.title(row)
+    main, src = _identity(), _source_identity()
+    sites = decl.mint_sites_of(main.app_id)
+    allure.dynamic.parameter("mint sites", ", ".join(sites))
+    assert sites == ["agents/coordinator/intake-git.yaml", "agents/coordinator/intake-read-git.yaml"], sites
+    for ident in (main, src):
+        consumers = decl.secret_consumers(ident.secret)
+        allure.dynamic.parameter(f"{ident.secret} consumers", ", ".join(consumers))
+        assert consumers == ["agents/coordinator/island-intake-argo.yaml"], (ident.secret, consumers)
+
+
+@pytest.mark.parametrize("row", [pytest.param("least-set", marks=rule("INTAKE-ACCESS-OWN-APP"), id="least-set")])
+def test_least_set(row: str) -> None:
+    # Declared == needed: a grant no row needs fails, and so does a need the App lacks. The mint
+    # requests the same set (metadata is implicit in every token).
+    allure.dynamic.title(row)
+    ident = _identity()
+    assert ident.declared == NEEDS, ident.declared
+    assert {k: v for k, v in NEEDS.items() if k != "metadata"} == ident.minted, ident.minted
