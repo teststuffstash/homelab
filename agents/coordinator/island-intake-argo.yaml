@@ -65,6 +65,10 @@
 #   identity   = ServiceAccount `island-intake` (rbac.yaml): the read roles + `island-intake-read`
 #                + the Argo executor's task-result write; no pod, exec, configmap or openrouterkeys
 #                verb. The gateway admits it by that name (policy.json `callers`).
+#                GitHub: the homelab-intake App's token (Secret `intake-git`, agents/coordinator/intake-git.yaml),
+#                in every leaf. The Secret ref is `optional` so the pod starts and the bootstrap refuses an
+#                empty token loudly (exit 1; the sitting leaf pushes its metrics first) — never a
+#                CreateContainerConfigError that hangs until the deadline, never another identity.
 #   toolchain  = the worker base image (agent-base — its tag is the one kustomization.yaml line)
 #                + the island's own devbox (islands/intake/devbox.json): the bootstrap installs it
 #                and runs the launcher through `devbox run` there. The devbox adds only promtool and
@@ -233,7 +237,7 @@ spec:
             - { name: VERSION_CACHE_TTL, value: "31536000" }
             - { name: ORG, value: "teststuffstash" }
             - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+              valueFrom: { secretKeyRef: { name: intake-git, key: GH_TOKEN, optional: true } }
             - { name: AWS_REGION, value: "garage" }
             - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
             - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
@@ -250,7 +254,8 @@ spec:
             - |
               set -uo pipefail
               rm -rf /work/homelab
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              [ -n "${GH_TOKEN:-}" ] || { echo "island-intake: GH_TOKEN is empty — Secret intake-git (the homelab-intake App) absent or unsynced; no other identity is used (the experiment read)"; exit 1; }
+              _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
               git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the experiment read)"; exit 1; }
               cd /work/homelab || exit 1
               timeout 540 devbox install --config islands/intake || { echo "island-intake: the island's devbox did not install (islands/intake/devbox.json)"; exit 1; }
@@ -296,7 +301,7 @@ spec:
             - { name: HOME, value: "/home/devbox" }
             - { name: ISLAND, value: "{{workflow.parameters.island}}" }
             - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+              valueFrom: { secretKeyRef: { name: intake-git, key: GH_TOKEN, optional: true } }
             - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
           volumeMounts:
             - { name: work, mountPath: /work }
@@ -310,7 +315,8 @@ spec:
                 echo "island-intake: islands $(cat "$OUT")"; exit 0
               fi
               rm -rf /work/homelab
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              [ -n "${GH_TOKEN:-}" ] || { echo "island-intake: GH_TOKEN is empty — Secret intake-git (the homelab-intake App) absent or unsynced; no other identity is used (the island list)"; exit 1; }
+              _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
               git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the island list)"; exit 1; }
               cd /work/homelab || exit 1
               # the stack islands' source: the live claims. A failed read never stops the platform
@@ -407,7 +413,7 @@ spec:
             - { name: OTEL_TRACES_EXPORTER, value: "none" }
             - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=coordinator,lane=intake,stack=platform" }
             - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+              valueFrom: { secretKeyRef: { name: intake-git, key: GH_TOKEN, optional: true } }
             - { name: AWS_REGION, value: "garage" }
             - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
             - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
@@ -456,7 +462,8 @@ spec:
                 echo "island-intake: $1"; exit 1
               }
               rm -rf /work/homelab
-              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              [ -n "${GH_TOKEN:-}" ] || _dead "GH_TOKEN is empty — Secret intake-git (the homelab-intake App) absent or unsynced; no other identity is used"
+              _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
               git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || _dead "clone failed"
               cd /work/homelab || _dead "clone failed (no /work/homelab)"
               # The image seeds claude's trust for a worker's /work/repo and its entrypoint re-seeds it for the

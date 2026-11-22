@@ -269,6 +269,7 @@ class Identity:
     slug: str
     minted: dict[str, str]
     declared: dict[str, str]
+    absent: set[str]
     repositories: list[str]
 
     def level(self, perm: str) -> int:
@@ -307,8 +308,42 @@ def identity_of(secret: str) -> Identity:
         slug=app["slug"],
         minted=dict(spec["permissions"]),
         declared={k: v["level"] for k, v in app["permissions"].items()},
+        absent=set(app.get("absent") or {}),
         repositories=list(spec["repositories"]),
     )
+
+
+# The mint sites github-apps-lint scans (scripts/github-apps-lint.py MINT_GLOBS) — read as text, as the
+# lint does: the Composition is Go-templated and does not parse as YAML.
+MINT_GLOBS = ["argocd/resources/agentstack/composition.yaml", "agents/coordinator/*.yaml",
+              "argocd/resources/github-exporter/rl-tokens.yaml"]
+_APPID = re.compile(r'appID:\s*"?(\d+)"?')
+
+
+def mint_sites_of(app_id: str) -> list[str]:
+    """Every mint-site file that mints a token as `app_id` (one entry per appID line)."""
+    out = []
+    for pattern in MINT_GLOBS:
+        for f in sorted(REPO.glob(pattern)):
+            out += [f.relative_to(REPO).as_posix() for m in _APPID.finditer(f.read_text(encoding="utf-8"))
+                    if m.group(1) == app_id]
+    return out
+
+
+_SECRET_REF = re.compile(r"secretKeyRef:\s*\{[^}]*\bname:\s*([A-Za-z0-9-]+)")
+
+
+def secret_consumers(secret: str) -> list[str]:
+    """Every manifest under agents/ and argocd/ that reads `secret` through a secretKeyRef."""
+    out = []
+    for root in ("agents", "argocd"):
+        for f in sorted((REPO / root).rglob("*.yaml")):
+            text = f.read_text(encoding="utf-8")
+            hits = [m for m in _SECRET_REF.finditer(text) if m.group(1) == secret]
+            hits += [m for m in re.finditer(r"secretKeyRef:\s*\n\s+name:\s*([A-Za-z0-9-]+)", text) if m.group(1) == secret]
+            if hits:
+                out.append(f.relative_to(REPO).as_posix())
+    return out
 
 
 def gateway_callers() -> dict[str, dict]:

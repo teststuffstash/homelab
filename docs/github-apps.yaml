@@ -168,8 +168,8 @@ apps:
       homelab-agents on purpose (operator, 2026-11-22): that App carries workers, the coordinator
       and the loop, so its writes do not say who acted and its mint holds grants no rule of a
       sitting writes (merges, reruns, workflow pushes). The permission set is the least the
-      sitting's acts need, act by act. Until the cutover the workflow still reads
-      `coordinator-git`; this App's token (`intake-git`) has no consumer yet.
+      sitting's acts need, act by act (islands/intake/specs/access.md). Its token, Secret
+      `intake-git`, is read by the island-intake workflow alone, in every leaf.
     permissions:
       metadata: { level: read, why: "baseline" }
       contents: { level: write, why: "cut a Goal's branch (`POST git/refs` for `refs/heads/goal/<n>-<slug>`, intake.md §A bot-authored Goal) — the ONE write; the clones need read only. Broader than the act: write also pushes to any unprotected branch — the rulesets bound it, not this grant" }

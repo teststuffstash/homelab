@@ -831,6 +831,12 @@ mkdir -p "$TMP/badbin"; printf '#!/bin/bash\nexit 1\n' > "$TMP/badbin/git"; chmo
 run_list all "$TMP/badbin:$BIN"; rc=$?
 { [ "$rc" = 1 ] && [ ! -s "$LIST_OUT" ] && grep -q 'clone failed (the island list)' "$TMP/list.log"; } \
   && ok "island=all with a failed clone: exit 1 and no list — never an empty walk that passes" || bad "list step, clone failed" "rc=$rc $(tail -2 "$TMP/list.log")"
+# no token: the step refuses before any clone — never an anonymous clone, never another identity
+printf '#!/bin/bash\necho "git $*" >> "%s/notoken.git"\nexit 0\n' "$TMP" > "$TMP/badbin/git"; rm -f "$TMP/notoken.git"
+rm -rf "$TMP/work" "$TMP/run"/*; mkdir -p "$TMP/work"
+( cd "$TMP" && H="$TMP" PATH="$TMP/badbin:$BIN:$PATH" HOME="$TMP/home" ISLAND=all env -u GH_TOKEN bash "$TMP/list.sh" ) > "$TMP/list.log" 2>&1; rc=$?
+{ [ "$rc" = 1 ] && [ ! -s "$LIST_OUT" ] && [ ! -e "$TMP/notoken.git" ] && grep -q 'GH_TOKEN is empty — Secret intake-git' "$TMP/list.log"; } \
+  && ok "island=all with no GH_TOKEN (Secret intake-git absent): exit 1 before any clone, naming the Secret" || bad "list step, no token" "rc=$rc $(tail -2 "$TMP/list.log")"
 # a selector that lists nothing (no facts file in the clone): exit 1
 cat > "$TMP/badbin/git" <<EOF
 #!/bin/bash
@@ -2341,6 +2347,17 @@ leaf() { yq -o=json -I=0 ".spec.workflowSpec.templates[] | select(.name == \"$1\
 { [ -n "$(leaf experiments)" ] && [ "$(leaf experiments)" = "$(leaf intake)" ]; } \
   && ok "the experiments leaf's image, command, mounts, token, writer key, bucket, HOME and nix env equal a sitting's" || bad "leaf identity (env)" "experiments: $(leaf experiments | cut -c1-300)
        intake:      $(leaf intake | cut -c1-300)"
+# the GitHub identity: every GH_TOKEN in the workflow is the homelab-intake App's (Secret intake-git), and every
+# leaf that clones refuses an empty token before its clone
+[ "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .valueFrom.secretKeyRef.name" "$YAML" | sort -u | tr '\n' ' ')" = "intake-git " ] \
+  && [ "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .name" "$YAML" | grep -c .)" = 3 ] \
+  && ok "every GH_TOKEN (experiments, list-islands, intake) reads Secret intake-git — the homelab-intake App, no other identity" || bad "GH_TOKEN secret" "$(yq -r "$SPEC.templates[].container.env[]? | select(.name == \"GH_TOKEN\") | .valueFrom.secretKeyRef.name" "$YAML" | tr '\n' ' ')"
+nt=0; for t in experiments list-islands intake; do
+  yq -r "$SPEC.templates[] | select(.name == \"$t\") | .container.args[0]" "$YAML" > "$TMP/tok-$t.sh"
+  g="$(grep -n 'GH_TOKEN is empty' "$TMP/tok-$t.sh" | head -1 | cut -d: -f1)"; c="$(grep -n 'git clone' "$TMP/tok-$t.sh" | head -1 | cut -d: -f1)"
+  { [ -n "$g" ] && [ -n "$c" ] && [ "$g" -lt "$c" ]; } || nt=$((nt + 1))
+done
+[ "$nt" = 0 ] && ok "…and each of the three leaves refuses an empty GH_TOKEN before its clone" || bad "token guard" "$nt leaf(s) without the guard before the clone"
 # the identity: the ServiceAccount is the workflow's (one for every template), the token and the writer key are the sitting's
 [ "$(yq -r "$SPEC.serviceAccountName" "$YAML")" = island-intake ] && [ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName // \"\"" "$YAML")" = "" ] \
   && ok "…under the workflow's island-intake ServiceAccount (the leaf names none of its own)" || bad "leaf identity" "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName" "$YAML")"
