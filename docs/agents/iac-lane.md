@@ -598,6 +598,11 @@ by design) supports three rungs; **eventually Cloudflare fronts all services** (
 - **Probe placement corollary:** once Cloudflare fronts a service, the SLO probe needs an
   outside-in leg through the same path users take — an all-green LAN probe over a broken edge is
   the FU-108 lesson (a probe that returns cleanly is not a probe that looked) at network scale.
+  That leg must START outside the homelab: an in-cluster probe of a public URL puts cluster DNS,
+  the router's Unbound and our own egress into the path and fails together with a WAN loss, so it
+  never stands in for a public-path check (operator, 2026-11-21) — the outside check is
+  Cloudflare's own tunnel health notification, and the in-cluster `CloudflaredTunnelDown` only
+  records an outage after the fact ([cloudflare.md](../cloudflare.md) §Observability).
 
 Oracle is where this is the business idea; sleep gets rung 0 now purely to prove the shape.
 
