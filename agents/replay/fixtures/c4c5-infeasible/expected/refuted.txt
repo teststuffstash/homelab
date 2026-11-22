@@ -1,0 +1,13 @@
+CALL gh api repos/teststuffstash/homelab/issues/66/comments?per_page=100
+CALL gh issue comment 66 --repo teststuffstash/homelab --body <!-- agent-infeasible-refuted -->\n🤖 **`AGENT_INFEASIBLE` refuted by `classify_touches` — NOT parked** (deterministic scan, homelab#3309).\n\nThe worker's marker names `gateway/devbox.json`, and `classify_touches` (agents/footprint.sh — the one lane classifier) rates that path **`machine-merge`**, not `codeowner-author`: it is not a never-touch path, so a fix-class worker may author it. The claim is contradicted by the classifier, so the issue keeps `agent/in-progress` and goes back through the ordinary `c4c5-redispatch` handling — a re-ride proceeds.\n\n**Next ride:** author `gateway/devbox.json` as the issue asks. If the task is infeasible for ANOTHER reason, say so in a new `AGENT_INFEASIBLE:` marker — a second marker after this refutation parks the issue `agent/blocked` for a human as usual.
+CALL gh api repos/teststuffstash/homelab/issues/70/comments?per_page=100
+OUT INFEAS <empty>
+OUT CLASS homelab|issue-66|phantom|machine|...
+OUT CLASS homelab|issue-70|phantom|machine|...
+OUT UNIT c4c5-redispatch|homelab|issue-66|fix
+OUT UNIT c4c5-redispatch|homelab|issue-70|fix
+OUT ORPHAN [homelab] ↺ INFEASIBLE REFUTED — issue #66 declared `AGENT_INFEASIBLE: gateway/devbox.json`, but classify_touches rates it `machine-merge` (not codeowner-author). NOT parked; it keeps its C4/C5 handling below (homelab#3309).
+OUT V2   issue #66 — CI: add the required `ci` workflow to this repo [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT V2   issue #70 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0
