@@ -201,3 +201,13 @@ bounded build); handoff-G4 waits on claude-jail#11.
 - [x] second-jail-G3 — invoked mid-session after an unpushed primary-seat commit; nothing handed it
       over (2026-10-13). **promoted→** "Invoked mid-session?" block: list prior writes/commits,
       finish under the old role or hand to the primary, then the rules start (2026-10-26).
+
+## seat-review
+
+- [ ] seat-review-G1 — the red-by-design check (`pin-only-lint`) runs EARLY in `ci`, so every later
+      gate is skipped and the PR carries no evidence for them; the skill's Limits only say the
+      red-by-design check stays unrun. Improvised 2026-11-22 (#3652): a local `diff-ci` selects
+      everything once `ci.yaml` changes (incl. report-only WAN gates CI never runs: 18+ min, no end);
+      `gh workflow run CI --ref <branch>` (dispatch skips `pin-only-lint`) ran all gates in ~16 min
+      and caught a `github-apps-lint` defect the subagent's diff read missed. Skill should say:
+      dispatch CI on the branch, read the PR-only skipped steps against the diff, record both.
