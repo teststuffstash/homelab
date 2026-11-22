@@ -15806,3 +15806,22 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - #3676 (intake access spec): its `tofu/github` change (`do_not_enforce_on_create = true` on `required-checks`) applied
   by the operator from the host on the PR branch, checked out in the shared tree on request and switched back to
   master. Live ruleset read: `do_not_enforce_on_create: true`. The PR still has to land.
+
+## 2026-11-22 (night) — seat: filed two second-jail wind-down handoffs (seat/20261122-1000-pr3627-ci-red, seat/20261122-2028-hardware-r630-note)
+
+- pr3627-ci-red (second jail, session f48815ba), as written, trimmed: #3627's red was `pin-only-lint` only (guarded
+  ci.yaml); the three island suite steps run by hand on 77f633c5+master (scan 324, launch 16, retro 26 passed);
+  `/seat-review 3627` APPROVE on the operator's word. Island ladder → order discussion: intake first (specs, access
+  page, deployment tier). Shipped: #3672 (ladder spike), #3676 (intake access spec + `do_not_enforce_on_create` on
+  `required-checks`, applied by the operator; probe goal ref 201/204), #3677 (`homelab-intake` App, app 5877266,
+  installed homelab + oracle-fleet, later oracle-iac), #3682 (token cutover → `intake-git` + read-only `intake-read-git`;
+  oracle told via oracle/done/20261122-2153-intake-read-token.md), all MERGED; #3683 (ladder order, armed); #3678
+  (jail-cluster rig, ADR-167, unarmed, security-reviewed, head d13426b9).
+- Filing checks: #3627 merged, master ci 45048719148 ran all three island suites green → meta-state #3391 lines
+  corrected. Pickups "file #3676 WIP-row issues" and "intake token cutover" dropped — done by #3677/#3682. FU-320
+  updated (identity line; not-started list → the ladder README). fu-new "jail-cluster pods cannot run `uv sync
+  --frozen`" folded into FU-220 (same hosts-vs-cache choice). Memory intake-own-island-contract-to-oracle: the
+  dedicated-App preference. `act: direct push for #3678` (d4c71f09a, three exception names) held for the operator's
+  read of #3678 — not pushed.
+- hardware-r630-note (session e33e46b8): hardware repo only — a Dell R630 256 GB auction note (cleared €700, operator
+  did not bid; hardware main b723b7a + fix). No homelab record.

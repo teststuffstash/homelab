@@ -680,10 +680,9 @@ the block needs pruning, not more headings.
       [`islands/intake/rules/intake.md`](../islands/intake/rules/intake.md), selector `islands/intake/scripts/intake-select.sh`, design + evidence
       [`spikes/island-intake.md`](spikes/island-intake.md) (#2978). WIRED: dig source 2026-10-28 (#3004 + #3008, `island-intake`
       CronWorkflow 05:00Z, receipts = the ruled-input ledger); issue pile + re-reads 2026-11-11 (#3259, ADR-163; `prefer: strongest`).
-      **Review-and-repair stage LIVE 2026-11-15** (#3378/#3381: two lenses once → one repair → queue regardless; spike §Run 4),
-      `gap` + `escape` sources; islands scan/launch/retro are intake islands (`docs/intake/`, Goals #3389 #3390 #3384).
-      **Learning loop 2026-11-19** (ADR-164): step 3 = a closed list (#3547/#3549), responder classes as a dig-source input (#3544), the WAIT read (#3555), weekly rules digest (#3552).
-      **Intake as its own island 2026-11-20:** rules — intake reads every deciding fact, checks the ride's recipe and reach (#3570); Goal #3574 BUILT and on master (#3598, 18:37Z: `islands/intake/`, SA `island-intake` read-only, agent-base + island devbox, one run walking nine islands, stack islands from the claim, [`CONTRACT.md`](../islands/intake/CONTRACT.md)); first sitting under it proven by a dry run; oracle told.
+      **Review-and-repair LIVE 11-15** (#3378/#3381, spike §Run 4), `gap` + `escape` sources, scan/launch/retro intake islands (`docs/intake/`);
+      **learning loop 11-19** (ADR-164); **own island 11-20** (#3570, Goal #3574 → #3598, [`CONTRACT.md`](../islands/intake/CONTRACT.md));
+      **own App 11-22** (`homelab-intake`, #3676/#3677/#3682). Ordered not-started list: [`spikes/island-ladder/README.md`](spikes/island-ladder/README.md) §Direction since the spike.
       **Next:** read the first 05:00Z full walk (2026-11-21); Goal #3586 (outcome experiments) in build; the replay runner + the edit-PR leg; meta-state pickup; the sittings' `prefer: strongest` spent Fable's weekly limit on 11-21 (45 sessions in 7 d) — weigh a Fable share vs opus (meta-state).
       oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
       ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
@@ -702,8 +701,8 @@ the block needs pruning, not more headings.
       and the two named costs of the transparent shape (forged certs for public hostnames in
       sandbox pods; hostAliases delete the upstream fallback) live in
       [`patterns/python-stack.md`](patterns/python-stack.md) §caches. **Next:** measure what the
-      bypass costs (wheel bytes/ride × rides/week) before spending anything — operator decision.
-      Relates homelab#1300/#1413.
+      bypass costs (wheel bytes/ride × rides/week) before spending anything — operator decision. Also decides jail-cluster
+      pods (#3678, 11-22: the rig's egress drops files.pythonhosted.org, no `uv sync --frozen` gate runs). Relates #1300/#1413.
 
 - [ ] **FU-197** — **manifest-lint fetches every kubeconform schema from raw.githubusercontent.com
       on each CI run — uncached, so a GitHub-raw hiccup reds the required check.** Bit PR#1099

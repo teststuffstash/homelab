@@ -18,15 +18,16 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-11-22 — island ladder spike, PR #3672 UNARMED, the operator reads it first; FU-320).**
-  `docs/spikes/island-ladder/` on branch `fix/island-ladder`: a position page per
-  island, the replay-to-specs map, and the README's three-group sort. Owed, all the operator's:
-  - Rule the README §What would settle it (the rung list, where a roadmap lives, replay retirement, the experiment reader).
-  - Cut `goal/3656-scan-checkpoint-b` (and the launch/retro Goal branches for #3480, #3482) — the intake identity is
-    refused with HTTP 422; the class is still untracked. Before the cut, read #3656 pins 9 and 10 (intake's own picks).
-  - `/seat-review 3627`, then admin-merge: until then no required check gates the scan, launch or retro suites.
-  - Loop state at wind-down: #1941 (PR #3670, r3 after a changes-requested) and #2589 (PR #3669) riding; both
-    un-latched by intake closing #3095 at 06:39 UTC.
+- **⚑ PICKUP (2026-11-22 — intake on its own App; island suites gated by required `ci`; FU-320).**
+  #3627 merged: master `ci` runs the scan/launch/retro suites (run 45048719148, all three green). #3672/#3676/#3677/#3682
+  merged: intake sits as `homelab-intake` (Secret `intake-git`; read-only `intake-read-git` for oracle-iac), and
+  `required-checks` has `do_not_enforce_on_create` (probe: goal ref create 201 / delete 204). NEXT:
+  - After the 2026-11-23 05:00Z `island-intake` run: its first write is authored by `homelab-intake[bot]`, and it cut
+    `goal/3656-…` and the #3480/#3482 Goal branches (or said why not). Then weigh a create+delete rule on `goal/**` with
+    homelab-intake the only non-admin bypass (it can delete a goal ref today — gap row on the access page); fix
+    `meta-throughput.sh` (counts intake writes by the old author) and the stale coordinator-git cell in `gateway/specs/access.md`.
+  - #3683 (ladder README order, ARMED) — let it land. #3678 (jail-cluster rig, ADR-167, UNARMED): the operator reads it;
+    its baseline commit d4c71f09a (three names in `policy/iac/exceptions/homelab.yaml`) goes direct to master first.
 - **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
   The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
   - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
@@ -106,7 +107,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 - **⚑ PICKUP (2026-11-20 — scan island Goal #3490 on master, built overnight by seat subagents; TICK-LOG 11-19/20).**
   Operator instruction 11-19 evening: build unattended, "I can redo decisions in the morning". DONE: #3561 merged
-  (`a715541b`; island gate 324 passed on master, run by hand — required `ci` still does not run it, #3391). OPERATOR
+  (`a715541b`; island gate 324 passed on master; required `ci` runs it since #3627). OPERATOR
   READS: the ⚖ choices + the reviewer's open spec questions, both in #3561's body and on #3490. NEXT, none started:
   (a) #3550 is not one ride — the split into cuts A–F is on the issue; its `blocked-on: issue=3491` is now a closed
   target, so the next scan sitting re-decides it (no scan sitting is scheduled); (b) #3448's wait fact (#3490's assembly
@@ -175,8 +176,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   the hop cap have run only in the selector tests and one hand-written comment (#3427).
 
 - **⚑ PICKUP (2026-11-15 — intake review stage live, islands scan/launch/retro started; TICK-LOG 11-14 → 15; FU-320).**
-  OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — the `.github/workflows/ci.yaml`
-  steps so required `ci` runs each island's suite; (c) launch island: fresh launcher = bash carrying the same blocks over
+  OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — DONE by #3627; (c) launch island: fresh launcher = bash carrying the same blocks over
   the same shell variables, or a new shape with its own test hooks? — the rest of that island stays unfiled until
   answered; (d) intake-workflow defects, unfixed: a dry-run's author/repair sessions hold the write token (only the
   prompt stops a write); unanswered findings miss the issue when a repair half-runs; a queue ruling without a hold line
