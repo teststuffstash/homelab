@@ -106,6 +106,33 @@ def test_recorded_refusal(row: str) -> None:
                for rs in decl.rulesets() if rs.target == "branch"), ref
 
 
+@pytest.mark.parametrize("row", [pytest.param("accepted-after-the-fix", marks=rule("INTAKE-ACCESS-GOAL-BRANCH"),
+                                              id="accepted-after-the-fix")])
+def test_recorded_acceptance(row: str) -> None:
+    # World create-ref-accepted-2026-11-22: the same call as the sitting's identity after the
+    # apply. Read strictly. Joined to the rulesets: the created ref is a goal/** ref, and every
+    # check-enforcing ruleset covering it exempts creation — the state create-goal-ref asserts.
+    allure.dynamic.title(row)
+    world = json.loads((WORLDS / "create-ref-accepted-2026-11-22.json").read_text(encoding="utf-8"))
+    assert set(world) == {"provenance", "request", "response"}
+    assert set(world["request"]) == {"method", "path", "fields"}
+    assert set(world["request"]["fields"]) == {"ref", "sha"}
+    assert set(world["response"]) == {"status", "headers", "body"}
+    assert set(world["response"]["body"]) == {"ref", "node_id", "url", "object"}
+    assert set(world["response"]["body"]["object"]) == {"sha", "type", "url"}
+    req, resp = world["request"], world["response"]
+    allure.attach(json.dumps(world, indent=2), name="world", attachment_type=allure.attachment_type.JSON)
+    assert req["method"] == "POST" and req["path"].endswith("/git/refs")
+    assert resp["status"] == 201
+    assert resp["body"]["ref"] == req["fields"]["ref"]
+    assert resp["body"]["object"]["sha"] == req["fields"]["sha"]
+    assert resp["headers"]["x-github-request-id"]
+    ref = req["fields"]["ref"]
+    covering = [rs for rs in decl.rulesets()
+                if rs.target == "branch" and decl.covers(rs.include, ref) and _has_rule(rs, "required_status_checks")]
+    assert covering, ref
+
+
 # ── INTAKE-ACCESS-ISSUES · -READ-PR · -CLONE ───────────────────────────────────────────────────
 
 

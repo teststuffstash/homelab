@@ -44,7 +44,7 @@ gateway caller, the kube API) is the workflow's ServiceAccount.
 | Requirement | section | Status |
 |---|---|---|
 | [INTAKE-ACCESS-IDENTITY](#intake-access-identity) | who acts | 🚧 WIP — no evidence publisher for this root (rule-labelled tests in `specs-tests/tests/test_access.py` pass locally against the declared records) |
-| [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | what the rules write | 🚧 WIP — no evidence publisher for this root (`create-goal-ref` and `refused-2026-11-22` pass locally against `tofu/github/repo_rulesets.tf` and world `create-ref-refused-2026-11-22`); unverified — the row `accepted-after-the-fix` has no world: the 201 answer can exist only after `tofu/github` is applied ([worlds/README.md](worlds/README.md) holds the recording steps), and whether `required-approval-goal`'s `pull_request` rule also refuses a creation only that live call settles |
+| [INTAKE-ACCESS-GOAL-BRANCH](#intake-access-goal-branch) | what the rules write | 🚧 WIP — no evidence publisher for this root (`create-goal-ref`, `refused-2026-11-22` and `accepted-after-the-fix` pass locally against `tofu/github/repo_rulesets.tf` and the two recorded worlds; the accepted answer was recorded after the 2026-11-22 apply). ⚑ gap — the same identity may also delete a `goal/**` ref (the probe's `204`); no row says whether it should |
 | [INTAKE-ACCESS-ISSUES](#intake-access-issues) | what the rules write | 🚧 WIP — no evidence publisher for this root (`issue-acts` passes locally against the mint site and `docs/github-apps.yaml`); unverified — a stack repo's write: the stack islands' repos come from the live claims, which no test reads |
 | [INTAKE-ACCESS-READ-PR](#intake-access-read-pr) | what the rules write | 🚧 WIP — no evidence publisher for this root (`pr-and-checks-read` passes locally against the mint site and `docs/github-apps.yaml`) |
 | [INTAKE-ACCESS-CLONE](#intake-access-clone) | what the rules write | 🚧 WIP — no evidence publisher for this root (`clone-homelab` passes locally); unverified — `clone-stack-repo`: no test joins the live claims' `repos[].intake.facts` repos to the mint's `repositories` |
@@ -99,11 +99,12 @@ rules have to make the branch.
 > `contents: write`; a ruleset's `required_status_checks` rule applies to ref creation unless
 > `do_not_enforce_on_create` is set — the provider attribute exists in the installed
 > `integrations/github` provider; the refusal's body names no rule (world below), so the cause is
-> read from the rulesets, not from the answer. Verify the creation against the live API after the
-> apply.
+> read from the rulesets, not from the answer. The creation was verified against the live API
+> after the apply (the accepted world).
 
 **World:** [create-ref-refused-2026-11-22](worlds/README.md#create-ref-refused-2026-11-22) for the
-refusal; the declared records for the static join.
+refusal, [create-ref-accepted-2026-11-22](worlds/README.md#create-ref-accepted-2026-11-22) for the
+accepted answer; the declared records for the static join.
 
 #### Cutting a Goal's branch
 
@@ -113,7 +114,7 @@ Legend: `rulesets` = the state of every ruleset covering the ref; `expected?` = 
 |---|---|---|---|---|
 | create-goal-ref | declared records | `refs/heads/goal/<n>-<slug>` at the default branch's head | every check-enforcing ruleset sets `do_not_enforce_on_create` | created |
 | refused-2026-11-22 | create-ref-refused-2026-11-22 | `refs/heads/goal/3656-scan-checkpoint-b` | `required-checks` enforces its checks on creation | refused, `422` `Reference update failed` |
-| accepted-after-the-fix | (not recorded) | `refs/heads/goal/0-access-probe` | as `create-goal-ref`, applied | `201` with the new ref |
+| accepted-after-the-fix | create-ref-accepted-2026-11-22 | `refs/heads/goal/0-access-probe` | as `create-goal-ref`, applied | `201` with the new ref |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
