@@ -219,8 +219,9 @@ issue, and never queue a ride, for a fact a subagent can read in this sitting.
    below the comment's first line — breaker #1 is the operator's. No such split → `queue`, however
    long it looks: numbered Deliverable items are steps, a requirement counts only where its rows
    gain behaviour for their own reason, and paths that follow the code do not count. One unit
-   larger than a ride's budget is a budget tier (`agent-budget/<tier>`; above the top tier the
-   estimator's own escalation answers), never a Goal and never `seat`. A
+   that looks larger than a ride's budget is still `queue`, never a Goal and never `seat`: the
+   launcher's estimator picks the tier and escalates above the top one; `agent-budget/*` is the
+   human's or the coordinator's override, never an intake write. A
    `seat` whose body now argues for an option the operator ruled out gets its body rewritten to
    what stays open (§Hard limits — whose issue it is).
 5. **Is it worth a ride now?** A gap row that is honest, read by nobody live, and whose fix would
