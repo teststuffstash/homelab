@@ -1357,6 +1357,9 @@ CODEOWNERS carve-outs each carry their lint; tier-1 ownership is a scaffold that
 IAC-G04 enforces on homelab; queue-time denial anywhere (e.g. the fix-debounce lane) may use only
 the ❌ table. Doctrine + tier table: `docs/agents/iac-lane.md` §"The platform lane"; enforcement:
 `CODEOWNERS`, `scripts/pin-only-lint.sh`, `tofu/github/repo_rulesets.tf`.
+**Consequence (2026-11-22, homelab#3680):** `policy/**` and `CODEOWNERS` joined the ❌ table (`ci`
+reads `policy/` from the branch; governance-lint reds a worker PR on either) — and the table is one
+line, governance-lint's `GOVERNANCE=`, which `classify_touches` reads.
 
 **Addendum (2026-09-25, design sitting — the `.github/workflows` pin carve-out, homelab#1990).
 Decision:** `.github/workflows/*.y(a)ml` is un-owned by owner→rule replacement: a PR may change
