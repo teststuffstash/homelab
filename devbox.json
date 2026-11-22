@@ -438,6 +438,12 @@
       "lock-intake-lint": [
         "python3 scripts/lock-intake-lint.py \"$@\""
       ],
+      "image-clock": [
+        "python3 scripts/image-clock.py \"$@\""
+      ],
+      "image-clock-test": [
+        "python3 scripts/image-clock.py --self-test"
+      ],
       "lock-intake-lint-test": [
         "python3 scripts/lock-intake-lint.py --self-test"
       ],

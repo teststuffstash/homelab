@@ -2968,8 +2968,9 @@ recipe repo gains the script before the launcher change lands; `retry:` blocks l
 oracle-fleet's own `scripts/pr-open.sh` retires and its checker moves behind the hook.
 
 ### ADR-158 — Stack test pins of platform components run within one minor AHEAD of prod, never behind (2026-10-31)
-**Status:** Accepted (operator, 2026-10-31: stacks bump first and fix their dashboards/logic before
-the platform bump; the platform bump never waits for a stack).
+**Status:** Superseded-by ADR-166 (2026-11-21: the version window became a time offset). Was Accepted
+(operator, 2026-10-31: stacks bump first and fix their dashboards/logic before the platform bump;
+the platform bump never waits for a stack).
 **Decision:** a stack's kind/e2e pin of a platform component (Grafana, Postgres fixtures, …) sits in
 the window prod ≤ pin ≤ prod + 1 minor, in each product's own versioning; patches free, never a
 major ahead. Stacks' Renovate proposes, the migration lens gates, the platform lane never holds.
@@ -3125,3 +3126,26 @@ already bound, and the guard makes any other shape fail at the apiserver whateve
 so the dial can absorb it later as its first non-core entry. The responder's report names the started
 Workflow.
 
+### ADR-166 — Stack test pins lead prod by TIME, not version distance: platform minors/majors wait 14 days, stacks 7 (2026-11-21)
+**Status:** Accepted (operator, 2026-11-21). Supersedes ADR-158.
+**Decision:** on homelab (where prod's pins live) a minor or major waits 14 days in Renovate, a
+week past the stacks' 7; patches wait 7 on both sides, security fixes none. A stack's test pin of a
+platform component is never behind prod and has no upper cap — stable releases only. Versions are
+compared only in the unit every packaging agrees on, the product's own compatibility unit
+(Postgres: major; Garage, Grafana, Prometheus: minor); each test keeps its own packaging (a raw
+image, a nix package). The platform warns and polls nobody before a bump: the offset is the notice.
+Mechanism: [dependency-upgrades.md §Version SETS](dependency-upgrades.md#version-sets--what-must-move-together-operator-ruling-2026-09-27-owner-2014).
+**Considered:** ADR-158's prod ≤ pin ≤ prod + 1 minor (rejected: prod jumps more than one version —
+Garage 2.3 → 2.5 in one PR, #3344 — and the "ahead" pin ends behind where prod lands); the test
+runs prod's exact artifact (rejected: the CNPG operand needs the operator, nixpkgs names majors
+only); stacks with no cooldown for the most lead (rejected: the Trivy Docker Hub images were
+overwritten for ~3.5 days in 2026-03 and stack CI is what that payload robs); the offset on
+patches too (rejected: no lead needed, it only delays fixes).
+**Why:** time lines up across Docker, nix and chart sources where version numbers don't; however
+far prod jumps, it lands on a version every stack has run for a week.
+**Consequences:** the migration lens drops its window check and keeps "behind prod" and
+"pre-release" refusals. Manual platform lanes (a Postgres `imageName` major, a Garage attended
+minor, Cilium) are floored by the offset, never faster. Docker has no release time Renovate can
+use, so the platform runs its own first-seen clock ([renovate.md §The image
+clock](renovate.md#the-image-clock)); a prod pin absent from git gives the stacks nothing to read
+(Postgres, FU-323). Revisit: shrink to 10 days if stacks routinely land the bump within a few.

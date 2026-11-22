@@ -184,7 +184,7 @@
         },
         "contents": {
           "level": "write",
-          "why": "renovate branches; devbox-update.sh pushes; runner-image warm-store lockfile fetch (private repos); version-sets-dispatch.yaml POSTs repository_dispatch to agent-coordinator + agent-runtime (homelab#2014)"
+          "why": "renovate branches; devbox-update.sh pushes; runner-image warm-store lockfile fetch (private repos); version-sets-dispatch.yaml POSTs repository_dispatch to agent-coordinator + agent-runtime (homelab#2014); renovate.yaml pushes the `image-clock` side branch (ADR-166)"
         },
         "pull_requests": {
           "level": "write",
