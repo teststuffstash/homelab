@@ -140,7 +140,9 @@ _load_creds() {
 }
 _resolve_install_id() { # needs gh with org read; writes CRED_DIR/installation-id
   INSTALL_ID="${INSTALL_ID:-$(gh api "/orgs/$ORG/installations" --jq ".installations[] | select(.app_id==($APP_ID|tonumber)) | .id" 2>/dev/null || true)}"
-  [ -n "$INSTALL_ID" ] || die "installation not found — is the App INSTALLED on $ORG? Or pass INSTALL_ID="
+  # gh prints an API error's JSON body on stdout, so a refused read (a PAT without org
+  # installations access) is non-empty: accept digits only.
+  case "$INSTALL_ID" in ''|*[!0-9]*) die "installation not found — is the App INSTALLED on $ORG, and may this token list org installations? Or pass INSTALL_ID=" ;; esac
   echo "$INSTALL_ID" > "$CRED_DIR/installation-id"
 }
 
@@ -169,6 +171,11 @@ cmd_secrets() {
       say "Pushing the specs-reviewer App private key into Infisical (homelab/prod)"
       devbox run infisical-secret "SPECS_REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
       echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register   (ADR-155: the Secret appearing ends shadow mode)" ;;
+    homelab-intake)
+      need gh; _resolve_install_id
+      say "Pushing the intake App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "INTAKE_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      echo "  NEXT: scripts/github-app-bootstrap.sh $SLUG register   (then the workflow's token cutover — a separate PR)" ;;
     homelab-merge)
       # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
       say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"
