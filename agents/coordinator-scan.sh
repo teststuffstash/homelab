@@ -5017,6 +5017,71 @@ EOF_GTHEMES_OPEN
               ipay="$(jq -rn --arg m "$imark" '$m | split("\n")[0] | ltrimstr("AGENT_INFEASIBLE:")
                       | sub("^[ \t]+"; "") | .[0:200]')"
               [ -n "$ipay" ] || ipay="(no path/resource named — ask the worker's transcript)"
+              # ── A CLAIM THE CLASSIFIER CAN CHECK IS CHECKED (homelab#3309) ───────────────────
+              # The commonest infeasible reason is "that path is codeowner-author / never-touch",
+              # and that is not the worker's to judge: `classify_touches` (agents/footprint.sh) IS
+              # the definition. homelab#3309's worker named `gateway/devbox.json` (only the ROOT
+              # devbox.json|lock is ❌; this one is machine-merge), the park took its word, and the
+              # issue's PR (#3590) sat two days. So when the payload's FIRST token is a repo path,
+              # it goes through the classifier before the park; any verdict but `codeowner-author`
+              # REFUTES the claim: no park, one machine comment saying so, a report line, and the
+              # issue falls through to the C4/C5 handling below exactly like a marker-less ended
+              # ride (the redispatch predicate decides the re-ride — no parallel branch).
+              # Everything else parks as before (fail closed toward the verdict):
+              #   • another repo — classify_touches_repo drops the ❌ set for a non-GUARDED_REPO slug
+              #     and knows nothing of that repo's recipe ban list, so it can refute nothing there
+              #     (the operator-lane hold's and the assembly lane's same GUARDED_REPO scope);
+              #   • a payload whose first token is not path-shaped, or names nothing in this
+              #     checkout (neither the path nor its parent dir exists) — a resource, a sentence;
+              #   • footprint.sh unsourceable, the classifier erroring or answering off-vocabulary;
+              #   • ONE refutation per issue: a scan refutation OLDER than this marker means a ride
+              #     was already refuted and the worker declared infeasible again — a human decides.
+              # Idempotent: the refutation comment opens with `<!-- agent-infeasible-refuted -->`
+              # (anchored, like the marker); one created AFTER this ride's marker is this ride's
+              # refutation, so later ticks report but never re-post.
+              ipath=""; iverdict=""; irefuted=""
+              if [ "$repo" = "${GUARDED_REPO:-}" ]; then
+                command -v classify_touches_repo >/dev/null 2>&1 || { . "${HERE:-/nonexistent}/footprint.sh"; } 2>/dev/null || true
+                # CANONICAL before classifying: classify_touches matches literal case arms, so
+                # `./devbox.json` or `scripts/./x.sh` would miss the ❌ arm and read machine-merge —
+                # refuting a CORRECT claim (fail-open). Strip the markdown wrapping fully (`` `p`: ``,
+                # `"p",` — leading `` `'"( ``, trailing `` `'":,;) `` and a sentence `.` that does not
+                # end a `.`/`..` segment), drop leading `./`, collapse `//` and `/./`, drop a trailing
+                # `/`; any `.`/`..` segment still left fails closed (no verdict → park).
+                ipath="${ipay%%[[:space:]]*}"
+                while :; do case "$ipath" in ['`'\'\"\(]*) ipath="${ipath#?}" ;; *) break ;; esac; done
+                while :; do case "$ipath" in *['`'\'\":,\;\)]) ipath="${ipath%?}" ;; *[!./].) ipath="${ipath%?}" ;; *) break ;; esac; done
+                while [[ "$ipath" == ./* ]]; do ipath="${ipath#./}"; done
+                while [[ "$ipath" == *//* ]]; do ipath="${ipath//\/\//\/}"; done
+                while [[ "$ipath" == */./* ]]; do ipath="${ipath//\/.\//\/}"; done
+                ipath="${ipath%/}"
+                if command -v classify_touches_repo >/dev/null 2>&1 && [ -n "${_FP_DIR:-}" ] \
+                   && [[ "$ipath" =~ ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$ ]] && [[ "/$ipath/" != */./* && "/$ipath/" != */../* ]] \
+                   && { [ -e "${_FP_DIR}/../${ipath}" ] || { [ "${ipath%/*}" != "$ipath" ] && [ -d "${_FP_DIR}/../${ipath%/*}" ]; }; }; then
+                  iverdict="$(classify_touches_repo "$slug" "$ipath" 2>/dev/null)" || iverdict=""
+                  case "$iverdict" in machine-merge|codeowner-merge) ;; *) iverdict="" ;; esac
+                fi
+                if [ -n "$iverdict" ]; then
+                  irefuted="$(jq -r --arg m "$imark" '
+                    ([ .[] | select((.body // "") == $m) | (.created_at // "") ] | last // "") as $at
+                    | [ .[] | select((.body // "") | startswith("<!-- agent-infeasible-refuted -->")) | (.created_at // "") ] as $r
+                    | if ([ $r[] | select(. > $at) ] | length) > 0 then "posted"
+                      elif ($r | length) > 0 then "earlier" else "none" end' <<<"$icmt" 2>/dev/null)" || irefuted=""
+                fi
+              fi
+              if [ -n "$iverdict" ] && { [ "$irefuted" = none ] || [ "$irefuted" = posted ]; }; then
+                if [ "$irefuted" = none ]; then
+                  gh issue comment "$icand" --repo "$slug" --body "$(printf '%s\n' \
+                    "<!-- agent-infeasible-refuted -->" \
+                    "🤖 **\`AGENT_INFEASIBLE\` refuted by \`classify_touches\` — NOT parked** (deterministic scan, homelab#3309)." \
+                    "" \
+                    "The worker's marker names \`${ipath}\`, and \`classify_touches\` (agents/footprint.sh — the one lane classifier) rates that path **\`${iverdict}\`**, not \`codeowner-author\`: it is not a never-touch path, so a fix-class worker may author it. The claim is contradicted by the classifier, so the issue keeps \`agent/in-progress\` and goes back through the ordinary \`c4c5-redispatch\` handling — a re-ride proceeds." \
+                    "" \
+                    "**Next ride:** author \`${ipath}\` as the issue asks. If the task is infeasible for ANOTHER reason, say so in a new \`AGENT_INFEASIBLE:\` marker — a second marker after this refutation parks the issue \`agent/blocked\` for a human as usual." )" >/dev/null 2>&1 || true
+                fi
+                orphans="${orphans}[$repo] ↺ INFEASIBLE REFUTED — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipath}\`, but classify_touches rates it \`${iverdict}\` (not codeowner-author). NOT parked; it keeps its C4/C5 handling below (homelab#3309).\n"
+                continue
+              fi
               infeas_done="${infeas_done}${icand} "
               # ── THE CLEARED LATCH IS NAMED, not erased (operator ruling 2026-10-15) ──────────
               # The clear below is unconditional (homelab#1797), but `agent/error` is not only the

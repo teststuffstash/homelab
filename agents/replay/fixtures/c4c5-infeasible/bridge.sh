@@ -12,6 +12,15 @@
 # is the state the block is only ever reached in.
 slug="teststuffstash/homelab"
 repo="homelab"
+# The homelab#3309 refutation reads the ONE lane classifier (agents/footprint.sh — in the scan it
+# is already in scope via touches-check.sh) and scopes itself to GUARDED_REPO (set at the scan's
+# top, outside any block). Both are per-row axes here, through the table's `env` channel:
+# `INFEAS_GUARDED_REPO` moves the guarded repo away from this slug (the classifier then refutes
+# nothing — a stack's ban list is not in it), and `INFEAS_NO_FOOTPRINT=1` leaves footprint.sh
+# unsourced so the block's own lazy source fails (HERE is unset in a composition) — the
+# fail-closed leg. Sourced, never stubbed: the verdict is the shipped classifier's.
+GUARDED_REPO="${INFEAS_GUARDED_REPO:-homelab}"
+[ "${INFEAS_NO_FOOTPRINT:-}" = 1 ] || . "$REPLAY_ROOT/agents/footprint.sh"
 dispatchable=1
 c6g_nums=""
 # The goal-child set the enclosing loop computed (the FU-143 hold's input). The `strike-marker`

@@ -61,3 +61,39 @@ marker-this-ride    | verdict |                                           |     
 marker-earlier-ride | verdict |                                           |                    | marker-earlier-ride
 marker-per-ride     | verdict |                                           |                    | marker-per-ride
 marker-no-stamp     | verdict |                                           |                    | parks
+# ── homelab#3309 (2026-11-22): the input axis is WHETHER THE CLASSIFIER BACKS THE CLAIM. A marker
+# whose first payload token is a path in this checkout goes through `classify_touches_repo` before
+# the park; only `codeowner-author` (or a payload the classifier cannot read) parks.
+# refuted         = #66's marker names `gateway/devbox.json` (patches/gateway-marker.jq) → machine-merge:
+#                   NO park, ONE refutation comment, a `↺ INFEASIBLE REFUTED` report line, and #66
+#                   falls through to `c4c5-redispatch` beside #70. RED on the base tree (it parked).
+# refuted-posted  = the same claim, the thread already carrying this ride's refutation (created after
+#                   the marker): no second comment, still no park — the refutation is idempotent.
+# refuted-twice   = a refuted ride (marker 09:20, refutation 09:25), re-dispatched 11:00, and the
+#                   new ride posted the SAME claim again at 11:20 → parked as before: ONE refutation
+#                   per issue, the second claim goes to a human.
+# devbox-root     = the marker names the ROOT `devbox.json` → codeowner-author → parked unchanged.
+# resource-slash  = `kube-system/coredns` is path-SHAPED but names nothing in this checkout (no such
+#                   path, no such parent dir) → a resource, not a path → parked unchanged.
+# refuted-other-repo = the `refuted` claim, but GUARDED_REPO is not this repo → parked unchanged
+#                   (classify_touches_repo drops the ❌ set off GUARDED_REPO; it can refute nothing).
+# refuted-no-footprint = the `refuted` claim, footprint.sh unsourceable → parked unchanged (fail closed).
+refuted              | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/gateway-marker.jq |  | refuted
+refuted-posted       | verdict |                                           |                    | refuted-posted
+refuted-twice        | verdict |                                           |                    | parks-gateway
+devbox-root          | verdict |                                           |                    | devbox-root
+resource-slash       | verdict |                                           |                    | resource-slash
+refuted-other-repo   | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/gateway-marker.jq | INFEAS_GUARDED_REPO=circles | parks-gateway
+refuted-no-footprint | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/gateway-marker.jq | INFEAS_NO_FOOTPRINT=1 | parks-gateway
+# ── PR #3681 review: the path is CANONICAL before it is classified. classify_touches matches literal
+# case arms, so a non-canonical spelling of a never-touch path read machine-merge and a CORRECT claim
+# was refuted (fail-open). Leading `./` is dropped, `//` and `/./` collapse, any `.`/`..` segment
+# left parks (fail closed); markdown wrapping (backticks, quotes, trailing `:,.;)`) is stripped fully.
+# dot-slash        = `./devbox.json` (patches/dot-slash-marker.jq) → codeowner-author → parked. RED on
+#                    6766aca06, which refuted it.
+# dot-segment      = `scripts/./node-maintenance.sh` (patches/dot-segment-marker.jq) → parked.
+# refuted-backtick = `` `gateway/devbox.json`: `` (patches/backtick-marker.jq) → classified, refuted
+#                    exactly as `refuted` (the same expected stream).
+dot-slash            | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/dot-slash-marker.jq   |  | dot-slash
+dot-segment          | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/dot-segment-marker.jq |  | dot-segment
+refuted-backtick     | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/backtick-marker.jq    |  | refuted
