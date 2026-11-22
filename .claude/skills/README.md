@@ -19,7 +19,7 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 | [tofu-apply](tofu-apply/SKILL.md) | Run tofu correctly (secrets, `-chdir`, plan-first) |
 | [skill-retro](skill-retro/SKILL.md) | Batched retro over jail transcripts → the GAPS ledger |
 | [seat-review](seat-review/SKILL.md) | The platform reviewer run by hand (a sonnet subagent with the bot's own instructions) on an operator-path change — a red-by-design guarded-file PR or a direct-to-master edit — before the operator admin-merges |
-| [second-jail](second-jail/SKILL.md) | A SECONDARY mono jail beside the primary: clone-only, no shared records, PR lane; **operator-typed only** |
+| [second-jail](second-jail/SKILL.md) | A SECONDARY mono jail beside the primary: clone-only, no shared records (a typed wind-down handoff carries them to the primary), PR lane; **operator-typed only** |
 
 ## Improvement contract
 
