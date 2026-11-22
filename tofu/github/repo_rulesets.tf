@@ -57,6 +57,13 @@ resource "github_repository_ruleset" "required_checks" {
   rules {
     required_status_checks {
       strict_required_status_checks_policy = true # branch must be up to date before merge
+      # Creating a ref is not a change that has checks: without this, cutting a NEW goal/<n>-<slug>
+      # at master's head is refused (HTTP 422) for every identity off the bypass list — island
+      # intake's own Goal cut (islands/intake/specs/access.md INTAKE-ACCESS-GOAL-BRANCH).
+      # ⚠ Ruleset-wide, not per-identity: ANY identity with contents:write may now create a
+      # goal/** ref (master always exists, so ~DEFAULT_BRANCH is unaffected). Every later update
+      # of goal/** or master — merges into and out of goal/** included — still needs these checks.
+      do_not_enforce_on_create = true
 
       dynamic "required_check" {
         for_each = each.value.required_checks

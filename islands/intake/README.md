@@ -25,6 +25,8 @@ and evidence: [docs/spikes/island-intake.md](../../docs/spikes/island-intake.md)
 | [`scripts/experiment-read.sh`](scripts/experiment-read.sh) | the scheduled read of the platform repo's open experiments (`experiment/open` issues): decides each, writes the verdict comment, reopens a failed one, uploads the report, pushes `island_intake_experiments_*` — the workflow's first step; `--dry-run` writes nothing |
 | `devbox.json`, `devbox.lock` | the two tools the pod image lacks — promtool, yq — which the manifest's bootstrap installs and runs the launcher with (`devbox run`); the pod image (the worker base image, agent-base) pre-bakes claude, git, curl, jq, gh, kubectl, s5cmd, python3, uv and devbox itself |
 | [`tests/island-intake-test.sh`](tests/island-intake-test.sh), `tests/fixtures/` | the hermetic harness and its recorded inputs (real dig and responder findings, the wait cases) |
+| [`specs/`](specs/README.md) | the spec root (`INTAKE-` ids): [`access.md`](specs/access.md) — every act the rules write, the sitting's identity can perform, and nothing beyond; the rule files are not specified there |
+| `specs-tests/`, [`scripts/ci.sh`](scripts/ci.sh) | the spec root's tests: rule-labelled pytest cases over the declared records, in their own devbox and uv project (this directory's `devbox.json` stays the sitting's); `scripts/ci.sh` is their gate, reached by `diff-ci` — the bash harness above is not part of it |
 
 The per-island facts stay in [`docs/intake/`](../../docs/intake/) (ADR-160): one rules home here,
 one facts file per island there. A stack island's facts file stays in the stack's own repo
