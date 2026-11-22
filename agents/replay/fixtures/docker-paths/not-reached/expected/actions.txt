@@ -1,0 +1,5 @@
+OUT → no docker: #3300's footprint does not reach fixer.dockerPaths (gateway/**)
+OUT DOCKER:[]
+OUT DOCKER_BY_PATH:[not-reached]
+OUT - **Docker: NO.** No daemon in this ride: this repo gives one only to a ride whose issue `Touches:` reaches `gateway/**`, and yours does not. A gate u
+RC 0

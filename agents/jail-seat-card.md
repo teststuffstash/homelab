@@ -89,8 +89,11 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   that alert, not by the reporter's diagnosis. Downtime detection never depends on issue reports,
   and the belt reaching the reporter's conclusion on its own is the fair test of the alerting
   (oracle-fleet#228 → `GarageQuorumMembersRestarted`/`GarageS3ServerErrors`).
-- **Never `talosctl upgrade` a Proxmox *nocloud* VM** — it loses its static IP/hostname and rejoins
-  as a ghost. Bake extensions into the image (`image.tf`) and recreate. Metal nodes upgrade fine.
+- **Never `talosctl upgrade` a Proxmox *nocloud* VM with the generic installer** (talosctl's default
+  when `--image` is omitted) — it loses its static IP/hostname and rejoins as a ghost. A VM upgrades
+  in place only with its exact nocloud installer, through `scripts/node-maintenance.sh upgrade` /
+  `devbox run cp-upgrade`, never a hand-typed `--image` (ADR-014). Extension changes still recreate
+  (`image.tf`). Metal nodes upgrade fine.
 - Never iterate destructive OPNsense firmware endpoints (`/reboot`, `/poweroff`) to "discover" them
   — they execute.
 - Don't claim "done" without an isolated end-state check.

@@ -1,0 +1,22 @@
+# assembly-ci-red/in-flight-held — `ci` is red, but another check on the head started three minutes
+# before the pinned clock and has not concluded (a re-run or a late job filling the rollup in). No
+# marker exists, so without the hold this world emits: the ride reads a SETTLED rollup only, and an
+# in-flight run buys none. (A re-run of the red check itself removes it from the rollup while it
+# runs — then the PR is not selected at all; `green-nothing` pins the unselected shape.)
+#
+# THE CONTRACT: a SETTLING report line; no unit, no side-map entry.
+name: assembly-ci-red-in-flight-held
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

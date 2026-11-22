@@ -1,0 +1,12 @@
+# A NAMED retro series (homelab#3140) writes on its stack repo: the rules PR via pr-open and the
+# brief's lane-B/C issues. Its ride must therefore DROP the fleet-wide read-only retro token
+# (RETRO_GH_SECRET → agent-session.sh mounts it and renders no broker) and keep the broker's
+# stack-repo worker token. Operator ruling 2026-11-07.
+# THE CONTRACT: the stack's own loop retro (series == stack) keeps the read-only fleet mount, no pr-open.
+name: retro-series-identity/loop
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-series-identity
+  - file:../post.sh

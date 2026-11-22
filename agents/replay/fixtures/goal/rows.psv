@@ -137,24 +137,49 @@
 # human or the merge — #1935 makes that wait long by construction. Without a hold the predicate
 # stays true every tick and re-summons a session that can only rule "nothing to rule, waiting on
 # the operator": 29 rides / ~1 h on oracle-fleet#828 (PR#845), ~25/h. The hold is the state-fp
-# idiom, clause-scoped (`state-fp:goal-checkpoint-b:<hash>`) and written at DISPATCH time; the fold
-# is STATE_FP_JQ_UNARMED's, so a verdict, a content change or a check flip releases it and a rebase
-# or a master-merge does not. The three rows below are the whole contract, recorded from the
-# oracle-fleet#828 world mapped onto this family's circles world (goal #29, assembly PR #845).
+# idiom, clause-scoped (`state-fp:goal-checkpoint-b:<hash>`) and written at DISPATCH time; the
+# fingerprint is the assembly PR's IDENTITY (STATE_FP_JQ_IDENTITY: `pr=<number>`), so the hold
+# releases only when that PR closes or is replaced by another, and NOTHING that happens on the PR
+# releases it. The rows below are the whole contract, on this family's circles world (goal #29,
+# assembly PR #845). Every marker is the hash of `pr=845` → `a04172e75052`
+# (`printf 'pr=845' | sha256sum | cut -c1-12`); every hold row expects 0 units and ONE hold line.
 #
 # goal-checkpoint-b-held  = the #828 shape: children closed, #845 OPEN REVIEW_REQUIRED/BEHIND with
-#                           the trailer, and a `state-fp:goal-checkpoint-b:` marker matching the
-#                           PR's current fingerprint → 0 units and ONE hold line. REDS on base
-#                           (pre-#2477 the row emits the unit). The store is 6/6 so trigger (a)
-#                           cannot mask the hold, and the row is the family's only `UNITS <none>`
-#                           pre-launch shape.
-# goal-checkpoint-b-verdict-rearms
-#                         = the SAME world with a NEW verdict on #845 (an APPROVED review at
-#                           18:04Z, after the 17:33Z marker). The fingerprint's `verdict=` line
-#                           moves, the hold releases, and (b) fires ONCE — the row that keeps the
-#                           hold from becoming a permanent silence.
+#                           the trailer, and a `state-fp:goal-checkpoint-b:` marker on it. REDS on
+#                           base (pre-#2477 the row emits the unit). The store is 6/6 so trigger
+#                           (a) cannot mask the hold.
+# goal-checkpoint-b-verdict-held
+#                         = the SAME world with a NEW verdict on #845 (the reviewer bot's APPROVED
+#                           at 18:04Z, after the 17:33Z marker). A verdict is not the PR closing:
+#                           the hold line prints and no unit is emitted. This row was
+#                           `goal-checkpoint-b-verdict-rearms` and expected the OPPOSITE (the
+#                           verdict released the hold and (b) fired once); the contract was
+#                           reversed by operator ruling — a checkpoint has nothing to rule on a
+#                           bot approval, and CHANGES_REQUESTED is the `assembly-cr` trigger's.
+# goal-checkpoint-b-content-push-held
+#                         = the SAME world after a push that changes what the PR changes: a new
+#                           `headRefOid` and a second, non-merge commit. Content is not identity —
+#                           held.
+# goal-checkpoint-b-check-flip-held
+#                         = the SAME world with `ci` SETTLED on FAILURE (green → red, settled to
+#                           settled). A check flip is not identity — held. A red assembly PR stays
+#                           on the report surface through the ci-red clause's own line (the
+#                           `ci-red-goal-head-exclusion` block), not through a checkpoint ride.
+# goal-checkpoint-b-inflight-check-held
+#                         = the SAME world after a push or an updater master-merge: a NEW
+#                           `headRefOid` and `ci` IN FLIGHT (no conclusion yet) — held.
+# goal-checkpoint-b-red-rerun-held
+#                         = the same re-run over a RED assembly PR (an operator-path assembly
+#                           whose required check is red by design, ADR-100), `ci` back in flight —
+#                           held, by the fingerprint alone: no settling line, no second probe.
+# goal-checkpoint-b-replaced-releases
+#                         = #845 is CLOSED and a NEW assembly PR #851 is open for the same goal
+#                           (`prsjson` carries #851 only; the marker stayed behind on #845). The
+#                           probe finds #851, which carries no marker → the hold releases and (b)
+#                           fires ONCE — the row that keeps the hold from becoming a permanent
+#                           silence. Its own dispatch then records `pr=851`.
 # goal-checkpoint-b-c-armed
-#                         = the SAME held world PLUS one undispositioned member (#301). Trigger (c)
+#                         = the held world PLUS one undispositioned member (#301). Trigger (c)
 #                           is deliberately NOT part of the hold: the unit is emitted with reason
 #                           `members 1 undispositioned` while the hold line still prints. This is
 #                           the row that proves the hold narrows (b) and nothing else.
@@ -182,7 +207,7 @@
 #                         = the SAME marker with a SECOND undispositioned member (#303) → the set
 #                           `#301 #303` differs from the recorded one, the hold releases and (c)
 #                           fires ONCE. The row that keeps the hold from becoming a permanent
-#                           silence (the #2477 `verdict-rearms` shape, on the member SET).
+#                           silence (the #2477 `replaced-releases` shape, on the member SET).
 # goal-checkpoint-c-ruled = the SAME marker with #301 ruled `deferred` on the store → the set is
 #                           EMPTY, so (c) never arms and the stale marker is not even consulted:
 #                           no unit, no hold line. The member ruled ⇒ (c) quiet.
@@ -201,7 +226,12 @@ assembly-complete  | open-pre |                                            | IN_
 checkpoint-due     | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | checkpoint-due
 child-set-complete | open-pre |                                            | IN_SLUG=teststuffstash/circles IN_REPO=circles | child-set-complete
 goal-checkpoint-b-held | open-pre |                                       | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-held
-goal-checkpoint-b-verdict-rearms | open-pre |                             | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-verdict-rearms
+goal-checkpoint-b-verdict-held | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-verdict-held
+goal-checkpoint-b-content-push-held | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-content-push-held
+goal-checkpoint-b-check-flip-held | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-check-flip-held
+goal-checkpoint-b-inflight-check-held | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-inflight-check-held
+goal-checkpoint-b-red-rerun-held | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-red-rerun-held
+goal-checkpoint-b-replaced-releases | open-pre | | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-replaced-releases
 goal-checkpoint-b-c-armed | open-pre | openall.json @ patches/add-bare-member-counted.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-b-c-armed
 goal-checkpoint-c-held | open-pre | openall.json @ patches/add-c-members.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-c-held
 goal-checkpoint-c-new-member | open-pre | openall.json @ patches/add-c-members-new.jq | IN_SLUG=teststuffstash/circles IN_REPO=circles | goal-checkpoint-c-new-member

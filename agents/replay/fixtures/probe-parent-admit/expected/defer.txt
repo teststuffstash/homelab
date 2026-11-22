@@ -1,0 +1,4 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"prober","task":"probe-parent-probe-platform-1730000000","round":0,"harness":"claude"}
+OUT probe DEFERRED — gateway: [subscription-sessions-full] retry_after=120s; next cron tick retries
+ERR → gateway(sessions): defer — [subscription-sessions-full] retry_after=120s — not dispatching (task=probe-parent-probe-platform-1730000000, round=0).
+RC 0

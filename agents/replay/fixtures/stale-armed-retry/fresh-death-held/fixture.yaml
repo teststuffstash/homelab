@@ -1,0 +1,15 @@
+# stale-armed-retry/fresh-death-held (ADR-162) — the clock is 17 minutes after #3237's startup failures: inside
+# SA_GRACE_S a dead run is GitHub's own retry's / a superseding event's, not ours — held silently. #3233's `ci`
+# died five hours before this clock, so it is re-run.
+name: stale-armed-retry-fresh-death-held
+mode: actions
+source: agents/coordinator-scan.sh
+world: homelab-dead-runs-3233-3237
+parts:
+  - file:../bridge.sh
+  - block:stale-armed-retry
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-09T16:30:00Z

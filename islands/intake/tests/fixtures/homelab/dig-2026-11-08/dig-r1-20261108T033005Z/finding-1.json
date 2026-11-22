@@ -1,0 +1,43 @@
+{
+  "schema": "dig-finding/v1",
+  "group": "2026-11-07T02:00:00Z|cluster",
+  "alerts": [
+    "GoCatalogStale (alert:GoCatalogStale)"
+  ],
+  "verdict": "cause-found",
+  "cause": "The gateway's docs catalog source has been 404 since 2026-11-06T07:36Z. The gateway fetches the vendor Go page from anomalyco/opencode dev/services/www/src/docs/content/console/go.mdx (gateway/src/agent_gateway/config.py:68). The vendor commit 9ced0469b (#62229, 2026-11-06T05:17:30Z, 'serve the V2 docs from services/site with SolidStart') moved that file to services/site/src/docs/content/console/go.mdx. The old path now returns 404, every docs refresh keeps the last good snapshot (31 models, fetched 2026-11-06T01:36:52Z), and the snapshot age crossed 24 h at 2026-11-07T01:36Z; the rule's 30m for: then fired at about 02:07Z. The config source is unaffected (models.dev api.json returns 200; the config leg logs ok). I also ran the gateway's own parse_docs (catalog.py:387, httpx stubbed in a scratch dir, read-only) on the relocated page: it parses to the same snapshot shape as the repo fixture (plans, plan_fees, peak hours, window_shares present). Differences are content only (a promotion row, a bonus), and the Go Teams row is passed over per #3011. Not verified: a full gateway test run and a live refresh from the new URL. Admission impact is not measured; the Go plan limits and fees in the docs snapshot are about 2 days old. No open issue or PR covers this (searched gh issues and PRs for GoCatalog, go.mdx, docs fetch 404, services/www, and go catalog).",
+  "evidence": [
+    "Prometheus instant query gateway_go_catalog_age_seconds{source=\"docs\"} → 179565 s (about 50 h), on pod agent-gateway-6bfc7777bc-b45hb",
+    "Prometheus range query_range on gateway_go_catalog_age_seconds{source=\"docs\"} 2026-11-06T20:00Z to 2026-11-08T03:30Z → linear growth from the last good refresh, no reset",
+    "Prometheus gateway_go_catalog_last_outcome{source=\"docs\"} and query_range → outcome=fetch-failed continuously from 2026-11-06T08:00Z; config outcome=ok throughout",
+    "Prometheus gateway_go_catalog_models{source=\"docs\"} → 31 (stored snapshot kept), config → 25",
+    "Prometheus ALERTS{alertname=\"GoCatalogStale\"} → firing, severity=warning, triage=dig",
+    "Alertmanager /api/v2/alerts → GoCatalogStale is not in the active list at 03:30Z (the group's alert is firing in Prometheus per ALERTS); no silence or inhibition on the gateway rule",
+    "Loki {namespace=agent-egress,pod=~agent-gateway.*} |= docs, tenant agent-egress, from 2026-11-05T20:00Z → 'docs fetch answered 404 (docs read) — keeping the last good snapshot' at 07:36, 13:36, 19:36 (11-06), 21:20, 22:46, 23:05, 23:20, 00:11, 00:47, 06:47, 12:47, 18:47, 21:38 (11-07); 'docs snapshot loaded from the store (fetched 2026-11-06T01:36:52Z, 31 models)' after each restart; the first good docs read is 'docs refreshed — 31 models' at 2026-11-06T01:36:52Z",
+    "Loki config leg {job=loki.source.kubernetes.pods} → 'config refreshed — 25 models' repeatedly, so the failure is docs-only",
+    "kubectl -n agent-egress get pods -o wide and kubectl logs deploy/agent-gateway --since=72h | grep docs → the same 404 lines; pod agent-gateway-6bfc7777bc-b45hb on wk-02, 5h52m old, 0 restarts",
+    "curl https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx → HTTP 404 (fetched now); same URL with services/site/... → HTTP 200, 55933 bytes; models.dev/api.json → 200",
+    "gh api repos/anomalyco/opencode/commits?path=services/www/src/docs/content/console/go.mdx → latest commit touching the old path is 9ced0469b (2026-11-06T05:17:30Z, #62229); gh api search/code filename:go.mdx → the only current copy is services/site/src/docs/content/console/go.mdx",
+    "Repo: gateway/src/agent_gateway/config.py:68 pins the old path; gateway/specs/endpoints/catalog.md:168-169 and :54/:118 and gateway/src/agent_gateway/catalog.py:18,321 name the old path; docs/spikes/opencode-go-catalog.md:64-65 records the earlier move (#54761, 2026-10-12) to services/www",
+    "Repo: argocd/resources/agent-gateway/go-catalog.promtool-rules and prometheusrule.yaml GoCatalogStale expr/for (for: 30m, >86400 s or models==0), consistent with the observed 02:07Z onset",
+    "Python (stub httpx, -I, read-only): gateway parse_docs on /tmp copy of the relocated page and on tests/fixtures/go-catalog/go.mdx → both succeed with identical top-level keys and plan counts"
+  ],
+  "recommendation": "Owner: the gateway/agent-loop seat, one gateway PR (not auto-merged here: it is a runtime vendor-source change that feeds admission prices). Change config.py:68 to services/site/src/docs/content/console/go.mdx, update the path in catalog.md lines 168-169 and 183/211 and catalog.py:18/321, refresh the test fixture from the new page, and run the gateway test suite. Then deploy the gateway (or restart the pod for an immediate refresh). GoCatalogStale should clear on the next good docs refresh. Also decide whether the new page's content changes (promotion row, bonus, Go Teams) need a parser or policy change before the fix ships. Consider a standing check that fails loudly on a 404 for the vendor URL, not only at 24 h.",
+  "pr": "",
+  "related": [
+    "FU-270",
+    "teststuffstash/homelab#2695",
+    "teststuffstash/homelab#3011",
+    "teststuffstash/homelab#2933",
+    "docs/spikes/opencode-go-catalog.md"
+  ],
+  "tool_gaps": [],
+  "ts": "2026-11-08T03:32:01Z",
+  "run": "dig-2026-11-08/dig-r1-20261108T033005Z",
+  "members": [
+    {
+      "alertname": "GoCatalogStale",
+      "subject": "alert:GoCatalogStale"
+    }
+  ]
+}

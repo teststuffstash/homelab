@@ -1,30 +1,10 @@
 """GW-RAIL-OPENCODE — the Go rail's wire, both dialects (specs/endpoints/anthropic-messages.md).
 
-| description | dialect | inbound header | upstream header |
-|---|---|---|---|
-| the Go key rides as x-api-key on the anthropic dialect | anthropic | Authorization: Bearer gws_... | x-api-key: <go key> |
-| no bearer reaches the Go anthropic endpoint | anthropic | Authorization: Bearer gws_... | no Authorization |
-| the Go key rides as a bearer on the openai dialect | openai | Authorization: Bearer gws_... | Authorization: Bearer <go key> |
-| anthropic-beta is dropped | anthropic | anthropic-beta: oauth-2025-04-20 | no anthropic-beta |
-| the claude-code session id passes through alone | anthropic | X-Claude-Code-Session-Id: <uuid>, no x-opencode-session | X-Claude-Code-Session-Id: <uuid>, no x-opencode-session |
-| the opencode session id passes through alone | openai | x-opencode-session: <id> | x-opencode-session: <id> |
-| both session headers pass through | anthropic | both | both, unchanged |
-| no session header — the gateway supplies its session id | anthropic | neither | x-opencode-session: <gateway session id> |
-| the caller's user agent is replaced by the gateway's own | openai | User-Agent: Python-urllib/3.13 | User-Agent: agent-gateway |
-| the client's Accept-Encoding passes through | openai | Accept-Encoding: gzip | Accept-Encoding: gzip |
-| no Accept-Encoding from the client is identity upstream | openai | (none) | Accept-Encoding: identity |
-
-| description | inbound path | upstream behaviour | upstream URL | status | body |
-|---|---|---|---|---|---|
-| an anthropic-dialect call lands | POST /anthropic/v1/messages | upstream-ok | https://opencode.ai/zen/go/v1/messages | 200 | byte-identical |
-| an openai-dialect call lands | POST /openai/v1/chat/completions | upstream-ok | https://opencode.ai/zen/go/v1/chat/completions | 200 | byte-identical |
-| the models list passes through | GET /openai/v1/models | upstream-ok | https://opencode.ai/zen/go/v1/models | 200 | byte-identical |
-| a stream streams | POST /openai/v1/chat/completions, stream: true | upstream-stream | .../chat/completions | 200 | SSE bytes unchanged |
-| a rate limit passes through | POST /anthropic/v1/messages | upstream-429 | .../messages | 429 | the upstream body, retry-after kept |
-| an upstream auth failure is typed and hidden | POST /openai/v1/chat/completions | upstream-401 | .../chat/completions | 424 | upstream-auth envelope |
-| the vendor's MissingSessionID is passed through, not masked | POST /anthropic/v1/messages | upstream-400-missing-session | .../messages | 400 | the upstream body |
-| an unreachable upstream is typed | POST /anthropic/v1/messages | upstream-down | .../messages | 502 | upstream-unreachable envelope |
-| a read past 600 s (WIP: clock-faked) | POST /anthropic/v1/messages | upstream-slow | .../messages | 504 | upstream-timeout |
+One parametrized case per table row: the argnames are the table's header cells (`name?` is
+`expected_name`), the ids its description cells, the literals the page's Legend lines. World
+`policy-default`, the fake Go upstream in the behaviour the `upstream` column names; `op` picks the
+session's harness (`messages` → a claude reviewer pinned to the Go rail, `chat` / `models` → an
+opencode worker), opened by `ride()`.
 """
 
 from __future__ import annotations
@@ -32,133 +12,123 @@ from __future__ import annotations
 import pytest
 
 from agent_gateway.config import UPSTREAM_DEFAULTS
-from agent_gateway.rails import OAUTH_BETA, upstream_url
+from agent_gateway.rails import upstream_url
 
-from ._rail_rows import expected_bytes, ride
-from .conftest import GO_KEY, err, given, open_session, rule, then, then_eq, when, world
+from ._rail_rows import NONE, apply_transport_world, body_class, headers_seen, inputs, oracle, recorded, ride
+from .conftest import rule, then, then_eq, world
 
 pytestmark = rule("GW-RAIL-OPENCODE")
 RAIL = "opencode"
+MODEL = {"messages": "claude-haiku-5-5", "chat": "deepseek-v4.1-flash", "models": None}  # the wire ids of the policy's Go tiers
 
-HEADER_ROWS = [
-    ("the Go key rides as x-api-key on the anthropic dialect", "messages", {}, {"x-api-key": GO_KEY}),
-    ("no bearer reaches the Go anthropic endpoint", "messages", {}, {"authorization": None}),
-    ("the Go key rides as a bearer on the openai dialect", "chat", {}, {"authorization": f"Bearer {GO_KEY}", "x-api-key": None}),
-    ("anthropic-beta is dropped", "messages", {"anthropic-beta": OAUTH_BETA}, {"anthropic-beta": None}),
-    ("the claude-code session id passes through alone", "messages", {"x-claude-code-session-id": "u1"}, {"x-claude-code-session-id": "u1", "x-opencode-session": None}),
-    ("the opencode session id passes through alone", "chat", {"x-opencode-session": "c1"}, {"x-opencode-session": "c1", "x-claude-code-session-id": None}),
-    ("both session headers pass through", "messages", {"x-opencode-session": "c1", "x-claude-code-session-id": "u1"}, {"x-opencode-session": "c1", "x-claude-code-session-id": "u1"}),
-    ("no session header — the gateway supplies its session id", "messages", {}, {"x-opencode-session": "<session id>"}),
+
+async def _header_case(gw, upstreams, upstream, op, inbound, expected_upstream_header):
+    world(upstream=upstream)
+    doc, r = await ride(gw, RAIL, op, inbound=inbound, name=inputs(upstream=upstream, op=op, inbound=inbound))
+    then_eq("status", r.status_code, 200)
+    then_eq("expected_upstream_header", headers_seen(upstreams[RAIL].calls[-1], expected_upstream_header, doc, inbound), expected_upstream_header,
+            claim=f"upstream_header? = {expected_upstream_header}")
+
+
+# -- The Go credential and the beta ---------------------------------------------------------------
+CREDENTIAL_ROWS = [  # description | upstream | op | inbound | upstream_header?
+    ("the Go key rides as x-api-key on the anthropic dialect", "upstream-ok", "messages", NONE, "x-api-key: <OPENCODE_GO_API_KEY>"),
+    ("no bearer reaches the Go anthropic endpoint", "upstream-ok", "messages", NONE, "Authorization: (absent)"),
+    ("the Go key rides as a bearer on the openai dialect", "upstream-ok", "chat", NONE, "Authorization: Bearer <OPENCODE_GO_API_KEY>; x-api-key: (absent)"),
+    ("anthropic-beta is dropped", "upstream-ok", "messages", "anthropic-beta: oauth-2025-04-20", "anthropic-beta: (absent)"),
+]
+
+
+@pytest.mark.parametrize(("upstream", "op", "inbound", "expected_upstream_header"), [r[1:] for r in CREDENTIAL_ROWS], ids=[r[0] for r in CREDENTIAL_ROWS])
+async def test_credential_headers(gw, upstreams, upstream, op, inbound, expected_upstream_header):
+    await _header_case(gw, upstreams, upstream, op, inbound, expected_upstream_header)
+
+
+# -- The vendor's session id ----------------------------------------------------------------------
+SESSION_ROWS = [  # description | upstream | op | inbound | upstream_header?
+    ("the claude-code session id passes through alone", "upstream-ok", "messages", "X-Claude-Code-Session-Id: u1",
+     "X-Claude-Code-Session-Id: u1; x-opencode-session: (absent)"),
+    ("the opencode session id passes through alone", "upstream-ok", "chat", "x-opencode-session: c1",
+     "x-opencode-session: c1; X-Claude-Code-Session-Id: (absent)"),
+    ("both session headers pass through", "upstream-ok", "messages", "x-opencode-session: c1; X-Claude-Code-Session-Id: u1",
+     "x-opencode-session: c1; X-Claude-Code-Session-Id: u1"),
+    ("no session header — the gateway supplies its session id ⚖", "upstream-ok", "messages", NONE, "x-opencode-session: <session id>"),
+]
+
+
+@pytest.mark.parametrize(("upstream", "op", "inbound", "expected_upstream_header"), [r[1:] for r in SESSION_ROWS], ids=[r[0] for r in SESSION_ROWS])
+async def test_session_headers(gw, upstreams, upstream, op, inbound, expected_upstream_header):
+    await _header_case(gw, upstreams, upstream, op, inbound, expected_upstream_header)
+
+
+# -- The client's signature and encoding ----------------------------------------------------------
+CLIENT_ROWS = [  # description | upstream | op | inbound | upstream_header?
     # `user_agent: fixed` on this rail (policy ⚖): the edge in front of opencode.ai judges client
     # signatures (Cloudflare 1010 refused `Python-urllib`, 2026-10-17) — it sees the gateway's own UA
-    ("the caller's user agent is replaced by the gateway's own", "chat", {"user-agent": "Python-urllib/3.13"}, {"user-agent": "agent-gateway"}),
-    ("the client's Accept-Encoding passes through", "chat", {"accept-encoding": "gzip"}, {"accept-encoding": "gzip"}),
+    ("the caller's user agent is replaced by the gateway's own ⚖", "upstream-ok", "chat", "User-Agent: Python-urllib/3.13", "User-Agent: agent-gateway"),
+    ("the client's Accept-Encoding passes through", "upstream-ok", "chat", "Accept-Encoding: gzip", "Accept-Encoding: gzip"),
+    ("no Accept-Encoding from the client is identity upstream ⚖", "upstream-ok", "chat", "Accept-Encoding: (none)", "Accept-Encoding: identity"),
 ]
 
 
-@pytest.mark.parametrize(("op", "inbound", "expect"), [r[1:] for r in HEADER_ROWS], ids=[r[0] for r in HEADER_ROWS])
-async def test_headers(gw, upstreams, op, inbound, expect):
-    world(upstream="upstream-ok")
-    doc, r = await ride(gw, RAIL, op, headers=inbound)
-    then_eq("status", r.status_code, 200)
-    call = upstreams[RAIL].calls[-1]
-    want = {k: (doc["session"]["id"] if v == "<session id>" else v) for k, v in expect.items()}
-    got = {k: call["headers"].get(k) for k in want}
-    with then("expect upstream headers " + ", ".join(f"{k} = {v}" for k, v in expect.items()),
-              expect={"expected": want, "actual": got}):
-        for k, v in want.items():
-            assert call["headers"].get(k) == v, (k, call["headers"].get(k))
+@pytest.mark.parametrize(("upstream", "op", "inbound", "expected_upstream_header"), [r[1:] for r in CLIENT_ROWS], ids=[r[0] for r in CLIENT_ROWS])
+async def test_client_headers(gw, upstreams, upstream, op, inbound, expected_upstream_header):
+    await _header_case(gw, upstreams, upstream, op, inbound, expected_upstream_header)
 
 
-async def test_no_accept_encoding_is_identity(gw, upstreams):
-    """row: no Accept-Encoding from the client is identity upstream"""
-    world(upstream="upstream-ok")
-    with given("a worker session on opencode"):
-        doc = await open_session(gw)
-    with when("POST /openai/v1/chat/completions with NO Accept-Encoding header"):
-        req = gw.build_request("POST", "/openai/v1/chat/completions", json={"messages": []},
-                               headers={"authorization": f"Bearer {doc['session']['token']}"})
-        del req.headers["accept-encoding"]
-        r = await gw.send(req)
-    then_eq("status", r.status_code, 200)
-    then_eq("upstream accept-encoding", upstreams[RAIL].calls[-1]["headers"].get("accept-encoding"), "identity",
-            claim="upstream Accept-Encoding = identity (the client asked for none)")
-
-
-LAND_ROWS = [
-    ("an anthropic-dialect call lands", "messages", "upstream-ok", "/v1/messages"),
-    ("an openai-dialect call lands", "chat", "upstream-ok", "/v1/chat/completions"),
-    ("the models list passes through", "models", "upstream-ok", "/v1/models"),
-    ("a stream streams", "chat", "upstream-stream", "/v1/chat/completions"),
+# -- A call lands on the Go upstream --------------------------------------------------------------
+LAND_ROWS = [  # description | upstream | op | upstream_path? | status? | body? | recorded?
+    ("an anthropic-dialect call lands", "upstream-ok", "messages", "/v1/messages", 200, "the upstream bytes", "1 · 12 · 0 · 0 · 7"),
+    ("an openai-dialect call lands", "upstream-ok", "chat", "/v1/chat/completions", 200, "the upstream bytes", "1 · 7 · 0 · 0 · 3"),
+    ("the models list passes through", "upstream-ok", "models", "/v1/models", 200, "the upstream bytes", "1 · 0 · 0 · 0 · 0"),
+    ("a stream streams", "upstream-stream", "chat", "/v1/chat/completions", 200, "the upstream bytes", "1 · 19 · 0 · 0 · 4"),
 ]
+PRODUCTION = "https://opencode.ai/zen/go"
 
 
-@pytest.mark.parametrize(("op", "behaviour", "path"), [r[1:] for r in LAND_ROWS], ids=[r[0] for r in LAND_ROWS])
-async def test_calls_land(gw, upstreams, settings, op, behaviour, path):
-    world(upstream=behaviour)
-    model = "claude-haiku-5-5" if op == "messages" else "deepseek-v4.1-flash"
-    status, body, headers = await expected_bytes(upstreams[RAIL], op, model, behaviour)
-    upstreams[RAIL].behaviour = behaviour
-    extra = {"model": model, **({"stream": True} if behaviour == "upstream-stream" else {})} if op != "models" else None
-    doc, r = await ride(gw, RAIL, op, body=extra)
-    then_eq("status", (r.status_code, status), (200, 200), claim="status = 200 (= the upstream's)")
-    with then(f"body = the upstream body under {behaviour}, byte-identical, same content-type",
-              body={"expected_len": len(body), "actual_len": len(r.content)},
-              content_type={"expected": headers["content-type"], "actual": r.headers["content-type"]}):
-        assert r.content == body
-        assert r.headers["content-type"] == headers["content-type"]
+@pytest.mark.parametrize(("upstream", "op", "expected_upstream_path", "expected_status", "expected_body", "expected_recorded"),
+                         [r[1:] for r in LAND_ROWS], ids=[r[0] for r in LAND_ROWS])
+async def test_calls_land(gw, upstreams, store, upstream, op, expected_upstream_path, expected_status, expected_body, expected_recorded):
+    world(upstream=upstream)
+    got = await oracle(upstreams[RAIL], op, MODEL[op], upstream)
+    upstreams[RAIL].behaviour = upstream
+    body = {"model": MODEL[op], **({"stream": True} if upstream == "upstream-stream" else {})} if op != "models" else None
+    doc, r = await ride(gw, RAIL, op, body=body, name=inputs(upstream=upstream, op=op))
     dialect = "anthropic" if op == "messages" else "openai"
-    prod = upstream_url(RAIL, UPSTREAM_DEFAULTS[RAIL], dialect, op)
-    with then(f"upstream path = {path} (production URL https://opencode.ai/zen/go{path})",
-              path={"expected": path, "actual": upstreams[RAIL].calls[-1]["path"]},
-              production_url={"expected": "https://opencode.ai/zen/go" + path, "actual": prod}):
-        assert upstreams[RAIL].calls[-1]["path"] == path
-        assert prod == "https://opencode.ai/zen/go" + path
+    with then(f"upstream_path? = {expected_upstream_path} (the production default {PRODUCTION}{expected_upstream_path})",
+              expected_upstream_path={"expected": expected_upstream_path, "actual": upstreams[RAIL].calls[-1]["path"]},
+              production_url={"expected": PRODUCTION + expected_upstream_path, "actual": upstream_url(RAIL, UPSTREAM_DEFAULTS[RAIL], dialect, op)}):
+        assert upstreams[RAIL].calls[-1]["path"] == expected_upstream_path
+        assert upstream_url(RAIL, UPSTREAM_DEFAULTS[RAIL], dialect, op) == PRODUCTION + expected_upstream_path
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status} (= the upstream's {got[0]})")
+    with then(f"body? = {expected_body} (same content-type as the upstream's own answer)",
+              expected_body={"expected": expected_body, "actual": body_class(r, got[1])},
+              content_type={"expected": got[2]["content-type"], "actual": r.headers.get("content-type")}):
+        assert body_class(r, got[1]) == expected_body
+        assert r.headers.get("content-type") == got[2]["content-type"]
+    then_eq("expected_recorded", recorded(store, doc), expected_recorded, claim=f"recorded? = {expected_recorded}")
 
 
-async def test_rate_limit(gw, upstreams):
-    """row: a rate limit passes through"""
-    world(upstream="upstream-429")
-    upstreams[RAIL].behaviour = "upstream-429"
-    _, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 429)
-    then_eq("retry-after", r.headers.get("retry-after"), "30")
-    then_eq("body error.type", r.json()["error"]["type"], "rate_limit_error", claim="body = the upstream body (error.type = rate_limit_error)")
+# -- Upstream answers that are not a 2xx ---------------------------------------------------------
+ERR_ROWS = [  # description | upstream | op | status? | body? | retry_after?
+    ("a rate limit passes through", "upstream-429", "messages", 429, "the upstream bytes", "30"),
+    ("an upstream auth failure is typed and hidden", "upstream-401", "chat", 424, "upstream-auth envelope", NONE),
+    ("the vendor's MissingSessionID is passed through, not masked ⚖", "upstream-400-missing-session", "messages", 400, "the upstream bytes", NONE),
+    ("an unreachable upstream is typed", "upstream-down", "messages", 502, "upstream-unreachable envelope", NONE),
+    ("a read past 600 s is a typed timeout", "upstream-slow", "messages", 504, "upstream-timeout envelope", NONE),
+]
 
 
-async def test_upstream_auth_hidden(gw, upstreams):
-    """row: an upstream auth failure is typed and hidden"""
-    world(upstream="upstream-401")
-    upstreams[RAIL].behaviour = "upstream-401"
-    _, r = await ride(gw, RAIL, "chat")
-    then_eq("status", r.status_code, 424)
-    with then("body = the upstream-auth envelope, not the upstream body (no LEAK marker)", body={"actual": r.text}):
-        assert err(r) == "upstream-auth"
+@pytest.mark.parametrize(("upstream", "op", "expected_status", "expected_body", "expected_retry_after"), [r[1:] for r in ERR_ROWS], ids=[r[0] for r in ERR_ROWS])
+async def test_not_2xx(gw, upstreams, transport, upstream, op, expected_status, expected_body, expected_retry_after):
+    world(upstream=upstream)
+    got = await oracle(upstreams[RAIL], op, MODEL[op], upstream)
+    upstreams[RAIL].behaviour = upstream
+    apply_transport_world(transport, RAIL, upstream)
+    _, r = await ride(gw, RAIL, op, body={"model": MODEL[op]}, name=inputs(upstream=upstream, op=op))
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    with then(f"body? = {expected_body} (no upstream credential hint crosses back)",
+              expected_body={"expected": expected_body, "actual": body_class(r, got[1] if got else None)}, body_text={"actual": r.text[:200]}):
+        assert body_class(r, got[1] if got else None) == expected_body
         assert "LEAK" not in r.text
-
-
-async def test_missing_session_id_passthrough(gw, upstreams):
-    """row: the vendor's MissingSessionID is passed through, not masked"""
-    world(upstream="upstream-400-missing-session")
-    upstreams[RAIL].behaviour = "upstream-400-missing-session"
-    _, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 400)
-    then_eq("body type", r.json()["type"], "MissingSessionID", claim="body = the vendor's (type = MissingSessionID)")
-
-
-async def test_upstream_unreachable(gw, transport):
-    """row: an unreachable upstream is typed"""
-    world(upstream="upstream-down")
-    transport.unreachable.add(RAIL)
-    _, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 502)
-    then_eq("code", err(r), "upstream-unreachable", claim="error code = upstream-unreachable")
-
-
-async def test_read_past_600s(gw, transport):
-    """row: a read past 600 s (WIP: clock-faked)"""
-    world(upstream="upstream-slow")
-    transport.slow.add(RAIL)
-    _, r = await ride(gw, RAIL, "messages")
-    then_eq("status", r.status_code, 504)
-    then_eq("code", err(r), "upstream-timeout", claim="error code = upstream-timeout")
+    then_eq("expected_retry_after", r.headers.get("retry-after") or NONE, expected_retry_after, claim=f"retry_after? = {expected_retry_after}")

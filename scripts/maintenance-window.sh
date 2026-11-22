@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # maintenance-window — the mechanical half of the /maintenance-window skill.
 #
-#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply] [--expect A,B]
+#   bash scripts/maintenance-window.sh open  --reason "<what you are doing>" [--alerts A,B,C] [--hours N] [--node <n> [--admit-reconciler]] [--admit-apply] [--expect A,B] [--no-ci] [--scope-ip <ip> [--scope-vm <n>] [--scope-prefix <P>]]
 #   bash scripts/maintenance-window.sh check [--id <window-id>]       # also RENEWS the window's lease; new-alert diff drops Watchdog/InfoInhibitor + the window's claims
 #   bash scripts/maintenance-window.sh watch [--id <window-id>] [--replace] [--tick <s>] [--ticks <n>]   # the background alert watch: one per window, prints each NEW name once, renews the lease every tick
 #   bash scripts/maintenance-window.sh renew [--id <window-id>]       # the lease alone — `watch` calls it every tick
@@ -41,7 +41,7 @@
 # parser), renewing the lease every tick, and exiting when the slot is gone (`close`).
 #
 # EXPECTED ALERTS do not block (GAPS maintenance-window-G4/G5, 2026-10-26). Two bins beside CLAIMED:
-#   declared         `open --expect A,B` — names the seat KNOWS the act produces (the detector it
+#   declared         `open --expect A,B` (or `compare <file> --expect A,B`) — names the seat KNOWS the act produces (the detector it
 #                    is firing on purpose). Recorded in the slot, NOT an Alertmanager silence: the
 #                    responder still sees the alert; only this tool's gate stops blocking on it.
 #   node consequence a window opened `--node <n>`: an alert whose NAME is in CONSEQUENCE_ALERTS and
@@ -139,9 +139,22 @@ CLAIMED='[]'
 # losing it (CiliumUnreachableNodes) and its own fstrim CronJob missing a run.
 EXPECTED='[]'
 WIN_NODE=""
+# SCOPE (`--scope-ip <ip> [--scope-vm <name>] [--scope-prefix <P>]`, on `open` and `compare`): an act on
+# ONE machine outside the cluster (a ci-runner VM) can only raise alerts about that machine, so a new
+# name counts only if one of its firing instances is in scope — `instance` host == ip, a `vm`, `name`
+# (the pve guest alerts: PveVmIoError, PveGuestSwapped) or `host` label == the vm name, or the alert
+# name starts with the prefix. Out-of-scope names print and pass; the responder still sees them.
+# Empty (the default) = every new name counts, as before. Never set without an ip (fail closed).
+SCOPE='{}'
+
 CONSEQUENCE_ALERTS="${MAINT_CONSEQUENCE_ALERTS:-NodeRebooted,PodSigkilled,KubeNodeNotReady,CiliumUnreachableNodes,CronJobNotSucceeding}"
 WATCH_TICK="${MAINT_WATCH_TICK:-45}"    # s between watch reads
 WATCH_BLIND="${MAINT_WATCH_BLIND:-3}"   # consecutive failed/empty reads before the watch says BLIND
+# Hard bound (s) on one `kubectl exec` into a cilium agent. An agent on a node whose kubelet
+# accepts the connection but never answers (memory thrash, #3107) holds the exec open forever;
+# `--request-timeout` does not bound a streaming exec, so the bound is `timeout`. A timed-out exec
+# is an exec that did not answer — `unknown`, the existing three-way split's "could not tell".
+EXEC_TO="${MAINT_EXEC_TIMEOUT:-20}"
 
 # EVERY read distinguishes "queried and found nothing" from "the query failed" — and returns
 # non-zero for the latter. Caught in review (#1804): the first cut piped `curl … 2>/dev/null` into
@@ -219,7 +232,7 @@ cilium_backends() {
   for p in $pods; do
     ok=0; out=""
     for _ in 1 2; do
-      if out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+      if out="$(timeout -k 5 "$EXEC_TO" kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
          && [ -n "$out" ]; then ok=1; break; fi
       sleep 1
     done
@@ -343,8 +356,16 @@ baseline_readable() { # <snapshot-file>
   return 1
 }
 
+# scope_json <ip> <vm> <prefix> → the SCOPE object; rc 64 on a malformed value or a scope without an ip.
+scope_json() {
+  [ -z "$1$2$3" ] && { echo '{}'; return 0; }
+  [ -n "$1" ] || { echo "--scope-vm/--scope-prefix need --scope-ip (a scope never widens by name alone)" >&2; return 64; }
+  case "$1$2$3" in *[!A-Za-z0-9_.:-]*) echo "scope values are an ip, a host name and an alert-name prefix (got '$1' '$2' '$3')" >&2; return 64 ;; esac
+  jq -cn --arg ip "$1" --arg vm "$2" --arg p "$3" '{ip:$ip, vm:$vm, prefix:$p}'
+}
+
 cmd_open() {
-  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply="" expect=""
+  local reason="" alerts="$DEFAULT_ALERTS" hours="" node="" admit="" admit_apply="" expect="" no_ci=false s_ip="" s_vm="" s_pre=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --admit-reconciler) admit=1; shift ;;
@@ -354,6 +375,10 @@ cmd_open() {
       --hours)  hours="$2";  shift 2 ;;
       --node)   node="$2";   shift 2 ;;
       --expect) expect="${2:-}"; shift 2 ;;   # names check/close report EXPECTED (declared) — header §EXPECTED ALERTS
+      --no-ci)  no_ci=true; shift ;;          # check/close skip the stranded-CI probe (needs gh; not every act's signal)
+      --scope-ip) s_ip="${2:-}"; shift 2 ;;   # the new-alert diff counts only this machine's alerts (SCOPE above)
+      --scope-vm) s_vm="${2:-}"; shift 2 ;;
+      --scope-prefix) s_pre="${2:-}"; shift 2 ;;
       *) echo "unknown arg: $1" >&2; exit 64 ;;
     esac
   done
@@ -361,6 +386,7 @@ cmd_open() {
   # Alert names only: the list lands in a JSON array and is matched by equality, never a regex.
   case "$expect" in *[!A-Za-z0-9_,]*) echo "open: --expect takes alert NAMES, comma-separated (got '$expect')" >&2; exit 64 ;; esac
   local expect_j; expect_j="$(jq -cn --arg e "$expect" '$e|split(",")|map(select(length>0))|unique')"
+  local scope_j; scope_j="$(scope_json "$s_ip" "$s_vm" "$s_pre")" || exit 64
   mkdir -p "$STATE_DIR"
   # The baseline is taken BEFORE the window exists (the window id is minted by seat-window.sh),
   # so it lands in a pending slot and is renamed to the id once the window is open.
@@ -400,8 +426,8 @@ cmd_open() {
   printf '%s' "$id" > "$pend/window-id"
   jq -n --arg id "$id" --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg until "$until_" --argjson lease "$([ -n "$hours" ] && echo false || echo true)" \
-        --arg node "$node" --argjson expect "$expect_j" \
-        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease, node:$node, expect:$expect}' > "$pend/meta.json"
+        --arg node "$node" --argjson expect "$expect_j" --argjson no_ci "$no_ci" --argjson scope "$scope_j" \
+        '{id:$id, reason:$reason, opened_at:$at, until:$until, lease:$lease, node:$node, expect:$expect, no_ci:$no_ci, scope:$scope}' > "$pend/meta.json"
   mv "$pend" "$STATE_DIR/$id"
   echo "  maintenance-window slot: $id — pass '--id $id' to check/renew/claim/close if any other session may have a window open"
   [ "$expect_j" = '[]' ] || echo "  expecting $(jq -r 'join(", ")' <<<"$expect_j") — check/close report them EXPECTED (declared), not blocking; NOT a silence, the responder still sees them"
@@ -503,7 +529,7 @@ classify_off_baseline() { # <baseline-json> <now-json>
   if [ -n "$WIN_NODE" ] && jq -e --argjson c "$cons" 'any(.[]; . as $a | ($c|index($a)) != null)' <<<"$cand" >/dev/null; then
     node_context || unread=true
   fi
-  jq -cn --argjson cand "$cand" --argjson now "$2" --argjson cl "$CLAIMED" --argjson exp "$EXPECTED" --argjson unread "$unread" \
+  jq -cn --argjson cand "$cand" --argjson now "$2" --argjson cl "$CLAIMED" --argjson exp "$EXPECTED" --argjson unread "$unread" --argjson scope "$SCOPE" \
          --argjson cons "$cons" --arg node "$WIN_NODE" --arg ip "$NODE_IP" --argjson ds "$NODE_DS_PODS" '
     def pinned($n; $l): ($node != "") and (
         ($l.node // "") == $node
@@ -511,21 +537,27 @@ classify_off_baseline() { # <baseline-json> <now-json>
         or (($l.pod // "") as $p | $p != "" and (($ds | index($p)) != null))
         or ($n == "CronJobNotSucceeding" and ($l.cronjob // "") == ("fstrim-guard-" + $node)));
     def inst($n): [ ($now.firing // [])[] | select(.alertname == $n) ];
-    reduce $cand[] as $a ({claimed:[], declared:[], node:[], new:[], ctx_unread:$unread};
+    def inscope($n; $l): (($scope.prefix // "") != "" and ($n | startswith($scope.prefix)))
+        or ((($l.instance // "") | split(":")[0]) == $scope.ip)
+        or (($scope.vm // "") != "" and ([$l.vm, $l.name, $l.host] | index($scope.vm)) != null);
+    reduce $cand[] as $a ({claimed:[], declared:[], node:[], scoped_out:[], new:[], ctx_unread:$unread};
       if ($cl|index($a)) != null then .claimed += [$a]
       elif ($exp|index($a)) != null then .declared += [$a]
       elif (($cons|index($a)) != null) and (inst($a)|length) > 0 and all(inst($a)[]; pinned($a; .labels)) then .node += [$a]
+      elif ($scope.ip // "") != "" and (inst($a)|length) > 0 and (any(inst($a)[]; inscope($a; .labels)) | not) then .scoped_out += [$a]
       else .new += [$a] end)'
 }
 
 # The slot's recorded context for the gate: claimed names (cmd_claim appends), the `--expect` list
 # and the `--node` (cmd_open writes meta.json). Idempotent; `watch` calls it every tick for claims.
 load_slot_meta() {
-  CLAIMED='[]'
+  CLAIMED='[]'; NO_CI=false; SCOPE='{}'
   [ ! -s "$STATE_DIR/$SLOT/claimed" ] || CLAIMED="$(jq -Rsc 'split("\n")|map(select(length>0))|unique' "$STATE_DIR/$SLOT/claimed")"
   [ ! -f "$STATE_DIR/$SLOT/meta.json" ] || {
     EXPECTED="$(jq -c '.expect // []' "$STATE_DIR/$SLOT/meta.json")"
-    WIN_NODE="$(jq -r '.node // ""' "$STATE_DIR/$SLOT/meta.json")"; }
+    WIN_NODE="$(jq -r '.node // ""' "$STATE_DIR/$SLOT/meta.json")"
+    NO_CI="$(jq -r '.no_ci // false' "$STATE_DIR/$SLOT/meta.json")"
+    SCOPE="$(jq -c '.scope // {}' "$STATE_DIR/$SLOT/meta.json")"; }
 }
 
 # The cluster half of `check`: probes 1–4 of <now> against <baseline>, one ok/⚠ line each.
@@ -559,6 +591,8 @@ compare_snapshots() { # <baseline-json> <now-json>
     for a in $(jq -r '.declared[]' <<<"$bins"); do echo "  ok  EXPECTED $a (declared)"; done
     for a in $(jq -r '.node[]' <<<"$bins"); do echo "  ok  EXPECTED $a (node consequence)"; done
     [ "$(jq -r .ctx_unread <<<"$bins")" != true ] || echo "  ⚠ node context for $WIN_NODE UNREADABLE (InternalIP / DaemonSet pods) — consequence alerts not pinned by a node label count as NEW"
+    a="$(jq -r '.scoped_out|join(", ")' <<<"$bins")"
+    [ -z "$a" ] || echo "  ok  firing but OUT OF SCOPE (not about $(jq -r 'if (.vm // "") != "" then .vm else .ip end' <<<"$SCOPE")): $a"
     new="$(jq -r '.new|join(", ")' <<<"$bins")"
     if [ -n "$new" ]; then echo "  ⚠ NEW firing alerts: $new"; rc=2; else echo "  ok  no new firing alerts"; fi
   fi
@@ -599,6 +633,9 @@ cmd_check() {
   echo "== check vs baseline ($(jq -r .at <<<"$b"), window $SLOT) =="
   compare_snapshots "$b" "$now" || rc=$?
 
+  # `open --no-ci`: the act's own verb owns its health and CI outcomes are not its signal (the runner
+  # verb: docs/management-box.md §Non-Talos VMs) — and the box, which runs it unattended, has no gh.
+  if [ "$NO_CI" = true ]; then echo "  ok  CI probe skipped (window opened --no-ci)"; return $rc; fi
   local ci_all ci ci_unread; ci_all="$(stranded_ci 600)"
   ci_unread="$(printf '%s\n' "$ci_all" | sed -n 's/^UNREADABLE://p' | tr '\n' ' ' | sed 's/ *$//')"
   ci="$(printf '%s\n' "$ci_all" | grep -v '^UNREADABLE:' || true)"
@@ -745,6 +782,21 @@ cmd_snapshot() {
 cmd_compare() {
   [ -s "${1:-}" ] || { echo "compare: no baseline file '${1:-}'" >&2; return 1; }
   local b; b="$(cat "$1")"
+  # `--expect A,B`: the declared bin for the unattended pair — a verb names what its own act structurally
+  # makes noise on, exactly as `open --expect` does for a window (no slot here, so it rides the call).
+  # `--scope-ip/-vm/-prefix`: the same one-machine scope `open` records (SCOPE above).
+  local s_ip="" s_vm="" s_pre=""; shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --expect) case "${2:-}" in ""|*[!A-Za-z0-9_,]*) echo "compare: --expect takes alert NAMES, comma-separated (got '${2:-}')" >&2; return 64 ;; esac
+                EXPECTED="$(jq -cn --arg e "$2" '$e|split(",")|map(select(length>0))')"; shift 2 ;;
+      --scope-ip) s_ip="${2:-}"; shift 2 ;;
+      --scope-vm) s_vm="${2:-}"; shift 2 ;;
+      --scope-prefix) s_pre="${2:-}"; shift 2 ;;
+      *) echo "compare: unknown arg '$1'" >&2; return 64 ;;
+    esac
+  done
+  SCOPE="$(scope_json "$s_ip" "$s_vm" "$s_pre")" || return 64
   echo "== compare vs baseline ($(jq -r .at <<<"$b")) =="
   compare_snapshots "$b" "$(snapshot)"
 }
@@ -789,5 +841,5 @@ case "${1:-}" in
   cilium-check) shift; cmd_cilium || exit $? ;;
   snapshot) shift; cmd_snapshot ;;
   compare)  shift; cmd_compare "$@" || exit $? ;;
-  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file>" >&2; exit 64 ;;
+  *) echo "usage: maintenance-window.sh open --reason <s> [--alerts A,B] [--hours N] [--node n [--admit-reconciler]] [--admit-apply] [--expect A,B] [--no-ci] [--scope-ip <ip> …] | check [--id <id>] | watch [--id <id>] [--replace] [--tick <s>] [--ticks <n>] | renew [--id <id>] | claim [--id <id>] --alert <name> (--match 'k=v,k=~re' | --fp <fp>) | close [--id <id>] [--force] | list | cilium-check | snapshot | compare <file> [--expect A,B] [--scope-ip <ip> [--scope-vm <n>] [--scope-prefix <P>]]" >&2; exit 64 ;;
 esac

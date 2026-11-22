@@ -207,7 +207,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 
 ## Hard lines (unchanged from the platform rules)
 
-- plan/review before apply; never `talosctl upgrade` nocloud VMs; prior-art grep (FU/ADR/TICK-LOG)
+- plan/review before apply; never a hand-typed `talosctl upgrade` on a nocloud VM (the node-maintenance verbs carry the exact installer — ADR-014 as amended); prior-art grep (FU/ADR/TICK-LOG)
   before filing/creating ANYTHING named — a NEW name additionally clears `docs/glossary.md`
   (the coining commit adds its row); next steps reported to the operator carry FU/issue ids;
   alert descriptions are symptoms; probes fail loudly; a belt is not a guard — predictable events

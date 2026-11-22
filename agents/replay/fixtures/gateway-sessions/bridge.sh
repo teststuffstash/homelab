@@ -3,6 +3,10 @@
 # gateway answer ($GW_REPLY_HTTP + $GW_REPLY_BODY; HTTP 000 = connection refused, curl exit 7)
 # and records every call. A bound answer carries no token; the one row whose gateway answers one
 # anyway uses `gws_` + 32 A's — post.sh greps every launcher variable for it.
+# The leak probe's baseline (homelab#3092): the `gws_`-bearing state INHERITED from the caller —
+# a gateway-ride worker pod's own ANTHROPIC_AUTH_TOKEN holds one — snapshotted to a file BEFORE
+# anything here or in the block runs, so post.sh counts only state the block set or changed.
+_gw_inherited="$(mktemp)"; (set -o posix; set) | grep 'gws_' > "$_gw_inherited" || true
 PROJECT="homelab"; TASK=""; ROUND="1"; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"
 HARNESS_SET=""; MODEL_SET=""; KUBECTL="kubectl"; KUBE=""; NS="homelab"
 RUN_CMD="echo replay"; RECIPE=""   # headless by default (an interactive ride is its own row)

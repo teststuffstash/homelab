@@ -17,6 +17,9 @@ from pathlib import Path
 
 RAILS = ("anthropic", "openrouter", "opencode", "codex")
 TIERS = ("light", "standard", "heavy")
+# GW-SESSIONS-ADMIT §The preferred end of the list: which end of a rail's ordered tier list the walk
+# starts from — the schema's `$defs.prefer` enum; the first is the default.
+PREFERENCES = ("cheapest", "strongest")
 HARNESSES = ("claude", "opencode", "goose", "codex")
 ROLES = ("worker", "reviewer", "coordinator", "responder", "retro", "prober", "researcher")
 DIALECTS = ("anthropic", "openai", "responses")
@@ -60,12 +63,15 @@ UPSTREAM_DEFAULTS = {
 # read (models.dev's api.json — the vendor's own registry, public) overlaid by the `config` read
 # (the console's V2 config: the workspace's overrides, the Go key reads it — since 2026-10-20 it
 # carries ONLY the overrides); the `docs` source = the vendor's Go page source on its default
-# branch (unauthenticated; the path moved once, on 2026-10-12 — a move is a fetch failure, and
+# branch (unauthenticated; the path has moved twice — 2026-10-12, and 2026-11-06 when the vendor
+# moved the page to services/site (commit 9ced0469b); a move is a fetch failure, and
 # GoCatalogStale names it).
 GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
-    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/www/src/docs/content/console/go.mdx",
+    "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
+    # the docs source's second read (GW-CATALOG-GO, the limits read): the Go models list, public; recorded, parsed by nothing
+    "limits": "https://opencode.ai/inference/go/v1/models",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
 
@@ -158,7 +164,7 @@ class WindowDraw:
 
 @dataclass(frozen=True)
 class AdmissionPolicy:
-    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-ADMIT). Every value is
+    """`rails.<rail>.admission` — the ladder's capacity half (GW-SESSIONS-CAPACITY). Every value is
     policy data with its ⚖ source in the spec row; an absent key = that check is off for the rail."""
     utilization_thresholds: dict[str, float] = field(default_factory=dict)  # subscription window -> fraction (0 = off)
     reading_stale_s: float | None = None  # a window reading older than this is no reading
@@ -171,13 +177,15 @@ class AdmissionPolicy:
 
 @dataclass(frozen=True)
 class HeadroomPolicy:
-    """The codex rail's account-headroom admission (GW-CODEX-HEADROOM): an observation older than
-    `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited; `windows_minutes` is the
-    window profile every observation must carry exactly (the fixture profile, not a discovered
-    entitlement)."""
+    """An account-headroom admission (GW-CODEX-HEADROOM; the Go rail's twin, GW-SESSIONS-CAPACITY §Go account headroom):
+    an observation older than `max_age_s` is stale; a window at or above `ceiling` (0–1) is limited;
+    `windows` is the window profile every observation must carry exactly (the fixture profile, not a
+    discovered entitlement), read from each window's `window_key` field — the span in minutes on codex,
+    the window's name on opencode."""
     max_age_s: float
     ceiling: float
-    windows_minutes: tuple[int, ...]
+    window_key: str  # `window_minutes` (codex) / `window` (opencode)
+    windows: tuple[int | str, ...]
     poll_interval_s: float  # the gateway's own usage poll (§Poll); must leave room under max_age_s
 
 
@@ -352,7 +360,7 @@ class RailPolicy:
     models: dict[str, tuple[str, ...]]  # tier -> the ORDERED policy model ids (model-classes.json spelling, rail-prefixed); a string in the file = a one-item list
     side_models: tuple[str, ...] = ()  # policy ids a harness's side-calls name, admitted on every session of this rail
     admission: AdmissionPolicy = field(default_factory=AdmissionPolicy)
-    headroom: HeadroomPolicy | None = None  # codex only (required there)
+    headroom: HeadroomPolicy | None = None  # codex (required) / opencode (optional: absent = the Go rail admits as today)
     refresh_margin_s: float | None = None  # codex only: refresh an OAuth access token this close to expiry
     # The User-Agent the upstream sees: `fixed` (the gateway's own, the default) or `forward` (the
     # harness's) — a per-rail ⚖ (GW-CRED-BOUNDARY): an edge that judges the client's signature
@@ -464,27 +472,49 @@ def _finite(v) -> bool:
     return type(v) in (int, float) and math.isfinite(v)
 
 
-def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
-    """The codex rail's two policy blocks; both required — a missing knob never becomes a code default."""
-    h = r.get("headroom")
+def _headroom(rail: str, h) -> HeadroomPolicy:
+    """`rails.<rail>.headroom` — the account-headroom block (GW-CODEX-HEADROOM; the Go rail's, GW-SESSIONS-ADMIT
+    §Capacity). The codex profile names span minutes, the opencode profile names its windows; both are
+    fixture profiles, never code literals."""
+    where = f"policy: rails.{rail}.headroom"
     if not isinstance(h, dict):
-        raise PolicyError("policy: rails.codex.headroom {max_age_s, ceiling, windows_minutes} is required")
-    max_age, ceiling, windows = h.get("max_age_s"), h.get("ceiling"), h.get("windows_minutes")
+        windows = "windows_minutes" if rail == "codex" else "windows"
+        raise PolicyError(f"{where} {{max_age_s, ceiling, {windows}, poll_interval_s}} is required")
+    max_age, ceiling = h.get("max_age_s"), h.get("ceiling")
     if not _finite(max_age) or max_age <= 0:
-        raise PolicyError("policy: rails.codex.headroom.max_age_s must be a positive number")
+        raise PolicyError(f"{where}.max_age_s must be a positive number")
     if not _finite(ceiling) or not 0 < ceiling <= 1:
-        raise PolicyError("policy: rails.codex.headroom.ceiling must be in (0, 1]")
-    if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
-            or any(type(w) is not int or w <= 0 for w in windows)):
-        raise PolicyError("policy: rails.codex.headroom.windows_minutes must be distinct positive integers")
+        raise PolicyError(f"{where}.ceiling must be in (0, 1]")
+    if rail == "codex":
+        key, windows = "window_minutes", h.get("windows_minutes")
+        if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
+                or any(type(w) is not int or w <= 0 for w in windows)):
+            raise PolicyError(f"{where}.windows_minutes must be distinct positive integers")
+    else:
+        key, windows = "window", h.get("windows")
+        if (not isinstance(windows, list) or not windows or len(set(windows)) != len(windows)
+                or any(not isinstance(w, str) or not w for w in windows)):
+            raise PolicyError(f"{where}.windows must be distinct non-empty window names")
     interval = h.get("poll_interval_s")
     if not _finite(interval) or not 0 < interval < max_age:
-        raise PolicyError("policy: rails.codex.headroom.poll_interval_s must be a positive number below max_age_s")
+        raise PolicyError(f"{where}.poll_interval_s must be a positive number below max_age_s")
+    return HeadroomPolicy(float(max_age), float(ceiling), key, tuple(sorted(windows)), float(interval))
+
+
+def _codex_policy(r: dict) -> tuple[HeadroomPolicy, float]:
+    """The codex rail's two policy blocks; both required — a missing knob never becomes a code default."""
+    headroom = _headroom("codex", r.get("headroom"))
     oauth = r.get("oauth")
     margin = oauth.get("refresh_margin_s") if isinstance(oauth, dict) else None
     if not _finite(margin) or margin < 0:
         raise PolicyError("policy: rails.codex.oauth.refresh_margin_s must be a non-negative number")
-    return HeadroomPolicy(float(max_age), float(ceiling), tuple(sorted(windows)), float(interval)), float(margin)
+    return headroom, float(margin)
+
+
+def _opencode_headroom(r: dict) -> HeadroomPolicy | None:
+    """`rails.opencode.headroom` — optional: absent = the Go rail admits exactly as before its headroom
+    existed (the window draw and the account latch only). The code ships before the policy does."""
+    return _headroom("opencode", r["headroom"]) if "headroom" in r else None
 
 
 SCORE_AXES = ("intelligence", "coding", "agentic")  # the AA capability row's three indices (GW-MODEL-TIERS)
@@ -643,6 +673,9 @@ class Policy:
     def from_dict(d: dict) -> Policy:
         if not isinstance(d, dict):
             raise PolicyError("policy: top level must be an object")
+        if "wire" in d:  # GW-WIRE-PROBE: probes and the key allowlist are the operator's read — their own file (GATEWAY_WIRE)
+            raise PolicyError("policy: a `wire` key is refused — probe declarations and the account allowlist live in the "
+                              "declarations file GATEWAY_WIRE names, never in the policy")
         stacks: dict[str, StackPolicy] = {}
         for name, s in (d.get("stacks") or {}).items():
             if not isinstance(s, dict) or not s.get("loop_ns"):
@@ -667,7 +700,7 @@ class Policy:
                 raise PolicyError(f"policy: unknown rail {name!r} (known: {', '.join(RAILS)})")
             models: dict[str, tuple[str, ...]] = {}
             for tier, model in (r.get("models") or {}).items():
-                # GW-SESSIONS-ADMIT: a tier names an ORDERED list of models (the walk's fallback order);
+                # GW-SESSIONS-RETRY: a tier names an ORDERED list of models (the walk's fallback order);
                 # a bare string is the one-item list (backward compatible).
                 ids = [model] if isinstance(model, str) else model
                 if (tier not in TIERS or not isinstance(ids, list) or not ids
@@ -677,7 +710,7 @@ class Policy:
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
-            headroom, margin = (_codex_policy(r) if name == "codex" else (None, None))
+            headroom, margin = (_codex_policy(r) if name == "codex" else (_opencode_headroom(r), None))
             plan = r.get("plan")
             if name == "opencode" and plan not in GO_PLANS:
                 raise PolicyError(f"policy: rails.opencode.plan is required, one of {', '.join(GO_PLANS)} "
@@ -760,6 +793,10 @@ class Settings:
     # NO default — like CODEX_UPSTREAM it names a vendor profile (the native backend's usage path);
     # unset = no poll, the rail stays `quota-unknown` (fail closed).
     codex_usage_url: str = ""
+    # GW-SESSIONS-CAPACITY §Go account headroom: the Go account usage endpoint the gateway polls with its own Go key
+    # (`OPENCODE_GO_API_KEY`). The same rule: NO default — unset = no poll, the Go rail with a headroom block
+    # stays `quota-unknown` (fail closed).
+    opencode_usage_url: str = ""
     # GW-CODEX-CAPTURE: the four-boundary recorder's scope (a task-key prefix; "" = off) and its byte
     # bound per request; retention of persisted records in days (the bundle is pulled and reviewed, not kept).
     codex_capture_task_prefix: str = ""
@@ -768,6 +805,11 @@ class Settings:
     # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
     # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
     benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
+    # GW-WIRE-RECORD: the byte bound of one kept vendor answer (an over-bound answer is cut and marked incomplete).
+    wire_max_bytes: int = 1_048_576
+    # GW-WIRE-PROBE: the declarations file (probes + the account class's key allowlist). Unset or empty = no
+    # probe goes out and no account string is kept. Its own file, never the policy.
+    wire_path: str = ""
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -789,13 +831,17 @@ class Settings:
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
             go_catalog_urls={"catalog": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["catalog"]),
                              "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
-                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
+                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"]),
+                             "limits": e.get("GATEWAY_GO_LIMITS_URL", GO_CATALOG_URLS["limits"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
+            opencode_usage_url=e.get("OPENCODE_USAGE_URL", "").strip(),
             codex_capture_task_prefix=e.get("CODEX_CAPTURE_TASK_PREFIX", "").strip(),
             codex_capture_max_bytes=int(e.get("CODEX_CAPTURE_MAX_BYTES", "262144")),
             codex_capture_retention_days=float(e.get("CODEX_CAPTURE_RETENTION_DAYS", "7")),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
+            wire_max_bytes=int(e.get("GATEWAY_WIRE_MAX_BYTES", "1048576")),
+            wire_path=e.get("GATEWAY_WIRE", "").strip(),
         )

@@ -1,0 +1,15 @@
+# gateway-admit — the decision table (family contract in fixture.yaml). Row state (ADMIT_ARGS, the
+# gateway's reply) lives in rows/<id>/vars.sh.
+# id                    | world | patch | env | expect                | params
+bound-dispatch          |       |       |     | bound-dispatch        |
+unbound-dispatch        |       |       |     | unbound-dispatch      |
+unbound-env-newline     |       |       |     | unbound-env-newline   |
+unbound-answer-bound    |       |       |     | unbound-answer-bound  |
+harness-not-run         |       |       |     | harness-not-run       |
+defer                   |       |       |     | defer                 |
+http-503                |       |       |     | http-503              |
+no-mode                 |       |       |     | no-mode               |
+both-modes              |       |       |     | both-modes            |
+bad-bind                |       |       |     | bad-bind              |
+bad-round               |       |       |     | bad-round             |
+missing-role            |       |       |     | missing-role          |

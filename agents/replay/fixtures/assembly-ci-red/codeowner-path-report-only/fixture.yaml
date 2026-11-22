@@ -1,0 +1,23 @@
+# assembly-ci-red/codeowner-path-report-only — the same settled red, but the assembly diff also changes
+# `agents/coordinator-scan.sh`, which the checkout's CODEOWNERS gives an owner. The PR blocks on that
+# human, who sees the red (and an operator-path assembly can be red by design — ADR-100): a child
+# here would be noise. The lane comes from `classify_touches_repo` over the real CODEOWNERS; this
+# fixture names no lane.
+#
+# THE CONTRACT: the FU-143 report line exactly as before; no unit; the PR is never probed (no
+# `gh pr view` in the stream).
+name: assembly-ci-red-codeowner-path-report-only
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

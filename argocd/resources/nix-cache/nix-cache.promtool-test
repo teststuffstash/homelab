@@ -1,0 +1,29 @@
+# Behaviour fixture for NixCacheAtEvictionLimit.
+#
+#   devbox run -- promtool test rules argocd/resources/nix-cache/nix-cache.promtool-test
+rule_files:
+  - nix-cache.promtool-rules
+
+evaluation_interval: 1h
+
+tests:
+  # Under the limit for a day, then at it: quiet until the whole 7-day window is at the limit.
+  # A different PVC at the same size never fires.
+  - interval: 1h
+    input_series:
+      - series: 'kubelet_volume_stats_used_bytes{namespace="nix-cache",persistentvolumeclaim="nixcache-data"}'
+        values: '30e9x24 34e9x200'
+      - series: 'kubelet_volume_stats_used_bytes{namespace="nix-cache",persistentvolumeclaim="other"}'
+        values: '34e9x224'
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: NixCacheAtEvictionLimit
+        exp_alerts: []
+      - eval_time: 194h
+        alertname: NixCacheAtEvictionLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              namespace: nix-cache
+              persistentvolumeclaim: nixcache-data

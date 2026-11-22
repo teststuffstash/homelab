@@ -1,0 +1,15 @@
+CALL bash agents/agent-session.sh homelab --task research-210-arm1 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+CALL bash agents/research-fanout.sh homelab 210 --arms 1 --start-slot 1 --class regular [AGENT_GATEWAY= ROLE= FALLBACK_EXIT= CALLER_SA= WIP= RESEARCH_GATEWAY=0]
+CALL bash agents/agent-session.sh homelab --task research-210-arm2 --round 1 --recipe /fixture-recipes/homelab/.agents/research.yaml [AGENT_GATEWAY=sessions ROLE=researcher FALLBACK_EXIT=75 CALLER_SA=platform-agents/agentstack-loop WIP=2 RESEARCH_GATEWAY=]
+OUT → FU-126 fan-out: homelab#210 → 2 arm(s), each admitted by the agent-gateway as role researcher (FU-270 — the gateway serves the model)
+OUT ── arm 1: task research-210-arm1 (log $TMP/research-gateway-arms.fallback.fx/armlogs/arm-1.log) ──
+OUT gateway admission refused rc=3 — old-proxy fallback
+OUT   arm 1: gateway admission refused — old-proxy fallback (one-arm draw on slot 1)
+OUT   slot 1: deepseek/deepseek-v4-pro
+OUT ── arm 2: task research-210-arm2 (log $TMP/research-gateway-arms.fallback.fx/armlogs/arm-2.log) ──
+OUT → gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=s2,context_tokens=null] (task=research-210-arm2, round=1) — bound
+OUT → arm table (the model each admission SERVED):
+OUT   arm 1: old-proxy fallback, drew deepseek/deepseek-v4-pro
+OUT   arm 2: served claude/sonnet
+OUT → branches arrive as research/issue-210-<model-slug> (two arms served one model share a slug — the recipe's branch rule); arm logs in $TMP/research-gateway-arms.fallback.fx/armlogs
+RC 0

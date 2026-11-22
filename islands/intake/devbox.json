@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "intake island toolchain (homelab#3577): ONLY what the pod image lacks \u2014 promtool (package prometheus, cli output) and yq (package yq-go). The sitting's pod is the worker base image (agent-base), whose /nix store already holds claude, git, curl, jq, gh, kubectl, s5cmd, python3 and uv on the login PATH, so nothing the image pre-bakes is installed a second time at a different version. The bootstrap in agents/coordinator/island-intake-argo.yaml runs the launcher through `devbox run` in THIS directory. Versions: the repo-root devbox.lock's entries, copied. The repo-root devbox.json/devbox.lock are never touched.",
+  "packages": {
+    "prometheus": {
+      "version": "latest",
+      "outputs": [
+        "cli"
+      ]
+    },
+    "yq-go": "latest"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {}
+  }
+}

@@ -1,4 +1,4 @@
-# Hand copy of the github-ci-drift group (GithubCiWallTimeDrift) from prometheusrule.yaml — the
+# Hand copy of the github-ci-drift group (GithubCiWallTimeDrift + its Blind belt) from prometheusrule.yaml — the
 # rules file loop-health-ci-drift.promtool-test loads. DRIFT-PINNED by `devbox run
 # prometheus-rules-lint` (expr+for vs the CR). Re-copy after an expr edit (ONE LINE — yq 4.x
 # rejects a newline inside the expression):
@@ -14,20 +14,29 @@ groups:
           (
             quantile by (repo, workflow, event) (0.5,
               max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d])))
-            > 1.5 *
+            > 1.25 *
             quantile by (repo, workflow, event) (0.5,
-              max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d)))
+              max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 7d)))
           ) > 120
           and on (repo, workflow, event)
             count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d]))) >= 20
           and on (repo, workflow, event)
-            count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d))) >= 20
+            count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 7d))) >= 20
         for: 6h
         labels:
           severity: warning
           platform_machinery: "true"
-          # triage: slow drift — the per-job timings and the workflow's git history name the cause; a daily dig, never a page
           triage: dig
         annotations:
-          summary: "CI wall time drifting up: {{ $labels.repo }} {{ $labels.workflow }} ({{ $labels.event }})"
-          description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 21d))).'
+          summary: 'CI wall time drifting up: {{ $labels.repo }} {{ $labels.workflow }} ({{ $labels.event }})'
+          description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.25× the median of the 7 days before that (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 7d))).'
+      - alert: GithubCiWallTimeDriftBlind
+        expr: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) < 15 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: dig
+        annotations:
+          summary: Prometheus holds {{ $value | humanizeDuration }} of history — GithubCiWallTimeDrift's 14-day lookback is blind
+          description: 'The oldest sample Prometheus holds is {{ $value | humanizeDuration }} old. GithubCiWallTimeDrift compares the last 7 days against the 7 days before them, so under 14 days of history its baseline reads nothing and it can never fire. Grow `retentionSize` (argocd/platform/values/kube-prometheus-stack.yaml) or cut series count; shortening the alert''s windows is the last resort. Check: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) / 86400.'

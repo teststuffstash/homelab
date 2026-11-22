@@ -1,0 +1,25 @@
+# The mgmt-router-firmware group, lifted VERBATIM out of router-firmware.yaml (annotations stripped —
+# the manifest is their one home) — the rules file router-firmware.promtool-test loads.
+# DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/router-firmware.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-router-firmware
+    rules:
+      - alert: MgmtRouterFirmwareBehind
+        expr: |
+          (time() - mgmt_router_firmware_update_offered_since_timestamp_seconds{role="node"}) > 7 * 86400
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+      - alert: MgmtRouterFirmwareUnread
+        expr: |
+          mgmt_router_firmware_read_ok{role="node"} == 0
+            or (time() - mgmt_router_firmware_last_check_timestamp_seconds{role="node"}) > 2 * 86400
+            or (up{job="mgmt-node"} == 1 unless on (instance) count by (instance) (mgmt_router_firmware_read_ok))
+        for: 6h
+        labels:
+          severity: warning
+          triage: none

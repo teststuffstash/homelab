@@ -44,7 +44,7 @@ groups:
       - alert: AgentRunInfraDeathBurst
         expr: |
           count by (project) (
-              agent_run_total{exit_status!~"clean|ci-failed|blocked-deliberate", issue!~"scout-.*"}
+              agent_run_total{exit_status!~"clean|ci-failed|blocked-deliberate"}
             and on (project, issue, role, round)
               (time() - push_time_seconds{job="agent_run"}) < 3600
           ) >= 3
@@ -53,12 +53,12 @@ groups:
           triage: dig
         annotations:
           summary: 3+ non-clean agent runs in 1h on {{ $labels.project }}
-          description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
+          description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) are excluded by design and cannot raise this.
       - alert: AgentRunBudgetCapHits
         expr: |
           count by (project) (
             count by (project, issue, round) (
-                agent_run_total{exit_status="budget-403", issue!~"scout-.*"}
+                agent_run_total{exit_status="budget-403"}
               and on (project, issue, role, round)
                 (time() - push_time_seconds{job="agent_run"}) < 7 * 86400
             )
@@ -68,7 +68,7 @@ groups:
           triage: dig
         annotations:
           summary: '{{ $value }} budget-403 rounds in 7d on {{ $labels.project }} — session caps are undersized or the account is dry'
-          description: 'Two or more distinct (issue, round) rides on {{ $labels.project }} ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator''s context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account. Model-scout canaries (issue=scout-*) are excluded by design.'
+          description: 'Two or more distinct (issue, round) rides on {{ $labels.project }} ended on exit_status=budget-403 in the last 7 days: the per-session OpenRouter key hit its enforced cap, or the account behind it had no credit — this metric cannot tell the two apart (agent-finalize pushes one budget-exhausted class; the -key/-account split lives only in the AGENT_STRIKE comments, homelab#871), so read the strike comments on the matched issues first. For the key-cap half the lever is the estimator''s context constant, DEFAULT_CONTEXT_TOKENS in agents/estimate_budget.py (50k since retro r8 F4 — measured per-request context was 63k–103k mean), not the TIERS ladder; for the credit half, top up the account.'
       - alert: AgentRunPhaseSlow
         expr: |
           (

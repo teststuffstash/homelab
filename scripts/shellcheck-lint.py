@@ -20,6 +20,14 @@ carries hides behind a fixed one of the same code — acceptable for a burn-down
 SCOPE: every tracked `*.sh` / `*.bash` file, plus extensionless tracked files whose shebang names
 sh/bash/dash (githooks/pre-push), MINUS `agents/replay/**` (fixtures and stubs deliberately mimic
 foreign tools). Shell embedded in YAML (Argo workflows, .github/workflows) is not scanned.
+
+MEMORY (homelab#3094). The gate runs inside 4Gi worker pods (`diff-ci` selects it on any `.sh` diff),
+so it runs WITHOUT ShellCheck's dataflow analysis (`--extended-analysis=false`): with it, the one
+7k-line `agents/coordinator-scan.sh` peaks at ~4.3 GiB (42 s); without it, 144 MiB (9 s). Every
+worker OOMKill after this gate landed was that peak, and none happened in the two weeks before it.
+Measured on the whole tree on 2026-11-01, dataflow added NO finding: both modes give the same 145
+baselined findings. Parallelism follows the cgroup's CPU quota, not the host's core count (a pod on
+the 40-core ride node would otherwise fan out 40 ShellChecks).
 """
 import collections
 import concurrent.futures
@@ -53,16 +61,39 @@ def tracked_shell_files():
 
 def _shellcheck_one(f, cwd):
     """json1 comments for one file. Exit 1 = findings (normal); anything else is the tool failing."""
-    p = subprocess.run(["shellcheck", "-S", "warning", "-f", "json1", f], cwd=cwd, capture_output=True)
+    p = subprocess.run(["shellcheck", "-S", "warning", "--extended-analysis=false", "-f", "json1", f],
+                       cwd=cwd, capture_output=True)
     if p.returncode not in (0, 1):
         sys.stderr.write(p.stderr.decode())
         raise SystemExit(f"shellcheck-lint: shellcheck itself failed on {f} (rc={p.returncode})")
     return json.loads(p.stdout or b'{"comments":[]}')["comments"]
 
 
+def workers(cpu_max=None, host=None):
+    """Parallelism = the cgroup v2 CPU quota (`/sys/fs/cgroup/cpu.max`: "<quota> <period>" or "max
+    <period>"), rounded up, capped at the host's count; no quota or no file → the host's count."""
+    host = host or os.cpu_count() or 4
+    if cpu_max is None:
+        try:
+            with open("/sys/fs/cgroup/cpu.max") as fh:
+                cpu_max = fh.read()
+        except OSError:
+            return host
+    parts = cpu_max.split()
+    if len(parts) != 2 or parts[0] == "max":
+        return host
+    try:
+        quota, period = int(parts[0]), int(parts[1])
+    except ValueError:
+        return host
+    if quota <= 0 or period <= 0:
+        return host
+    return max(1, min(host, -(-quota // period)))
+
+
 def run_shellcheck(files, cwd=ROOT):
     """One process per file, in parallel: the 7k-line clause files dominate a serial run."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers()) as pool:
         return [c for cs in pool.map(lambda f: _shellcheck_one(f, cwd), files) for c in cs]
 
 
@@ -118,6 +149,13 @@ def self_test():
     check("same code in another file is over", compare(C({("b.sh", "SC2034"): 1}), C({("a.sh", "SC2034"): 1})),
           ([(("b.sh", "SC2034"), 1, 0)], [(("a.sh", "SC2034"), 0, 1)]))
 
+    # workers(): expectations from the cpu.max format (cgroup v2 docs: "$MAX $PERIOD", MAX may be
+    # "max") — the ride pod's `cpu: "6"` limit renders "600000 100000" → 6 on a 40-core node.
+    check("pod quota caps a 40-core host", workers("600000 100000\n", 40), 6)
+    check("fractional quota rounds up", workers("50000 100000\n", 40), 1)
+    check("no quota keeps the host count", workers("max 100000\n", 40), 40)
+    check("quota above the host is capped", workers("1600000 100000\n", 8), 8)
+    check("unparseable falls back to the host", workers("garbage", 8), 8)
     # The parser against the real tool: an unused variable is SC2034 at warning (ShellCheck wiki), a
     # missing `|| exit` after cd is SC2164 — two findings, one per code, in the one file.
     with tempfile.TemporaryDirectory() as d:

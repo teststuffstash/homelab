@@ -89,6 +89,33 @@ an ephemeral in-cluster runner** — same policy question, same per-project answ
   four kata nodes), and resolving once at dispatch black-holed any ride that outlived a dependency
   reschedule — [the spike](../spikes/kata-service-vip.md) has the three occurrences.
 
+### Docker by footprint (`fixer.dockerPaths`)
+
+`fixer.docker` is one switch per repo. A repo that holds several projects (homelab: tofu, manifests,
+the agent scripts, the gateway island) declares `fixer.dockerPaths` instead — a list of `Touches:`
+footprint paths (`["gateway/**"]`) — so only the rides that need a daemon pay for one. A ride's
+gates equal CI's gates; this is how a path-scoped gate that needs docker gets a ride that has it.
+
+- **Decision, per dispatch** (`agents/agent-session.sh`, `REPLAY:docker-paths`): the issue's declared
+  `Touches:` reaches an entry (the scan's `fp_conflict`) ⇒ docker ride. **No `Touches:` at all ⇒
+  docker ride** — the opposite of the spec-process rule below, because a missing daemon fails a
+  gate where a missing process only degrades a ride. Declared and not reaching ⇒ a plain pod whose
+  card names the paths and tells the ride to stop rather than edit them. `--docker` and
+  `docker: true` decide first. The scan's `dockerRepos` is unchanged (whole-repo docker only).
+- **Per namespace, not per ride:** a non-empty list turns the docker egress legs on in the repo's
+  CNP, and the claim must set `storage.scratch` (20Gi × concurrent docker rides) — a `"0"` cap
+  refuses the dind volume at create.
+- **The ride gets the daemon; the repo brings the client.** The launcher gives a docker ride the
+  dind sidecar and `$DOCKER_HOST`, never a `docker` binary: the CLI is `docker-client` in the
+  `devbox.json` the gate runs under (homelab: `gateway/devbox.json`, where
+  `gateway-specs-site-e2e` runs). A worker cannot add it on a repo whose `devbox.json` is outside
+  its tier, so it is declared with the paths, not discovered by the first ride.
+- **A diff that strays into the paths undeclared** gets no daemon: the gate fails naming the cause
+  (`gateway/scripts/e2e-specs-site.sh`), never skips.
+
+Replay: `agents/replay/fixtures/docker-paths/` (reached / not reached / undeclared / field absent /
+already docker).
+
 ## The spec process rides with the worker (`repos[].specs`, ADR-156)
 
 A repo that keeps `specs/` under the [portable spec process](specs-reviewer.md#the-portable-process-adr-156-2026-10-16)
@@ -112,8 +139,29 @@ The Composition renders nothing for it; two consumers read it:
   without the field (and for cluster-less runs). The `specs-review` SA holds `agentstacks`
   get/list for this one read ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
 
+**Island intake for a stack repo: `repos[].intake: {facts}`.** Present = the daily
+[island intake](../../islands/intake/README.md#stack-islands) run holds a sitting for the repo as the island `<stack>/<repo>`,
+ruled by the platform's rules and the facts file at that repo-relative path; absent = off. The Composition renders nothing for it.
+
+**Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
+has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
+evidence bucket all belong to it), and each further root is listed here — homelab lists
+`islands/{scan,launch,retro}/specs` beside the gateway's. Two consumers read it. The specs reviewer
+(`pack_root_pairs` → `touched_pairs`): a PR touching a listed root gets a context pack over THAT
+root and a real rows review instead of the mechanical approval; a PR touching several roots gets
+one pass per root (one per tick, each held as a `SPECS ROOT REVIEW` comment) and ONE verdict,
+CHANGES_REQUESTED when any root's is. `tests` is optional and has no default: a root without one
+is reached through its spec pages alone, and its pack carries no evidence (no publisher exists
+for an extra root yet), so unproven rows need the evidence brief's `🚧 WIP → #<issue>` or
+`⚑ gap` index mark. The worker launcher (same `REPLAY:specs-process-volume` clause): when the
+primary pair is not reached and the footprint reaches a listed root, the ride gets the same
+read-only mount, pinned from THAT root's `README.md` (its `RULES.md @ v<version>` link, the
+`gateway/specs/README.md` §Rules shape); a README with no parseable link falls back to the primary
+pin file, said on stderr. The primary pair wins a footprint that reaches both (one mount per ride).
+
 Replay: `agents/replay/fixtures/specs-process/` (reached / not reached / field absent / pin
-unresolvable). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
+unresolvable / single pair; `extra-*`: an island root reached, its README unpinned, not reached,
+reached beside the primary). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
 worker).
 
 ## The MCP knob (`spec.mcp`, #1039)

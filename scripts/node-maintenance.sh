@@ -660,7 +660,7 @@ vm_start() {
   [ -n "$hvip" ] || { log "$NODE is VM $vmid on $hv, but machines.yaml has no ip for $hv — start it by hand (qm start $vmid); waiting for Ready"; return 0; }
   log "$NODE is a VM (vmid $vmid on $hv) — qm start via root@$hvip"
   ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$hvip" "qm start $vmid" \
+    -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$REPO/machines/hypervisor_known_hosts" -o ConnectTimeout=10 "root@$hvip" "qm start $vmid" \
     || log "qm start $vmid on $hv failed (already running? host key? key file?) — still waiting for Ready in case the VM is already up"
 }
 
@@ -676,7 +676,7 @@ up() {
       else
         log "WoL $NODE ($mac) via $PVE_HOST"
         ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-          -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$PVE_HOST" \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$REPO/machines/hypervisor_known_hosts" -o ConnectTimeout=10 "$PVE_HOST" \
           "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\"" \
           || log "WoL hop to $PVE_HOST failed (host key? key file?) — no magic packet sent; still waiting for Ready in case the box is already on"
       fi
@@ -1243,8 +1243,9 @@ cilium_on_node() {
   [ -n "$p" ] || { fail "cilium: no running cilium-agent pod on $NODE"; return 1; }
   jq -e --arg p "$p" '.items[] | select(.metadata.name == $p) | any(.status.conditions[]?; .type == "Ready" and .status == "True")' \
     >/dev/null <<<"$pj" || { fail "cilium: $p on $NODE is not Ready"; return 1; }
-  out="$(kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
-    || { fail "cilium: $p on $NODE does not answer (exec failed)"; return 1; }
+  # Bounded: a hung agent's exec never returns (#3107) — the timeout reads as "does not answer".
+  out="$(timeout -k 5 "${MAINT_EXEC_TIMEOUT:-20}" kubectl -n kube-system exec -i "$p" -c cilium-agent -- cilium-dbg service list 2>/dev/null)" \
+    || { fail "cilium: $p on $NODE does not answer (exec failed or timed out)"; return 1; }
   awk '$2=="10.96.0.1:443/TCP"' <<<"$out" | grep -q '=>' \
     || { fail "cilium: $p on $NODE has NO backend for 10.96.0.1:443"; return 1; }
   ok "cilium: $p Ready and holding the apiserver backend"

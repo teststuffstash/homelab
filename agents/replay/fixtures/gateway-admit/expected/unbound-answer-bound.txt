@@ -1,0 +1,11 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"responder","task":"respond homelab#9","round":0}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-coord-1 [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): released s-coord-1
+OUT rc=3
+OUT GW_SESSION_ID='' GW_RAIL='anthropic' GW_HARNESS='claude' GW_MODEL='claude/opus' GW_WIRE_MODEL='opus'
+OUT GW_ENV_KEYS='' GW_PULL_URL='' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='dispatch-unusable: env, env_keys lacks ANTHROPIC_MODEL' GW_RETRY_AFTER='?'
+OUT env file: absent
+OUT gws_ in shell state: 0
+ERR → gateway(sessions): defer — [dispatch-unusable: env, env_keys lacks ANTHROPIC_MODEL] retry_after=?s — FAIL CLOSED, releasing and not dispatching.
+RC 0

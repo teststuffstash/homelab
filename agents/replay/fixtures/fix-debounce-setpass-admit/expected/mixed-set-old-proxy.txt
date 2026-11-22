@@ -1,0 +1,5 @@
+OUT SP_STACK='oracle' SP_MODEL='' rail='' _gw=4
+OUT GW_LLM_ENV keys:  · env file left: no
+OUT path after the block: old-proxy-latch
+ERR → gateway(sessions): stack 'oracle' stays on the old proxy — the /sessions flip is platform-only (FU-270)
+RC 0

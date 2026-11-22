@@ -5,7 +5,7 @@ point for the sleep-tracking pipeline (ADR-045). Longhorn and CNPG backups do NO
 go to a separate single-node backup Garage outside Longhorn ([`longhorn-backup.md`](longhorn-backup.md)).
 
 - **Deploy:** `argocd/platform/garage.yaml` (ArgoCD, since 2026-08-04 — FU-136; chart vendored at
-  `argocd/charts/garage`, Garage **v2.3.0**). `tofu/garage.tf` keeps only the namespace, two
+  `argocd/charts/garage`; the version is the pin in `scripts/vendor-garage-chart.sh`). `tofu/garage.tf` keeps only the namespace, two
   Secrets and the VIP Service.
 - **Access model: LAN-only.** In-cluster clients use the ClusterIP Service; LAN clients use
   `https://s3.teststuff.net` (OPNsense HAProxy → BGP VIP **192.168.40.16**:3900). No Cloudflare
@@ -78,9 +78,10 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 - **rpc_secret** is pinned in tofu state (`random_id.garage_rpc`) so applies don't churn it.
 - Chart is kept **chart-shaped** (homelab adds only the LoadBalancer Service); the ArgoCD
   re-point happened 2026-08-04 (FU-136).
-- Updating Garage: re-vendor the chart at the new tag (see `argocd/charts/garage/VENDORED.md`),
-  bump values in `argocd/platform/garage.yaml`, ArgoCD syncs (steps:
-  [`garage-bulk-migration.md`](garage-bulk-migration.md)).
+- Updating Garage: Renovate bumps the tag pin in `scripts/vendor-garage-chart.sh` and the script
+  rebuilds the vendored chart on that branch (`argocd/charts/garage/VENDORED.md`;
+  [`dependency-upgrades.md`](dependency-upgrades.md) class 20). How a bump rolls: [§Upgrading](#upgrading). The backup LXC's `garage_version`
+  ([`longhorn-backup.md`](longhorn-backup.md)) follows by hand.
 
 ## Durability — what actually stands between you and losing all of it
 
@@ -730,6 +731,39 @@ controller's gate refuses for the resync's whole duration (queues) — verified 
 20:05Z rotation of garage-0 onto the 7600p (ledger §The rf=3 build-out as run). **Never** use `repair tables`
 alone as the reclamation: measured 2026-09-09, a natively re-synced env is 3–4× the compacted
 size (§above), which is the fill this loop exists to clear.
+
+## Upgrading
+
+Upstream splits upgrades in two (`doc/book/operations/upgrading.md`). Inside one major
+(v2.3 → v2.5) protocols and data structures stay compatible, so a running cluster may mix v2.x
+versions: check health, run `garage repair --all-nodes --yes tables`, then replace nodes one at a
+time, no downtime. Compatibility is not reversibility: a minor can be one-way — v2.5.0's release
+notes say once a node is upgraded it must not be downgraded, so `git revert` is not a rollback
+there (a forward fix, or the `preflight` snapshot, a human decides; read each release's notes for
+that line). A major
+(v2 → v3) changes the RPC protocol or the metadata format and has its own migration guide.
+
+- **A patch** merges on the bot's review; ArgoCD's sync rolls the StatefulSet.
+- **A minor** is merged by a person for now, inside a declared maintenance window:
+  1. `devbox run -- bash scripts/garage-upgrade.sh preflight --kubeconfig tofu/kubeconfig` —
+     refuses unless `garage:disruption_allowed` is 1, the StatefulSet is settled, every node
+     reports one version and the write probe is green; then takes a metadata snapshot on each node
+     in turn (the restore point for a one-way release, and across a major; writes made since the
+     snapshot are lost) and launches the table repair. The signal closes for ~10 minutes after any
+     resync spike — wait, do not override. A snapshot took 5.5 minutes on wk-metal-01.
+  2. Merge the Renovate PR. The sync rolls one zone at a time behind readiness and
+     `minReadySeconds`. The roll does not wait for the resync backlog (§Voluntary disruption, "Not
+     gated by it").
+  3. `… garage-upgrade.sh verify --to <version> --kubeconfig tofu/kubeconfig` — retries until
+     every node runs the target version, every partition has all replicas up and the write probe
+     is green.
+
+  First run: homelab#3344, v2.3.0 → v2.5.0, 2026-11-13 (three zones in 11 minutes, no alert). The
+  two verbs are meant to become the Garage Application's PreSync / PostSync hooks, stopping and
+  paging on a refusal. No automatic revert is planned: a release can be one-way, and a one-way
+  release stops and escalates to a person (operator, 2026-11-13).
+- **A major** is a person's decision (operator, 2026-11-13): read upstream's migration guide for
+  that version first.
 
 ## Static-website serving (3902, live 2026-07-14)
 

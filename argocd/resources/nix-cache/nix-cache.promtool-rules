@@ -1,0 +1,11 @@
+# Hand copy of the nix-cache group from prometheusrule.yaml — re-copy after every expr edit.
+groups:
+  - name: nix-cache
+    rules:
+      - alert: NixCacheAtEvictionLimit
+        expr: |
+          min_over_time(kubelet_volume_stats_used_bytes{namespace="nix-cache",persistentvolumeclaim="nixcache-data"}[7d])
+            > 0.95 * 32 * 1024^3
+        labels:
+          severity: warning
+          triage: dig

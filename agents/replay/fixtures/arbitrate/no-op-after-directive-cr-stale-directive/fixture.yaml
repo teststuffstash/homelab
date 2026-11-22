@@ -1,0 +1,26 @@
+# arbitrate/no-op-after-directive (c) changes-requested, the directive predates the PREVIOUS round → arbitrate (homelab#1910, Goal #1906 pin 3).
+#
+# An `ARBITRATE:` comment exists (09:30) but BOTH completed rounds (stats 10:05, 11:00) post-date
+# it: the no-op is not the first round after the directive, the directive already got its round —
+# so it is not a re-run case (homelab#1910 acceptance (c)) ⇒ the FU-147 label + event as today.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-stale-directive
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T11:10:00Z

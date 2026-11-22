@@ -38,3 +38,10 @@ stats-harness-fault                   |       |       |     | stats-harness-faul
 rawlog-harness-fault                  |       |       |     | rawlog-harness-fault                  |
 rawlog-harness-fault-content-echo     |       |       |     | rawlog-harness-fault-content-echo     |
 rawlog-harness-fault-goose-harness    |       |       |     | rawlog-harness-fault-goose-harness    |
+# homelab#3094: an OOMKilled agent container takes agent-finalize with it, so only this fallback
+# sees the ride. The kubelet's terminated reason is the evidence (no log signature exists) and it
+# outranks the log greps, as DeadlineExceeded does; a PR does not silence it (a death, not a round).
+rawlog-oomkilled                      |       |       |     | rawlog-oomkilled                      |
+rawlog-oomkilled-with-pr              |       |       |     | rawlog-oomkilled-with-pr              |
+rawlog-oomkilled-outranks-log         |       |       |     | rawlog-oomkilled-outranks-log         |
+rawlog-agent-error-not-oom            |       |       |     | rawlog-agent-error-not-oom            |

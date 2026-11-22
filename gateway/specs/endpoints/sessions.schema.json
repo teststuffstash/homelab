@@ -8,7 +8,7 @@
   ],
   "$defs": {
     "rail_choice": {
-      "$comment": "GW-MODEL-TIERS §The rail choice: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
+      "$comment": "GW-RAIL-CHOICE: when the tier named ONE model on two allowed rails, which rail's twin cell went first and why; null = no twin at this tier (the role's rail order alone)",
       "oneOf": [
         { "type": "null" },
         {
@@ -16,11 +16,11 @@
           "properties": {
             "rail": { "$ref": "#/$defs/rail", "description": "the rail that walked first" },
             "over": { "$ref": "#/$defs/rail", "description": "the rail whose twin cell lost (still walked when the first yields nothing)" },
-            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint"], "description": "price = cheaper per clean ride and by price alone (a tie goes to the role's order); clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price" }
+            "reason": { "enum": ["price", "clean-rate", "headroom", "not-in-catalog", "no-eligible-endpoint", "order"], "description": "price = cheaper per clean ride and by price alone; clean-rate = the measured clean rate flipped the price order; headroom = the Go twin's window (or its 429 cooldown) holds it; not-in-catalog = the Go catalog does not price the twin; no-eligible-endpoint = the openrouter twin has no eligible endpoint to price; order = both twin cells cost the same per clean ride, the role's order decides (metrics.py RAIL_CHOICE_REASONS carries the same six)" }
           }
         }
       ],
-      "x-requirements": ["GW-MODEL-TIERS"]
+      "x-requirements": ["GW-RAIL-CHOICE"]
     },
     "stack": {
       "type": "string",
@@ -45,6 +45,13 @@
         "light",
         "standard",
         "heavy"
+      ]
+    },
+    "prefer": {
+      "type": "string",
+      "enum": [
+        "cheapest",
+        "strongest"
       ]
     },
     "harness": {
@@ -157,19 +164,28 @@
           "default": 1,
           "description": "the consumer's automatic re-admission counter at this round; the same caller re-admitting the same (stack, task, round, attempt, bound pod) supersedes the earlier ACTIVE session",
           "x-requirements": [
-            "GW-SESSIONS-ADMIT"
+            "GW-SESSIONS-RETRY"
           ]
         },
         "tier": {
           "$ref": "#/$defs/tier",
           "description": "default from policy roles.<role>.tier",
           "x-requirements": [
+            "GW-SESSIONS-ADMIT",
+            "GW-SESSIONS-RETRY"
+          ]
+        },
+        "prefer": {
+          "$ref": "#/$defs/prefer",
+          "default": "cheapest",
+          "description": "which end of each rail's ordered tier list the walk starts from (sessions.md \u00a7The preferred end of the list): cheapest = the list's head (the default); strongest = its end, and no rail choice; refused with canary",
+          "x-requirements": [
             "GW-SESSIONS-ADMIT"
           ]
         },
         "harness": {
           "$ref": "#/$defs/harness",
-          "description": "optional: present, it fixes the dialect the walk may use (an explicit narrowing); absent, the harness follows the rail the walk picks (sessions.md \u00a7The harness follows the rail), policy roles.<role>.harness being the role's harness on the rails that serve its dialect",
+          "description": "optional: present, it fixes the dialect the walk may use (an explicit narrowing); absent, the harness follows the rail the walk picks (sessions.md \u00a7The harness follows the cell), policy roles.<role>.harness being the role's harness on the rails that serve its dialect",
           "x-requirements": [
             "GW-SESSIONS-ADMIT",
             "GW-SESSIONS-ENV"
@@ -414,8 +430,10 @@
             "quota-stale",
             "quota-limited"
           ],
-          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; not-in-catalog = the Go model is not listed by the Go catalog, or has no monthly limit under the policy's plan (GW-CATALOG-GO) \u2014 refused, never priced at a fallback, polled until the next catalog refresh; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) \u2014 an operator act, polled at defer_retry_s (sessions.md \u00a7Capacity); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
+          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; not-in-catalog = the Go model is not listed by the Go catalog, or has no monthly limit under the policy's plan (GW-CATALOG-GO) \u2014 refused, never priced at a fallback, polled until the next catalog refresh; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) \u2014 an operator act, polled at defer_retry_s (GW-SESSIONS-CAPACITY); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
           "x-requirements": [
+            "GW-SESSIONS-RETRY",
+            "GW-SESSIONS-CAPACITY",
             "GW-SESSIONS-ADMIT",
             "GW-CRED-RESOLVE",
             "GW-CODEX-HEADROOM"
@@ -424,11 +442,16 @@
         "retry_after_s": {
           "type": "integer",
           "minimum": 1,
-          "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail. ABSENT exactly when reason = cells-exhausted (every candidate cell is struck for this task \u2014 waiting does not help; escalate)"
+          "description": "seconds until the first blocked rail may admit: a window reset, a latch expiry, or the policy defer_retry_s for a full rail. ABSENT exactly when reason = cells-exhausted (every candidate cell is struck for this task \u2014 waiting does not help; escalate)",
+          "x-requirements": [
+            "GW-SESSIONS-RETRY",
+            "GW-SESSIONS-CAPACITY"
+          ]
         }
       },
       "x-requirements": [
-        "GW-SESSIONS-ADMIT"
+        "GW-SESSIONS-ADMIT",
+        "GW-SESSIONS-CAPACITY"
       ]
     }
   },
@@ -481,7 +504,7 @@
           "type": "integer",
           "minimum": 1,
           "x-requirements": [
-            "GW-SESSIONS-ADMIT"
+            "GW-SESSIONS-RETRY"
           ]
         },
         "state": {

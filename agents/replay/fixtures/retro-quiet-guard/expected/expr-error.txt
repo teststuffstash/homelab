@@ -1,0 +1,6 @@
+CALL curl -sf --max-time 20 --get http://prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/query --data-urlencode query=max(g)>bool(604800)
+CALL python3 agents/retro_guard_expr.py
+OUT QUIET: <unset>
+OUT BUNDLE: <none>
+ERR GUARD FAILED: Prometheus status 'error' — parse error
+RC 1

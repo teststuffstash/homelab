@@ -1,0 +1,10 @@
+# fleet-fault-unlatch-issue case 3: PR-less issue latch, cause still OPEN ⇒ agent/error HELD (homelab#3048)
+name: fleet-fault-unlatch-issue-no-pr-cause-open
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:fleet-fault-unlatch
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'

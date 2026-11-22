@@ -86,7 +86,7 @@ esac
 
 
 MUTATING_VERBS="comment edit close reopen merge review ready create delete rename transfer lock
-unlock pin unpin sync develop checkout add remove set"
+unlock pin unpin sync develop checkout add remove set rerun cancel"
 
 # GraphQL-pool DRAIN (FU-290, homelab#2476): STUB_GH_GRAPHQL=drained models the App installation's
 # GraphQL pool exhausted while its REST (core) pool still serves — the 2026-10-10 19:00Z state. Every

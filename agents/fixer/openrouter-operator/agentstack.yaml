@@ -33,7 +33,6 @@ spec:
   # window accepted 2026-08-11, guards staged in tofu/github/variables.tf + repo CODEOWNERS.
   reviewer:
     enabled: true
-    goalModel: sonnet   # declared-not-defaulted (M10; the server default drifted the app 2026-08-12)
   loop:
     perStack: true
     graduated: true
@@ -44,7 +43,11 @@ spec:
   prober:
     enabled: true
     schedule: "41 */6 * * *"
-    model: haiku
+    model: haiku # the old-proxy fallback's model; under `gateway` the gateway picks
+    # FU-270 (operator ruling 2026-11-01): the outer session admits through the agent-gateway
+    # (prober.gateway in the XRD). Platform claim only — every other stack's prober parent stays
+    # on the ref rail.
+    gateway: sessions
   # 0731 DENY — kept UNCHANGED across the chainless flip (2026-09-19). Head-swapped 2026-08-05 on
   # wall-clock evidence, not on scores: the 0731 ride produced eight consecutive ~max_tokens
   # completions (~1.25 MB each, latency climbing 162s → 299s) in 30 minutes with no branch, no
@@ -123,17 +126,23 @@ spec:
       # `Touches:` reaches either root gets the pinned process (gateway/scripts/lib/snippets.sh)
       # mounted read-only + the card block; the specs reviewer reads the same roots (#3025).
       specs: { root: gateway/specs, tests: gateway/tests }
+      # The islands built fresh beside the old loop (islands/README.md) keep their own specs/: the
+      # specs reviewer reviews each root on its own and a worker reaching one gets the process mount
+      # pinned by that root's README (XRD extraSpecs); no evidence pipeline yet, so no tests root.
+      extraSpecs:
+        - root: islands/scan/specs
+        - root: islands/launch/specs
+        - root: islands/retro/specs
       # ADR-089 quota-as-contract, ARMED 2026-08-07. Until today NO claim set spec.repos[].storage,
       # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
-      # fails fast at CREATE" promise was never in force. This repo is docker:false, so it takes
-      # no per-ride 20Gi scratch volume — scratch stays at the "0" default DELIBERATELY, which
-      # means flipping docker:true later also requires setting a scratch cap here. That coupling
-      # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
+      # fails fast at CREATE" promise was never in force. A docker ride takes a 20Gi scratch
+      # volume, so the cap is a declared decision instead of a silent draw on the pool: this
+      # repo's docker rides are the gateway island's only (fixer.dockerPaths below), sized like the docker stacks (docs/storage-ledger.md).
       storage:
         standard: "5Gi"
         bulk: "0"
         fast: "0"
-        scratch: "0" # declared-not-defaulted (agent-fixer.yaml doctrine, 2026-08-12 drift)
+        scratch: "100Gi" # 20Gi × 5: three live docker rides (the scan's REPO_MAX_WIP) + two finished pods inside the janitor's grace — the stacks' number (homelab#1321, homelab#3563)
       # FIXER BLOCK 2026-08-04 — homelab becomes a dispatch target. The gate it lands behind is
       # PATH-based, not repo-based (docs/agents/iac-lane.md §The platform lane): CODEOWNERS owns
       # the governance tiers, and tier 1 (argocd/resources/) is owned as a temporary scaffold until
@@ -148,6 +157,10 @@ spec:
         # before spend and the ride could never start. budgetUSD is what bounds it.
         guardrail: none
         docker: false
+        # Docker by footprint: only a ride whose issue `Touches:` reaches the gateway island (or
+        # declares none) is a kata+dind ride — its specs-site gate runs a browser image, and a
+        # ride's gates equal CI's. Every other homelab ride stays a plain pod.
+        dockerPaths: ["gateway/**"]
         # true since 2026-08-07 (subscription cutover, when the chain's primary was claude/haiku;
         # the M12 credit-floor degrade below is what keeps it load-bearing after the 2026-09-19
         # chainless flip) — renders
@@ -155,7 +168,7 @@ spec:
         # claudeTier is for RIDING the subscription, never the backdoor for web lookup.
         claudeTier: true
         egress:
-          profile: none # baseline only — homelab work is YAML/HCL; npm (scripts/mermaid-lint) resolves via the BASELINE npm mirror .40.35 (FU-294), not a node profile
+          profile: python # the gateway island (gateway/) is uv-locked: its gate installs from the lock's files.pythonhosted.org URLs, which the LAN PyPI cache cannot serve (FU-220). npm (scripts/mermaid-lint) still resolves via the BASELINE npm mirror .40.35 (FU-294), not a node profile
           # raw.githubusercontent.com is the fixer's OWN GATE, not a convenience: `devbox run
           # manifest-lint` shells to kubeconform, whose default schema location is that host. Under
           # enforce:true a ride would fail on a network drop rather than on its manifest — a gate

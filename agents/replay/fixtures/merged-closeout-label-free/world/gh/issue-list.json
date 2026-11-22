@@ -1,0 +1,26 @@
+[
+  {
+    "number": 96,
+    "title": "a label-free carrier closed by its merged fix round",
+    "labels": [{"name": "agent/review"}],
+    "updatedAt": "2099-01-01T00:00:00Z"
+  },
+  {
+    "number": 97,
+    "title": "an agent-fix ride whose auto-merge outran the review flip",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}],
+    "updatedAt": "2099-01-01T00:00:00Z"
+  },
+  {
+    "number": 98,
+    "title": "already terminal",
+    "labels": [{"name": "agent/review"}, {"name": "agent/done"}],
+    "updatedAt": "2099-01-01T00:00:00Z"
+  },
+  {
+    "number": 99,
+    "title": "human-first breaker",
+    "labels": [{"name": "agent/review"}, {"name": "agent/error"}],
+    "updatedAt": "2099-01-01T00:00:00Z"
+  }
+]

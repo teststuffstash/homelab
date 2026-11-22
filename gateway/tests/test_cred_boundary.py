@@ -1,52 +1,21 @@
-"""GW-CRED-BOUNDARY — inbound auth stops here; the upstream credential starts here (specs/endpoints/anthropic-messages.md).
+"""GW-CRED-BOUNDARY — inbound auth stops here; the upstream credential starts here
+(specs/endpoints/anthropic-messages.md).
 
-| description | Authorization | x-api-key | verdict |
-|---|---|---|---|
-| a bearer session token | Bearer gws_<valid> | — | session resolved |
-| an x-api-key session token | — | gws_<valid> | session resolved |
-| the bearer is consulted first | Bearer gws_<valid A> | gws_<valid B> | session A |
-| no credential | — | — | 401 session-unknown |
-| a token nobody minted | Bearer gws_AAAA... | — | 401 session-unknown |
-| a real-looking key is not a session | Bearer sk-or-v1-FAKE... | — | 401 session-unknown; never forwarded; logged redacted |
-| a released session's token | Bearer gws_<released> | — | 401 session-released |
-| an expired session's token | Bearer gws_<expired> | — | 401 session-expired |
-| a session whose credential went away | Bearer gws_<valid>, ref now a definitive miss | — | 401 credential-unresolved |
-| a session whose credential read is failing | Bearer gws_<valid>, ref transient | — | 503 credential-transient |
-
-| description | inbound header | reaches upstream |
-|---|---|---|
-| the inbound bearer is stripped | Authorization: Bearer gws_... | no (replaced by the rail credential) |
-| the inbound x-api-key is stripped | x-api-key: gws_... | no (replaced on the Go anthropic leg; absent elsewhere) |
-| hop-by-hop headers are stripped | Connection, Keep-Alive, Transfer-Encoding, TE, Trailer, Upgrade, Proxy-Authorization | no |
-| content-type passes through | Content-Type: application/json | yes |
-| an unknown vendor header passes through | x-foo: bar | yes |
-| a credential-shaped value in a vendor header is refused | x-foo: Bearer sk-ant-oat-x | 502 header-refused, upstream not called |
-
-| description | upstream behaviour | status | body | log |
-|---|---|---|---|---|
-| an upstream 401 never leaks | upstream-401 (body names the key) | 424 | upstream-auth envelope | upstream-auth <rail> 401, no body |
-| an upstream 403 naming a credential reason is the same class | upstream-403 (permission_error) | 424 | upstream-auth envelope | upstream-auth <rail> 403 |
-
-| description | rail | upstream behaviour | status | code | the rail's credential |
-|---|---|---|---|---|---|
-| an expired key is a credential verdict | opencode | upstream-401-key-expired | 424 | upstream-auth | rejected (gateway_credentials_rejected{rail="opencode"} = 1) |
-| a policy refusal is not a credential verdict | openrouter | upstream-403-refused | 403 | upstream-refused | not rejected (gateway_credentials_rejected{rail="openrouter"} = 0) |
-| a refusal's body is not relayed either | openrouter | upstream-403-refused | 403 | upstream-refused | the body names neither the model's gate text nor the routing step |
-| an edge's error-code 403 is not a credential verdict | opencode | upstream-403-edge | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
-| an edge's HTML 403 is not a credential verdict | opencode | upstream-403-html | 403 | upstream-edge-refused | not rejected (gateway_credentials_rejected{rail="opencode"} = 0) |
+One parametrized case per table row: the argnames are the table's header cells (`name?` is
+`expected_name`), the ids its description cells, the literals the page's Legend lines. World
+`policy-default`, the fake upstream in the behaviour the `upstream` column names; unless a `rail`
+column says otherwise the session is a goose worker's on the openrouter rail, and `<A>` / `<B>` are
+the tokens of two such sessions A and B.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 
 import pytest
 
+from ._rail_rows import NONE, headers_seen, inputs, oracle, parse_pairs
 from .conftest import (
-    ANTHROPIC_TOKEN,
-    GO_KEY,
-    OPENROUTER_KEY,
     attach_json,
     bearer,
     check,
@@ -62,195 +31,221 @@ from .conftest import (
 )
 
 pytestmark = rule("GW-CRED-BOUNDARY")
+RAIL = "openrouter"
+PATH = "/openai/v1/chat/completions"
 REF = "platform-agents/platform-openrouter"
 
-AUTH_ROWS = [
-    ("a bearer session token", "bearer", "active", 200, None),
-    ("an x-api-key session token", "x-api-key", "active", 200, None),
-    ("the bearer is consulted first", "both", "active", 200, None),
-    ("no credential", "none", "active", 401, "session-unknown"),
-    ("a token nobody minted", "unminted", "active", 401, "session-unknown"),
-    ("a real-looking key is not a session", "foreign", "active", 401, "session-unknown"),
-    ("a released session's token", "bearer", "released", 401, "session-released"),
-    ("an expired session's token", "bearer", "expired", 401, "session-expired"),
-    ("a session whose credential went away", "bearer", "cred-missing", 401, "credential-unresolved"),
-    ("a session whose credential read is failing", "bearer", "cred-transient", 503, "credential-transient"),
-]
 
-HOW = {
-    "bearer": "Authorization: Bearer <A's token>",
-    "x-api-key": "x-api-key: <A's token>",
-    "both": "Authorization: Bearer <A's token> + x-api-key: <B's token>",
-    "none": "no credential header",
-    "unminted": "Authorization: Bearer gws_AAAA… (never minted)",
-    "foreign": "Authorization: Bearer sk-or-v1-FAKEFAKEFAKE",
-}
-
-
-@pytest.mark.parametrize(("how", "state", "status", "code"), [r[1:] for r in AUTH_ROWS], ids=[r[0] for r in AUTH_ROWS])
-async def test_inbound_auth(gw, app, upstreams, secrets, policy, clock, caplog, how, state, status, code):
-    world(upstream="upstream-ok")
-    caplog.set_level(logging.INFO)
+async def _sessions_ab(gw) -> tuple[dict, dict]:
     with given("sessions A and B on rail openrouter (worker, harness goose)"):
         with quiet():  # arrange only — one summary instead of two exchanges
-            a = await open_session(gw, role="worker", harness="goose", rail="openrouter", task="A")
-            b = await open_session(gw, role="worker", harness="goose", rail="openrouter", task="B")
+            a = await open_session(gw, role="worker", harness="goose", rail=RAIL, task="A")
+            b = await open_session(gw, role="worker", harness="goose", rail=RAIL, task="B")
         attach_json("sessions A and B", {"A": a["session"]["id"], "B": b["session"]["id"], "rail": a["rail"]})
-    with given(f"state: session A is {state}"):
+    return a, b
+
+
+def _auth_headers(cell: str, a: dict, b: dict, header: str) -> dict:
+    if cell == NONE:
+        return {}
+    value = cell.replace("<A>", a["session"]["token"]).replace("<B>", b["session"]["token"])
+    return {header: value}
+
+
+async def _served(gw, a: dict, b: dict) -> str:
+    with quiet():  # the two GET /sessions reads; the verdict carries their requests values
+        ra = (await gw.get(f"/sessions/{a['session']['id']}")).json()["requests"]
+        rb = (await gw.get(f"/sessions/{b['session']['id']}")).json()["requests"]
+    return "A" if (ra, rb) == (1, 0) else "B" if (ra, rb) == (0, 1) else NONE if (ra, rb) == (0, 0) else f"A {ra}, B {rb}"
+
+
+# -- Which header carries the session token -------------------------------------------------------
+TOKEN_ROWS = [  # description | upstream | authorization | x_api_key | status? | code? | served?
+    ("a bearer session token", "upstream-ok", "Bearer <A>", NONE, 200, NONE, "A"),
+    ("an x-api-key session token", "upstream-ok", NONE, "<A>", 200, NONE, "A"),
+    ("the bearer is consulted first ⚖", "upstream-ok", "Bearer <A>", "<B>", 200, NONE, "A"),
+    ("no credential", "upstream-ok", NONE, NONE, 401, "session-unknown", NONE),
+    ("a token nobody minted", "upstream-ok", "Bearer gws_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", NONE, 401, "session-unknown", NONE),
+    ("a real-looking key is not a session", "upstream-ok", "Bearer sk-or-v1-FAKEFAKEFAKE", NONE, 401, "session-unknown", NONE),
+]
+
+
+@pytest.mark.parametrize(("upstream", "authorization", "x_api_key", "expected_status", "expected_code", "expected_served"),
+                         [r[1:] for r in TOKEN_ROWS], ids=[r[0] for r in TOKEN_ROWS])
+async def test_inbound_token(gw, upstreams, caplog, upstream, authorization, x_api_key, expected_status, expected_code, expected_served):
+    world(upstream=upstream)
+    caplog.set_level(logging.INFO)
+    a, b = await _sessions_ab(gw)
+    headers = {**_auth_headers(authorization, a, b, "authorization"), **_auth_headers(x_api_key, a, b, "x-api-key")}
+    with when(f"POST {PATH} · {inputs(upstream=upstream, authorization=authorization, x_api_key=x_api_key)}"):
+        r = await gw.post(PATH, json={"messages": []}, headers=headers)
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    then_eq("expected_code", err(r) if r.status_code != 200 else NONE, expected_code, claim=f"code? = {expected_code}")
+    then_eq("expected_served", await _served(gw, a, b), expected_served, claim=f"served? = {expected_served}")
+    if "sk-or-v1-FAKE" in authorization:
+        msgs = [rec.getMessage() for rec in caplog.records]
+        with then("the foreign key never reaches upstream; logged as session-unknown, its value never logged",
+                  upstream_calls={"expected": 0, "actual": len(upstreams[RAIL].calls)}, log_lines=msgs):
+            assert upstreams[RAIL].calls == []
+            assert any("session-unknown" in m for m in msgs)
+            assert not any("FAKEFAKEFAKE" in m for m in msgs)
+
+
+# -- A session that can no longer serve -----------------------------------------------------------
+STATE_ROWS = [  # description | upstream | state | status? | code?
+    ("a released session's token", "upstream-ok", "released", 401, "session-released"),
+    ("an expired session's token", "upstream-ok", "expired", 401, "session-expired"),
+    ("a session whose credential went away", "upstream-ok", "credential ref a definitive miss", 401, "credential-unresolved"),
+    ("a session whose credential read is failing", "upstream-ok", "credential read transient", 503, "credential-transient"),
+]
+
+
+@pytest.mark.parametrize(("upstream", "state", "expected_status", "expected_code"), [r[1:] for r in STATE_ROWS], ids=[r[0] for r in STATE_ROWS])
+async def test_session_state(gw, app, secrets, policy, clock, upstream, state, expected_status, expected_code):
+    world(upstream=upstream)
+    a, _b = await _sessions_ab(gw)
+    with given(f"state = {state}: session A"):
         if state == "released":
             await gw.delete(f"/sessions/{a['session']['id']}")
         elif state == "expired":
             clock.advance(policy.session_ttl_s + 1)
             attach_json("clock advanced past expires_at", {"advanced_s": policy.session_ttl_s + 1})
-        elif state == "cred-missing":
+        elif state == "credential ref a definitive miss":
             secrets.secrets.pop(REF)
             app.state.resolver.forget()
             attach_json(f"secrets after: {REF} removed", sorted(secrets.secrets))
-        elif state == "cred-transient":
+        else:
             secrets.transient.add(REF)
             app.state.resolver.forget()
             attach_json(f"secrets transient: {REF}", sorted(secrets.transient))
-    headers = {
-        "bearer": bearer(a),
-        "x-api-key": {"x-api-key": a["session"]["token"]},
-        "both": {**bearer(a), "x-api-key": b["session"]["token"]},
-        "none": {},
-        "unminted": {"authorization": "Bearer gws_" + "A" * 32},
-        "foreign": {"authorization": "Bearer sk-or-v1-FAKEFAKEFAKE"},
-    }[how]
-    with when(f"POST /openai/v1/chat/completions how={how} ({HOW[how]})"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=headers)
-    then_eq("status", r.status_code, status, claim=f"status = {status}" + ("" if code else " (code None: served, no error envelope)"))
-    if code:
-        then_eq("code", err(r), code, claim=f"error code = {code}")
-        if how == "foreign":
-            msgs = [rec.getMessage() for rec in caplog.records]
-            with then("the foreign key never reaches upstream; logged as session-unknown, its value never logged",
-                      upstream_calls={"expected": 0, "actual": len(upstreams["openrouter"].calls)}, log_lines=msgs):
-                assert upstreams["openrouter"].calls == []
-                assert any("session-unknown" in m for m in msgs)
-                assert not any("FAKEFAKEFAKE" in m for m in msgs)
-    else:
-        with then("session A served the request, never B: (A requests, B requests) = (1, 0)"):
-            with quiet():  # the two GET /sessions reads; the verdict carries their requests values
-                served_a = (await gw.get(f"/sessions/{a['session']['id']}")).json()["requests"]
-                served_b = (await gw.get(f"/sessions/{b['session']['id']}")).json()["requests"]
-            check("(A requests, B requests)", (served_a, served_b), (1, 0))
+    with when(f"POST {PATH} with Authorization: Bearer <A> · {inputs(upstream=upstream, state=state)}"):
+        r = await gw.post(PATH, json={"messages": []}, headers=bearer(a))
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    then_eq("expected_code", err(r), expected_code, claim=f"code? = {expected_code}")
 
 
-HEADER_ROWS = [
-    ("the inbound bearer is stripped", {}, {"authorization": f"Bearer {OPENROUTER_KEY}"}, []),
-    ("the inbound x-api-key is stripped", {"x-api-key": "<token>"}, {}, ["x-api-key"]),
-    ("hop-by-hop headers are stripped", {"connection": "close", "keep-alive": "timeout=5", "te": "trailers", "trailer": "x", "upgrade": "h2c", "proxy-authorization": "Basic x"}, {}, ["keep-alive", "te", "trailer", "upgrade", "proxy-authorization", "transfer-encoding"]),
-    ("content-type passes through", {"content-type": "application/json"}, {"content-type": "application/json"}, []),
-    ("an unknown vendor header passes through", {"x-foo": "bar"}, {"x-foo": "bar"}, []),
+# -- What of the inbound reaches upstream ---------------------------------------------------------
+HEADER_ROWS = [  # description | upstream | inbound | upstream_header?
+    ("the inbound bearer is stripped", "upstream-ok", NONE, "Authorization: Bearer <OPENROUTER_API_KEY>"),
+    ("the inbound x-api-key is stripped", "upstream-ok", "x-api-key: <session token>", "x-api-key: (absent)"),
+    ("hop-by-hop headers are stripped", "upstream-ok",
+     "Connection: close; Keep-Alive: timeout=5; TE: trailers; Trailer: x; Upgrade: h2c; Proxy-Authorization: Basic x",
+     "Connection: (the gateway's own); Keep-Alive: (absent); TE: (absent); Trailer: (absent); Upgrade: (absent); Proxy-Authorization: (absent); Transfer-Encoding: (absent)"),
+    ("content-type passes through", "upstream-ok", "Content-Type: application/json", "Content-Type: application/json"),
+    ("an unknown vendor header passes through", "upstream-ok", "x-foo: bar", "x-foo: bar"),
 ]
 
 
-@pytest.mark.parametrize(("inbound", "present", "absent"), [r[1:] for r in HEADER_ROWS], ids=[r[0] for r in HEADER_ROWS])
-async def test_header_boundary(gw, upstreams, inbound, present, absent):
-    world(upstream="upstream-ok")
+@pytest.mark.parametrize(("upstream", "inbound", "expected_upstream_header"), [r[1:] for r in HEADER_ROWS], ids=[r[0] for r in HEADER_ROWS])
+async def test_header_boundary(gw, upstreams, upstream, inbound, expected_upstream_header):
+    world(upstream=upstream)
     with given("a session on rail openrouter (worker, harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
+        doc = await open_session(gw, role="worker", harness="goose", rail=RAIL)
     token = doc["session"]["token"]
-    headers = {**bearer(doc), **{k: (token if v == "<token>" else v) for k, v in inbound.items()}}
-    with when(f"POST /openai/v1/chat/completions · inbound {inbound or '(bearer only)'}"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=headers)
+    headers = {**bearer(doc), **{k.lower(): (token if v == "<session token>" else v) for k, v in parse_pairs(inbound)}}
+    with when(f"POST {PATH} · {inputs(upstream=upstream, inbound=inbound)} (beside Authorization: Bearer <session token>)"):
+        r = await gw.post(PATH, json={"messages": []}, headers=headers)
     then_eq("status", r.status_code, 200)
-    seen = upstreams["openrouter"].calls[-1]["headers"]
-    with then(f"present upstream: {present or 'nothing extra'}; absent upstream: {absent or 'nothing listed'}",
-              present={"expected": present, "actual": {k: seen.get(k) for k in present}},
-              absent={"expected": absent, "actual_present": [k for k in absent if k in seen]}):
-        for k, v in present.items():
-            assert seen.get(k) == v, (k, seen.get(k))
-        for k in absent:
-            assert k not in seen, (k, seen.get(k))
-    with then("the inbound Connection is not forwarded and no session token (gws_) reaches upstream",
-              connection={"actual": seen.get("connection")}):
-        assert seen.get("connection") != "close", "the inbound Connection header is the gateway's, not forwarded (the client stack owns its own)"
-        assert token not in str(seen) and "gws_" not in str(seen)
+    seen = upstreams[RAIL].calls[-1]
+    then_eq("expected_upstream_header", headers_seen(seen, expected_upstream_header, doc, inbound), expected_upstream_header,
+            claim=f"upstream_header? = {expected_upstream_header}")
+    with then("no session token (gws_) reaches upstream", upstream_headers={"actual": sorted(seen["headers"])}):
+        assert token not in str(seen["headers"]) and "gws_" not in str(seen["headers"])
 
 
-async def test_credential_shaped_vendor_header_refused(gw, upstreams):
-    """row: a credential-shaped value in a vendor header is refused"""
-    world(upstream="upstream-ok")
+# -- A credential-shaped vendor header ------------------------------------------------------------
+TRIPWIRE_ROWS = [  # description | upstream | inbound | status? | code? | upstream_calls?
+    ("a credential-shaped value in a vendor header is refused", "upstream-ok", "x-foo: Bearer sk-ant-oat-x", 502, "header-refused", 0),
+]
+
+
+@pytest.mark.parametrize(("upstream", "inbound", "expected_status", "expected_code", "expected_upstream_calls"),
+                         [r[1:] for r in TRIPWIRE_ROWS], ids=[r[0] for r in TRIPWIRE_ROWS])
+async def test_credential_shaped_vendor_header_refused(gw, upstreams, upstream, inbound, expected_status, expected_code, expected_upstream_calls):
+    world(upstream=upstream)
     with given("a session on rail openrouter (worker, harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
-    with when("POST /openai/v1/chat/completions · inbound x-foo: Bearer sk-ant-oat-x"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={**bearer(doc), "x-foo": "Bearer sk-ant-oat-x"})
-    then_eq("status", r.status_code, 502)
-    then_eq("code", err(r), "header-refused", claim="error code = header-refused")
-    then_eq("upstream calls", len(upstreams["openrouter"].calls), 0, claim="no upstream call")
+        doc = await open_session(gw, role="worker", harness="goose", rail=RAIL)
+    with when(f"POST {PATH} · {inputs(upstream=upstream, inbound=inbound)}"):
+        r = await gw.post(PATH, json={"messages": []}, headers={**bearer(doc), **{k.lower(): v for k, v in parse_pairs(inbound)}})
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    then_eq("expected_code", err(r), expected_code, claim=f"code? = {expected_code}")
+    then_eq("expected_upstream_calls", len(upstreams[RAIL].calls), expected_upstream_calls, claim=f"upstream_calls? = {expected_upstream_calls}")
 
 
-UPSTREAM_ROWS = [("an upstream 401 never leaks", "upstream-401", 401),
-                 ("an upstream 403 naming a credential reason is the same class", "upstream-403", 403)]
+# -- An upstream 401/403 never relays its body ----------------------------------------------------
+LEAK_ROWS = [  # description | upstream | status? | code? | upstream_body_relayed? | log_line_prefix?
+    ("an upstream 401 never leaks", "upstream-401", 424, "upstream-auth", "no", "upstream-auth openrouter 401"),
+    ("an upstream 403 naming a credential reason is the same class", "upstream-403", 424, "upstream-auth", "no", "upstream-auth openrouter 403"),
+]
 
 
-@pytest.mark.parametrize(("behaviour", "upstream_status"), [r[1:] for r in UPSTREAM_ROWS], ids=[r[0] for r in UPSTREAM_ROWS])
-async def test_upstream_auth_never_leaks(gw, upstreams, caplog, behaviour, upstream_status):
-    world(upstream=behaviour)
+def _relayed(r, got) -> str:
+    """`upstream_body_relayed?`: `yes` when the answer's body is the upstream's own bytes, else `no`."""
+    return "yes" if got is not None and r.content == got[1] else "no"
+
+
+@pytest.mark.parametrize(("upstream", "expected_status", "expected_code", "expected_upstream_body_relayed", "expected_log_line_prefix"),
+                         [r[1:] for r in LEAK_ROWS], ids=[r[0] for r in LEAK_ROWS])
+async def test_upstream_auth_never_leaks(gw, upstreams, caplog, upstream, expected_status, expected_code, expected_upstream_body_relayed,
+                                         expected_log_line_prefix):
+    world(upstream=upstream)
     caplog.set_level(logging.INFO)
-    upstreams["openrouter"].behaviour = behaviour
+    got = await oracle(upstreams[RAIL], "chat", "deepseek/deepseek-v4-flash", upstream)
+    upstreams[RAIL].behaviour = upstream
     with given("a session on rail openrouter (worker, harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
-    with when(f"POST /openai/v1/chat/completions (upstream answers {behaviour}, upstream_status {upstream_status})"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    then_eq("status", r.status_code, 424)
-    with then("body = the upstream-auth envelope; no upstream body, no credential value", body={"actual": r.text}):
-        assert err(r) == "upstream-auth"
+        doc = await open_session(gw, role="worker", harness="goose", rail=RAIL)
+    with when(f"POST {PATH} · {inputs(upstream=upstream)}"):
+        r = await gw.post(PATH, json={"messages": []}, headers=bearer(doc))
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    then_eq("expected_code", err(r), expected_code, claim=f"code? = {expected_code}")
+    with then(f"upstream_body_relayed? = {expected_upstream_body_relayed} (the envelope carries no upstream body and no credential value)",
+              expected_upstream_body_relayed={"expected": expected_upstream_body_relayed, "actual": _relayed(r, got)}, body={"actual": r.text}):
+        assert _relayed(r, got) == expected_upstream_body_relayed
         assert "sk-ant-oat" not in r.text and "LEAK" not in r.text
-        for secret in (ANTHROPIC_TOKEN, OPENROUTER_KEY, GO_KEY):
-            assert secret not in r.text
-    with then(f"the log line reads upstream-auth openrouter {upstream_status}, summarised"):
-        line = next(rec.getMessage() for rec in caplog.records if rec.getMessage().startswith("upstream-auth"))
-        attach_json(f"verdict: log line upstream_status {upstream_status}", {"upstream_status": {"expected": upstream_status, "actual": line}})
-        assert line.startswith(f"upstream-auth openrouter {upstream_status}")
+    line = next((rec.getMessage() for rec in caplog.records if rec.getMessage().startswith("upstream-auth")), "")
+    with then(f"log_line_prefix? = {expected_log_line_prefix} (summarised: no body, no credential value)",
+              expected_log_line_prefix={"expected": expected_log_line_prefix, "actual": line[: len(expected_log_line_prefix)]}, log_line={"actual": line}):
+        assert line.startswith(expected_log_line_prefix)
         assert "LEAK" not in line and "sk-ant-oat" not in line
 
 
-async def _rejected_gauge(gw, rail: str) -> float:
+# -- A credential verdict against a refusal -------------------------------------------------------
+async def _rejected_gauge(gw, rail: str) -> int:
+    import re
+
     with quiet():
         text = (await gw.get("/metrics")).text
     m = re.search(rf'^gateway_credentials_rejected\{{rail="{rail}"\}} (\S+)$', text, re.M)
-    attach_json(f"sample: gateway_credentials_rejected{{rail={rail}}}", {"line": m.group(0) if m else None})
-    return float(m.group(1)) if m else -1
+    return int(float(m.group(1))) if m else -1
 
 
-KIND_ROWS = [
-    ("an expired key is a credential verdict", "opencode", "upstream-401-key-expired", 424, "upstream-auth", 1),
-    ("a policy refusal is not a credential verdict", "openrouter", "upstream-403-refused", 403, "upstream-refused", 0),
-    ("an edge's error-code 403 is not a credential verdict", "opencode", "upstream-403-edge", 403, "upstream-edge-refused", 0),
-    ("an edge's HTML 403 is not a credential verdict", "opencode", "upstream-403-html", 403, "upstream-edge-refused", 0),
+KIND_ROWS = [  # description | rail | upstream | status? | code? | credentials_rejected? | upstream_body_relayed?
+    ("an expired key is a credential verdict ⚖", "opencode", "upstream-401-key-expired", 424, "upstream-auth", 1, "no"),
+    ("a policy refusal is not a credential verdict ⚖", "openrouter", "upstream-403-refused", 403, "upstream-refused", 0, "no"),
+    ("an edge's error-code 403 is not a credential verdict ⚖", "opencode", "upstream-403-edge", 403, "upstream-edge-refused", 0, "no"),
+    ("an edge's HTML 403 is not a credential verdict", "opencode", "upstream-403-html", 403, "upstream-edge-refused", 0, "no"),
 ]
 
 
-@pytest.mark.parametrize(("rail", "behaviour", "status", "code", "rejected"), [r[1:] for r in KIND_ROWS], ids=[r[0] for r in KIND_ROWS])
-async def test_upstream_401_403_kind(gw, upstreams, rail, behaviour, status, code, rejected):
-    world(upstream=behaviour)
-    upstreams[rail].behaviour = behaviour
+@pytest.mark.parametrize(("rail", "upstream", "expected_status", "expected_code", "expected_credentials_rejected", "expected_upstream_body_relayed"),
+                         [r[1:] for r in KIND_ROWS], ids=[r[0] for r in KIND_ROWS])
+async def test_upstream_401_403_kind(gw, upstreams, rail, upstream, expected_status, expected_code, expected_credentials_rejected,
+                                     expected_upstream_body_relayed):
+    world(upstream=upstream)
+    got = await oracle(upstreams[rail], "chat", "fixture/model", upstream)
+    upstreams[rail].behaviour = upstream
     with given(f"rail = {rail}: a worker session there (harness goose)"):
         with quiet():
             doc = await open_session(gw, role="worker", harness="goose", rail=rail)
-    with when(f"POST /openai/v1/chat/completions (behaviour = {behaviour!r}: the upstream's answer)"):
+    with when(f"POST {PATH} · {inputs(rail=rail, upstream=upstream)}"):
         with quiet():
-            r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
+            r = await gw.post(PATH, json={"messages": []}, headers=bearer(doc))
         attach_json(f"gateway answer → {r.status_code}", {"status": r.status_code, "body": r.json()})
-    then_eq("status", r.status_code, status)
-    then_eq("code", err(r), code, claim=f"error code = {code}")
-    with then(f"the rail's credential: gateway_credentials_rejected{{rail=\"{rail}\"}} = {rejected}"):
-        check(f"gateway_credentials_rejected{{rail={rail}}}", await _rejected_gauge(gw, rail), rejected)
-
-
-async def test_refusal_body_not_relayed(gw, upstreams):
-    """row: a refusal's body is not relayed either"""
-    world(upstream="upstream-403-refused")
-    upstreams["openrouter"].behaviour = "upstream-403-refused"
-    with given("a worker session on openrouter (harness goose)"):
-        doc = await open_session(gw, role="worker", harness="goose", rail="openrouter")
-    with when("POST /openai/v1/chat/completions (upstream answers upstream-403-refused)"):
-        r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers=bearer(doc))
-    then_eq("status", r.status_code, 403)
-    with then("the body is the upstream-refused envelope; neither the gate text nor the routing step crosses back", body={"actual": r.text}):
-        assert err(r) == "upstream-refused"
-        assert "agentic harnesses" not in r.text and "Gate Free Endpoints" not in r.text
+    then_eq("expected_status", r.status_code, expected_status, claim=f"status? = {expected_status}")
+    then_eq("expected_code", err(r), expected_code, claim=f"code? = {expected_code}")
+    with then(f"credentials_rejected? = {expected_credentials_rejected}: gateway_credentials_rejected{{rail=\"{rail}\"}}"):
+        check("expected_credentials_rejected", await _rejected_gauge(gw, rail), expected_credentials_rejected)
+    with then(f"upstream_body_relayed? = {expected_upstream_body_relayed} (neither the gate text nor the routing step crosses back)",
+              expected_upstream_body_relayed={"expected": expected_upstream_body_relayed, "actual": _relayed(r, got)}, body={"actual": r.text}):
+        assert _relayed(r, got) == expected_upstream_body_relayed
+        assert "agentic harnesses" not in r.text and "Gate Free Endpoints" not in r.text and "Access denied" not in r.text

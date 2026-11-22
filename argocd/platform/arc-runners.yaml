@@ -1,5 +1,5 @@
 # The runner scale set — ephemeral GitHub Actions runners registered org-wide on teststuffstash.
-# Workflows target them with `runs-on: homelab-ephemeral`. One warm runner (minRunners 1, settled
+# Workflows target them with `runs-on: homelab-ephemeral`. Three warm runners (minRunners 3 since 2026-11-13; 1 settled
 # 2026-08-30 — see the readout at the field below); each job's pod is ephemeral: it runs, then it's
 # torn down and a fresh one pre-warms. Pinned to the ephemeral laptop tier so CI
 # noise/privilege stays off the service nodes (same tier as the Forgejo runner).
@@ -41,7 +41,15 @@ spec:
         # 1 → median 3s / p90 3s / max 7s. The warm runner deletes the cold-start tail (pod spin-up
         # + registration, minutes at p90) for ~2.5Gi resident on the ephemeral tier. Revisit only
         # if the tier needs the RAM back.
-        minRunners: 1
+        # minRunners 3 (2026-11-13): minRunners is an IDLE buffer (listener target = minRunners +
+        # assigned jobs), and a merge starts a BURST — the master push run plus the PR runs that
+        # update-pr-branch re-triggers. Over 30 days of homelab CI, PR job pickup by position in
+        # the burst (homelab jobs created in the 2 min before): 0 → median 3 s; 1 → 23 s; 2 → 44 s;
+        # 3+ → 57 s (p90 242 s). 96 % of post-merge bursts are ≤ 3 homelab jobs, so three warm runners
+        # take the cold start off nearly every one. Cost: two more idle pods at ~2.5Gi requested,
+        # which land on nx-01 (61.5 GiB, 29 % requested at the change). Numbers:
+        # docs/spikes/ci-runtime-2026-11.md.
+        minRunners: 3
         # Capacity is RAM placement, not slots (FU-218): a runner pod REQUESTS ~2.5Gi incl. dind
         # and an 8 GB ephemeral node fits exactly one (wk-metal-01/-02, ~6.3Gi allocatable minus
         # DaemonSets). 2026-09-08: wk-03 grew to 16Gi (~5 runners) → 6 = 1 + 1 + ~4, sized to the
@@ -77,6 +85,7 @@ spec:
         #     so a CI gate that wants a LAN pull of a ghcr image names the mirror path outright
         #     (`192.168.40.21/<org>/<image>`, the kind-ci REGISTRY_MIRROR_GHCR pattern) — the
         #     daemon must accept plain http for that VIP or the pull is refused;
+        #     the mcr mirror VIP (192.168.40.31) likewise — the gateway specs-site e2e's playwright image;
         #   - pin docker:dind (was :latest-floating via the chart);
         #   - homelab#1299: mount the shared uv wheel cache (Longhorn RWX PVC arc-uv-cache,
         #     argocd/resources/github-runner/uv-cache-pvc.yaml) at UV_CACHE_DIR=/uv-cache —
@@ -100,13 +109,19 @@ spec:
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
-            # Soft spread across the two ephemeral nodes + a real memory request (2026-08-11
-            # incident: all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of
-            # CI on one node's failure). Requests-not-limits by intent: a runner's true footprint
-            # depends on which job lands (lint vs cold nix build vs dind), so requests state the
-            # ~2-per-node envelope for honest packing and the spread halves the blast radius;
-            # BestEffort→Burstable also keeps runners first-kill under node pressure, which is
-            # correct for retryable CI. maxRunners stays the concurrency contract.
+            # Soft spread across the ephemeral nodes + a real memory request (2026-08-11 incident:
+            # all 4 runners binpacked onto wk-metal-02 while its WAN was dead — 100% of CI on one
+            # node's failure); the spread halves the blast radius, Burstable keeps runners
+            # first-kill under node pressure (correct for retryable CI). maxRunners stays the
+            # concurrency contract.
+            # LIMITS (FU-218, 2026-11-01): requests state the packing envelope, limits are the
+            # job's BUDGET — runner 3Gi + dind 1Gi. Without them a job sized to the HOST: a
+            # ShellCheck dataflow pass hit 5.4 GB on wk-metal-03 and thrashed it NotReady for
+            # ~4 h (#3107). This set is the "normal" class — fits a laptop, no kind (20-day
+            # harvest: every recurring job ≤ 2.7 GiB runner peak, dind ≤ 0.3 GiB; kind/e2e
+            # runs on the ci-runner VMs). An overrun is now the job's own OOMKilled, never the
+            # node. Bigger jobs: `runs-on: homelab-ephemeral-large` (arc-runners-large.yaml).
+            # Tools that self-size read the cgroup (`/sys/fs/cgroup/memory.max`), not nproc.
             topologySpreadConstraints:
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
@@ -116,7 +131,7 @@ spec:
                     actions.github.com/scale-set-name: homelab-ephemeral
             initContainers:
               - name: init-dind-externals
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.31-ge2e6bfaa9b75
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.20-g17c2d811ef4d
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -127,6 +142,8 @@ spec:
                 resources:
                   requests:
                     memory: 1Gi
+                  limits:
+                    memory: 1Gi # docker's budget — the daemon + every container it runs (FU-218)
                 args:
                   - dockerd
                   - --host=unix:///var/run/docker.sock
@@ -134,6 +151,7 @@ spec:
                   - --registry-mirror=http://192.168.40.20
                   - --insecure-registry=192.168.40.20
                   - --insecure-registry=192.168.40.21
+                  - --insecure-registry=192.168.40.31  # mcr mirror (SERVICES.md, ADR-091)
                 env:
                   - name: DOCKER_GROUP_GID
                     value: "123"
@@ -155,11 +173,13 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.10.31-ge2e6bfaa9b75
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.11.20-g17c2d811ef4d
                 command: ["/home/runner/run.sh"]
                 resources:
                   requests:
                     memory: 1536Mi
+                  limits:
+                    memory: 3Gi # the job's budget (FU-218) — see the block above topologySpreadConstraints
                 env:
                   - name: DOCKER_HOST
                     value: unix:///var/run/docker.sock

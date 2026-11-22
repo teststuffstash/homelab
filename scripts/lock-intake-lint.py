@@ -3,6 +3,7 @@
 
     devbox run lock-intake-lint [<base-ref>]     (default: origin/master)
     devbox run lock-intake-lint -- --self-test   (offline: extractors + diff, no network)
+    python3 scripts/lock-intake-lint.py --uv-floor   (offline: every changed uv.lock carries a resolver cutoff ≥ 7 d old)
 
 Reads every lockfile the diff <base>..HEAD touches, takes the set of (package, version) pairs the
 HEAD side has and the base side does not — the INTAKE, transitive dependencies included — and
@@ -45,7 +46,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 MIN_AGE_DAYS = 7
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
@@ -246,6 +247,80 @@ def changed_lockfiles(base):
     return [p for p in r.stdout.split() if os.path.basename(p) in names]
 
 
+def uv_floor_verdict(text, now):
+    """`ok`, `missing` or `too-new` for one uv.lock's `[options] exclude-newer` (homelab#3425).
+
+    uv writes the `[tool.uv] exclude-newer` cutoff it resolved under into the lock's `[options]`. Every
+    version in such a lock was published before the cutoff, so a cutoff at least MIN_AGE_DAYS old means
+    check (b) of the full lint passes on it today and on any later day. A value that is not a
+    timestamp cannot be judged (Closed)."""
+    import tomllib
+    cutoff = (tomllib.loads(text).get("options") or {}).get("exclude-newer")
+    if cutoff is None:
+        return "missing"
+    try:
+        t = datetime.fromisoformat(str(cutoff).replace("Z", "+00:00"))
+    except ValueError:
+        raise Closed(f"[options] exclude-newer = {cutoff!r} is not a timestamp")
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return "ok" if (now - t).total_seconds() / 86400 >= MIN_AGE_DAYS else "too-new"
+
+
+def uv_floor():
+    """--uv-floor: the offline half of check (b), for every uv.lock this change touches (homelab#3425).
+
+    The full lint needs a base ref, api.osv.dev and the registries, so it runs in `ci` only; a worker's
+    pre-flight (`devbox run pr-gate`) runs this instead, through its `scripts/diff-ci.sh` MAP row. A
+    lock whose working-tree content is byte-identical to the default branch's is not this change's and
+    is not judged (the homelab#2412 filter, read from the local ref — no fetch): a ride is never red on
+    a project outside its `Touches`. With no local default-branch ref every lock is judged. It reads
+    files, the local git objects and the clock, nothing else."""
+    r = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+                       capture_output=True, text=True, check=True)
+    locks = sorted(p for p in r.stdout.splitlines() if os.path.basename(p) == "uv.lock" and os.path.exists(p))
+    master = next((ref for ref in ("origin/master", "master") if subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], capture_output=True).returncode == 0), None)
+    now = datetime.now(timezone.utc)
+    newest = (now - timedelta(days=MIN_AGE_DAYS)).strftime("%Y-%m-%dT00:00:00Z")
+    judged = failures = 0
+    for path in locks:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        if master and text == git_show(master, f"./{path}"):
+            continue
+        judged += 1
+        verdict = uv_floor_verdict(text, now)
+        if verdict == "ok":
+            continue
+        failures += 1
+        d = os.path.dirname(path) or "."
+        what = "has no `[options] exclude-newer`" if verdict == "missing" else f"has an `exclude-newer` under {MIN_AGE_DAYS} d old"
+        print(f"FAIL {path} {what} — in {d}/pyproject.toml set, under `[tool.uv]`, "
+              f"`exclude-newer = \"{newest}\"` (or an earlier date), then run `uv lock` in {d}/")
+    print(f"lock-intake-lint --uv-floor: {len(locks)} uv.lock file(s), {judged} changed, {failures} failure(s)")
+    return 1 if failures else 0
+
+
+def remedy_lines(n_failures, uv_too_new):
+    """The lines under a red: what the PR does next (homelab#3425).
+
+    `uv_too_new` = the too-new versions that only a uv.lock brings in. Those do not wait (operator
+    ruling on PR #3400): a resolver cutoff fixes them in the PR. Every other failure keeps ADR-143's
+    wait line, so a red that is only uv too-new versions never says the PR waits."""
+    lines = []
+    if n_failures > len(uv_too_new):
+        # ADR-143: the remedy is upstream, never a local pin/override — the PR stays red until a
+        # release (or the cooldown) clears it and the proposer re-proposes; red is the correct state.
+        lines.append("lock-intake-lint: do NOT pin or override to go green (ADR-143) — this PR waits for an upstream "
+                     "release that clears it (vulnerable), or for the floor to pass (too new)")
+    if uv_too_new:
+        lines.append(f"lock-intake-lint: too new in a uv.lock ({', '.join(uv_too_new)}) does NOT wait and is NOT "
+                     "pinned — fix it in this PR: run `python3 scripts/lock-intake-lint.py --uv-floor` and make the "
+                     "edit it prints (`[tool.uv] exclude-newer` in the project's pyproject.toml, then `uv lock`)")
+    return lines
+
+
 def run(base):
     locks = changed_lockfiles(base)
     if not locks:
@@ -276,21 +351,21 @@ def run(base):
         kind = "MALICIOUS" if any(i.startswith("MAL-") for i in ids) else "vulnerable"
         failures.append(f"{kind} {n}@{v} — " + ", ".join(f"https://osv.dev/vulnerability/{i}" for i in ids))
     now = datetime.now(timezone.utc)
+    uv_too_new = []
     for n, v in pairs:
         age = publish_age_days(n, v, now, ecosystems[(n, v)])
         if age < MIN_AGE_DAYS:
             failures.append(f"too new {n}@{v} — published {age:.1f} d ago, the floor is {MIN_AGE_DAYS} d")
+            if all(os.path.basename(w) == "uv.lock" for w in intake_all[(n, v)]["where"]):
+                uv_too_new.append(f"{n}@{v}")
     for (n, v), m in sorted(intake_all.items()):
         if m.get("scripts"):
             failures.append(f"install-time code {n}@{v} ({', '.join(m['where'])})")
     for f in failures:
         print(f"FAIL {f}")
     print(f"lock-intake-lint: {len(failures)} failure(s)")
-    if failures:
-        # ADR-143: the remedy is upstream, never a local pin/override — the PR stays red until a
-        # release (or the cooldown) clears it and the proposer re-proposes; red is the correct state.
-        print("lock-intake-lint: do NOT pin or override to go green (ADR-143) — this PR waits for an upstream "
-              "release that clears it (vulnerable), or for the floor to pass (too new)")
+    for line in remedy_lines(len(failures), uv_too_new):
+        print(line)
     return 1 if failures else 0
 
 
@@ -352,6 +427,24 @@ source = { git = "https://github.com/x/y?rev=abc#abc" }
         check("unknown deno.lock version fails closed", "passed", "Closed")
     except Closed:
         check("unknown deno.lock version fails closed", "Closed", "Closed")
+    floor_now = datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc)
+    check("uv floor: a cutoff 7 d old passes",
+          uv_floor_verdict('version = 1\n[options]\nexclude-newer = "2026-11-08T00:00:00Z"\n', floor_now), "ok")
+    check("uv floor: a cutoff 2 d old is too new",
+          uv_floor_verdict('version = 1\n[options]\nexclude-newer = "2026-11-13T00:00:00Z"\n', floor_now), "too-new")
+    check("uv floor: no cutoff is missing", uv_floor_verdict("version = 1\n", floor_now), "missing")
+    try:
+        uv_floor_verdict('version = 1\n[options]\nexclude-newer = "7 days"\n', floor_now)
+        check("uv floor: a cutoff that is not a timestamp fails closed", "passed", "Closed")
+    except Closed:
+        check("uv floor: a cutoff that is not a timestamp fails closed", "Closed", "Closed")
+    check("remedy: only uv too-new versions — no line says the PR waits",
+          [("waits" in x, "does NOT wait" in x) for x in remedy_lines(1, ["ruff@0.17.5"])], [(False, True)])
+    check("remedy: a too-new version from another lockfile keeps the wait line alone",
+          [("waits" in x, "does NOT wait" in x) for x in remedy_lines(1, [])], [(True, False)])
+    check("remedy: both kinds — the wait line, then the uv line naming its versions",
+          [("waits" in x, "(ruff@0.17.5)" in x) for x in remedy_lines(2, ["ruff@0.17.5"])], [(True, False), (False, True)])
+    check("remedy: no failure — no line", remedy_lines(0, []), [])
     ok &= self_test_master_filter()
     return 0 if ok else 1
 
@@ -432,6 +525,8 @@ def main(argv):
         return self_test()
     base = argv[0] if argv else "origin/master"
     try:
+        if argv[:1] == ["--uv-floor"]:
+            return uv_floor()
         return run(base)
     except Closed as e:
         print(f"lock-intake-lint: CANNOT JUDGE — {e}", file=sys.stderr)

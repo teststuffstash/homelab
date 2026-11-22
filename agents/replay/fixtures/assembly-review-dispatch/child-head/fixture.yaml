@@ -1,0 +1,12 @@
+# assembly-review-dispatch-child-head — a child PR (fix/* head INTO goal/**) is a normal review:
+# default rubric, no extra arguments at all.
+name: assembly-review-dispatch-child-head
+mode: actions
+source: agents/review-reflex.sh
+env:
+  - phead=fix/issue-42
+  - REVIEW_GOAL_MODEL=opus
+parts:
+  - file:bridge.sh
+  - block:assembly-review-dispatch
+  - file:post.sh

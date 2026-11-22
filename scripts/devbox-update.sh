@@ -21,6 +21,12 @@
 # written on the body as a line-anchored `lock-lane:` line (mechanical | arm | human — <why>).
 # Non-major bumps keep the `automerge` mechanical path.
 #
+# THE CACHE HOLD (homelab#3233): `devbox update` can resolve a package to a build the binary cache does
+# not carry, and devbox then compiles it on every install. Right after the update, every package whose
+# new store path no substituter has is put back to its previous lock entry (`cache_hold` →
+# scripts/lock-cache-check.sh --hold) and named in its own body section; the rest of the update lands.
+# The same script is ci's first step, so a lock from any other source reds with the package named.
+#
 # A SECOND body section (gap register G17, ADR-141 as amended 2026-10-06) names what the major gate is
 # blind to: same-major DOWNGRADES (numeric-tuple compare — openssl 3.6.0 → 3.5.8 when nixpkgs re-pointed
 # the default alias to the 3.5 LTS, #2260) and compatibility-LINE moves of the LINE_PACKAGES set
@@ -181,6 +187,20 @@ access-tokens = github.com=${GH_TOKEN:-}" nix shell "$ref" -c bash agents/replay
   return 0
 }
 
+# cache_hold <old-lock-file> <lock-file> → scripts/lock-cache-check.sh --hold: a package whose NEW store
+# path no substituter carries goes back to its previous lock entry, so the update never merges a
+# from-source build into every consumer's install (homelab#3233). Prints the `held …`/`unheld …` lines.
+# A cache that cannot be read fails the run (rc 2) — an unjudged lock is never proposed.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cache_hold() { bash "$SELF_DIR/lock-cache-check.sh" --hold "$1" "$2"; }
+# cache_hold_section <held/unheld lines> → the body section (markdown); empty input → nothing.
+cache_hold_section() {
+  [ -n "$1" ] || return 0
+  printf '### Held at the previous lock entry — the new build is not in the binary cache\n\n'
+  printf 'devbox installs a locked store path by download and BUILDS it from source when no substituter has it; these packages keep their previous entry and retry next week (`scripts/lock-cache-check.sh`).\n\n'
+  awk '{ printf "- %s`%s` %s — `%s`\n", ($1 == "unheld" ? "**NOT held (no previous entry to fall back to — ci names it)** " : ""), $2, $3, $4 }' <<<"$1"
+}
+
 [ "${DEVBOX_UPDATE_LIB:-0}" = 1 ] && return 0
 
 REPO="${REPO:?set REPO=owner/name}"
@@ -194,6 +214,12 @@ cd "$WORK/r"
 
 echo "[$REPO] devbox update ($DIR)…"
 ( cd "$DIR" && devbox update )
+
+# The cache hold (cache_hold above) — before anything reads the lock diff, so the move lists, the lane
+# and the body describe the lock that is actually proposed.
+git show "HEAD:$( [ "$DIR" = "." ] && echo devbox.lock || echo "$DIR/devbox.lock" )" > "$WORK/old.lock" 2>/dev/null || echo '{}' > "$WORK/old.lock"
+HELD="$(cache_hold "$WORK/old.lock" "$DIR/devbox.lock")" || { echo "::error::[$REPO] could not read the binary cache — refusing to propose an unjudged lock"; exit 1; }
+[ -z "$HELD" ] || { echo "::warning::[$REPO] not in the binary cache — kept at the previous lock entry:"; printf '%s\n' "$HELD" | sed 's/^/  /'; }
 
 # The version-set stamp (header): homelab leg only — the clone carries version-sets/devbox.json.
 VS_DIR=""
@@ -270,6 +296,8 @@ BASE_BODY="Weekly synchronized \`devbox update\` (FU-022): keeps \`@latest\` pin
 # The second section rides BOTH bodies — it informs the lens, never the lane (G17).
 G17_SECTION="$(lock_moves_section "$DOWNGRADES" "$LINES")"
 [ -z "$FLAKE_SECTION" ] || G17_SECTION="$(printf '%s\n\n%s' "$G17_SECTION" "$FLAKE_SECTION")"
+HELD_SECTION="$(cache_hold_section "$HELD")"
+[ -z "$HELD_SECTION" ] || G17_SECTION="$(printf '%s\n\n%s' "$G17_SECTION" "$HELD_SECTION")"
 LANE="$(lock_lane "$MOVES")"   # arm | human <pkg: old → new …>
 if [ -n "$MAJORS" ] && [ "$LANE" != arm ]; then
   TITLE="chore: devbox update — MAJOR bump, human review (align toolchain lock)"

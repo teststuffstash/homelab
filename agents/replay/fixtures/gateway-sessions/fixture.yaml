@@ -24,6 +24,11 @@
 # AGENT_GATEWAY_CALLER_SA=<ns>/<sa>. Neither, an unmintable SA, or a malformed one refuses before
 # any request (exit 2).
 #
+# FU-270 transition fallback: AGENT_GATEWAY_FALLBACK_EXIT=<n> (set by a wrapper that keeps an
+# old-proxy path — retro-session.sh, research-fanout.sh) turns the helper's rc 2 (refused before any
+# request) and rc 3 (fail closed) into ONE loud line + exit <n>; a defer stays exit 1 and the
+# launcher's own --model refusal stays exit 2 (rows fallback-*).
+#
 # GW-CATALOG-OR's entry canary (homelab#2742): AGENT_GATEWAY_ROLE=<role> sets the body's role (default
 # worker) and AGENT_GATEWAY_CANARY=<model>@<provider> adds `canary: {model, provider}` — a prober
 # session the gateway pins to that OpenRouter cell (row dispatch-canary; the jail launcher is

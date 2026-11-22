@@ -29,6 +29,7 @@ from .capacity import Capacity
 from .config import (
     HARNESS_DIALECT,
     HARNESSES,
+    PREFERENCES,
     RAIL_DIALECTS,
     RAILS,
     TIERS,
@@ -40,6 +41,7 @@ from .config import (
 )
 from .control import ControlPlaneAuth, authorize_outcome, visible_to
 from .credentials import CredentialResolver, CredentialTransient, CredentialUnresolved
+from .headroom import Headroom, Verdict
 from .liveness import PodSource
 from .metrics import Metrics
 from .outcomes import OutcomeRefused, Outcomes, parse_outcome, public_outcome
@@ -129,7 +131,8 @@ class Admission:
     caller: str | None = None  # GW-SESSIONS-AUTH: the reviewed caller identity, stored on the row
     caller_pod: str | None = None  # GW-SESSIONS-LIVENESS: the caller's pod (a pod-bound caller token)
     caller_pod_uid: str | None = None
-    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's automatic re-admission counter at this round
+    attempt: int = 1  # GW-SESSIONS-RETRY: the consumer's automatic re-admission counter at this round
+    prefer: str = "cheapest"  # GW-SESSIONS-ADMIT §The preferred end of the list: `strongest` walks each list from its end
 
 
 def parse_admission(policy: Policy, body: object) -> Admission:
@@ -156,6 +159,9 @@ def parse_admission(policy: Policy, body: object) -> Admission:
     tier = body.get("tier", role.tier)
     if tier not in TIERS:
         raise BadRequest("malformed-body", f"tier {tier!r} is not one of {', '.join(TIERS)}")
+    prefer = body.get("prefer", PREFERENCES[0])
+    if not isinstance(prefer, str) or prefer not in PREFERENCES:
+        raise BadRequest("malformed-body", f"prefer {prefer!r} is not one of {', '.join(PREFERENCES)}")
     harness = body.get("harness", role.harness)
     harness_explicit = "harness" in body  # absent: the harness follows the cell the walk picks (§The harness follows the cell)
     if harness not in HARNESSES:
@@ -183,11 +189,13 @@ def parse_admission(policy: Policy, body: object) -> Admission:
             raise BadRequest("harness-rail-mismatch", f"canary: harness {harness} does not speak a dialect the openrouter rail serves")
         if rail not in (None, "openrouter"):
             raise BadRequest("malformed-body", "canary: the rail is openrouter")
+        if "prefer" in body:  # ⚖ a canary names its own cell: there is no list to walk from either end
+            raise BadRequest("malformed-body", "canary: a canary names its own cell — prefer does not apply")
         rail = "openrouter"
         canary = (c["model"], c["provider"])
     stack = policy.stacks.get(body["stack"]) or StackPolicy(body["stack"], "", None, None)
     return Admission(stack, role, body["task"], rnd, tier, harness, rail, bind, canary=canary, attempt=attempt,
-                     harness_explicit=harness_explicit)
+                     harness_explicit=harness_explicit, prefer=prefer)
 
 
 def assemble_env(self_url: str, harness: str, token: str, wire: str) -> dict[str, str]:
@@ -259,6 +267,7 @@ class SessionService:
         self.pods: PodSource | None = None  # GW-SESSIONS-LIVENESS: app.py hands the kube one in
         self.auth = ControlPlaneAuth(policy, self, metrics)  # reviews through self.reviewer (one TokenReview path)
         self.codex = None  # a codex.CodexRail when the policy declares the rail (GW-CODEX-HEADROOM)
+        self.go_headroom: Headroom | None = None  # the Go rail's account headroom when its policy declares one (app.py hands it in)
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
         self.providers: EndpointSnapshot | None = None  # GW-RAIL-OPENROUTER: the endpoint snapshot (app.py hands it in)
         self.orcatalog = None  # an orcatalog.OpenRouterCatalog: the cells' entry states + the canary gate (app.py hands it in)
@@ -383,10 +392,18 @@ class SessionService:
         # GW-MODEL-TIERS §The rail choice: when the tier names ONE model on two allowed rails, the rail
         # whose twin cell costs less per clean ride walks first, with that twin at its list's head; the
         # role's order stands for everything else (the other rail is still walked when the first yields nothing).
-        choice = self.rail_choice(adm, [r for r in candidates
-                                        if any(self._for_cell(adm, r, m).harness not in struck_harnesses
-                                               for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
-                                  struck_models, struck_cells, now)
+        # ⚖ GW-SESSIONS-ADMIT §The preferred end of the list: `prefer: strongest` walks every rail's tier
+        # list from its END (the lists are ordered cheapest first) and makes NO rail choice — the choice
+        # is the cheaper twin first, which is the other preference; the role's rail order stands.
+        strongest = adm.prefer == "strongest"
+        if strongest:
+            log.info("session: prefer strongest for %s/%s — each rail's tier %s list is walked from its strongest end, no rail choice",
+                     adm.stack.name, adm.task, adm.tier)
+        choice = None if strongest else self.rail_choice(
+            adm, [r for r in candidates
+                  if any(self._for_cell(adm, r, m).harness not in struck_harnesses
+                         for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
+            struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
         if choice is not None:
@@ -402,17 +419,28 @@ class SessionService:
             if not models:
                 log.info("session: rail %s has no model for tier %s — skipped", rail, adm.tier)
                 continue
+            if strongest:
+                models = tuple(reversed(models))
             if rail in promoted:
                 models = [promoted[rail]] + [m for m in models if m != promoted[rail]]
             if self.store.active_count(rail, now) >= rp.max_sessions:
                 capacity_blocked.append((rail, "rail-capacity", now + self.policy.defer_retry_s, f"{rail} at max_sessions"))
                 continue
+            if rail == "opencode" and self.go_headroom is not None:
+                # GW-SESSIONS-CAPACITY §Go account headroom: ONE account allowance under every Go model, so
+                # its verdict holds the whole rail before any model is walked (the codex twin is per candidate below).
+                verdict = self.go_headroom.verdict()
+                if verdict != Verdict.ADMIT:
+                    retry_s = self.go_headroom.retry_after(self.policy.defer_retry_s)
+                    log.info("session: rail %s account headroom %s — skipped for %ds", rail, verdict.value, retry_s)
+                    capacity_blocked.append((rail, verdict.value, now + retry_s, f"opencode account headroom {verdict.value}"))
+                    continue
             block = self.capacity.blocked(rail, now)
             if block is not None:
                 log.info("session: rail %s capacity-blocked (%s) until %s — skipped", rail, block.detail, iso(block.free_at))
                 capacity_blocked.append((rail, block.reason, block.free_at, block.detail))
                 continue
-            # The tier's ordered list: the first model this task has not struck, whose cell is not
+            # The tier's ordered list (reversed under `prefer: strongest`): the first model this task has not struck, whose cell is not
             # cooled, that an explicit harness (when the body named one) can speak, and that the
             # model's own capacity admits (the Go rail: listed in the Go catalog, its own windows
             # under threshold — GW-CATALOG-GO; one model's block never holds another).
@@ -693,7 +721,8 @@ class SessionService:
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
     def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]], set[str]]:
-        """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
+        """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id and its twins
+        (`tiers.same_model`, GW-SESSIONS-RETRY §A strike crosses the twins) on every rail;
         cell-scoped → that (rail, model, provider) — provider '' is the model's own cell, a slug one
         provider's cell on it (GW-RAIL-OPENROUTER); harness-scoped → the harness on every cell."""
         models: set[str] = set()
@@ -702,6 +731,10 @@ class SessionService:
         for st in self.store.strikes_for(adm.stack.name, adm.task):
             if st["scope"] == "model":
                 models.add(st["model"])
+                # The twin rule is id arithmetic: every policy id that names the same model is struck too.
+                for rcfg in self.policy.rails.values():
+                    for tier_models in rcfg.models.values():
+                        models.update(m for m in tier_models if same_model(st["model"], m))
             elif st["scope"] == "harness":
                 if st["harness"]:
                     harnesses.add(st["harness"])

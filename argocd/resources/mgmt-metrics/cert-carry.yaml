@@ -1,0 +1,40 @@
+# The router certificate carry's belt (FU-297, docs/management-box.md §Router certificate carry). The
+# management box runs mgmt/scripts/mgmt-cert-carry.sh nightly (mgmt-cert-carry.timer): the CARP
+# MASTER's renewed Let's Encrypt certificates onto the BACKUP, which cannot order its own — and writes
+# mgmt_cert_carry_* to its textfile (job mgmt-node).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-cert-carry
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-cert-carry
+      rules:
+        # ONE belt for every way the carry stops working: a failed run, a run with warnings, a run
+        # held by declared windows, a timer that stopped firing — each leaves the last-SUCCESS stamp
+        # behind, so 50 h (two missed nights + slack) without one fires. The second arm: no success
+        # EVER, 50 h after the box's first run (the first-run stamp is the clock). Blind spot: a box
+        # that never ran it at all publishes neither series (no arm can tell "not deployed yet" from
+        # "never ran" without a false page between merge and the first night). Not urgent by
+        # construction: the MASTER renews at 30 days left, so the BACKUP's copy has weeks.
+        - alert: MgmtCertCarryStale
+          expr: |
+            (time() - mgmt_cert_carry_last_success_timestamp_seconds) > 50 * 3600
+              or
+            ((time() - mgmt_cert_carry_first_run_timestamp_seconds) > 50 * 3600
+              unless on (instance) mgmt_cert_carry_last_success_timestamp_seconds)
+          for: 30m
+          # triage none: the reason is in the box journal; the outcome gauge alone carries no cause
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "The router cert carry has not succeeded in 50 hours ({{ $labels.instance }})"
+            description: >-
+              The CARP BACKUP's certificates follow the MASTER's renewals only through this nightly
+              carry; a failover onto a BACKUP whose copies aged out serves expired certs. The last
+              run's outcome is mgmt_cert_carry_outcome{outcome} (failed / warn / held by a declared
+              window). On the box: `journalctl -u mgmt-cert-carry -n 100`, `systemctl list-timers
+              mgmt-cert-carry.timer`. A 403 on trust/cert/search = `automation` lacks
+              page-system-certmanager (scripts/opnsense-api-users.sh). Rerun with `systemctl start
+              mgmt-cert-carry` once fixed. Recipe: docs/management-box.md §Router certificate carry.

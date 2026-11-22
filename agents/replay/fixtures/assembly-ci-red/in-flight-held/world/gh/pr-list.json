@@ -1,0 +1,58 @@
+[
+  {
+    "number": 3301,
+    "labels": [],
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "autoMergeRequest": {
+      "enabledAt": "2026-11-12T08:59:00Z"
+    },
+    "headRefOid": "a55e3b1ea55e3b1ea55e3b1ea55e3b1ea55e3b1e",
+    "headRefName": "goal/3118-gateway-wire",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "name": "ci",
+        "workflowName": "CI",
+        "status": "COMPLETED",
+        "conclusion": "FAILURE",
+        "startedAt": "2026-11-12T09:00:10Z",
+        "detailsUrl": "https://github.com/teststuffstash/homelab/actions/runs/43300000001/job/131460000001"
+      },
+      {
+        "__typename": "CheckRun",
+        "name": "approve / approve",
+        "workflowName": "renovate-approve",
+        "status": "COMPLETED",
+        "conclusion": "SKIPPED",
+        "startedAt": "2026-11-12T09:00:09Z",
+        "detailsUrl": "https://github.com/teststuffstash/homelab/actions/runs/43300000001/job/131460000001"
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "iac-sentinel",
+        "state": "SUCCESS",
+        "startedAt": "2026-11-12T09:04:00Z",
+        "targetUrl": ""
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "management-sentinel",
+        "state": "SUCCESS",
+        "startedAt": "2026-11-12T09:02:00Z",
+        "targetUrl": ""
+      },
+      {
+        "__typename": "CheckRun",
+        "name": "gateway-e2e",
+        "workflowName": "CI",
+        "status": "IN_PROGRESS",
+        "conclusion": "",
+        "startedAt": "2026-11-12T11:57:00Z",
+        "detailsUrl": "https://github.com/teststuffstash/homelab/actions/runs/43300000001/job/131460000001"
+      }
+    ],
+    "body": "Assembles goal #3118 (gateway wire declarations) onto master.\n\nAssembly-for: #3118\n"
+  }
+]

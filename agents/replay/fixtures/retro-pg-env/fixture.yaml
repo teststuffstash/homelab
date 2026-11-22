@@ -1,0 +1,18 @@
+# retro-pg-env — the PGUSER/PGPASSWORD fragment agent-session.sh renders for a retro SERIES cell
+# (homelab#3140); the table twin of retro-gh-token-env (same block shape, same seam).
+#
+# THE CONTRACT: the launcher's OWN environment carries RETRO_PG_SECRET — a basic-auth Secret NAME
+# in the ride namespace (retro-argo.yaml's `cellPgSecret`, exported by the retro-cell step) — and
+# the >>>REPLAY:retro-pg-env>>> block renders two secretKeyRef env entries (keys `username` and
+# `password`, both optional: true) that the manifest heredoc splices in verbatim. No name = an
+# empty fragment = nothing rendered. The VALUE never appears anywhere: this is the PR#619 r2 rule
+# (no cross-namespace literal) applied to a credential the ride reads a database with.
+#
+# Rows: `set` (a name → the two entries) · `unset` (no name → empty fragment).
+name: retro-pg-env
+mode: table
+source: agents/agent-session.sh
+parts:
+  - block:retro-pg-env
+  - file:post.sh
+rows: rows.psv

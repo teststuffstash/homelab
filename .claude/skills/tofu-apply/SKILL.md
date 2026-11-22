@@ -58,8 +58,11 @@ If a plan errors `No value for required variable <x>`, a new required var was ad
 
 ## Gotchas
 
-- ⚠️ **Never `talosctl upgrade` a Proxmox nocloud VM** — bake extensions into the image
-  (`image.tf`) and recreate (`-replace`). Metal nodes upgrade fine.
+- ⚠️ **Never `talosctl upgrade` a Proxmox nocloud VM with the generic installer** (talosctl's
+  default) — it rejoins as a DHCP ghost. With its exact Image Factory nocloud installer a VM
+  upgrades in place like a metal node (ADR-014 as amended): use `scripts/node-maintenance.sh
+  upgrade <node>` / `devbox run cp-upgrade -- <cp>`, never a hand-typed `--image`
+  ([`docs/provisioning.md`](../../../docs/provisioning.md) §Upgrading a node's Talos).
 - ⚠️ **A `machines.yaml` `longhorn_disks` change needs a node REBOOT** (Talos provisions
   `machine.disks` at boot) — so does any other v1alpha1 change Talos cannot take live. Both
   `talos_machine_configuration_apply` resources run `apply_mode = "no_reboot"` (`tofu/talos.tf`,

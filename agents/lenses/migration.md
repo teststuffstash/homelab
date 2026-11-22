@@ -31,8 +31,9 @@ handoff gate matches them literally):
    name, never a guess): the ARC runner image and its Actions Runner version
    (`docker/arc-runner/Dockerfile`, the `FROM ghcr.io/actions/actions-runner:<ver>` line;
    `argocd/platform/arc-runners.yaml`), the Talos / Kubernetes / Cilium versions
-   (`machines/README.md`), the org Renovate policy (`.github/renovate-global.json` — there is NO
-   per-repo `renovate.json` by design; never report its absence). Per class:
+   (`machines/README.md`), the org Renovate policy (`.github/renovate-global.json` — homelab has NO
+   per-repo `renovate.json` by design, and a stack repo's holds extraction overrides only, never a
+   lane; never report its absence). Per class:
    - **Actions:** notes + known issues + runner compatibility (the Node runtime the action needs
      vs the Runner version above) + CI on the bumped head (a `pull_request` workflow runs the
      PR's own file, so a green `ci` at head IS the runner-compat proof for the workflows it ran;

@@ -74,8 +74,9 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 
 | state at the content commit | the tick does |
 |---|---|
-| a live own verdict (APPROVED / CHANGES_REQUESTED, never DISMISSED) | nothing — done |
-| more than one live own verdict | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
+| a live own verdict (APPROVED / CHANGES_REQUESTED, never DISMISSED) | nothing — done, UNLESS it is CHANGES_REQUESTED and the PR body was edited after it: then the PR is a candidate again (the code reviewer's `reviewable_again` shape — a newer content commit OR a newer body edit answers a CHANGES_REQUESTED; an APPROVED never re-opens on an edit). The body's `lastEditedAt` comes through `agents/pr-last-edited.sh`, asked only for PRs under an own live CHANGES_REQUESTED (≤ 1 GraphQL query per repo per tick; a failed read degrades to the commit-time rule) |
+| more than one live own verdict, unless each earlier one was a CHANGES_REQUESTED the body was edited after | ONE `AGENT_ERROR:` comment with a `head=` marker (idempotent), no label — this identity has no `issues:write` |
+| an own `PARTIAL READ:` hold comment keyed to the content commit | nothing — held until a push moves the content commit (§The partial read) |
 | no live `homelab-reviewer` APPROVED | nothing — the code gate goes first ("one old reviewer and THEN the new"; a Renovate PR's approval comes from the renovate-approve reflex, so this holds for it too) |
 | CI not green, or label `agent/error` | nothing |
 | no specs path and no rule-test path among the PR's files (REST, paginated; `review_path_re`: `(^\|/)specs/` or the repo's tests root, `gateway/tests/` here) | **mechanical** `--approve` with a fixed body, no LLM — the price of GitHub's repo-wide count; many per tick |
@@ -86,12 +87,20 @@ its content commit (the newest NON-MERGE commit — `review-reflex.sh`'s grammar
 `allure-behavior-snippets` wheel (`SNIPPETS_VERSION`, verified against `SNIPPETS_SHA256`, extracted
 and run with the image's stdlib `python3`); the round context the pack cannot fetch itself (PR body,
 `issue-intent.md` = each closing issue's `## Acceptance` section, `prior-review.md` = the newest own
-LLM review in any state, since a push dismisses it); the head's evidence pack (raw Allure results
+LLM review in any state, since a push dismisses it — on a multi-root PR, only the section of the
+root this pass reviews, since the pass cannot see the other roots' packs); the head's evidence pack (raw Allure results
 + `evidence.json` + `digest.md`) and the newest first-parent base commit's pack as baseline (its
 `evidence.json` + commit) — both read anonymously from the `gateway-specs` bucket's web endpoint,
 `evidence/<pr-N|base>/<sha>.tar.gz`, written by ci (`gateway/scripts/evidence-publish.sh`; until
 2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
-storage — that artifact stays the read fallback until the old runs expire). `evidence-pack` turns these into the model's inputs dir: touched rules,
+storage — that artifact stays the read fallback until the old runs expire). **The diff base** is what the PR itself changes: the pack diffs three-dot from
+`merge-base(base, head)`, and when a PR on a non-default base (a `goal/**` branch) has merged the
+default branch in, every path the base side left alone since its merge-base with the newest
+default-branch commit the head holds, and whose content at head is byte-identical to that commit,
+is taken from that commit into the diff base (a base-side edit the merge discarded stays in the diff) (`pack_diff_base`: a synthetic
+commit grafted under the head in the throwaway clone; the head keeps its sha). Upstream content
+reviewed where it merged is not this PR's spec change. Path-level: a path both sides changed keeps
+the upstream's hunks. `evidence-pack` turns these into the model's inputs dir: touched rules,
 their sections + the spec diff, the specs tree, `digest.md` (`Stamp:` / `Baseline:` + mechanical
 findings), per-rule tables, `evidence/<RULE>.json`, attachments, and `process/` (RULES, CONVENTIONS,
 briefs). A failed clone, wheel or pack is no review (fail CLOSED); ABSENT evidence is not a refusal:
@@ -104,7 +113,7 @@ default`, so in `-p` mode any read outside the inputs (the token file under `/va
 homelab's wiring lens (`agents/lenses/specs.md`, fetched from `LENS_BASE`, default the public
 master raw URL; a fetch failure is no review) followed by the pinned finding contract, rows brief
 and evidence brief from the pack's `process/briefs/`. The verdict is parsed from the model's `Verdict:` line and submitted
-by the SCRIPT, **pinned to the reviewed head**: the head is re-read immediately before the
+by the SCRIPT — a third line, `Verdict: PARTIAL READ — <files>`, is no verdict at all (§The partial read) — **pinned to the reviewed head**: the head is re-read immediately before the
 submit (moved = the verdict is dropped and the next tick reads the new head — a push during the
 minutes the model runs must never land a verdict on an unreviewed head), and the review is
 posted through the REST reviews endpoint with `commit_id` = the reviewed head (`APPROVE` →
@@ -129,6 +138,19 @@ harness death with no pass 2. The first trial, oracle-fleet#946 on the riigiteat
 41 structural findings that survived the reveal; nine ordinary review rounds had passed that
 class. The masked surface comes from allure-behavior-snippets#39.
 
+**The partial read.** A verdict is a claim that the touched contract was read in full (the lens
+§Verdict mechanics): a model that cannot finish every named file within its budget writes
+`Verdict: PARTIAL READ — <what it did not finish>` and no finding judged from a digest line in
+place of the section. The tick posts NO review on it: one `PARTIAL READ:` comment keyed to the
+content commit holds the PR (`classify` → `partial-held`) until a push moves it, and the tick
+counts `kind=partial` (the `SpecsReviewPartialRead` belt fires on any occurrence). It is not an
+error (the model did its job, no gateway strike) and not a round (a worker cannot fix the
+reviewer's read): the lever is the pack's size — a smaller PR, a narrower touched-rule scope (a
+page-preamble rewrite marks every rule on the page), or the read-map unit — the stack's or the
+operator's call. Pass 1 of the staged read honours `pass1-prior.tsv` when the pack carries it
+(snippets ≥ 0.6.8: the prior rounds' pass-2 rulings as keys, so a survivor is re-listed, never
+re-argued).
+
 **Evidence at head.** Only a run stamped `git.commit=<head>` in `environment.properties` counts
 (CONVENTIONS § The head/artifact stamp); the pack's `Stamp:` line says whether it does. The gateway
 suite runs against the PR head's source in-process, so its stamp carries no `image.digest`: it is
@@ -141,9 +163,10 @@ must exist, else exit 10 (a silent green would mask a dead review plane — the
 **Belts.** Pushgateway `job/specs-review`: `specs_review_last_tick_timestamp_seconds` (every
 tick, shadow and zero-PR ticks included — the `SpecsReviewTickStale` alert in
 `argocd/resources/pushgateway/prometheusrule.yaml` reads it, 30 m), `specs_review_shadow`,
-`specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error}` (per-tick
+`specs_review_tick_verdicts{kind=mechanical|approve|request_changes|defer|error|partial}` (per-tick
 counts — a push replaces the group; `SpecsReviewNoProgress` fires when every tick for an hour
-reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see). The model
+reported an `error` or a `defer`, the stuck-but-ticking case the heartbeat cannot see;
+`SpecsReviewPartialRead` on any `partial`). The model
 run is bounded by `timeout ${LLM_TIMEOUT_S}` (600 s; a staged read's two passes share it) inside the pod's 900 s deadline, because a
 deadline kill skips the EXIT trap and leaves the gateway session holding its slot until the 4 h
 TTL. OTEL with `role=specs-reviewer` so the subscription spend
@@ -301,7 +324,10 @@ read-only at `/mnt/snippets` through the ADR-135 image-volume path whenever the 
 `Touches:` reaches `root/` or `tests/`, and its env card says: read `briefs/author.md` first, list
 every specs change under `Spec changes:` with ⚖ on judgment rows, the reviewer judges against this
 same text. This reviewer's `pack_roots` reads the same claim field, so the ride, the trigger and the
-pack name one set of roots. The author brief itself ships with the snippets release (since v0.6.6).
+pack name one set of roots. A repo with several roots lists the rest under `repos[].extraSpecs`
+(one pack and one pass per touched root, one verdict; a body-edit re-review discards the root reviews held from before the edit; the worker mount follows the root's README pin —
+[agentstack.md §The spec process](agentstack.md#the-spec-process-rides-with-the-worker-reposspecs-adr-156)).
+The author brief itself ships with the snippets release (since v0.6.6).
 
 **Order** (status kept here):
 1. This record — DONE 2026-10-16 (#2621).
@@ -373,3 +399,8 @@ CODEOWNERS; §Reach below).
    tool flag both repos get from the pin (`gateway/specs/README.md` §Rules) or a repo gate beside
    `spec_gate.py`'s join ratchet is the open fork; homelab#2860 (GW-REDACT rewritten to v0.6.1) is the
    rule where they would first apply. File them in the snippets repo when the pin moves.
+   **RESOLVED for the half-join guard (2026-11-06): a repo gate, the oracle-fleet shape** — oracle
+   answered it first (`scripts/spec-join-ratchet.py`, `row-unproven` as the fifth join code, run
+   through the pinned wheel's own join), and the gateway adopted the same script
+   (`gateway/scripts/spec-join-ratchet.py` + `spec-join-baseline.json`; the hand-rolled join in
+   `spec_gate.py` retired). Parametrize-from-spec stays open, a snippets-repo item.

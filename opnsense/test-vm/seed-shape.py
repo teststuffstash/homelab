@@ -28,9 +28,13 @@ rehearsal has the why.
                         the web GUI's ssl-certref
              acme       OPNsense/AcmeClient whole: the REGISTERED account (so no re-register —
                         FU-298's 404 never runs) + the certificate rows bound to those refids
-             api-users  the non-root users of group_vars opnsense_api_users (backup-puller,
-                        automation) with their API keys (hashed), and root's prod API key lines
-                        appended to the seed's own — so every consumer's key authenticates
+             api-users  the non-root users of group_vars opnsense_api_users (read from
+                        ansible/group_vars/opnsense.yml unless --api-users names them) with their
+                        API keys (hashed), and root's prod API key lines appended to the seed's
+                        own — so every consumer's key authenticates. A listed user prod does not
+                        have yet (added to the list, users play not run) is NOT carried and is
+                        named on stderr: no consumer holds a key for it, and the users play's
+                        next run installs or mints its one pair on every node
              wireguard  OPNsense/wireguard whole: the server keypair (so the road-warrior
                         clients need no re-issue — operator ruling 2026-09-30) + its peers
 The input holds every router secret: never print a value. Output = the seed, which the bootstrap
@@ -51,8 +55,29 @@ ap.add_argument("--lan-ip", default="")
 ap.add_argument("--lan-gw", default="")
 ap.add_argument("--carry-from")
 ap.add_argument("--carry", default="")
-ap.add_argument("--api-users", default="backup-puller,automation")
+ap.add_argument("--api-users", default="", help="comma list; default = group_vars opnsense_api_users")
 a = ap.parse_args()
+
+GROUP_VARS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ansible", "group_vars", "opnsense.yml")
+
+
+def group_vars_api_users(path=GROUP_VARS):
+    """The names under `opnsense_api_users:` — the list's one home. A line parse (the jail python has
+    no yaml module): the block ends at the next column-0 line; every `  - name: X` in it is a user."""
+    names, inside = [], False
+    with open(path) as f:
+        for line in f:
+            if line.startswith("opnsense_api_users:"):
+                inside = True
+                continue
+            if inside and line[:1] not in ("", " ", "\n"):
+                break
+            m = inside and re.match(r"  - name: *([A-Za-z0-9_.-]+) *$", line)
+            if m:
+                names.append(m.group(1))
+    if not names:
+        die("no users under opnsense_api_users in %s" % path)
+    return names
 
 tree = ET.parse(a.seed)
 root = tree.getroot()
@@ -203,12 +228,19 @@ if a.carry_from:
         put_section("OPNsense/wireguard")
     if "api-users" in items:
         system = root.find("system")
-        names = [n for n in a.api_users.split(",") if n]
+        names = [n for n in a.api_users.split(",") if n] or group_vars_api_users()
+        prod_names = {u.findtext("name") for u in prod.findall("system/user")}
+        absent = [n for n in names if n not in prod_names]
+        if absent:
+            print("seed-shape: WARNING api-users not on prod, NOT carried: %s — the users play "
+                  "(scripts/opnsense-api-users.sh) gives each its one key pair on every node"
+                  % ",".join(absent), file=sys.stderr)
+        names = [n for n in names if n in prod_names]
+        if not names:
+            die("prod has none of the api-users %s" % ",".join(absent))
         uids = [0]
         for n in names:
-            src = next((u for u in prod.findall("system/user") if u.findtext("name") == n), None)
-            if src is None:
-                die("prod has no user %s" % n)
+            src = next(u for u in prod.findall("system/user") if u.findtext("name") == n)
             for old in [u for u in system.findall("user") if u.findtext("name") == n]:
                 system.remove(old)
             system.append(src)
@@ -231,7 +263,8 @@ if a.carry_from:
         prod_ids = {l.split("|", 1)[0] for l in prod_lines}
         seed_lines = [l for l in (pk.text or "").splitlines() if l.strip() and l.split("|", 1)[0] not in prod_ids]
         pk.text = "\n".join(seed_lines + prod_lines)
-        carried.append("users %s + %d root key line(s)" % (",".join(names), len(prod_lines)))
+        carried.append("users %s + %d root key line(s)%s" % (",".join(names), len(prod_lines),
+                       " (not on prod: %s)" % ",".join(absent) if absent else ""))
     print("seed-shape: carried " + "; ".join(carried), file=sys.stderr)
 
 if a.standing:

@@ -1,0 +1,11 @@
+OUT GW_SESSIONS='' MODEL='opus' MODEL_RAIL='' GO_SERVED=0
+OUT AGENT_ROUTER='' _router_adopted='' GW_PULL_PRELUDE set: no
+OUT LABEL:
+OUT POD LLM ENV:
+OUT         - name: ANTHROPIC_BASE_URL
+OUT           value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+OUT         - name: ANTHROPIC_AUTH_TOKEN
+OUT           value: "ref:agent-coordinator/coordinator-claude"
+OUT MOUNT:none VOLUME:none
+ERR WARN gateway(sessions): explicit --model opus — the gateway owns the model, so this review keeps the old-proxy path (FU-270: transition fallback)
+RC 0

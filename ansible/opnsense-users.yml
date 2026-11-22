@@ -3,9 +3,12 @@
 # the users and their privileges in group_vars/opnsense.yml (opnsense_api_users).
 # Run: bash scripts/opnsense-api-users.sh   (wraps scripts/opnsense-playbook.sh with a key sink
 #      and stores what gets minted — never run this play bare unless every user already has a key)
+# any_errors_fatal: the key plan joins every node's state (one user = one pair on every node), so
+# a node that fails stops the run on all of them — never a half-converged pair.
 - name: OPNsense API users
   hosts: opnsense
   gather_facts: false
+  any_errors_fatal: true
   module_defaults:
     oxlorg.opnsense.user: "{{ opnsense_conn }}"
     oxlorg.opnsense.raw: "{{ opnsense_conn }}"

@@ -1,0 +1,3 @@
+ERR PREFLIGHT REFUSED: no gateway caller token — /nonexistent/agent-gateway/token is not mounted, and AGENT_GATEWAY_CALLER_SA (jail canary: <ns>/<sa> of the dispatcher, e.g. platform-agents/agentstack-loop) is unset. /sessions authenticates its caller (GW-SESSIONS-AUTH). No session, no pod.
+ERR gateway admission refused rc=2 — old-proxy fallback
+RC 75

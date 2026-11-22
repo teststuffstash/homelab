@@ -1,0 +1,8 @@
+OUT RETRO_PG_ENV (non-empty):
+OUT         - name: PGUSER
+OUT           valueFrom:
+OUT             secretKeyRef: { name: "oracle-pg-feedback-ro", key: username, optional: true }
+OUT         - name: PGPASSWORD
+OUT           valueFrom:
+OUT             secretKeyRef: { name: "oracle-pg-feedback-ro", key: password, optional: true }
+RC 0

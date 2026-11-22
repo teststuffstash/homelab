@@ -17,5 +17,6 @@ mode: actions
 source: agents/agent-session.sh
 parts:
   - file:bridge.sh
+  - block:comment-trust
   - block:fetch-reviews
   - file:post.sh

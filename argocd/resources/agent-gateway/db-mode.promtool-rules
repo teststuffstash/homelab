@@ -1,0 +1,23 @@
+# The `agent-gateway-db-mode` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file db-mode.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-db-mode","rules":[.spec.groups[] | select(.name == "agent-gateway-db-mode") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-db-mode
+    rules:
+      - alert: GatewayStoreMemoryMode
+        expr: |
+          max(gateway_db_mode{job="agent-gateway",mode="memory"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: 'The gateway runs on its fail-open memory store — sessions, caps and rotated credentials do not survive its next restart'
+          description: 'gateway_db_mode{mode="memory"} is 1: the gateway did not open its PVC store at start, so it admits rides from memory and forgets them at the next restart. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "db: memory" names the path and the error (missing, read-only or corrupt); (2) GET /healthz on the gateway answers db: memory; (3) the agent-gateway Deployment mounts its /data PVC. The contract is gateway/specs/endpoints/health.md (GW-HEALTH) and gateway/specs/endpoints/metrics.md (GW-METRICS).'

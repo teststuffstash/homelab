@@ -12,8 +12,10 @@
 #     ref:agent-coordinator/coordinator-claude; the egress proxy injects the token — FU-066d): free at
 #     margin, a strong model, deliberately DECORRELATED from the cheap OpenRouter model that wrote the
 #     PR. Reviewer must be at least as capable as the author; same model = same blind spots. Review +
-#     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model (**sonnet**,
-#     the default) — NOT the cheap OpenRouter models the workers use. Don't cheap out on the reviewer.
+#     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model — NOT the cheap
+#     OpenRouter models the workers use. Don't cheap out on the reviewer. On the PLATFORM stack the gateway
+#     picks the model (policy.json roles.reviewer = tier `heavy` → anthropic `[opus, fable]`, so opus); the
+#     `sonnet` default below is the old-proxy path's (every other stack, and the gateway's fallback).
 #     (Proven live: on sleep-tracking#9 a *sonnet* reviewer caught the *coordinator's* own misjudgment —
 #     dispatching a review on a DIRTY, superseded PR — and recommended close. Sonnet is sufficient here;
 #     opus is available for a genuinely high-stakes PR via --model, but it is not the default.)
@@ -175,6 +177,104 @@ echo '→ MCP config written'"
   fi
 fi
 # <<<REPLAY:reviewer-mcp-prep<<<
+# >>>REPLAY:reviewer-verdict-pin>>>
+# THE VERDICT PIN (homelab#3444): a verdict is filed on the commit that was REVIEWED. The session
+# submits with `gh pr review`, which attaches to whatever head exists at SUBMIT time — on #3444 a
+# push landed mid-review (536ed6a0 read, 75aaa056 pushed 19 s before the submit) and the approval
+# was filed on the unread head; dismiss_stale_reviews_on_push only dismisses reviews submitted
+# BEFORE a push. The pod puts this shim first on PATH as `gh`: every other subcommand passes
+# through untouched; an --approve/--request-changes is re-read against the head checked out in
+# PREP and goes through the REST reviews endpoint with commit_id = that head — the specs
+# reviewer's review_submit contract (specs-reviewer-session.sh), same two belts plus a third:
+#   head unchanged, or moved by MERGE commits only (the shared merge-shape grammar —
+#     review-reflex.sh's is_merge: an updater merge brings no PR-authored content) → submit pinned;
+#   content moved (a non-merge commit after the reviewed one, or the reviewed commit gone from the
+#     PR — a force-push) → NO verdict; the drop is recorded for the exit contract and the
+#     level-triggered review path re-dispatches on the new head;
+#   content moved between the pre-read and the POST → the just-filed review is DISMISSED (an
+#     undismissed one would still count — it postdates the push).
+# A COMMENT review, a non-review call, and a review of another PR pass through unchanged.
+# VP_REAL_GH = the real gh (captured before the PATH prepend), VP_REVIEWED_HEAD_FILE = the head
+# PREP checked out, VP_DROP_RECORD = the exit contract's drop terminal; PR_NUMBER/REPO_SLUG = pod env.
+verdict_pin_gh() {
+  local g="${VP_REAL_GH:-gh}" kind="" num="" repo="${REPO_SLUG:-}" body="" bodyfile="" have_body=0 unknown=""
+  if [ "${1:-}" != pr ] || [ "${2:-}" != review ]; then "$g" "$@"; return; fi
+  local -a orig=("$@"); shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -a|--approve) kind=APPROVE ;;
+      -r|--request-changes) kind=REQUEST_CHANGES ;;
+      -c|--comment) kind=COMMENT ;;
+      -b|--body) body="${2:-}"; have_body=1; shift ;;
+      --body=*) body="${1#--body=}"; have_body=1 ;;
+      -F|--body-file) bodyfile="${2:-}"; shift ;;
+      --body-file=*) bodyfile="${1#--body-file=}" ;;
+      -R|--repo) repo="${2:-}"; shift ;;
+      --repo=*) repo="${1#--repo=}" ;;
+      -*) unknown="$1" ;;
+      *) num="$1" ;;
+    esac
+    shift
+  done
+  case "$kind" in APPROVE|REQUEST_CHANGES) ;; *) "$g" "${orig[@]}"; return ;; esac
+  num="${num:-${PR_NUMBER:-}}"; repo="${repo#https://github.com/}"
+  if [ -n "$unknown" ] || [ "$num" != "${PR_NUMBER:-}" ] || [ -z "$repo" ]; then
+    echo "verdict-pin: refused — use exactly: gh pr review ${PR_NUMBER:-<n>} --approve|--request-changes --body-file <file> (got flag '${unknown}', pr '${num}'); nothing submitted" >&2
+    return 2
+  fi
+  local reviewed; reviewed="$(cat "${VP_REVIEWED_HEAD_FILE:-/tmp/reviewed-head}" 2>/dev/null)" || reviewed=""
+  [ -n "$reviewed" ] || { echo "verdict-pin: no reviewed head recorded — nothing submitted" >&2; return 1; }
+  local bf; bf="$(mktemp)"
+  if [ -n "$bodyfile" ]; then
+    if [ "$bodyfile" = - ]; then cat > "$bf"; else cat "$bodyfile" > "$bf" || { echo "verdict-pin: body file unreadable: $bodyfile — nothing submitted" >&2; rm -f "$bf"; return 1; }; fi
+  elif [ "$have_body" = 1 ]; then printf '%s' "$body" > "$bf"
+  fi
+  # content_moved: same | merge-only | moved — one read of the PR (headRefOid + commits in PR order).
+  vp_moved() {
+    "$g" pr view "$num" --repo "$repo" --json headRefOid,commits 2>/dev/null | jq -r --arg r "$reviewed" '
+      def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
+      (.commits // []) as $cs
+      | ([ $cs | to_entries[] | select(.value.oid == $r) | .key ] | first) as $i
+      | if (.headRefOid // "") == "" then "unreadable"
+        elif .headRefOid == $r then "same"
+        elif $i == null then "moved"
+        elif ([ $cs[($i + 1):][] | select(is_merge | not) ] | length) == 0 then "merge-only"
+        else "moved" end' 2>/dev/null
+  }
+  local pre; pre="$(vp_moved)" || pre=""
+  case "$pre" in
+    same|merge-only) ;;
+    moved)
+      printf 'VERDICT_DROPPED: content moved past %s before submit (%s)\n' "${reviewed:0:8}" "$kind" > "${VP_DROP_RECORD:-/tmp/verdict-dropped}"
+      echo "verdict-pin: NOT submitted — the PR's content moved past the reviewed head ${reviewed:0:8} while you reviewed. Do not resubmit and post nothing: the review path re-dispatches on the new head. Stop here."
+      rm -f "$bf"; return 0 ;;
+    *) echo "verdict-pin: head re-read FAILED — nothing submitted; re-run the same command" >&2; rm -f "$bf"; return 1 ;;
+  esac
+  local rid
+  rid="$("$g" api -X POST "repos/${repo}/pulls/${num}/reviews" -f "commit_id=${reviewed}" -f "event=${kind}" -F "body=@${bf}" --jq .id)" \
+    || { echo "verdict-pin: review POST failed — nothing submitted" >&2; rm -f "$bf"; return 1; }
+  rm -f "$bf"
+  local post; post="$(vp_moved)" || post=""
+  if [ "$post" = moved ]; then
+    "$g" api -X PUT "repos/${repo}/pulls/${num}/reviews/${rid}/dismissals" -f event=DISMISS \
+      -f "message=verdict-pin: the PR's content moved past the reviewed head ${reviewed:0:8} during submit — this verdict is about an older head (homelab#3444)" >/dev/null \
+      || echo "verdict-pin: WARN — dismissal of review ${rid} FAILED; it is filed on ${reviewed:0:8} (stale by commit)" >&2
+    printf 'VERDICT_DROPPED: content moved past %s during submit; review %s dismissed (%s)\n' "${reviewed:0:8}" "$rid" "$kind" > "${VP_DROP_RECORD:-/tmp/verdict-dropped}"
+    echo "verdict-pin: submitted then DISMISSED — the content moved during submit. Do not resubmit; stop here."
+    return 0
+  fi
+  echo "verdict-pin: ${kind} submitted on ${reviewed:0:8} (review ${rid})"
+}
+# The pod-side install, injected into PREP right after `gh pr checkout` (the reviewer-mcp-prep
+# shape: base64 keeps the unquoted <<PREP heredoc from expanding anything in the shim).
+VERDICT_PIN_B64="$(printf '#!/bin/bash\n%s\nverdict_pin_gh "$@"\n' "$(declare -f verdict_pin_gh)" | base64 -w0)"
+VERDICT_PIN_PREP="git rev-parse HEAD > /tmp/reviewed-head
+export VP_REAL_GH=\"\$(command -v gh)\" VP_REVIEWED_HEAD_FILE=/tmp/reviewed-head VP_DROP_RECORD=/tmp/verdict-dropped
+rm -f /tmp/verdict-dropped; mkdir -p /tmp/verdict-pin
+printf '%s' '${VERDICT_PIN_B64}' | base64 -d > /tmp/verdict-pin/gh; chmod +x /tmp/verdict-pin/gh
+export PATH=\"/tmp/verdict-pin:\$PATH\"
+echo \"→ verdict pin: reviews file on \$(cut -c1-8 /tmp/reviewed-head)\""
+# <<<REPLAY:reviewer-verdict-pin<<<
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
@@ -192,7 +292,7 @@ if [ -n "${LOOP_NS_ARG:-}" ]; then
 fi
 # <<<REPLAY:loop-fetch-guard<<<
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
-IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
+IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-registry.teststuff.net/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"
 REVIEWER_GIT="${REVIEWER_GIT:-reviewer-git}"   # Secret w/ the review-bot App token — MUST differ from the PR author's App
 # STEP 0 resolves its own identity from THIS literal, substituted into the prompt below — never at
@@ -249,6 +349,80 @@ else
   POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
 fi
 # <<<REPLAY:reviewer-currency-gate<<<
+
+# ── FU-270: admission through the agent-gateway's POST /sessions (PLATFORM stack only) ──────────
+# The worker's shape (agents/agent-session.sh, the gateway-sessions block) through the ONE shared
+# helper (agents/gateway-admit.sh): AGENT_GATEWAY=sessions is an env knob its dispatchers set for
+# the platform stack only (the review-<stack> cron in the agentstack Composition, the review-perstack
+# Sensor in review-argo.yaml), and this launcher guards on the same stack name. Under it the /route
+# consult, the FU-188 shadow pin, the FU-088 latch and the Go failover ladder are all SKIPPED — the
+# gateway's admission walk IS the capacity answer and owns the model (GW-SESSIONS-ADMIT).
+#   • The FU-188 pin's CONSTRAINT is the gateway's to hold: the reviewer pod runs `claude` only, so
+#     the request names `harness: claude` (the walk keeps only anthropic-dialect cells — never an
+#     openrouter-rail model this pod cannot ride, the 2026-08-26 class) and policy roles.reviewer.rails
+#     lists no openrouter. Lost: a codex-first reviewer rail order (the operator's weekly knob) is
+#     not followed by this claude-only pod — the gateway defers instead.
+#   • Decorrelation from the author: the gateway has no family-exclusion input. Nothing regresses —
+#     the pin held /route at shadow, so decorrelate_from was computed and discarded (Goal #1769) —
+#     and the evidence stays: the author's served model is logged beside the admitted one.
+#   • An explicit --model is a model pin the gateway cannot take: that review keeps the old-proxy
+#     path, loudly. No dispatcher passes one (the assembly review is unpinned, FU-270) — it is the
+#     hand-run override (`--model opus` for a high-stakes PR) only.
+# Transition safety (seat ruling 2026-11-01): defer (rc 1) defers as the FU-088 latch does today
+# (exit 0 — the level-triggered reflex re-picks); refused-before-request (rc 2) or fail-closed (rc 3)
+# falls back to the old-proxy path below with one loud line, so a gateway outage never stops review.
+# >>>REPLAY:reviewer-gateway-admit>>>
+. "${HERE}/gateway-admit.sh"
+GW_SESSIONS=""; REVIEW_GW_LABEL=""; GW_TOKEN_MOUNT=""; GW_TOKEN_VOLUME=""
+REVIEW_LLM_ENV='        - name: ANTHROPIC_BASE_URL
+          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+        - name: ANTHROPIC_AUTH_TOKEN
+          value: "ref:agent-coordinator/coordinator-claude"'
+if [ "${AGENT_GATEWAY:-}" = "sessions" ]; then
+  _gw_stack="$(jq -r --arg r "$PROJECT" \
+    '[.stacks[] | select([.repos[]? | if type=="object" then .name else . end] | index($r)) | .name][0] // ""' \
+    "$HERE/stacks.json" 2>/dev/null)" || _gw_stack=""
+  if [ "$_gw_stack" != "platform" ]; then
+    echo "WARN gateway(sessions): AGENT_GATEWAY=sessions IGNORED for stack '${_gw_stack:-unresolved}' — reviewer admission is platform-only (FU-270); this review takes the old-proxy path" >&2
+  elif [ -n "${MODEL_SET_EXPLICIT:-}" ]; then
+    echo "WARN gateway(sessions): explicit --model ${MODEL} — the gateway owns the model, so this review keeps the old-proxy path (FU-270: transition fallback)" >&2
+  else
+    _gw_rc=0
+    gw_preflight_caller || _gw_rc=$?
+    if [ "$_gw_rc" = 0 ]; then
+      gw_admit --stack platform --role reviewer --task "${TASK_KEY:-review-${PROJECT}-${PR}}" --round "$ROUND" \
+        --harness claude --harnesses claude --bind "${NS}/${POD_SA}/${POD}" || _gw_rc=$?
+    fi
+    case "$_gw_rc" in
+      0)
+        GW_SESSIONS=1; trap 'gw_release' EXIT
+        echo "→ gateway(sessions): reviewer served ${GW_MODEL}; author's served model ${DECORRELATE_FROM:-unknown} (evidence only — no family exclusion at the gateway; FU-188)"
+        # The pod's claude invocation model is the gateway's, rail prefix stripped (GW-MODEL-RESOLVE).
+        MODEL="$GW_WIRE_MODEL"; MODEL_RAIL="$GW_RAIL"; GO_SERVED=0
+        [ "$GW_RAIL" = "opencode" ] && GO_SERVED=1
+        # The skipped region: no /route consult (AGENT_ROUTER=off) and no FU-088 latch / Go ladder
+        # (the go-failover gate's adopted arm — the gateway decided the model and the capacity).
+        AGENT_ROUTER="off"; _router_adopted="gateway"
+        # The pod pulls its own LLM env (GW-SESSIONS-PULL): the URL + key NAMES as plain values, a
+        # projected token (audience agent-gateway) to authenticate the pull — no credential in the
+        # launcher or the manifest, the old /anthropic ref included.
+        REVIEW_LLM_ENV="        - name: AGENT_GATEWAY_PULL_URL
+          value: \"${GW_PULL_URL}\"
+        - name: AGENT_GATEWAY_ENV_KEYS
+          value: \"${GW_ENV_KEYS}\""
+        GW_TOKEN_MOUNT=$'\n        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }'
+        GW_TOKEN_VOLUME=$'\n    - name: gateway-token\n      projected:\n        sources:\n          - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }'
+        REVIEW_GW_LABEL=", \"homelab.teststuff.net/gateway-session\": \"${GW_SESSION_ID}\"";;
+      1)
+        echo "→ review of ${PROJECT}#${PR} deferred — gateway ${GW_DEFER_REASON} (retry_after=${GW_RETRY_AFTER}s)"
+        exit 0;;
+      *)
+        # FU-270: transition fallback — deleted when the old proxy retires.
+        echo "WARN gateway admission refused rc=${_gw_rc} — old-proxy fallback" >&2;;
+    esac
+  fi
+fi
+# <<<REPLAY:reviewer-gateway-admit<<<
 
 # ── ADR-096: consult the router at the model-decision seam (POST /route) ──
 # role: reviewer → class review; the class policy orders the subscription rail first, so behaviour
@@ -567,6 +741,9 @@ _ah="http.extraHeader="; [ -n "\${GH_TOKEN:-}" ] && _ah="http.extraHeader=Author
 timeout 120 git clone -q -c "\$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || echo "→ WARN: homelab clone failed — platform facts unavailable to the lens (TOOL_GAP)"
 cd /work/repo
 gh pr checkout ${PR}
+# The verdict pin (homelab#3444): record the head just checked out and put the review-submit shim
+# first on PATH — built launcher-side in the reviewer-verdict-pin block above.
+${VERDICT_PIN_PREP}
 # MCP config (#1041): injected from the launcher-side MCP_PREP (built above the replay region).
 # Knob absent → MCP_PREP is empty → blank line, nothing attached.
 ${MCP_PREP}
@@ -574,7 +751,8 @@ ${MCP_PREP}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
 # the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
 # reference ("Fixes #N"); fall back to parsing the PR body for a closing keyword when
-# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then pr-<N>.
+# closingIssuesReferences is empty (e.g. PR base != default branch — #1189); then a "Refs #N"
+# line (the pr-open.sh form for an unfinished issue); then pr-<N>.
 _PR_META=\$(gh pr view ${PR} --json closingIssuesReferences,baseRefName,body 2>/dev/null || true)
 ISSUE=\$(printf '%s' "\$_PR_META" | jq -r '.closingIssuesReferences[0].number // empty' 2>/dev/null || true)
 PR_BASE=\$(printf '%s' "\$_PR_META" | jq -r '.baseRefName // empty' 2>/dev/null || true)
@@ -587,6 +765,15 @@ if [ -z "\$ISSUE" ] || [ "\$ISSUE" = "null" ]; then
   if [ -n "\$_BODY_ISSUE" ]; then
     ISSUE="\$_BODY_ISSUE"
     echo "→ ISSUE derived from PR body closing keyword: #\$_BODY_ISSUE"
+  else
+    # Last resort: "Refs #N" — the form agents/pr-open.sh prescribes for an issue the PR does not
+    # finish (or a non-master base). It names the issue the PR SERVES, which is all this derivation
+    # keys (context, footprint, transcript); finishing is the coordinator's strong-link question.
+    _REFS_ISSUE=\$(printf '%s' "\$_PR_BODY" | grep -ioE '\brefs\s+#([0-9]+)\b' | sed -n 1p | grep -oE '[0-9]+' || true)
+    if [ -n "\$_REFS_ISSUE" ]; then
+      ISSUE="\$_REFS_ISSUE"
+      echo "→ ISSUE derived from PR body Refs line: #\$_REFS_ISSUE (served, not closed)"
+    fi
   fi
 fi
 # <<<REPLAY:issue-derivation<<<
@@ -981,7 +1168,7 @@ RC=$?
 # (which never reaches here) — stay exit 0: the assert is "one terminal exists", not "a verdict
 # exists".
 assert_review_terminal() {
-  local state newest_commit newest_sha8 head_ts verdict aside error_label silent_dedup
+  local state newest_commit newest_sha8 head_ts verdict aside error_label silent_dedup verdict_dropped
   [ -n "${REVIEWER_LOGIN:-}" ] || { echo "exit-contract: REVIEWER_LOGIN unset — cannot verify a terminal; failing closed" >&2; return 1; }
   state="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json reviews,comments,labels,commits,headRefOid 2>/dev/null)" || {
     echo "exit-contract: review-state re-read FAILED — cannot prove a terminal exists; failing closed" >&2; return 1; }
@@ -1012,6 +1199,12 @@ assert_review_terminal() {
   # dispatch visible instead of invisible in the exit contract.
   silent_dedup="0"
   [ -f "${SILENT_DEDUP_RECORD:-${TMPDIR:-/tmp}/silent_dedup_record.$$}" ] && silent_dedup="1"
+  # TERMINAL 5 — the verdict pin dropped this session's verdict because the PR's content moved
+  # past the reviewed head (homelab#3444, the reviewer-verdict-pin shim): the session did its job,
+  # no verdict is the correct record, and the level-triggered review path re-dispatches on the new
+  # head. Never rings the specs doorbell — nothing changed for the specs gate.
+  verdict_dropped="0"
+  [ -s "${VP_DROP_RECORD:-/tmp/verdict-dropped}" ] && verdict_dropped="1"
   if [ "${verdict:-0}" -gt 0 ]; then
     echo "exit-contract: terminal OK — live ${REVIEWER_LOGIN} verdict at this head"
     RING_SPECS=1   # the one terminal that changes the specs gate's premise (its doorbell, below)
@@ -1022,6 +1215,10 @@ assert_review_terminal() {
   # made this terminal unreachable — a record written by THIS session is the more specific fact.
   if [ "${silent_dedup}" = "1" ]; then
     echo "exit-contract: terminal OK — ${REVIEWER_LOGIN} silent-dedup-aside recorded (idempotent aside reused, homelab#1438)"
+    return 0
+  fi
+  if [ "${verdict_dropped}" = "1" ]; then
+    echo "exit-contract: terminal OK — verdict dropped by the verdict pin ($(cat "${VP_DROP_RECORD:-/tmp/verdict-dropped}")); the new head gets its own review"
     return 0
   fi
   if [ "${aside:-0}" -gt 0 ]; then
@@ -1079,7 +1276,9 @@ if ! printf '%s\n' "$_COMBINED" | bash -n /dev/stdin 2>/dev/null; then
   echo "FATAL: combined pod script has a syntax error — review dispatch aborted before pod creation (homelab#1113)" >&2
   exit 1
 fi
-ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
+# FU-270: a gateway-admitted review's FIRST step is the in-pod env pull (GW_PULL_PRELUDE, empty on
+# the old-proxy path) — ahead of the transcript trap: a failed pull exits 97 before claude starts.
+ARGS="[\"bash\",\"-lc\",$(printf '%s%s\n%s\n%s\n%s' "${GW_PULL_PRELUDE:-}" "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
@@ -1161,18 +1360,34 @@ esac
 # The inversion is what makes it worth a guard: failover fires precisely BECAUSE the Anthropic
 # window is latched, so the rides routing around it were consuming the slots they were meant to
 # free — five of them would have blocked subscription dispatch outright.
-case "${MODEL:-}" in
+# A gateway-admitted review (GW_SESSIONS): GW_MODEL keeps the rail prefix the stripped invocation
+# MODEL lost. Never GW_MODEL alone — a refused admission (the old-proxy fallback) leaves it set.
+_label_model="${MODEL:-}"; [ -z "${GW_SESSIONS:-}" ] || _label_model="${GW_MODEL:-}"
+case "$_label_model" in
   opencode-go/*) REVIEW_RAIL_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
   *)             REVIEW_RAIL_LABEL=', "homelab.teststuff.net/subscription-session": claude';;
 esac
 # <<<REPLAY:reviewer-rail-label<<<
-cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
-  || { echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
+# The create's stderr is captured so a refusal can name its cause: a Forbidden is RBAC (this SA cannot
+# write the namespace it was pointed at), not a lost race or a bad manifest.
+CREATE_ERR="$(mktemp)"
+# >>>REPLAY:reviewer-create-refusal>>>
+create_refusal() {
+  cat "$CREATE_ERR" >&2
+  if grep -q 'Forbidden' "$CREATE_ERR"; then
+    echo "REVIEW REFUSED (atomic): create of ${POD} in ns ${NS} is Forbidden — this SA cannot create pods there. The flagless default ns agent-coordinator is the legacy single-tenant one; a per-stack coordinator passes --loop-ns <stack>-agents." >&2
+  else
+    echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2
+  fi
+  rm -f "$CREATE_ERR"; exit 3
+}
+# <<<REPLAY:reviewer-create-refusal<<<
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - 2>"$CREATE_ERR" || create_refusal
 apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}"${REVIEW_RAIL_LABEL} }
+  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}"${REVIEW_RAIL_LABEL}${REVIEW_GW_LABEL:-} }
 spec:
   serviceAccountName: ${POD_SA}
   restartPolicy: Never
@@ -1242,10 +1457,9 @@ spec:
         # LLM-authored PR code, so it of all roles must not hold the raw ~1y token. The pod carries
         # only the opaque ref; the proxy resolves + injects (token + oauth beta). Do NOT also set
         # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN — they take auth precedence over this path.
-        - name: ANTHROPIC_BASE_URL
-          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
-        - name: ANTHROPIC_AUTH_TOKEN
-          value: "ref:agent-coordinator/coordinator-claude"
+        # FU-270: a gateway-admitted review carries the pull URL + env key names instead (the
+        # reviewer-gateway-admit block) and pulls its LLM env in-pod — no ref, no token.
+${REVIEW_LLM_ENV}
         # gh clone / pr checkout / pr review: the REVIEW-BOT App token (distinct identity from the PR
         # author, or Approve self-rejects). Env is the frozen fallback; the image's gh-wrapper prefers
         # the LIVE token file (ESO re-mints it ~hourly).
@@ -1255,7 +1469,7 @@ spec:
         - name: GH_TOKEN_FILE
           value: "/var/run/reviewer-git/GH_TOKEN"
       volumeMounts:
-        - { name: reviewer-git, mountPath: /var/run/reviewer-git, readOnly: true }
+        - { name: reviewer-git, mountPath: /var/run/reviewer-git, readOnly: true }${GW_TOKEN_MOUNT:-}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -1268,8 +1482,9 @@ spec:
         limits:   { cpu: "2",    memory: "2Gi" }
   volumes:
     - name: reviewer-git
-      secret: { secretName: ${REVIEWER_GIT}, optional: true }
+      secret: { secretName: ${REVIEWER_GIT}, optional: true }${GW_TOKEN_VOLUME:-}
 EOF
+rm -f "$CREATE_ERR"
 
 echo "→ waiting for ${POD} (clone + checkout + review)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=120s || true

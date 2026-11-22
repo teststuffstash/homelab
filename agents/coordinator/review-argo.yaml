@@ -59,6 +59,22 @@ spec:
       controller: eventbus-controller
       eventbus-name: default
 ---
+# The agent-loop EventSource's budget (ADR-140 shape: 2 replicas spread by the required
+# anti-affinity on the EventSource below, zero-unavailable rollout, PDB). Selector = the labels the
+# argo-events controller sets on the EventSource's pods (and its Service). A drain takes one pod at
+# a time; the other keeps serving every webhook endpoint. Argo Events ships no PDB of its own.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-loop-eventsource
+  namespace: agent-coordinator
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      controller: eventsource-controller
+      eventsource-name: agent-loop
+---
 # Webhook EventSource — an in-cluster POST /review {repo,number} endpoint (svc :12000).
 apiVersion: argoproj.io/v1alpha1
 kind: EventSource
@@ -67,7 +83,21 @@ metadata:
   namespace: agent-coordinator
 spec:
   eventBusName: default
+  # Two pods, one per node: a webhook EventSource is ACTIVE-ACTIVE at replicas > 1 (argo-events
+  # docs/eventsources/ha.md — no leader election, every pod serves, the Service below selects both),
+  # so a delivery no longer dies with a lone pod's restart. The controller's default RollingUpdate
+  # (25%/25% → surge 1, unavailable 0 at 2) needs a third eligible node; five untainted workers.
+  # Selector = the controller-set pod labels; its PDB is beside the EventBus's above.
+  replicas: 2
   template:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                controller: eventsource-controller
+                eventsource-name: agent-loop
+            topologyKey: kubernetes.io/hostname
     container:
       resources:
         requests: { cpu: "25m", memory: "64Mi" }
@@ -179,6 +209,14 @@ spec:
     provider-errored:
       port: "12000"
       endpoint: /provider-errored
+      method: POST
+    # oracle-iac#1192: Alertmanager POSTs KargoProdVerificationFailed here
+    # (argocd/platform/values/kube-prometheus-stack.yaml); the `kargo-prod-diagnose` Sensor
+    # (kargo-prod-diagnose-argo.yaml) starts oracle-fleet/prod-diagnose with no argument. The
+    # responder also sees the alert on /alert.
+    kargo-prod-failed:
+      port: "12000"
+      endpoint: /kargo-prod-failed
       method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
@@ -295,12 +333,20 @@ spec:
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
+                  # FU-270 (GW-SESSIONS-AUTH): the gateway caller token reviewer-session.sh's admission
+                  # reads (it runs in this pod). One Workflow shape for every stack, so mounted for all
+                  # and USED only where the knob below is set (platform); the token is this pod's own
+                  # agentstack-loop identity, audience agent-gateway — inert for a non-caller SA.
+                  - name: gateway-token
+                    projected:
+                      sources:
+                        - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
                 templates:
                   - name: main
                     metadata:
                       labels: { app: review-perstack-workflow }
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator
+                      image: registry.teststuff.net/agent-coordinator
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -342,12 +388,17 @@ spec:
                           # from an "authenticated" loop. `clone -c` persists it for later fetch/push. Empty = anonymous.
                           _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
                           git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          # FU-270, the reviewer flip: the PLATFORM stack's reviews admit through the
+                          # agent-gateway (reviewer-session.sh's reviewer-gateway-admit block guards on the
+                          # stack name too). Gated on the loop home, the one stack fact this trigger carries.
+                          case "${NS}" in platform-agents) export AGENT_GATEWAY=sessions;; esac
                           exec bash /work/homelab/agents/reviewer-session.sh "${REPO}" "${PR}" --loop-ns "${NS}"
                       env:
                         - { name: HOME, value: "/home/node" }
                         - { name: ORG, value: "teststuffstash" }
                       volumeMounts:
                         - { name: work, mountPath: /work }
+                        - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
@@ -412,7 +463,7 @@ spec:
       metadata:
         labels: { app: review-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |

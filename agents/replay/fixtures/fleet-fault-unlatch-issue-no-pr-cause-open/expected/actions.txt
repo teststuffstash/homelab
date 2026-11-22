@@ -1,0 +1,5 @@
+CALL gh issue view 100 --repo teststuffstash/homelab --json comments
+CALL gh issue view 1000 --repo teststuffstash/homelab --json state
+OUT REACHED: issue case — fleet-fault marker + cause still OPEN + PR-less ⇒ label held
+OUT Case: issue-side — PR-less, cause still OPEN ⇒ agent/error should be HELD on issue #100
+RC 0

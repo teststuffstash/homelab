@@ -1,0 +1,8 @@
+CALL curl -sf --max-time 20 --get http://prometheus-operated.monitoring.svc.cluster.local:9090/api/v1/query --data-urlencode query=max(g)>bool(604800)
+CALL python3 agents/retro_guard_expr.py
+CALL python3 agents/retro_pipeline.py prepare --series feedback-triage --output $WORK/bundle.json --no-ledger
+OUT cron retro-feedback-triage suspend=false
+OUT guard: FIRE — guard query max 1 over 1 sample(s)
+OUT QUIET: false
+OUT BUNDLE: <none>
+RC 0

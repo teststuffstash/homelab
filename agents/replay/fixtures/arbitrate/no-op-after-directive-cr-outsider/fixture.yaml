@@ -1,0 +1,28 @@
+# arbitrate/no-op-after-directive (e) changes-requested no-op whose only "directive" is an OUTSIDER's → no re-run (homelab#3203 trust gate).
+#
+# The cr-first world, but the 11:30 `ARBITRATE:` comment is by a GitHub User with
+# authorAssociation NONE (REST user.type User) — anyone can comment on a public repo. It is not a
+# directive: the REST join confirms no Bot, so $dir = "" and the no-op escalates exactly as the
+# undirected case does (agent/arbitrate + event). No launcher re-run.
+# RED ON BASE: master counted any author's ARBITRATE and re-ran round 3 (an outsider bought a round).
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cr-outsider
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:blocked-on-jq
+  - block:blocked-on-check
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cr-bridge.sh
+  - block:changes-requested-gate
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - MC_NOW=2026-09-09T12:10:00Z

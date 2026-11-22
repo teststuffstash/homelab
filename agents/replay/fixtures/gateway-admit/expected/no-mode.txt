@@ -1,0 +1,8 @@
+OUT rc=2
+OUT GW_SESSION_ID='' GW_RAIL='' GW_HARNESS='' GW_MODEL='' GW_WIRE_MODEL=''
+OUT GW_ENV_KEYS='' GW_PULL_URL='' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='' GW_RETRY_AFTER=''
+OUT env file: absent
+OUT gws_ in shell state: 0
+ERR gw_admit: exactly one of --bind <ns>/<sa>/<pod> (the pod pulls its env) or --env-file <path> (unbound) is required
+RC 0

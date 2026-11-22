@@ -1,0 +1,19 @@
+{
+  "headRefOid": "b3d5513920000000000000000000000000000000",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "statusCheckRollup": [
+    {"__typename":"CheckRun","name":"ci","status":"IN_PROGRESS","conclusion":"","startedAt":"2026-09-23T09:38:00Z"},
+    {"__typename":"CheckRun","name":"e2e","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-09-23T09:38:00Z"}
+  ],
+  "reviews": [
+    {"state":"CHANGES_REQUESTED","submittedAt":"2026-09-23T08:40:00Z"},
+    {"state":"COMMENTED","submittedAt":"2026-09-23T08:45:00Z"}
+  ],
+  "comments": [
+    {"body":"⏳ goal-checkpoint dispatched for goal #281 (trigger=assembly-cr) `state-fp:assembly-cr:01a3358fb2d9`","createdAt":"2026-09-23T08:50:55Z"}
+  ],
+  "commits": [
+    {"oid":"0df28aeca0000000000000000000000000000000","messageHeadline":"goal: assemble the delta-redesign themes"},
+    {"oid":"b3d5513920000000000000000000000000000000","messageHeadline":"Merge branch 'master' into goal/281-delta-redesign"}
+  ]
+}

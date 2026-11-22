@@ -1,0 +1,11 @@
+OUT REACHED: ladder
+OUT rail=opencode-go/deepseek-v4-flash
+OUT stack=platform clause=goal-decompose → dispatch model=sonnet
+OUT stack=platform clause=goal-checkpoint → dispatch model=sonnet
+OUT stack=platform clause=queued-dispatch → dispatch model=opencode-go/deepseek-v4-flash
+OUT stack=oracle clause=goal-decompose → DEFER
+OUT stack=oracle clause=goal-checkpoint → DEFER
+OUT stack=oracle clause=queued-dispatch → dispatch model=opencode-go/deepseek-v4-flash
+OUT REACHED: end
+ERR → Anthropic latched — Go rail clear (opencode-go/deepseek-v4-flash)
+RC 0

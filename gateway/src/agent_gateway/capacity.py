@@ -1,4 +1,4 @@
-"""The ladder's capacity half as admission facts (GW-SESSIONS-ADMIT, sessions.md §Capacity).
+"""The ladder's capacity half as admission facts (GW-SESSIONS-CAPACITY, sessions.md §Capacity).
 
 Three per-rail checks the admission walk consults after the slot count, each driven only by
 `rails.<rail>.admission` in policy (no threshold, hold or price lives in this file):
@@ -10,9 +10,10 @@ Three per-rail checks the admission walk consults after the slot count, each dri
   (`retry-after`, else OpenRouter's `x-ratelimit-reset` in epoch ms, else the rail's
   `latch_429_hold_s`, else the policy `defer_retry_s`); admission skips a cooled cell and any 2xx
   on that cell clears it. A 429 is a model's fact unless the rail is one account.
-- **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` (the
-  subscription rails, one account each) is latched by a 429 for the same reset; any 2xx on the
-  rail clears it.
+- **429 latch** — the account-scope signal: a rail whose policy declares `latch_429_hold_s` with
+  `latch_scope: account` (one account whose limits are account windows) is latched by a 429 for
+  the same reset; any 2xx on the rail clears it. Under `latch_scope: model` the 429 only cools
+  the cell.
 - **credential rejected** — an upstream 401, or a 403 whose error names a credential reason, marks
   THAT credential (rail + sha256 of the value, never the value) rejected. It RECOVERS WITHOUT
   TRAFFIC: a rail with a policy `credential_probe` is re-verified by the gateway itself on a
@@ -218,8 +219,9 @@ class Capacity:
     def _reload(self, now: float) -> None:
         """Load the stored marks a restart must keep, dropping (and deleting) the ones the in-memory
         logic would have let go by `now`: an expired cooldown or latch, a no-probe rail's rejection
-        past its half-open (the hold row stays: a repeat still doubles), anything on a rail the
-        policy no longer names. A probe rail's rejection past its due time is kept — the first
+        past its half-open (the hold row stays: a repeat still doubles), a latch on a rail that no
+        longer latches (no `latch_429_hold_s`, or a scope other than account), anything on a rail
+        the policy no longer names. A probe rail's rejection past its due time is kept — the first
         re-probe pass sends it."""
         kept: dict[str, int] = {"cooled": 0, "latched": 0, "rejected": 0, "hold": 0}
         dropped = 0
@@ -231,6 +233,10 @@ class Capacity:
                 keep = rp is not None and kind in kept
                 if keep and kind in ("cooled", "latched"):
                     keep = until is not None and until > now
+                if keep and kind == "latched":
+                    # observe()'s own predicate: a rail that no longer latches (no latch_429_hold_s,
+                    # or a scope other than account) would never have set this mark
+                    keep = bool(rp.admission.latch_429_hold_s) and rp.admission.latch_scope == "account"
                 if keep and kind == "rejected":
                     keep = until is not None and (rp.credential_probe is not None or until > now)
                 if not keep:

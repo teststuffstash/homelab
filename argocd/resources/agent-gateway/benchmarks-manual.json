@@ -1,0 +1,14 @@
+{
+  "_comment": "GW-MODEL-TIERS manual benchmark rows (operator ruling 2026-11-11): hand-entered Artificial Analysis scores for a model the benchmark feed (the old proxy's weekly capability pull) has not caught up with. Read by `devbox run tiers -- snapshot --manual` (gateway/scripts/benchmarks-snapshot.sh passes this file); NOT mounted into the gateway. A row scores ONLY an id the feed does not carry — the moment the feed has the id the feed wins and the snapshot run reports the row RETIRED: delete it then. Every row names where and when the number was read.",
+  "rows": [
+    {
+      "id": "anthropic/claude-fable-5.2",
+      "intelligence": 65,
+      "coding": null,
+      "agentic": null,
+      "source_url": "https://artificialanalysis.ai/models/claude-fable-5-2",
+      "read_at": "2026-11-11",
+      "note": "Artificial Analysis Intelligence Index, the max-effort row (high 62, medium 56, low 54), the setting the feed's claude-opus-5.5 row is recorded at; the feed still ends at claude-fable-5.1."
+    }
+  ]
+}

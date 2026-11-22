@@ -171,8 +171,9 @@ GitHub App). The **coordinator** (`agents/coordinator/`) adds two in ns `agent-c
 `coordinator-claude` (`CLAUDE_CODE_OAUTH_TOKEN` — a ~1y `claude setup-token`, the operator's Pro/Max
 subscription) and `coordinator-git` (`GH_TOKEN` — `issues:write`+`pull_requests:write`+`contents` across
 the agent repos; prefer minting from the `homelab-agents` App over a new PAT — see
-`agents/coordinator/README.md` §Git token). The coordinator **image** CI needs no token (ghcr push via
-the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later (FU-001).
+`agents/coordinator/README.md` §Git token). The coordinator and agent-base **image** CI pushes to
+`registry.teststuff.net` with the `REGISTRY_PUSH_TOKEN` repo secret (never ghcr — the images carry the
+Claude Code binary; `scripts/github-secrets-sync.sh` writes the copy). Imperative for now; fold into Infisical/ESO later (FU-001).
 
 ## Where things get written down (the routing table)
 

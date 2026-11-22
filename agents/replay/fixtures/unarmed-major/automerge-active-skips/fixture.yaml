@@ -1,0 +1,17 @@
+# unarmed-major/automerge-active-skips (ADR-162; homelab#3233) — the `automerge-stale-emits` world, armed two
+# days, with ONE comment three hours old: a PR something touched today is moving, not abandoned, however long
+# ago it was armed. Expected: NO unit. (#3233 bought two rides in minutes while its re-run and the updater
+# were carrying it, when stale meant "armed over a day".)
+name: unarmed-major-automerge-active-skips
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:unarmed-major
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-10-28T09:00:00Z

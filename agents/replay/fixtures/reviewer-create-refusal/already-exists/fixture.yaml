@@ -1,0 +1,15 @@
+# 2026-11-01 — homelab#1973: every non-Forbidden create failure keeps the original refusal text.
+#
+# CONDITION UNDER REPLAY. Two dispatchers raced on the same (pr, head) key, so the create hit
+# AlreadyExists. This row exists so the Forbidden branch beside it cannot be read as "reword
+# every refusal": the lost race is still a lost race.
+#
+# THE CONTRACT: the kubectl error is passed through, then the racing-dispatcher / invalid-manifest
+# message, unchanged from before #1973. Exit 3.
+name: reviewer-create-refusal-already-exists
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-create-refusal
+  - file:post.sh

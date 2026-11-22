@@ -1,0 +1,15 @@
+# stale-armed-retry/retries-exhausted (ADR-162) — #3233 already carries three `ci-retry` event lines at this
+# head (constructed comment) and `ci` still dies without a failed step: not a flake. No fourth re-run — one
+# EXHAUSTED report line naming the runner/workflow as the subject. #3237 (no retries yet) still gets its own.
+name: stale-armed-retry-retries-exhausted
+mode: actions
+source: agents/coordinator-scan.sh
+world: homelab-dead-runs-3233-3237
+parts:
+  - file:../bridge.sh
+  - block:stale-armed-retry
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-10T19:15:00Z

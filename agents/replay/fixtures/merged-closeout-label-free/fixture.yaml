@@ -1,0 +1,34 @@
+# homelab#2808 — C6 merged-closeout selects a CLOSED issue by its pre-merge LIFECYCLE label
+# (`agent/in-progress` | `agent/review`), never by `agent-fix`. Carrier issues are authored
+# label-free and gateway rides are admitted with `agent/queued` + `agent-budget/*` and no
+# `agent-fix`; the merge that closed them left `agent/review` behind, and an `agent-fix`
+# pre-filter meant no clause could ever close the loop (no agent/done flip, no Follow-ups harvest).
+#
+# CONDITION UNDER REPLAY. Four closed issues, served to BOTH label reads (the stub keys the world
+# without the `--label` value, so each read returns all four):
+#   #96 — `agent/review` ONLY (a label-free carrier)        → ONE merged-closeout unit
+#   #97 — `agent-fix` + `agent/in-progress`                 → ONE merged-closeout unit
+#   #98 — `agent/review` + `agent/done` (terminal)          → nothing
+#   #99 — `agent/review` + `agent/error` (human breaker)    → nothing
+#
+# THE CONTRACT:
+#   1. The selector is two server-side reads keyed on the lifecycle labels (`gh --label` ANDs);
+#      neither names `agent-fix`. Base REDS here: it reads once with `--label agent-fix`.
+#   2. The two reads merge BY ISSUE NUMBER — #96/#97 each yield exactly one unit even though both
+#      reads returned them (a plain concatenation would emit each twice).
+#   3. Newest-created first (gh's own default order), so the 3/scan cap takes the newest: 97, 96.
+#   4. agent/done and agent/error are excluded exactly as before.
+#
+# NOT PINNED: the server-side label semantics themselves (the stub cannot filter by `--label`);
+# the CALL lines are the pin for "which labels are asked for".
+pins:
+  - IL-T09
+name: merged-closeout-label-free
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:merged-closeout
+  - file:post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'

@@ -63,11 +63,16 @@ resource "proxmox_virtual_environment_vm" "opnsense_router_nx02" {
     dedicated = 2048
   }
 
+  # size: 30 days of logs (operator ruling 2026-11-21) — filter ~110 MB/day (~3.3 GB at OPNsense's
+  # ~31-day keep) + HAProxy ~1 GB, plus firmware headroom; the 8 GB it was born with filled to 108 %
+  # and Unbound could not start (docs/incidents/2026-11-20-nx-02-boot-disk.md). A thin LV: only used
+  # blocks allocate. Growing is in-place; the guest's UFS then needs one online growfs
+  # (docs/router-move.md §Disk size).
   disk {
     datastore_id = var.nx02_datastore_vms
     file_id      = proxmox_download_file.opnsense_nano_nx02.id
     interface    = "scsi0"
-    size         = 8
+    size         = 32
     file_format  = "raw"
     discard      = "on"
     ssd          = true
@@ -146,11 +151,12 @@ resource "proxmox_virtual_environment_vm" "opnsense_router_pve" {
     dedicated = 2048
   }
 
+  # size: as nx-02's — 30 days of logs + firmware headroom (the comment there).
   disk {
     datastore_id = var.datastore_vms
     file_id      = proxmox_download_file.opnsense_nano_pve.id
     interface    = "scsi0"
-    size         = 8
+    size         = 32
     file_format  = "raw"
     discard      = "on"
     ssd          = true

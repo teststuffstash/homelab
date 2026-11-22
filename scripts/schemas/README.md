@@ -51,4 +51,4 @@ or dropped a validation the schema still enforces (silently permissive). **Re-ru
 whenever `tofu/variables.tf`'s `cilium_version` bumps** — Cilium's CRD schema changes between minor
 versions far more often than the API version (`v2`) does. There is no automation for this yet
 (FU-197's offline-only constraint means it cannot run in CI against the live cluster); it is a
-manual step in the Cilium-bump recipe.
+manual step in the Cilium-bump recipe ([`docs/runbook.md`](../../docs/runbook.md) §"Class-6 bump: Cilium", step 7).

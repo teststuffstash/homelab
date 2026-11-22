@@ -1,0 +1,4 @@
+# retro-pg-env — the decision table (family contract in fixture.yaml; per-row intent below).
+# id    | world | patch | env                                   | expect | params
+set     |       |       | RETRO_PG_SECRET=oracle-pg-feedback-ro | set    |
+unset   |       |       |                                       | unset  |

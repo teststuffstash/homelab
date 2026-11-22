@@ -188,9 +188,9 @@ its anchor and its evidence:
     base; the tie-break plumbing shipped in PR#963 (`compute_pin`'s `ranked` sort key).
 - **Serve a canary under the CLASS's policy, not the same provider** (an Exacto-routed class gets
   Exacto-routed canaries) — pinning a probe would make its evidence less representative.
-  - **`unenforced`** — a recorded principle of the provider work; the scout's arm list exists
-    (`agents/model-scout.sh` `CELL_PROVIDERS`: `""` = the proxy's own pin, an integer slot, or a
-    slug) but nothing asserts the class-policy equivalence. Owner: Goal #1640 acceptance 8's
+  - **`unenforced`** — a recorded principle of the provider work; the retired scout's arm list
+    (`CELL_PROVIDERS`, gone with `agents/model-scout.sh` 2026-11-01) never asserted the class-policy
+    equivalence, and the gateway's entry canary pins one (model, provider) cell by design. Owner: Goal #1640 acceptance 8's
     matrix run (its arms are the evidence), and the follow-up that canary rows carry the SERVED
     slug.
 - **Latency is an ordering dimension, tie-broken on measured decode tokens/sec per
@@ -422,7 +422,7 @@ Bearer <key>` everywhere; "probed" = verified against our account, with date.
 | `GET /api/v1/activity` | account-wide usage | **management-key only** — not worth holding one in-cluster (FU-095 backfill idea parked) |
 | frontend `/api/frontend/v1/benchmarks` | model quality scores | **session-cookie-gated, API key 401s** (2026-08-02) — see MCP row |
 | MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`**, `get-endpoint-uptime-history`, `list-presets`/`get-preset` | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). Probed 2026-08-03 (OAuth): `list-benchmarks` sources = `artificial-analysis` (AA intelligence/coding/agentic composite indices, ~126 models) **and `openrouter` — OpenRouter's OWN evals (gpqa_diamond accuracy + $/task), i.e. the formerly session-gated frontend data**; `list-task-classifications` = 7d traffic share per task tag (incl. `code:devops_config`, `devops`, `security_audit`, `research_report`) with top-10 models each; `get-endpoint-uptime-history` = 72h hourly per-provider uptime **with quantization in the endpoint label** (fp8/fp4 — the provider-staleness filter's data). **Probed 2026-08-03: the standard account key pulls `list-benchmarks` AND `list-task-classifications`** (jail replay of the proxy's exact `_mcp_call` shape with the `router-account-key` Secret) — the scout's weekly capability/market pull is fully automatable server-side; OAuth is only needed for the interactive/billable tools |
-| provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | scout canary keys ride this with `only-free` guardrail (FU-024) |
+| provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | the retired scout's canary keys rode this with the `only-free` guardrail (FU-024) |
 | frontend `/api/frontend/v1/stats/effective-pricing?permaslug=` | per-provider 30d market effective prices + REAL cache-hit (the market price basis) | works **unauthenticated** (2026-08-26). ⚠ takes the **DATED permaslug** (`deepseek-v4-flash-20260731`), never the model id (`…-0731`) — the wrong form returns an EMPTY payload, not an error. The proxy already derives it from `/endpoints` tag names (`_PERMASLUG_RE`); a hand probe must too. Ranks effective **input** price only — output price and quality are not in it |
 | frontend `/api/frontend/v1/stats/tool-call-error-rate?permaslug=` | per-ENDPOINT daily tool-call error-rate series (the Performance-tab modal's data — the Auto Exacto quality signal itself) | found 2026-08-26 after the RSC row below couldn't reach it (the tab lazy-loads); unauthenticated; endpoint ids join to providers via `endpointStats`/`/endpoints`. The live-floor input for provider selection + a fleet alerting feed (a provider at 39.6% tool-error read 99.6% *uptime* — "up" ≠ "works") |
 | model-page RSC stream (`GET openrouter.ai/<author>/<slug>` + `RSC: 1` header) | the Performance-tab data as React-Query dehydrated state, keyed by dated permaslug: **`benchmarkScores`** (per-provider Auto-Exacto benchmark rows — gpqa_diamond + TAU-Bench score, `run_count`, `endpoint_id`, 32d rolling — the quality table behind Exacto routing), **`endpointStats`** (per-provider latency/throughput **percentiles** p50–p99, `is_deranked`, `capacity_tpm`, quantization — richer than `/endpoints`), **`appStats`** (daily model-level `total_tool_calls` + `requests_with_tool_call_errors` → the model-wide tool-call error rate), `uptimeRecent`, `topColos` | probed 2026-08-26 (the 0731 read). Unauthenticated. ⚠ the PER-PROVIDER **Tool Call / Structured Output Error Rate** table lazy-loads on tab open and is NOT in the initial stream — its endpoint is unfound (candidate paths under `/api/frontend/v1/stats/*` all 404); the website is the only reader today. The signal is still CONSUMABLE blind: **Auto Exacto** reorders providers by it on every tool-calling request by default, and the **`:exacto`** model-variant suffix applies it explicitly — ⚠ an explicit `provider.order` pin presumably suppresses it (unverified; the 0731 matrix run tests this) |
@@ -441,8 +441,9 @@ rates), `send-feedback` (per-generation feedback), `get-generation`, media tools
 `list-app-rankings` adds `sort: trending`. The 2026-08-26 reading above ("no top-weekly / rising
 view") is superseded: a 1–2-week riser is two weekly rows in one call, no retained snapshots
 needed. Rows are DATED permaslugs (`deepseek/deepseek-v4.1-flash-20260910`), so a consumer joins
-them to model ids the way the proxy's `_PERMASLUG_RE` does. *New* models still come from the
-scout's weekly `/models` diff. The gateway's OpenRouter catalog leg (FU-270) is the consumer.
+them to model ids the way the proxy's `_PERMASLUG_RE` does. *New* models come from the
+gateway's OpenRouter catalog leg (`GW-CATALOG-OR`, FU-270) — the model scout's weekly `/models` diff
+retired 2026-11-01.
 
 ## Who owns which fact
 
@@ -521,7 +522,8 @@ work the coding lane's rules were never written for.
 - **The candidate source is a maintained ROTATION**, not the scout's new-model diff. The scout
   missed `nemotron-3-ultra-550b:free` — verified: the registry snapshot predates it *and* kimi-k3.
   Diff-only + tools/price filter ≠ "what's currently good". The rotation feeds chains
-  continuously; the scout's canary leg stays as the safety probe for rotation entrants.
+  continuously; the safety probe for entrants is the gateway's entry canary (`GW-CATALOG-OR`) since
+  the scout retired (2026-11-01).
   · **`unenforced`** — FU-095.
 - **Reasoning tier for audit/review/research task types.** The coordinator README currently *bars*
   reasoning models — a worker-coding rule. The audit/research lane needs its own, including
@@ -560,7 +562,7 @@ work the coding lane's rules were never written for.
   pilot supplies the evidence that decision is waiting on.
 
 **Leg (c) — free-model probing of goose error handling.**
-- **`unenforced`** — FU-095 leg (c); the scout's canary shape is anchored in the class rules above.
+- **`unenforced`** — FU-095 leg (c); the canary shape (the retired scout's, now the gateway's entry canary) is anchored in the class rules above.
   Extend the canary from trivial closed rides to real sleep xs tasks. This resolves the live
   tension between "free entries are fine anywhere" and `stacks.json` `_chain_policy` ("free tiers
   never fix-chain entries").

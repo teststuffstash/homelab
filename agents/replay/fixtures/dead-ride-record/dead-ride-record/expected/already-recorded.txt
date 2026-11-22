@@ -1,0 +1,13 @@
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab logs agent-homelab-issue-3303-r1 -c agent
+CALL kubectl -n homelab get pod agent-homelab-issue-3303-r1 -o jsonpath={.status.reason}/{.status.containerStatuses[?(@.name=="agent")].state.terminated.reason}
+CALL gh api repos/teststuffstash/homelab/issues/3303/comments?per_page=100 --paginate
+CALL kubectl -n homelab get pods -l app=agent-session,project=homelab -o json
+CALL kubectl -n homelab delete pod agent-homelab-issue-3303-r1 --ignore-not-found
+CALL kubectl -n homelab delete pod agent-homelab-issue-3290-r2 --ignore-not-found
+OUT   [homelab] dead ride agent-homelab-issue-3303-r1 (issue-3303 r1): agent ended non-zero, no AGENT_RUN_STATS — recording it with the launcher's classifier
+OUT → terminal record for agent-homelab-issue-3303-r1 already on teststuffstash/homelab#3303 — not written twice
+OUT → no PR opened — AGENT_STRIKE: model=claude/sonnet error_class=unknown round=1 session=agent-homelab-issue-3303-r1
+OUT   [homelab] janitor: deleting terminal ride pod agent-homelab-issue-3303-r1 (releases its ephemeral scratch PVC)
+OUT   [homelab] janitor: deleting terminal ride pod agent-homelab-issue-3290-r2 (releases its ephemeral scratch PVC)
+RC 0

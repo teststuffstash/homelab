@@ -1,0 +1,27 @@
+# arbitrate/no-op-after-directive (c) ci-red, a no-op with NO directive → today's arbitrate path (homelab#1910, Goal #1906 pin 3).
+#
+# First no-op on the PR (stats 10:05 pushed, 11:00 did not) and no `ARBITRATE` comment on the PR
+# or the issue: there is no directive to re-run, so the ruling is genuinely needed ⇒ the label +
+# the FU-115b event exactly as today. Nothing is launched.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cired-undirected
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cired-bridge.sh
+  - block:ci-red-rounds
+  - block:ci-red-arbitrate
+  - file:../no-op-after-directive/cired-close.sh
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=1540
+  - IN_ISSUE=1530
+  - IN_HEAD=fix/issue-1530-red-step
+  - MC_NOW=2026-09-09T11:10:00Z

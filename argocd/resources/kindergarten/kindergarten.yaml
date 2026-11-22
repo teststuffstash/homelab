@@ -1,0 +1,65 @@
+# The kindergarten site: nginx-unprivileged + static files, built by Forgejo rasmus/kindergarten
+# (scripts/publish.sh — crane, no Docker daemon). `:main` + pullPolicy Always is deliberate: the
+# repo's CI restarts this Deployment after each push (kindergarten-rollout.yaml), and the immutable
+# `:<sha>` tags stay in the registry for a rollback (`kubectl set image` → then re-sync).
+# Served via the homelab Gateway as kindergarten.homelab.teststuff.net (homelab-gateway/httproute-kindergarten.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kindergarten
+  namespace: kindergarten
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app: kindergarten }
+  template:
+    metadata:
+      labels: { app: kindergarten }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: registry.teststuff.net/kindergarten:main
+          imagePullPolicy: Always
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kindergarten
+  namespace: kindergarten
+spec:
+  selector: { app: kindergarten }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+# Lets the platform Gateway's HTTPRoute (ns homelab-gateway) point at Service kindergarten here.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: homelab-gateway-httproute-to-kindergarten
+  namespace: kindergarten
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: homelab-gateway
+  to:
+    - group: ""
+      kind: Service
+      name: kindergarten

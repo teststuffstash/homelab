@@ -37,7 +37,7 @@ spec:
   monitoring:
     enablePodMonitor: true
   storage:
-    size: 5Gi
+    size: 15Gi # was 5Gi — WAL pile-up while the backup target was down (incident 2026-11-20-nx-02-boot-disk)
     storageClass: longhorn-local-std # replica-1 node-local std (tofu/longhorn.tf) — Postgres replicates itself
   bootstrap:
     initdb:

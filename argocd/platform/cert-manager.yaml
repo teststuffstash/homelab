@@ -26,7 +26,21 @@ spec:
         resources:
           requests: { cpu: "20m", memory: "64Mi" }
           limits: { memory: "256Mi" }
+        # Two webhook pods, one per node (ADR-140 shape): the webhook is failurePolicy Fail, so a
+        # lone pod restarting rejects every write of a cert-manager resource. Selector = the chart's
+        # webhook Deployment selector labels.
         webhook:
+          replicaCount: 2
+          podDisruptionBudget: { enabled: true, maxUnavailable: 1 }
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: webhook
+                      app.kubernetes.io/instance: cert-manager
+                      app.kubernetes.io/component: webhook
+                  topologyKey: kubernetes.io/hostname
           resources:
             requests: { cpu: "10m", memory: "32Mi" }
             limits: { memory: "128Mi" }

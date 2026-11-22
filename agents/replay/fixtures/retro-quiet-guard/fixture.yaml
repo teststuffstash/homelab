@@ -15,6 +15,13 @@
 # Rows: `prepare-ok` · `quiet-push-ok` · `quiet-push-retry-ok` · `quiet-push-fails` ·
 # `prepare-fails`. Seams in bridge.sh: python3 / curl / date / sleep shadows, and WORK (the
 # outputs dir, defined just above the block in the manifest) pointed at a tmpdir.
+#
+# THE PROMQL GUARD (homelab#3140, the `expr-*` rows): a named series (`guardExpr` set) reads ONE
+# Prometheus instant query instead of the ledger. The curl shadow answers the query with a canned
+# body (PROM_VALUE), the REAL agents/retro_guard_expr.py parses it (never transcribed), and the
+# block branches on its exit exactly as on prepare's: 0 → `prepare --no-ledger` then fall through;
+# 3 → the quiet push; 1 → fail. `expr-absent`/`expr-error`/`expr-prom-down` pin the rule that an
+# absent gauge or a dead Prometheus is a FAILED run, never a quiet week.
 name: retro-quiet-guard
 mode: table
 source: agents/coordinator/retro-argo.yaml

@@ -7,6 +7,7 @@ reports `db: memory` so the belt sees it.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import json
 import logging
@@ -118,6 +119,20 @@ CREATE TABLE IF NOT EXISTS captures (
     record     TEXT NOT NULL,
     PRIMARY KEY (session_id, seq)
 );
+CREATE TABLE IF NOT EXISTS wire_records (
+  source TEXT PRIMARY KEY,
+  class TEXT NOT NULL,
+  url TEXT NOT NULL,
+  status INTEGER,
+  content_type TEXT,
+  body BLOB,
+  bytes INTEGER,
+  sha256 TEXT,
+  fetched_at REAL,
+  complete INTEGER,
+  last_error TEXT,
+  last_error_at REAL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value REAL NOT NULL
@@ -133,7 +148,6 @@ CREATE TABLE IF NOT EXISTS capacity_marks (
 );
 """
 _STRIKES_REBUILD = """
-BEGIN;
 CREATE TABLE strikes_v2 (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   stack TEXT NOT NULL,
@@ -155,7 +169,6 @@ INSERT INTO strikes_v2 (id, stack, task, rail, model, provider, class, scope, so
 DROP TABLE strikes;
 ALTER TABLE strikes_v2 RENAME TO strikes;
 CREATE INDEX IF NOT EXISTS strikes_task ON strikes (stack, task);
-COMMIT;
 """
 # Columns added after the first PVC database was created: `CREATE TABLE IF NOT EXISTS` never adds
 # them to an existing table, so _migrate() does (idempotent, additive only). The bind columns
@@ -184,6 +197,25 @@ _ADDED_COLUMNS = {
 # A bound session's token is minted at the PULL, not the dispatch: until then its token_hash
 # column (NOT NULL UNIQUE) holds this prefix + the id, which no sha256 hex digest can equal.
 UNMINTED_PREFIX = "unminted:"
+
+
+def _statements(script: str) -> list[str]:
+    """A DDL script as single statements, for `execute()` inside the open-time transaction:
+    `executescript()` cannot run there — it COMMITs any open transaction first (Python 3.15, even
+    with isolation_level=None). Splits on `sqlite3.complete_statement`, so a ';' inside a quoted
+    default never cuts a statement."""
+    out, buf = [], ""
+    for line in script.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            out.append(buf.strip())
+            buf = ""
+    assert not buf.strip(), f"incomplete trailing statement: {buf!r}"
+    return out
+
+
+_SCHEMA_STATEMENTS = _statements(_SCHEMA)
+_STRIKES_REBUILD_STATEMENTS = _statements(_STRIKES_REBUILD)
 
 
 @dataclass(frozen=True)
@@ -241,7 +273,7 @@ class Session:
     caller: str | None = None
     # GW-RAIL-*: the 2xx answers whose body stopped before its end (never counted as clean).
     requests_incomplete: int = 0
-    attempt: int = 1  # GW-SESSIONS-ADMIT: the consumer's re-admission counter at this round
+    attempt: int = 1  # GW-SESSIONS-RETRY: the consumer's re-admission counter at this round
     # GW-SESSIONS-LIVENESS: the pod this session lives in (the pulling pod, else the caller's), and why it ended
     live_namespace: str | None = None
     live_pod: str | None = None
@@ -303,18 +335,36 @@ class Store:
                 (integrity,) = self._db.execute("PRAGMA quick_check").fetchone()
                 if integrity != "ok":
                     raise sqlite3.DatabaseError(f"quick_check: {integrity}")
-            self._db.executescript(_SCHEMA)
-            self._migrate()
+            self._apply_schema(migrate=True)
         except sqlite3.Error as e:
             if self.mode == "memory":
                 raise
             log.error("db: memory — FAIL-OPEN, sessions do not survive a restart (%s unusable: %s)", path, e)
             self.mode = "memory"
             self._db = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
-            self._db.executescript(_SCHEMA)
+            self._apply_schema(migrate=False)
         else:
             log.info("db: %s %s", self.mode, path)
         self._db.row_factory = sqlite3.Row
+
+    def _apply_schema(self, migrate: bool) -> None:
+        """_SCHEMA (+ _migrate on a file) in ONE transaction: one commit, one WAL fsync, instead of
+        one per DDL statement under autocommit (~150 → ~40 ms for a fresh file). All or nothing —
+        a crash or error midway rolls back to the schema the file had, never a partial one. The
+        journal_mode / quick_check pragmas run before it: journal_mode cannot change inside a
+        transaction."""
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            for stmt in _SCHEMA_STATEMENTS:
+                self._db.execute(stmt)
+            if migrate:
+                self._migrate()
+            self._db.execute("COMMIT")
+        except BaseException:
+            if self._db.in_transaction:
+                with contextlib.suppress(sqlite3.Error):
+                    self._db.execute("ROLLBACK")
+            raise
 
     def _migrate(self) -> None:
         for table, cols in _ADDED_COLUMNS.items():
@@ -327,7 +377,8 @@ class Store:
         # provider it tried, in the same class): a table built with the old UNIQUE is rebuilt once.
         (sql,) = self._db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strikes'").fetchone()
         if "UNIQUE (session_id, class, source)" in sql:
-            self._db.executescript(_STRIKES_REBUILD)
+            for stmt in _STRIKES_REBUILD_STATEMENTS:
+                self._db.execute(stmt)
             log.info("db: migrated strikes — the unique key now carries provider")
 
     # -- sessions -------------------------------------------------------------------------------
@@ -479,7 +530,7 @@ class Store:
 
     def rail_usage_since(self, rail: str, since: float) -> list[tuple[float, str, int, int, int, int]]:
         """The rail's metered (2xx) requests since `since`, ascending: (ts, session model, tokens_in,
-        cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-ADMIT)."""
+        cache_read, cache_write, tokens_out) — the window-draw ledger (GW-SESSIONS-CAPACITY)."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT r.ts, s.model, r.tokens_in, r.tokens_cache_read, r.tokens_cache_write, r.tokens_out"
@@ -553,7 +604,7 @@ class Store:
             return cur.rowcount == 1
 
     def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset(),
-                       harness: str = "") -> int:
+                       harness: str = "", twins: set[str] = frozenset()) -> int:
         """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
         its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
         provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
@@ -561,13 +612,16 @@ class Store:
         cell (§Harness-scoped strikes: a clean ride proves the harness's machinery works)."""
         ps = sorted(providers)
         marks = ",".join("?" for _ in ps)
+        ts = sorted(twins)  # the model's twins: a model-scoped strike on one is refuted from either (GW-SESSIONS-RETRY §A strike crosses the twins)
+        tmarks = ",".join("?" for _ in ts)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
                 " AND ((scope = 'harness' AND harness = ? AND harness != '')"
                 " OR (scope != 'harness' AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''"
-                + (f" OR provider IN ({marks})" if ps else "") + ")))))",
-                (at, stack, task, at, harness, model, rail, *ps),
+                + (f" OR provider IN ({marks})" if ps else "") + "))))"
+                + (f" OR (scope = 'model' AND model IN ({tmarks}))" if ts else "") + ")",
+                (at, stack, task, at, harness, model, rail, *ps, *ts),
             )
             return cur.rowcount
 
@@ -604,6 +658,36 @@ class Store:
         except ValueError:
             log.error("db: catalog_snapshots.%s is not JSON — ignored (the next refresh replaces it)", source)
             return None
+
+    # -- the wire record (GW-WIRE-RECORD): the latest answer of each vendor read, one row per source ----
+    def wire_ok(self, source: str, cls: str, url: str, status: int, content_type: str, body: bytes, sha256: str,
+                fetched_at: float, complete: bool) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO wire_records (source, class, url, status, content_type, body, bytes, sha256, fetched_at, complete,"
+                " last_error, last_error_at) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)"
+                " ON CONFLICT(source) DO UPDATE SET class = excluded.class, url = excluded.url, status = excluded.status,"
+                " content_type = excluded.content_type, body = excluded.body, bytes = excluded.bytes, sha256 = excluded.sha256,"
+                " fetched_at = excluded.fetched_at, complete = excluded.complete, last_error = NULL, last_error_at = NULL",
+                (source, cls, url, status, content_type, body, len(body), sha256, fetched_at, 1 if complete else 0))
+
+    def wire_fail(self, source: str, cls: str, url: str, error: str, at: float) -> None:
+        """A failed read: the last good answer stays; the failure is recorded beside it."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO wire_records (source, class, url, last_error, last_error_at) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(source) DO UPDATE SET last_error = excluded.last_error, last_error_at = excluded.last_error_at",
+                (source, cls, url, error, at))
+
+    def wire_get(self, source: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM wire_records WHERE source = ?", (source,)).fetchone()
+        return dict(row) if row is not None else None
+
+    def wire_all(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM wire_records ORDER BY source").fetchall()
+        return [dict(r) for r in rows]
 
     # -- the OpenRouter catalog's cells + the canary meter (GW-CATALOG-OR) ----------------------
     def cells_sync(self, pairs: list[tuple[str, str]], now: float) -> int:
@@ -680,6 +764,14 @@ class Store:
             row = self._db.execute("SELECT 1 FROM requests WHERE session_id = ? AND status = 429 LIMIT 1", (session_id,)).fetchone()
         return row is not None
 
+    def session_last_throttled(self, session_id: str) -> bool:
+        """Whether the session's LAST relayed upstream answer was a 429 — a consumer's non-clean outcome
+        after it is a capacity death, no strike (GW-SESSIONS-OUTCOME §The store)."""
+        with self._lock:
+            row = self._db.execute("SELECT status FROM requests WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                                   (session_id,)).fetchone()
+        return row is not None and row["status"] == 429
+
     def canary_usage_since(self, since: float) -> list[tuple[str, str, int, int, int, int]]:
         """The canary sessions' 2xx requests since `since`: (model, provider, tokens_in, cache_read,
         cache_write, tokens_out) — the budget meter's ledger."""
@@ -699,7 +791,7 @@ class Store:
         with self._lock:
             self._db.execute("INSERT INTO meta (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
-    # -- the capacity marks (GW-SESSIONS-ADMIT §Capacity, "Kept across a restart") --------------
+    # -- the capacity marks (GW-SESSIONS-CAPACITY §Kept across a restart) --------------
     # One row per mark the admission's capacity state holds (capacity.py writes through under its own
     # lock; a new gateway on the same DB reloads them at start): `kind` cooled (key `rail|model|provider`)
     # | latched (the rail) | rejected (`rail|<credential fingerprint>`, with the mark's stack, at = since,

@@ -1,0 +1,25 @@
+# assembly-ci-red/debounced — the SAME red state one tick later: the dispatch-time marker is on the PR.
+# One red state buys one ride. The marker's hash is derived from the inputs and the fold's contract,
+# not by running the clause:
+#   printf '%s' 'head=a55e3b1ea55e3b1ea55e3b1ea55e3b1ea55e3b1e|red=ci@2026-11-12T09:00:10Z' | sha256sum | cut -c1-12
+#     → 275c4e614d6a
+# The world also carries `iac-sentinel` as a FAILURE commit STATUS re-posted minutes ago: a status
+# has `.state`, not `.conclusion`, so it is not red to the ci-red clause and never enters the fold —
+# a heartbeat re-post cannot re-arm the trigger (the #2065 ride-per-beat class).
+#
+# THE CONTRACT: a DEBOUNCED report line naming the marker; no unit, no side-map entry.
+name: assembly-ci-red-debounced
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

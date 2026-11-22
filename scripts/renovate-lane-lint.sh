@@ -29,6 +29,15 @@
 #   unarmed-lane  lane-labelled (`automerge`/`deps-review`), no `major`, yet automerge false
 #   no-lane       no lane label at all — the #1988 "unlabelled class" nobody owns
 #   two-lanes     one member carries both `automerge` and `deps-review`
+#   split-set     a VERSION SET (a group with a member declaring `minimumGroupSize` >= 2 — the config's
+#                 own "never alone" key) computed into two branches past the major/non-major split:
+#                 `patch-<group>` beside `<group>` is `separateMinorPatch` dealing one set into two PRs
+#                 (gap G16, #3036) — each half is either a half set or held forever by its own size
+#   lone-partner  a branch Renovate WILL open moves a chart whose Application declares
+#                 `homelab.teststuff.net/app-version-of: <partner>` without <partner> (#3280's shape);
+#                 the same annotation argocd-validate-pins asserts on every PR — one declaration
+# A branch with fewer members than its highest `minimumGroupSize` is printed `held`: Renovate skips
+# creating it (update/branch/index.ts — unless the branch already exists), so lone-partner skips it.
 # Majors are not asserted either way: ADR-141's armed-major rules make both states legitimate.
 #
 # ⚠ COMMIT FIRST: the local platform lists the tree through git, so an UNTRACKED file is invisible
@@ -36,7 +45,7 @@
 # group with one member; the same run on the committed tree extracted 341 and showed both.
 # Usage: devbox run renovate-lane-lint            # run renovate, then assert (prints the branch table)
 #        … -- --trace FILE                        # assert on an existing trace (no renovate run)
-#        … -- --self-test                         # the fixture: one good group, one legit major, one of each violation
+#        … -- --self-test                         # the fixture: one good group, one legit major, one held lone partner, one of each violation
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -72,9 +81,18 @@ if [ -z "$trace" ]; then
   echo "renovate-lane-lint: trace at $trace" >&2
 fi
 
-python3 - "$trace" "$selftest" <<'PY'
-import json, sys
+# chart → the partner its Application must match (the app-version-of annotation, read with yq: the
+# jail python has no yaml module). A failed read is fatal — an empty map would pass lone-partner vacuously.
+partners="$(grep -rl 'kind: Application' argocd --include='*.yaml' | while IFS= read -r f; do
+  yq -o=json "$f" | jq -c 'select(.kind == "Application" and .metadata.annotations["homelab.teststuff.net/app-version-of"] != null)
+    | {(([ (.spec.source // empty) ] + (.spec.sources // []))[] | select(.chart != null) | .chart):
+       .metadata.annotations["homelab.teststuff.net/app-version-of"]}'; done | jq -cs 'add // {}')"
+[ "$partners" != '{}' ] || { echo "renovate-lane-lint: FAIL — no app-version-of annotation under argocd/ (lone-partner would assert nothing)" >&2; exit 1; }
+
+python3 - "$trace" "$selftest" "$partners" <<'PY'
+import json, re, sys
 path, selftest = sys.argv[1], sys.argv[2] == "1"
+PARTNER = json.loads(sys.argv[3])
 LANE = {"automerge", "deps-review", "major", "major/awaiting-human"}
 branches, stats, depcount, result = [], None, None, ""
 for line in open(path, encoding="utf-8", errors="replace"):
@@ -105,8 +123,19 @@ def lane(u):
     return frozenset(set((u.get("labels") or []) + (u.get("addLabels") or [])) & LANE)
 
 rows, violations = [], []
+sets, setsize = {}, {}  # group → its computed branches, and the highest minimumGroupSize any member declares (split-set)
 for ups in branches:
     name = ups[0].get("branchName", "?")
+    mgs = max(int(u.get("minimumGroupSize") or 1) for u in ups)
+    held = len(ups) < mgs
+    group = ups[0].get("groupName")
+    if group:
+        sets.setdefault(group, set()).add(name)
+        setsize[group] = max(setsize.get(group, 1), mgs)
+    deps = {u.get("depName") for u in ups}
+    for d in sorted(deps):
+        if not held and d in PARTNER and PARTNER[d] not in deps:
+            violations.append((name, "lone-partner", f"{d} moves without {PARTNER[d]} (app-version-of) — half a version set"))
     arms = [bool(u.get("automerge")) for u in ups]
     lanes = [lane(u) for u in ups]
     every = all(arms)
@@ -114,7 +143,7 @@ for ups in branches:
     members = "; ".join(
         f"{u.get('manager')}:{u.get('depName')}:{u.get('updateType')}:am={'T' if a else 'F'}:{','.join(sorted(l)) or '-'}"
         for u, a, l in zip(ups, arms, lanes))
-    rows.append((name, every, union, members))
+    rows.append((name, every, union, ("[held: minimumGroupSize %d] " % mgs if held else "") + members))
     if len(set(arms)) > 1:
         violations.append((name, "mixed-arm", "members disagree on automerge → the branch arms false (G15)"))
     if len(set(lanes)) > 1:
@@ -126,6 +155,13 @@ for ups in branches:
     if any({"automerge", "deps-review"} <= l for l in lanes):
         violations.append((name, "two-lanes", "one member carries both automerge and deps-review"))
 
+for group, names in sorted((g, n) for g, n in sets.items() if setsize[g] > 1):
+    # strip the major/non-major split (separateMajorMinor — alternatives, each a whole set); what remains
+    # must be ONE topic, or the set was dealt into several PRs by update type
+    topics = {re.sub(r"^(renovate/)major-(\d+-)?", r"\1", n) for n in names}
+    if len(topics) > 1:
+        violations.append((group, "split-set", f"version set computed into {sorted(names)} — separateMinorPatch (or separateMultipleMinor) splits it (G16)"))
+
 print(f"renovate-lane-lint: {len(branches)} branch(es) computed" + (f" from {depcount} extracted dependencies" if depcount else ""))
 for name, every, union, members in rows:
     print(f"  {name[:48]:48} arm={'T' if every else 'F'} lane={','.join(sorted(union)) or '-':30} {members}")
@@ -134,10 +170,11 @@ if violations:
     for name, kind, why in violations:
         print(f"  {kind:13} {name}: {why}")
     if selftest:
-        want = {"mixed-arm", "mixed-lane", "unarmed-lane", "no-lane", "two-lanes"}
+        want = {"mixed-arm", "mixed-lane", "unarmed-lane", "no-lane", "two-lanes", "split-set", "lone-partner"}
         got = {k for _, k, _ in violations}
         good = {n for n, e, u, _ in rows} - {n for n, _, _ in violations}
-        if got == want and good == {"renovate/good-group", "renovate/major-ok"}:
+        held_ok = any(m.startswith("[held") for n, _, _, m in rows if n == "renovate/major-held")
+        if got == want and good == {"renovate/good-group", "renovate/major-ok", "renovate/major-held", "renovate/held", "renovate/patch-split", "renovate/split"} and held_ok:
             print("renovate-lane-lint: self-test OK (every violation class fired once, the good group passed)")
             sys.exit(0)
         print(f"renovate-lane-lint: self-test FAILED — fired {sorted(got)}, clean {sorted(good)}")

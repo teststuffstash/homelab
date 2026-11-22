@@ -66,7 +66,7 @@ spec:
   sources:
     - repoURL: ghcr.io/akuity/kargo-charts
       chart: kargo
-      targetRevision: 1.12.5
+      targetRevision: 1.12.6
       helm:
         valuesObject:
           global:
@@ -148,6 +148,21 @@ spec:
               serviceMonitor:
                 enabled: true
           webhooksServer:
+            # Two pods, one per node (ADR-140 shape): every Kargo admission webhook but one is
+            # failurePolicy Fail, so a lone pod restarting rejects every write of a Kargo resource.
+            # Selector = the chart's Deployment selector labels. The PDB value has no default in this
+            # chart's values.yaml; templates/kubernetes-webhooks-server/pdb.yaml reads it.
+            replicas: 2
+            podDisruptionBudget: { enabled: true, maxUnavailable: 1 }
+            affinity:
+              podAntiAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  - labelSelector:
+                      matchLabels:
+                        app.kubernetes.io/name: kargo
+                        app.kubernetes.io/instance: kargo
+                        app.kubernetes.io/component: kubernetes-webhooks-server
+                    topologyKey: kubernetes.io/hostname
             resources:
               requests: { cpu: "10m", memory: "64Mi" }
               limits: { memory: "256Mi" }

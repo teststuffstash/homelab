@@ -1,0 +1,19 @@
+# stale-armed-retry/live-board (ADR-162) — the event replay: the homelab board of 2026-11-10 as
+# recorded. #3237's `renovate-approve` died three times at startup (zero jobs) and #3233's `ci`
+# died with its runner (no failed step); both sat armed a day with no actor. Expected: one act
+# per PR — #3237's lost event re-fired (a transient `ci-retry` label = one `labeled` event; GitHub refuses to
+# re-run a startup failure), #3233's dead `ci` re-run with --failed — one event line each;
+# #3233's renovate-approve group (a success beside two cancels) and #3237's green `ci` are
+# satisfied; the three un-armed drafts are never read.
+name: stale-armed-retry-live-board
+mode: actions
+source: agents/coordinator-scan.sh
+world: homelab-dead-runs-3233-3237
+parts:
+  - file:../bridge.sh
+  - block:stale-armed-retry
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-10T19:15:00Z

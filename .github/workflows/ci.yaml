@@ -55,6 +55,13 @@ jobs:
       # because EVERY `devbox run` rewrites .devbox/gen/scripts/ and a concurrent serial
       # `devbox run` then dies on "text file busy" (PR #1139's run 33410609342) — only the
       # serial steps may invoke devbox itself.
+      # homelab#3233: a locked store path no substituter carries makes devbox BUILD the package in
+      # the warm below — a compile the runner's memory limit kills with no step log. This names the
+      # package in seconds instead. Bare bash + jq + curl (the runner image's own tools): it must
+      # run BEFORE the first `devbox run`. Rule + the generator's hold: docs/renovate.md §devbox.
+      - name: Locked toolchain is downloadable — nothing compiles in the warm (scripts/lock-cache-check.sh)
+        run: bash scripts/lock-cache-check.sh devbox.lock
+
       - name: Warm the devbox closure (once, before anything runs ∥)
         run: |
           devbox run -- true
@@ -78,8 +85,9 @@ jobs:
 
       # ADR-131: the management box's stage-1 fixtures + the fail-closed policy/classifier reads
       # (homelab#1631's four review rounds were unverified by any required check — the reviewer
-      # read the diff). Serial and BEFORE the ∥ suites start: the test's nested `devbox run yq`
-      # calls must not overlap a background `devbox run` (the "text file busy" class, #1139).
+      # read the diff). The fixtures run concurrently INSIDE this step (mgmt-policy-test-all.sh,
+      # no nested `devbox run` since #3354); the step itself stays serial because it invokes
+      # `devbox run`, which only serial steps may do (the snapshot rule above, #1139).
       - name: mgmt policy fixtures (devbox run mgmt-policy-test)
         if: steps.diff.outputs.mgmt-policy-test != 'false'
         run: devbox run mgmt-policy-test
@@ -211,6 +219,12 @@ jobs:
         if: steps.diff.outputs.specs-review-self-test != 'false'
         run: devbox run specs-review-self-test
 
+      # pr-open (agents/pr-open.sh, ADR-157): the one way a worker opens a PR — its refusals, stamp
+      # and base against a throwaway repo with stubbed devbox/gh. Row in scripts/diff-ci.sh.
+      - name: pr-open self-test (devbox run pr-open-self-test)
+        if: steps.diff.outputs.pr-open-self-test != 'false'
+        run: devbox run pr-open-self-test
+
       # The ~250-line responder script EMBEDDED in responder-argo.yaml is the one thing
       # manifest-lint skips entirely (it validates the Sensor CR, not the shell inside it) — and
       # it shipped two bugs in two rounds on homelab#124 alone. The harness extracts the script
@@ -328,7 +342,7 @@ jobs:
           # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
           # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
-          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(model-scout\.sh|coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo|corpus-dispatch-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           # homelab#1028: `mode: suite` fixtures name an ENTRYPOINT outside agents/replay/
           # (agents/asvs-replay.sh, agents/slo-teeth-replay.sh, …). Growing one IS the replay
@@ -523,6 +537,18 @@ jobs:
       - name: governance-lint self-test (devbox run governance-lint-test)
         if: steps.diff.outputs.governance-lint-test != 'false'
         run: devbox run governance-lint-test
+
+      # FU-274: the registry keep-set's selection rule (which image tags an agent-image build
+      # untags on registry.teststuff.net). No network: a fixed tag list in, the untag set out.
+      - name: registry-keep-set self-test (devbox run registry-keep-set-test)
+        if: steps.diff.outputs.registry-keep-set-test != 'false'
+        run: devbox run registry-keep-set-test
+
+      # FU-185 / ADR-113: ShellCheck -S warning over the tracked shell, ratcheted against
+      # scripts/shellcheck-baseline.txt (#3081 shipped the lint + MAP row; this is its ci step).
+      - name: shellcheck-lint (devbox run shellcheck-lint)
+        if: steps.diff.outputs.shellcheck-lint != 'false'
+        run: devbox run shellcheck-lint
 
       # G17 (ADR-141 as amended 2026-10-06): the devbox-update lock-diff gate over #2260's recorded
       # lock diff — the major gate, the downgrade + line-move lists the second body section carries.
@@ -748,6 +774,29 @@ jobs:
           GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
           SITE_PREFIX: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || '' }}
         run: devbox run gateway-specs-publish
+      # The island's rendered-browser specs-site leg (gateway/scripts/e2e-specs-site.sh — the
+      # oracle-fleet e2e-specs-site shape): the built site in the pinned playwright image, every
+      # spec page's Mermaid diagrams render, every flowchart node link navigates to its requirement
+      # heading. Needs docker (containerMode=dind on this runner class). Scoped by the diff-ci row
+      # to mkdocs.yml, site-assets/, any spec page, the build and the leg itself.
+      - name: Gateway specs-site e2e (devbox run gateway-specs-site-e2e)
+        if: steps.diff.outputs.gateway-specs-site-e2e != 'false'
+        run: devbox run gateway-specs-site-e2e
+      # The scan island's browsable specs site (islands/scripts/specs-site.sh): the island's suite for
+      # its evidence, the mkdocs build, the mirror to the `scan-specs` bucket → master runs
+      # https://scan-specs.homelab.teststuff.net, PR runs …/pr-<N>/ (purged on close by
+      # gateway-specs-pr-purge.yaml). A red island suite does not fail this step — it publishes
+      # what the suite left; the suite's own gate step is #3391. The writer key is the gateway-specs
+      # pair (granted on the bucket in argocd/resources/agent-gateway/garage-workspace.yaml). A
+      # failed upload fails the step (verify-own-write), deliberately no continue-on-error.
+      - name: Scan specs site publish (islands/scripts/specs-site.sh publish scan)
+        if: steps.diff.outputs.bash-islands-scripts-specs-site-sh-publish-scan != 'false'
+        env:
+          GATEWAY_SPECS_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
+          GATEWAY_SPECS_S3_ACCESS_KEY_ID: ${{ secrets.GATEWAY_SPECS_S3_ACCESS_KEY_ID }}
+          GATEWAY_SPECS_S3_SECRET_ACCESS_KEY: ${{ secrets.GATEWAY_SPECS_S3_SECRET_ACCESS_KEY }}
+          SITE_PREFIX: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || '' }}
+        run: devbox run -- bash islands/scripts/specs-site.sh publish scan
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".

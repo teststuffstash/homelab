@@ -122,13 +122,15 @@ instructions: |
   - **Specs are the pinned process.** When `Touches:` names `gateway/specs/**` or `gateway/tests/**`,
     read `gateway/specs/README.md` §Rules FIRST: it points at the RULES.md / CONVENTIONS.md version this
     island runs, and the specs reviewer (your second required approval) gates your rows against that
-    same text. The spec ⇄ test join is a RATCHET in `gateway/scripts/spec_gate.py` — per rule,
-    `row-unkeyed` / `header-unthreaded` / `cell-mismatch` / `case-unspecified` may never exceed
-    `gateway/scripts/spec-gate-baseline.json`. Your rule's counts go down or stay: after a green
-    `pr-open --check-only` (its gate runs the gateway suite, which writes `gateway/allure-results`),
-    run `uv run python scripts/spec_gate.py --write-baseline` in `gateway/` and commit the lowered
-    line in the same PR — the final `pr-open` then gates that commit. A raised line is a RED you
-    do not get to edit around.
+    same text. The spec ⇄ test join is a RATCHET (`gateway/scripts/spec-join-ratchet.py`) — per rule,
+    `row-unkeyed` / `header-unthreaded` / `cell-mismatch` / `case-unspecified` / `row-unproven` may
+    never exceed `gateway/scripts/spec-join-baseline.json`; the report-hygiene codes are a second
+    ratchet of (rule · world · case · code) identities against `gateway/scripts/spec-hygiene-baseline.json`.
+    Your rule's lines go down or stay: after a green `pr-open --check-only` (its gate runs the
+    gateway suite, which writes `gateway/allure-results`), run `devbox run join-ratchet -- --write-baseline`
+    and `devbox run hygiene-ratchet -- --write-baseline` in `gateway/` and commit the lowered lines in
+    the same PR — the final `pr-open` then gates that commit. A raised line or a new identity is a
+    RED you do not get to edit around.
   - Branch `fix/issue-{{ issue }}-<slug>`; push after the first meaningful commit and after each
     green step. A run that dies must leave a resumable branch.
   - The PR body must CLOSE the issue: write `Fixes #{{ issue }}` — a GitHub closing keyword, not a

@@ -155,7 +155,7 @@ spec:
 ---
 # The per-ride-namespace mirror. Hand-written for the PLATFORM series ride ns
 # (openrouter-operator — agents/retro-project.sh is the map's one home); a second stack's retro
-# graduation adds its own mirror here, or the AgentStack Composition renders it per claim knob
+# graduation adds its own mirror here (oracle-fleet below), or the AgentStack Composition renders it per claim knob
 # (the transcripts-store precedent) when retro graduates per-stack.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -165,6 +165,24 @@ metadata:
 spec:
   # 5m: one apiserver read per copy; this interval is how long the ride namespace can keep
   # serving the PREVIOUS token after a fresh mint.
+  refreshInterval: 5m
+  secretStoreRef: { name: retro-git, kind: ClusterSecretStore }
+  target:
+    name: retro-git
+    creationPolicy: Owner
+  data:
+    - secretKey: GH_TOKEN
+      remoteRef: { key: retro-git, property: GH_TOKEN }
+---
+# The oracle stack's series ride ns (homelab#3140 — the feedback-triage series rides in
+# oracle-fleet). Without it the first hand-fired run died at the ride's clone: the optional
+# mount resolved to no file and git asked for a username it could not read.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: retro-git
+  namespace: oracle-fleet
+spec:
   refreshInterval: 5m
   secretStoreRef: { name: retro-git, kind: ClusterSecretStore }
   target:

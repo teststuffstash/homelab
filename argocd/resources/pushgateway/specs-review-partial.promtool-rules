@@ -1,0 +1,26 @@
+# SpecsReviewPartialRead, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is
+# its one home) — the rules file that specs-review-partial.promtool-test loads. Not a manifest and not
+# applied to anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
+#
+# ONE ALERT, its OWN file: the self-resolving per-tick-gauge shape (fires on one tick's 1, stays up
+# through the next ticks' 0s for the window, then clears) is the behaviour worth pinning.
+#
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the alert:
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "SpecsReviewPartialRead")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-runs
+    rules:
+      - alert: SpecsReviewPartialRead
+        expr: max_over_time(specs_review_tick_verdicts{kind="partial"}[30m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+          triage: none
+        annotations:
+          summary: 'specs-review: a PR is HELD on a PARTIAL READ — the context pack exceeds the reviewer''s read; no second approval until the pack shrinks'
+          description: 'A specs-review tick''s model reported `Verdict: PARTIAL READ` (agents/lenses/specs.md): it could not read every touched section/table in full, so NO verdict was posted and the PR''s content commit is held by a `PARTIAL READ:` comment from homelab-specs-reviewer naming what was not finished (the hold releases on a push). This is a fact about the PACK, not the rows: shrink it — split the PR, narrow the touched-rule scope (a page-preamble rewrite marks every rule on the page), or raise the read-map unit (oracle-fleet docs/process/read-map.yaml / allure-behavior-snippets). Find the PR: Loki tenant agent-coordinator, `{pod=~"specs-review.*"} |= "PARTIAL READ"`.'

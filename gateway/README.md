@@ -27,7 +27,7 @@ four live **rails** — `anthropic` (the operator's Claude subscription OAuth to
 | `POST /openai/v1/responses` — the codex rail (`GW-RAIL-CODEX`, `GW-CODEX-HEADROOM`, `GW-CODEX-OAUTH`) and its scoped four-boundary capture, `GET /sessions/{id}/capture` (`GW-CODEX-CAPTURE`) | [`specs/endpoints/openai-responses.md`](specs/endpoints/openai-responses.md) |
 | `GET /catalog/opencode` — the Go catalog leg: vendor models, prices and per-model plan limits, refreshed every 6 h (`GW-CATALOG-GO`) | [`specs/endpoints/catalog.md`](specs/endpoints/catalog.md) |
 | `GET /catalog/openrouter` — the OpenRouter catalog leg: the weekly ranking ∩ AA-benched, each candidate's endpoints, the cells' entry states, the floors' verdict per harness (`pinnable` / `floor`) and the budget-capped entry canary (`GW-CATALOG-OR`; the jail launcher `scripts/canary-entrants.sh` walks the pinnable candidate cells cheapest-first) | [`specs/endpoints/catalog.md#gw-catalog-or`](specs/endpoints/catalog.md#gw-catalog-or) |
-| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, ordered by cost per clean ride (the openrouter model's selected endpoint, the Go plan's discounted price), the committed snapshot and its staleness alert, the equality check; the admission's rail choice between a model's twin cells (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
+| The tier evidence — the deployed policy's per-(rail, tier) model lists derived from benchmark evidence, ordered by cost per clean ride (the openrouter model's selected endpoint, the Go plan's discounted price), the committed snapshot and its staleness alert, the manual benchmark rows for a model the feed lacks (`benchmarks-manual.json`, self-retiring), the equality check; the admission's rail choice between a model's twin cells (`GW-MODEL-TIERS`; `devbox run tiers -- snapshot \| derive \| check \| apply`, `scripts/benchmarks-snapshot.sh`) | [`specs/endpoints/catalog.md#gw-model-tiers`](specs/endpoints/catalog.md#gw-model-tiers) |
 | `GET /metrics` (`GW-METRICS`), `GET /healthz` (`GW-HEALTH`) | [`specs/endpoints/metrics.md`](specs/endpoints/metrics.md), [`specs/endpoints/health.md`](specs/endpoints/health.md) |
 | Role × service access inventory (`GW-ACCESS`) | [`specs/access.md`](specs/access.md) |
 | Fixture worlds (the test policy, fake upstream behaviours) | [`specs/worlds/`](specs/worlds/) |
@@ -60,7 +60,10 @@ Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
 
 ```sh
 cd gateway
-devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, evidence render, the Allure report
+devbox run ci             # THE gate: uv sync --frozen, ruff, pytest (+ evidence), spec gate, the join + hygiene ratchets, evidence render, the Allure report, specs-build + lychee
+devbox run join-ratchet -- --write-baseline     # after a FULL green run: re-record scripts/spec-join-baseline.json (lines only ever go down)
+devbox run hygiene-ratchet -- --write-baseline  # likewise scripts/spec-hygiene-baseline.json (identities, not counts)
+devbox run specs-site-e2e # the rendered site in the pinned playwright image: diagrams render, flowchart node links navigate (docker)
 devbox run test -- -k admit   # one table
 devbox run evidence       # after a test run: allure-results/ → allure-report-single/index.html + allure-evidence/ (evidence.json, digest.md, <RULE>.md, allure-results/)
 devbox run specs-build    # the site as CI publishes it (specs-site/, joined tables + report/index.html) — open specs-site/index.html
@@ -70,7 +73,10 @@ Every test module is a decision table (`@pytest.mark.parametrize(..., ids=[row d
 with the same table in the module docstring) under one `@rule("GW-…")` marker, which fails at
 collection when `specs/` has no such heading. The plugin in `tests/conftest.py` writes
 `evidence/evidence.json`; `scripts/spec_gate.py` couples requirement headings ⇄ schema
-`x-requirements` ⇄ evidence rows; `scripts/evidence_render.py` renders the per-rule tables.
+`x-requirements` ⇄ evidence rows; `scripts/spec-join-ratchet.py` and `scripts/spec-hygiene-ratchet.py`
+hold the spec ⇄ test join (five codes per rule) and the report-hygiene identities flat against
+their committed baselines through the pinned wheel's own join (`specs/README.md` §Rules names
+the gate in full); `scripts/evidence_render.py` renders the per-rule tables.
 Every run also writes raw **Allure** results (`allure-results/`, pyproject `addopts`) in the
 oracle-fleet conventions' shape (ADR-156 — one portable process): `rule()` sets story == rule ID
 (epic = spec page, feature = section, a link to the anchor), every case names its world

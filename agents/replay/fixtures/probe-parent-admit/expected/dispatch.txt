@@ -1,0 +1,8 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"prober","task":"probe-parent-probe-platform-1730000000","round":0,"harness":"claude"}
+CALL curl DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-probe-1 [auth: Bearer fake-caller-token-projected]
+OUT → gateway(sessions): dispatch claude/sonnet [rail=anthropic,harness=claude,session=s-probe-1,context_tokens=200000] (task=probe-parent-probe-platform-1730000000, round=0) — unbound; env ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL written to $MKTEMP; caller the projected token of this pod (AGENT_GATEWAY_CALLER_TOKEN_FILE)
+OUT parent model: sonnet · child: claude/sonnet
+OUT claude sees: ANTHROPIC_BASE_URL=http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic ANTHROPIC_AUTH_TOKEN=gws_… ANTHROPIC_MODEL=sonnet
+OUT env file left behind: no
+OUT → gateway(sessions): released s-probe-1
+RC 0

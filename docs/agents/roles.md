@@ -51,7 +51,7 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
 |---|---|---|---|
 | dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer; infra-fixer (FU-106 — detector + infra-enrich 2026-07-27, oracle-iac twin 2026-08-02; both -iac repos have merged rides) | |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
-| dispatch-on-schedule | cron (level-triggered) | scout; retro; prober (FU-102 — `probe-<stack>` since 2026-08-24) | audit-pass (FU-101 e-ITS) |
+| dispatch-on-schedule | cron (level-triggered) | retro; prober (FU-102 — `probe-<stack>` since 2026-08-24) | audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
 | dispatch-on-goal | a human-queued mission (research) / Goal issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
@@ -108,15 +108,14 @@ Three platform-wide design rules bound every brief (operator, 2026-07-27; the th
   weekly window (FU-058 activity windows; a refused window rolls forward); no edge;
   keys/breakers inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
 
-### scout (model-scout)
+### scout (model-scout) — RETIRED
 
-- **brief**: scout probe (model-routing-history.md §M7 — v3 redesign 2026-08-10: variant filter,
-  benchmark cross-check, typed cell-keyed canary verdicts, and the §M13 pool-curation duty;
-  FU-161/FU-162)
-- **boundary**: ephemeral only-free capped keys (canary)
-- **machinery**: backstop = weekly `model-scout` cron (reflexes-argo.yaml); no edge; FU-095(b)
-  extends its candidate source to a maintained rotation. Documented under the model axis today;
-  it is a *role* — machinery listed here, content stays in model-routing.md.
+**Retired 2026-11-01**, superseded by the agent-gateway's entry canary + tier evidence
+(`GW-CATALOG-OR` / `GW-MODEL-TIERS`, `gateway/scripts/canary-entrants.sh` —
+[`gateway/README.md`](../../gateway/README.md)): new candidate models now enter through the
+gateway's catalog, canaried per (model, provider) cell before they join a provider order. The
+weekly `model-scout` cron, `agents/model-scout.sh`, its `scout-account` key and its replay family
+are gone; design history stays in [`model-routing-history.md`](../spikes/model-routing-history.md) §M7.
 
 ### meta-coordinator
 
@@ -176,14 +175,18 @@ never harder posture on quiet ones.
 ## Role machinery checklists (built + planned)
 
 - **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
-  the scout's rail probe; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
+  a rail probe — the retired scout's, now the gateway's entry canary; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
   the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07; FIRST FLIP 2026-08-24
   (platform stack, homelab#835)**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION
   (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
   latch-gated). `spec.prober.childRail: codex` (FU-270, operator ruling 2026-10-24) puts the brief's
   NESTED client on the agent-gateway's codex rail — the pod (agent-base image) admits one unbound
-  prober session as its loop SA and hands the child its env; the outer session stays claude; the
+  prober session as its loop SA and hands the child its env; the outer session stays claude.
+  `spec.prober.gateway: sessions` (FU-270, operator ruling 2026-11-01 — the platform claim only)
+  admits the OUTER session too, through the shared helper `agents/gateway-admit.sh` (one unbound
+  prober session, harness claude, the gateway's model); a refusal falls the tick back to the pod's
+  old-proxy env until the old proxy retires. The
   brief's artifacts (`PROBE_ARTIFACTS`) upload beside the report. no git/cluster writes by construction (operator ruling 2026-08-30). A feedback row filed through a stack's own MCP is a report into that stack's product sink — not a write to git or the cluster. Still
   missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
   and every stack brief but the platform's (`homelab/.agents/probe.md`, #835 — belt-gap
@@ -290,7 +293,8 @@ never harder posture on quiet ones.
   🚨 issues were held open by it). Evidence + the build:
   [`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md) §The 2026-09-16 pass;
   capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
-  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
+  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations (one exception: starting a stack's fixed
+  WorkflowTemplate the alert names, admitted by the start guard — [ADR-165](../adr.md)), no agent labels
   (inert, breaker #1), loop-smell → report-only stop.
   **Dispatch SPLIT from triage 2026-08-07 (FU-133 dispatch half):** the session's issue carries
   `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan's
@@ -422,7 +426,12 @@ never harder posture on quiet ones.
   marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).
   Every session now writes `homelab/alert-<fp>/responder-r1-<ts>/` — input alert, `triage.log`,
   the transcript, an A1 manifest and a typed `finding.json` — with the write-only bucket key, before
-  the post-session belts, degrading loudly rather than failing.
+  the post-session belts, degrading loudly rather than failing. **A recurring report-only class is
+  consumed:** findings that filed nothing but carry a `remediation_would`, on an island's alert or a
+  ride of an island's issue, reach that island's intake sitting as one input per alert + namespace
+  once they recur — the rule and its floor live in
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh)'s header (`--source dig`, FU-320);
+  the responder itself still files nothing for them.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
@@ -438,7 +447,11 @@ never harder posture on quiet ones.
   2026-10-12), or a dig finding
   for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
   finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
-  reason, so the session reads the record instead of re-deriving it. The subject is the responder's
+  reason, so the session reads the record instead of re-deriving it. An issue, follow-up or
+  meta-state explanation is not permanent: when the alert has stood through the whole lookback
+  and no dig has looked at it for a hold period, it is selected as a **re-test** group carrying
+  the record, which the session tests against live evidence (rule and constants: the selector's
+  header, step 3b; FU-249). Fresh groups rank ahead of re-tests under the group cap. The subject is the responder's
   own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
   fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03
   audit named ([`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
@@ -465,7 +478,7 @@ never harder posture on quiet ones.
   surfacing them on the board is the next step, not built here. **Island findings are consumed:**
   a `cause-found` finding whose text names an island (`gateway/`) is a `text:` input to that
   island's intake sitting — [`island-intake-argo.yaml`](../../agents/coordinator/island-intake-argo.yaml),
-  daily 05:00Z, brief [`gateway/intake.md`](../../gateway/intake.md) — which folds, files and queues
+  daily 05:00Z, brief [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — which folds, files and queues
   it (FU-320); the dig itself still files nothing.
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
   MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =

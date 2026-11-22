@@ -1,7 +1,9 @@
 # island-intake-argo — the island intake sitting, WIRED (FU-320): the gateway island admits the
 # deep dig's findings about it, so a cause the dig established becomes a queued, spec-shaped issue
-# without the seat relaying it. First source = the dig only (operator, 2026-10-28); the issue pile
-# keeps the seat-run sitting (gateway/intake.md) until a second source is wired here.
+# without the seat relaying it. First source = the dig (operator, 2026-10-28); second = the island's
+# issue pile, waits included (operator, 2026-11-11, ADR-163): unruled issues are ruled, and an issue
+# an earlier ruling parked on a human is RE-READ once its wait is days old — a wait is a claim about
+# one fact, and nothing re-tested it (9 open `agent/blocked` gateway issues, none re-read).
 #
 # WHY. The dig files nothing by design (FU-231: findings to the bucket, issues only for actionable
 # verdicts), so its `cause-found` findings reached a worker only through a human: the 10-25 Go
@@ -11,27 +13,115 @@
 # for everyone else; the island's lens is the gate — ADR-155/156).
 #
 # Machinery inventory (the deep dig's shape, deep-dig-argo.yaml):
-#   predicate  = `gateway/scripts/intake-select.sh --source dig`: dig `cause-found` findings from the
-#                last 7 d whose text names the island, minus every input an earlier APPLY receipt
-#                ruled (deterministic shell; the model never picks its inputs — ADR-094).
+#   predicate  = `islands/intake/scripts/intake-select.sh`, twice (deterministic shell; the model never picks
+#                its inputs — ADR-094): `--source dig` = dig `cause-found` findings from the last 7 d
+#                on one of the island's ALERTS (or citing its paths as evidence), plus every class of
+#                ≥ INTAKE_RESPONDER_MIN report-only responder findings (same alert + namespace, a
+#                `remediation_would`, on the island's alerts or rides of its issues — the selector's
+#                header), minus every input an earlier APPLY receipt ruled; `--source pile` = the island's unruled, unlabelled issues
+#                (`member`) + its waits (`reread`: `agent/blocked` or a latest `intake: seat`, ≥
+#                INTAKE_REREAD_AGE_D days old, not re-read by a receipt of the last
+#                INTAKE_REREAD_EVERY_D days); `--source gaps` = the `⚑ gap` / `🚧 WIP` rows of the
+#                island's own specs index no receipt ruled and no open issue names (≤ INTAKE_GAP_MAX);
+#                `--source escape` = the PRs of issues this island queued that drew CHANGES_REQUESTED,
+#                not yet read by a receipt (the island's improvement loop, islands/intake/rules/intake-escape.md);
+#                `--source wait` = the island's parking comments released inside the lookback or standing
+#                after an `unchanged` re-read, not yet read by a receipt, ≤ INTAKE_WAIT_MAX (the other half of
+#                that loop, islands/intake/rules/intake-wait.md), plus its STALE waits (a named target closed or merged)
+#                as `reread:` rows merged into the pile's by id. Any one firing starts the ONE sitting over
+#                all five sets.
 #   edge       = this CronWorkflow, daily 05:00Z (after the 03:30Z dig). No Sensor: nothing here is
-#                urgent, and one sitting over the day's batch is the cost shape (≈150k tokens).
+#                urgent, and one sitting per island over the day's batch is the cost shape (≈150k
+#                tokens a sitting; an island with no inputs starts no session).
 #   key        = the receipts — homelab/intake-<island>-<date>/<run>/receipt.json, read back with the
-#                READER key (the dig's own re-dig key pattern). An input with no ruling line in the
-#                session's output is NOT ruled and re-presents tomorrow.
+#                READER key (the dig's own re-dig key pattern); `ruled` lines carry dig ids and issue
+#                ids (`<owner/repo>#<n>`). An input with no ruling line in the session's output is NOT
+#                ruled and re-presents tomorrow; a re-read ruled `unchanged` writes nothing to GitHub,
+#                so its receipt line is the only thing that keeps it from being re-read daily.
 #   capacity   = INTAKE_DAILY_MAX apply sittings per UTC day (the responder's daily-cap shape) + the
 #                subscription-capacity semaphore on the LEAF (FU-198 — the retry wrapper holds no slot)
-#                + activeDeadline 1 h. The model is the goal-decompose class (authoring, not checking —
+#                + the leaf's activeDeadline (one sitting) inside the workflow's (the walk). The model is the goal-decompose class (authoring, not checking —
 #                coordinator-scan.sh's ruling for the same work one level later); it is not served on
 #                the Go rail, so a Go-only window defers to the retry.
 #   output     = the sitting's GitHub writes (issues, labels, one `intake:` comment per ruling — the
 #                brief's outcomes) + the receipt, inputs, brief, transcript and an A1 manifest in the
 #                bucket; then ONE /coordinate ring for the platform stack when anything was queued.
-#   belts      = island_intake_* gauges (job island_intake) + IslandIntakeStale
+#   belts      = island_intake_* gauges (job island_intake; island_intake_source_inputs{source} =
+#                the dig / member / reread / gap / escape / wait / stale split — DISJOINT, summing to
+#                island_intake_inputs: `reread` = re-reads with no `stale`, `stale` = every re-read carrying
+#                one (the wait source's own rows and pile rows it or the pile's ledger marked); the wait read's
+#                island_intake_wait_records{class} (intake-written records of this run, by class H|R|O|U),
+#                island_intake_false_waits (this run's R + O — the loop's KPI) and
+#                island_intake_false_wait_items (distinct items behind R/O records over the ledger's window))
+#                + IslandIntakeStale
 #                (argocd/resources/pushgateway/prometheusrule.yaml).
+#   live reads = the brief's read set, every one a GET, addressed in the prompt: Alertmanager and
+#                Prometheus (ns monitoring), Loki (ns loki, tenant header = the namespace), the kube
+#                API (`kubectl get`, read-only — the identity below), the ride records in the
+#                transcripts bucket (READER key), the gateway's own views with the pod's projected
+#                caller token. The caller (`agent-coordinator:island-intake`) lists only the sessions
+#                it admitted (GW-SESSIONS-AUTH), so a worker ride is read from its ride record, never
+#                from an empty `/sessions?task=` answer.
+#   identity   = ServiceAccount `island-intake` (rbac.yaml): the read roles + `island-intake-read`
+#                + the Argo executor's task-result write; no pod, exec, configmap or openrouterkeys
+#                verb. The gateway admits it by that name (policy.json `callers`).
+#   toolchain  = the worker base image (agent-base — its tag is the one kustomization.yaml line)
+#                + the island's own devbox (islands/intake/devbox.json): the bootstrap installs it
+#                and runs the launcher through `devbox run` there. The devbox adds only promtool and
+#                yq; jq/gh/kubectl/s5cmd/python3/uv are the image's own pre-baked copies. `command:` is
+#                set, so the image's entrypoint (agent-entrypoint: a worker's clone/branch/finalize,
+#                which needs REPO_URL) does NOT run — what it would have exported for nix is env here.
+#   review     = parameter `review` (default review-repair; operator 2026-11-14, islands/intake/rules/intake.md
+#                §Review and repair): the author writes queue/goal bodies with no label and no ruling
+#                comment, lists `## Review units` and INTAKE-HOLD lines; per `unit:` line one
+#                islands/intake/rules/intake-review-unit.md session, per `rows:` line one islands/intake/rules/intake-review-rows.md
+#                session as the specs reviewer's staged read (pass 1 over masked/ — the pinned wheel's
+#                mask_page — + process/ only; a missing file or empty Pass 1 is re-run once, then
+#                skipped); each lens admitted on its own, confined (env -i, no token, Read scoped to its
+#                frozen case dir, Write to its one file, git show/grep at the base); then ONE repair
+#                session posts `intake: review — …`, the labels and the ruling LAST. The launcher's belt
+#                labels a held issue the repair left unlabelled (and posts the review comment first / the
+#                ruling last when this run has not). Lens sessions per run ≤ INTAKE_REVIEW_LENS_MAX, each
+#                started only when it fits the deadline; nothing loops; a lens that fails or defers never
+#                holds the queue.
+#                Receipt: `review` (units, lenses, repair) + `findings` (id, lens, posture, fate) +
+#                `escapes` (INTAKE-ESCAPE lines) + `escape_records` (the report's section verbatim) +
+#                `waits` (INTAKE-WAIT lines joined to their selection rows) + `wait_records` (the section
+#                verbatim) + `wait_ledger` (islands/intake/scripts/intake-wait-ledger.py over the receipts' prior
+#                records + this run's: classes, the false-wait count, the keys at the bar) + `wait_proposals`
+#                (INTAKE-WAIT-PROPOSAL lines the ledger kept: diff, the items behind it, widens_authority —
+#                a record, never a pushed branch).
+#   islands    = parameter `island`, default `all` (homelab#3579): the `list-islands` step prints the
+#                selector's own list (`intake-select.sh --list-islands` — every island with a membership
+#                row and a facts file, gateway first) and the entrypoint runs `intake-retry` once per
+#                name. No island is named in this file: a new island is a selector row + a facts file.
+#                STACK islands (homelab#3580) follow the platform's in the same list: the list step reads
+#                the live AgentStack claims (islands/intake/scripts/claims-read.sh — `kubectl get
+#                agentstacks`, the one rule added to `island-intake-read`) and hands them to the selector
+#                (`--list-islands --claims`), which adds one `<stack>/<repo>` per repo declaring
+#                `repos[].intake.facts`. No stack and no stack repo is named in this file, the selector or
+#                the launcher. A claims read that fails or answers no items still walks the platform
+#                islands, prints `island-intake: claims read FAILED — stack islands not walked` and pushes
+#                `island_intake_claims_read_ok 0` (1 on success; job island_intake_claims) —
+#                IslandIntakeClaimsUnread fires after two days at 0. The leaf resolves its name again
+#                (its own claims read, a stack island only), clones the declared repo beside the homelab
+#                clone and runs the sessions there; its records land under intake-<stack>-<repo>-<day>/
+#                and its metrics carry island="<stack>/<repo>" (the Pushgateway grouping key rides
+#                base64 — a path segment cannot hold the slash).
+#                One sitting at a time: `workflowSpec.parallelism: 1` (at most one pod of this workflow
+#                runs), and each sitting still takes the semaphore. An island that fails (its own
+#                retries spent) does not stop the others; the workflow ends Failed when any did.
+#                Every island's pod pays the bootstrap, pushes its own `island`-labelled metrics and
+#                writes its own receipt prefix. ONE island by hand:
+#                `argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=scan`
+#                (a stack island: `-p island=<stack>/<repo>`).
 #   dry-run    = `argo -n agent-coordinator submit --from cronworkflow/island-intake -p mode=dry-run`:
-#                the sitting writes nothing to GitHub and its receipt consumes nothing.
-# Harness: agents/island-intake-test.sh (run by `devbox run deep-dig-test`, the dig's own gate).
+#                the sitting writes nothing to GitHub and its receipt consumes nothing (the lenses and
+#                the repair still run, on the bodies the author wrote to /tmp/review/issues/).
+# Launcher: islands/intake/scripts/sitting.sh — everything above is that script; the `intake` template
+#   below keeps a bootstrap only (clone, the island's devbox, the "did not start" metric push, exec
+#   the script inside `devbox run`).
+# Harness: islands/intake/tests/island-intake-test.sh (run by `devbox run deep-dig-test`, the dig's own gate).
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
@@ -44,13 +134,28 @@ spec:
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   workflowSpec:
-    serviceAccountName: agent-coordinator
-    activeDeadlineSeconds: 3600
+    serviceAccountName: island-intake
+    # THE WALK's deadline (homelab#3579): 23 h, so a run always ends before the next 05:00Z and
+    # `concurrencyPolicy: Forbid` never skips a day. One SITTING's deadline is the `intake` leaf's own
+    # (14400 s, below). The walk is sequential, so 82800 s holds every island's bootstrap (≤ 600 s
+    # each) plus five sittings at the leaf's full 14400 s; an island the walk does not reach is read
+    # by the next run (no receipt line → its inputs re-present), and one that is not reached for two
+    # days fires IslandIntakeStale with its own `island` label.
+    activeDeadlineSeconds: 82800
+    # One pod of this workflow at a time: the sittings run in sequence (the subscription rail latched
+    # for 3.5 h on three concurrent heavy sessions, 2026-11-14). Workflow-level on purpose — a
+    # template-level `parallelism` does not count the pods of the steps templates it invokes.
+    parallelism: 1
     ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 172800 }
     arguments:
       parameters:
         - { name: mode, value: apply }
-        - { name: island, value: gateway }
+        # all = every island `intake-select.sh --list-islands` prints; a name = that island only.
+        - { name: island, value: all }
+        # off = the author labels as it rules (the pre-review shape); review-repair = the author
+        # holds labels + ruling, the lenses read the queued bodies, ONE repair pass answers them and
+        # posts review comment → labels → ruling (islands/intake/rules/intake.md §Review and repair).
+        - { name: review, value: review-repair }
     # homelab#103 / #867 soft spread + Longhorn-disk de-preference — the dig's.
     podSpecPatch: |
       topologySpreadConstraints:
@@ -70,34 +175,226 @@ spec:
                     operator: NotIn
                     values:
                       - "true"
-    entrypoint: intake-retry
+    entrypoint: intake-islands
     volumes:
       - { name: work, emptyDir: {} }
+      # GW-SESSIONS-AUTH: this pod's projected ServiceAccount token for the gateway's caller check.
+      - name: gateway-token
+        projected:
+          sources:
+            - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
     templates:
+      # THE WALK — the island list first, then one `intake-retry` per name. The expanded steps are one
+      # step group: a failed island leaves its siblings running, and the group (so the workflow)
+      # fails once all are done if any failed. Sequence = workflowSpec.parallelism above.
+      - name: intake-islands
+        steps:
+          # THE EXPERIMENT READ (Goal #3586, homelab#3604): before the sittings, so an experiment that
+          # failed is an undecided input of THIS run's sitting. `continueOn: failed + error` (Argo reports an
+          # evicted / OOM-killed / node-lost pod as Error, matched separately — homelab#268) — a read that failed
+          # never stops the sittings — and the `experiments-failed` group at the end fails the workflow
+          # when it did (continueOn alone would end the workflow Succeeded).
+          - - name: experiments
+              template: experiments
+              continueOn: { failed: true, error: true }
+          - - name: islands
+              template: list-islands
+          - - name: sitting
+              template: intake-retry
+              arguments:
+                parameters:
+                  - { name: island, value: "{{item}}" }
+              withParam: "{{steps.islands.outputs.parameters.islands}}"
+          - - name: experiments-failed
+              template: experiments-failed
+              when: "{{steps.experiments.status}} != Succeeded"
+      # THE EXPERIMENT READ's leaf — the sitting's identity (image, the workflow's ServiceAccount, HOME,
+      # NIX_CONFIG, the GH token, the writer key, the Pushgateway) and bootstrap (clone, the island's devbox,
+      # exec through it), without the model's env or the subscription semaphore: nothing here calls a model.
+      # Prometheus is read through the in-cluster service. One run reads every closed issue labelled
+      # `experiment/open` of the platform repo and writes its verdicts (islands/intake/scripts/experiment-read.sh).
+      - name: experiments
+        metadata:
+          labels: { app: island-intake-workflow }
+        activeDeadlineSeconds: 3600
+        retryStrategy:
+          limit: "2"
+          retryPolicy: OnFailure
+          backoff: { duration: "5m", factor: "2" }
+        container:
+          image: registry.teststuff.net/agent-base
+          env:
+            - { name: HOME, value: "/home/devbox" }
+            - name: NIX_CONFIG
+              value: "experimental-features = nix-command flakes\nflake-registry =\nsubstituters = http://nixcache.nix-cache.svc.cluster.local?priority=10\nextra-trusted-substituters = http://nixcache.nix-cache.svc.cluster.local"
+            - { name: DEVBOX_NO_UPDATE_CHECK, value: "1" }
+            - { name: DEVBOX_DISABLE_TELEMETRY, value: "1" }
+            - { name: DO_NOT_TRACK, value: "1" }
+            - { name: VERSION_CACHE_TTL, value: "31536000" }
+            - { name: ORG, value: "teststuffstash" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: AWS_REGION, value: "garage" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+            - { name: PROMETHEUS, value: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the experiment read)"; exit 1; }
+              cd /work/homelab || exit 1
+              timeout 540 devbox install --config islands/intake || { echo "island-intake: the island's devbox did not install (islands/intake/devbox.json)"; exit 1; }
+              cat > /tmp/experiment-read-launch.sh <<'LAUNCH'
+              cd /work/homelab || exit 1
+              exec bash islands/intake/scripts/experiment-read.sh
+              LAUNCH
+              exec devbox run --config islands/intake -- bash /tmp/experiment-read-launch.sh
+          resources:
+            requests: { cpu: "100m", memory: "512Mi" }
+            limits: { memory: "3Gi" }
+      # The workflow's own failure for a failed `experiments` step (see intake-islands).
+      - name: experiments-failed
+        container:
+          image: registry.teststuff.net/agent-base
+          command: [bash, -lc]
+          args:
+            - |
+              echo "island-intake: the experiment read failed (its step's log) — the sittings ran; failing the workflow"
+              exit 1
+          resources:
+            requests: { cpu: "10m", memory: "32Mi" }
+            limits: { memory: "128Mi" }
+      # THE LIST — a JSON array of island names for the walk's withParam. `all` asks the selector in a
+      # fresh clone (the table and the facts files are the checkout's; no gh, no bucket) and hands it
+      # the live claims for the stack islands (ONE kube read, claims-read.sh — a failed read walks the
+      # platform islands alone, says so and pushes island_intake_claims_read_ok 0);
+      # a named island is that one name, no clone. An empty list fails: zero sittings is never a pass.
+      - name: list-islands
+        metadata:
+          labels: { app: island-intake-workflow }
+        retryStrategy:
+          limit: "3"
+          retryPolicy: OnFailure
+          backoff: { duration: "1m", factor: "2" }
+        outputs:
+          parameters:
+            - name: islands
+              valueFrom: { path: /tmp/island-intake-islands.json }
+        container:
+          image: registry.teststuff.net/agent-base
+          env:
+            - { name: HOME, value: "/home/devbox" }
+            - { name: ISLAND, value: "{{workflow.parameters.island}}" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              OUT=/tmp/island-intake-islands.json
+              if [ "$ISLAND" != all ]; then
+                jq -nc --arg i "$ISLAND" '[$i]' > "$OUT" || { echo "island-intake: could not write the island list"; exit 1; }
+                echo "island-intake: islands $(cat "$OUT")"; exit 0
+              fi
+              rm -rf /work/homelab
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "island-intake: clone failed (the island list)"; exit 1; }
+              cd /work/homelab || exit 1
+              # the stack islands' source: the live claims. A failed read never stops the platform
+              # islands — the script says so and pushes the gauge; the selector then lists them alone.
+              CLAIMS_ARGS=()
+              bash islands/intake/scripts/claims-read.sh --push /tmp/island-intake-claims.json \
+                && CLAIMS_ARGS=(--claims /tmp/island-intake-claims.json)
+              bash islands/intake/scripts/intake-select.sh --list-islands "${CLAIMS_ARGS[@]}" > /tmp/island-intake-islands.txt \
+                || { echo "island-intake: the selector did not list the islands"; exit 1; }
+              jq -Rnc '[inputs | select(length > 0)]' /tmp/island-intake-islands.txt > "$OUT" \
+                || { echo "island-intake: could not write the island list"; exit 1; }
+              [ "$(jq 'length' "$OUT")" -gt 0 ] || { echo "island-intake: the island list is empty — no sitting would run"; exit 1; }
+              # which islands this run walks, for IslandIntakeStale: an island that left the list
+              # (or was never in it) is not reported stale. Only the full walk says so — a run of
+              # one named island (above) leaves the last full list in force.
+              bash islands/intake/scripts/listed-push.sh /tmp/island-intake-islands.txt
+              echo "island-intake: islands $(cat "$OUT")"
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { memory: "512Mi" }
       # THE RETRY WRAPPER — no semaphore here; every attempt is a fresh `intake` node that acquires
-      # and releases the slot (FU-198, the dig's and the responder's split).
+      # and releases the slot (FU-198, the dig's and the responder's split). One invocation per island.
       - name: intake-retry
+        inputs:
+          parameters:
+            - { name: island }
         steps:
           - - name: intake
               template: intake
+              arguments:
+                parameters:
+                  - { name: island, value: "{{inputs.parameters.island}}" }
         retryStrategy:
           limit: "3"
           retryPolicy: OnFailure
           backoff: { duration: "30m", factor: "2" }
       - name: intake
+        inputs:
+          parameters:
+            - { name: island }
         metadata:
           labels: { app: island-intake-workflow }
+        # ONE sitting's deadline (it was the workflow's while the workflow was one sitting). The review
+        # stage's worst case: author (AUTHOR_TIMEOUT_S 3600) + INTAKE_REVIEW_LENS_MAX (3) lenses × two
+        # runs × (PASS1 240 + LENS 1200 s) + the repair (1200 s); the script's _fits keeps it inside
+        # RUN_DEADLINE_S (= this, 14400) so the pod is never killed mid-review. A real unit lens explored
+        # past 600 s and wrote nothing, twice (in-cluster dry-run 2026-11-15)
+        activeDeadlineSeconds: 14400
         synchronization:
           semaphores:
             - configMapKeyRef: { name: subscription-capacity, key: claude }
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator
+          # NO tag: kustomization.yaml `images:` supplies it (the agent-base entry there).
+          image: registry.teststuff.net/agent-base
           env:
-            - { name: HOME, value: "/home/node" }
+            # agent-base runs as uid 1000 `devbox`; its claude settings (the bypass-permissions
+            # prompt skipped) and its nix profile live under this HOME.
+            - { name: HOME, value: "/home/devbox" }
+            # The island's devbox, with the image's entrypoint out of the path (`command:` below).
+            # NIX_CONFIG is what a worker pod carries: the launcher's two lines (agents/agent-session.sh
+            # NIX_ENV — flakes on FIRST, then the empty global registry, which the egress policy would
+            # otherwise see as channels.nixos.org fetches) + the entrypoint's two (agent-runtime
+            # agent-base/entrypoint.sh NIX-CACHE-CONFIG — the in-cluster pull-through mirror as the
+            # ONLY substituter). The three DEVBOX/telemetry switches and the launcher-version TTL are
+            # that launcher's too (releases.jetify.com is not on the egress policy).
+            - name: NIX_CONFIG
+              value: "experimental-features = nix-command flakes\nflake-registry =\nsubstituters = http://nixcache.nix-cache.svc.cluster.local?priority=10\nextra-trusted-substituters = http://nixcache.nix-cache.svc.cluster.local"
+            - { name: DEVBOX_NO_UPDATE_CHECK, value: "1" }
+            - { name: DEVBOX_DISABLE_TELEMETRY, value: "1" }
+            - { name: DO_NOT_TRACK, value: "1" }
+            - { name: VERSION_CACHE_TTL, value: "31536000" }
             - { name: ORG, value: "teststuffstash" }
             - { name: MODE, value: "{{workflow.parameters.mode}}" }
-            - { name: ISLAND, value: "{{workflow.parameters.island}}" }
+            - { name: ISLAND, value: "{{inputs.parameters.island}}" }
+            - { name: REVIEW, value: "{{workflow.parameters.review}}" }
             - { name: INTAKE_DAILY_MAX, value: "2" }
+            # The pile's waits: re-read once the wait is this old, and the same wait at most this often.
+            - { name: INTAKE_REREAD_AGE_D, value: "3" }
+            - { name: INTAKE_REREAD_EVERY_D, value: "7" }
+            # The wait read: parking comments read per sitting (released first), and its lookback in days.
+            - { name: INTAKE_WAIT_MAX, value: "6" }
+            - { name: INTAKE_WAIT_LOOKBACK_D, value: "30" }
+            # FU-270: the agent-gateway admits this sitting (the deep dig's wiring, deep-dig-argo.yaml).
+            - { name: AGENT_GATEWAY, value: "sessions" }
             - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
             - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
             - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -127,139 +424,60 @@ spec:
             - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
           volumeMounts:
             - { name: work, mountPath: /work }
+            - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
           command: [bash, -lc]
           args:
             - |
               set -uo pipefail
-              DAY="$(date -u +%Y-%m-%d)"; TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"
-              case "$MODE" in apply|dry-run) ;; *) echo "island-intake: mode must be apply|dry-run (got $MODE)"; exit 1;; esac
-              PGW="${PUSHGATEWAY:-}"
-              _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
-                [ -n "$PGW" ] || return 0
-                printf '%s\n' \
-                  "# TYPE island_intake_last_run_timestamp_seconds gauge" "island_intake_last_run_timestamp_seconds $(date -u +%s)" \
-                  "# TYPE island_intake_probe_ok gauge" "island_intake_probe_ok $1" \
-                  "# TYPE island_intake_inputs gauge" "island_intake_inputs $2" \
-                  "# TYPE island_intake_session_ran gauge" "island_intake_session_ran $3" \
-                  "# TYPE island_intake_ruled gauge" "island_intake_ruled $4" \
-                  "# TYPE island_intake_queued gauge" "island_intake_queued $5" \
-                  | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/island/$ISLAND" >/dev/null 2>&1 \
-                  || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
+              # BOOTSTRAP ONLY (Goal #3574 pin 3): clone, install the island's devbox, exec the island's
+              # launcher script from the clone inside it; a clone or an install that fails pushes the
+              # "did not start" metrics. Everything a sitting does is islands/intake/scripts/sitting.sh;
+              # it reads MODE / ISLAND / REVIEW and every knob from this container's env (above) —
+              # `devbox run` and exec keep it.
+              _dead() { # <why> — the sitting never started: the script's own `_push 0 0 0 0 0` (every
+                # island_intake_* gauge at 0, probe_ok 0), written here because the script is not on
+                # disk (or not runnable) yet; then exit 1, Argo retries
+                if [ -n "${PUSHGATEWAY:-}" ]; then
+                  # the script's own grouping key: a stack island's `<stack>/<repo>` rides base64
+                  local _grp="island/$ISLAND"
+                  case "$ISLAND" in */*) _grp="island@base64/$(printf '%s' "$ISLAND" | base64 | tr -d '\n=' | tr '+/' '-_')";; esac
+                  {
+                    printf '# TYPE island_intake_last_run_timestamp_seconds gauge\nisland_intake_last_run_timestamp_seconds %s\n' "$(date -u +%s)"
+                    for m in probe_ok inputs; do printf '# TYPE island_intake_%s gauge\nisland_intake_%s 0\n' "$m" "$m"; done
+                    printf '# TYPE island_intake_source_inputs gauge\n'
+                    for s in dig member reread gap escape wait stale; do printf 'island_intake_source_inputs{source="%s"} 0\n' "$s"; done
+                    for m in session_ran ruled queued review_ran; do printf '# TYPE island_intake_%s gauge\nisland_intake_%s 0\n' "$m" "$m"; done
+                    printf '# TYPE island_intake_wait_records gauge\n'
+                    for c in H R O U; do printf 'island_intake_wait_records{class="%s"} 0\n' "$c"; done
+                    for m in false_waits false_wait_items; do printf '# TYPE island_intake_%s gauge\nisland_intake_%s 0\n' "$m" "$m"; done
+                  } | curl -fsS --max-time 5 --data-binary @- "$PUSHGATEWAY/metrics/job/island_intake/$_grp" >/dev/null 2>&1 \
+                    || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
+                fi
+                echo "island-intake: $1"; exit 1
               }
-              TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}"
-              _ts_put() { # <local> <remote-basename>
-                [ -s "$1" ] || return 0
-                [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 writer key — $2 not captured"; return 1; }
-                command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — $2 not captured"; return 1; }
-                AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" \
-                  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
-                  || { echo "transcripts: upload FAILED for $2"; return 1; }
-              }
-
               rm -rf /work/homelab
               _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { _push 0 0 0 0 0; echo "island-intake: clone failed"; exit 1; }
-              cd /work/homelab
-
-              # ── 1. SELECT (deterministic; exit 1 = hold, 2 = a probe failed) ─────────────────
-              bash gateway/scripts/intake-select.sh --source dig --island "$ISLAND" --out /tmp/sel.json 2>/tmp/select.log
-              rc=$?; cat /tmp/select.log
-              # A hold is a hold only when the selector WROTE a selection saying so: an unexpected death
-              # (set -e) also exits 1, and reading that as "nothing to do" is the fail-open the first
-              # in-cluster dry-run hit (2026-10-28 — inputs 0 while four findings were waiting).
-              if [ "$rc" -eq 2 ] || ! jq -e '.schema == "island-intake-select/v1"' /tmp/sel.json >/dev/null 2>&1; then
-                _push 0 0 0 0 0; echo "island-intake: selection failed (rc=$rc, no valid selection) — exit 1, Argo retries"; exit 1
-              fi
-              NIN="$(jq -r '.counts.inputs // 0' /tmp/sel.json 2>/dev/null || echo 0)"
-              if [ "$rc" -ne 0 ]; then _push 1 "$NIN" 0 0 0; echo "island-intake: hold — no sitting today"; exit 0; fi
-
-              # ── 2. one sitting, on the subscription rail (the goal-decompose class is not on Go) ──
-              rail="$(SUBSCRIPTION_TIER=heavy bash agents/subscription-latch.sh --pick-rail)" || rail=""
-              case "$rail" in
-                ''|opencode-go/*) _push 1 "$NIN" 0 0 0; echo "island-intake: subscription rail not clear (rail='$rail') — exit 1, Argo retries with backoff"; exit 1;;
-              esac
-              _rm="$(bash agents/resolve-model.sh --role coordinator --class goal-decompose --fallback opus)"
-              eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}"
-
-              {
-              cat <<BRIEF
-              You are the ISLAND INTAKE sitting for the \`$ISLAND\` island, running unattended in-cluster
-              (agents/coordinator/island-intake-argo.yaml). Your working tree is a fresh clone of homelab
-              master at /work/homelab (cwd). Read gateway/intake.md IN FULL first and follow it exactly —
-              it is your brief; this prompt only adds the inputs, the mode and the receipt protocol.
-
-              mode: $MODE
-
-              The inputs are \`text:\` inputs with \`source: dig\` — findings of the grouped deep dig
-              (docs/agents/roles.md §deep dig), each a diagnosis of standing alerts with the reads it
-              made. Treat each as a CLAIM (intake.md procedure step 1): live-verify it within the brief's
-              read set — the spec row it names, the alert's live state (curl -s
-              http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts), the log lines
-              the alert's annotation names, and the issues/PRs filed or merged since the finding's
-              timestamp. Several findings are
-              often ONE cause (the dig groups by onset + host, and re-digs a renamed tail alert):
-              rule them together — one issue for one change. When you \`file\`, the issue's prose names
-              the finding id(s) as its origin (\`Origin=\` is prose for a non-issue source).
-
-              RECEIPT PROTOCOL (the shell parses this; the receipt is the ONLY record that an input was
-              ruled — an input without a line re-presents tomorrow). For EVERY input id below print
-              exactly one line, at the end, outside any code fence:
-                INTAKE-RULED: <input id> <outcome> <refs>
-              <outcome> is one of queue|goal|seat|fold|close|standing|file|deferred (the brief's
-              outcomes; \`deferred\` = left for a later sitting, e.g. past the 3-queue cap); <refs> is a
-              comma-separated list of the issue/PR refs you wrote or relied on (owner/repo#n), or \`-\`.
-              In dry-run mode print the lines you WOULD print.
-              BRIEF
-              printf '\nINPUTS (island-intake-select/v1, built %s):\n' "$(jq -r .ts /tmp/sel.json)"
-              jq '.inputs' /tmp/sel.json
-              } > /tmp/brief.md
-              _ts_put /tmp/brief.md brief.md || true
-              _ts_put /tmp/sel.json inputs.json || true
-
-              : > /tmp/ts-mark; : > /tmp/intake.log
-              claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 \
-                | tee /tmp/intake.log \
-                || echo "WARN: the intake session failed — whatever it printed is still harvested" | tee -a /tmp/intake.log
-
-              # ── 3. RECEIPT (shell-owned: only ids of THIS run's inputs, only known outcomes) ────
-              grep -oE '^ *INTAKE-RULED: [^ ]+ [a-z-]+( [^ ]+)?' /tmp/intake.log | sed 's/^ *INTAKE-RULED: //' \
-                | jq -R -s --slurpfile sel /tmp/sel.json '
-                    ($sel[0].inputs | map(.id)) as $ids
-                    | [ split("\n")[] | select(length > 0) | split(" ")
-                        | {input: .[0], outcome: .[1], refs: ((.[2] // "-") | if . == "-" then [] else split(",") end)}
-                        | select(.input as $i | $ids | index($i))
-                        | select(.outcome | IN("queue","goal","seat","fold","close","standing","file","deferred")) ]
-                    | unique_by(.input)' > /tmp/ruled.json 2>/dev/null || echo '[]' > /tmp/ruled.json
-              NR="$(jq '[.[] | select(.outcome != "deferred")] | length' /tmp/ruled.json)"
-              NQ="$(jq '[.[] | select(.outcome == "queue" or .outcome == "goal")] | length' /tmp/ruled.json)"
-              jq -n --arg island "$ISLAND" --arg mode "$MODE" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                    --arg model "$TS_MODEL" --arg rail "$rail" --arg run "intake-${ISLAND}-${DAY}/intake-r1-${TS_RUN}" \
-                    --slurpfile sel /tmp/sel.json --slurpfile ruled /tmp/ruled.json \
-                    '{schema: "island-intake-receipt/v1", island: $island, mode: $mode, ts: $ts, run: $run,
-                      session_ran: true, model: $model, rail: $rail,
-                      inputs: ($sel[0].inputs | map(.id)), ruled: $ruled[0]}' > /tmp/receipt.json
-              echo "island-intake: $NR of $NIN input(s) ruled ($NQ queued) — receipt:"; jq -c '.ruled[]' /tmp/receipt.json
-              _ts_put /tmp/receipt.json receipt.json \
-                || echo "⚠ island-intake: the RECEIPT did not upload — tomorrow's sitting re-reads these inputs (its own step 2 finds what this one filed)"
-              jq -n --arg role coordinator --arg lane intake --arg project homelab --arg task "intake-${ISLAND}-$DAY" \
-                    --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
-                    '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
-                      session_key:"coordinator-claude", pod:$pod, timestamp:$ts,
-                      files:["inputs.json","brief.md","intake.log","receipt.json"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
-              _ts_put /tmp/intake.log intake.log || true
-              _ts_put /tmp/ts-manifest.json manifest.json || true
-              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")" || true; done
-
-              # ── 4. RING once, so queued work dispatches now rather than on the scan's cron ──────
-              if [ "$MODE" = apply ] && [ "$NQ" -gt 0 ]; then
-                curl -m 5 -fsS -X POST -H "Content-Type: application/json" \
-                  -d '{"stack":"platform","loop_ns":"platform-agents","unit":"-"}' \
-                  http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate >/dev/null 2>&1 \
-                  && echo "island-intake: rang /coordinate for platform" \
-                  || echo "island-intake: coordinate bell failed (non-fatal — the scan's cron catches it)"
-              fi
-              _push 1 "$NIN" 1 "$NR" "$NQ"
-              exit 0
+              git clone -c "$_ah" --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || _dead "clone failed"
+              cd /work/homelab || _dead "clone failed (no /work/homelab)"
+              # The image seeds claude's trust for a worker's /work/repo and its entrypoint re-seeds it for the
+              # real workdir; that entrypoint does not run here, so this is its line, for this clone.
+              { mkdir -p "$HOME" && jq -n --arg d /work/homelab '{hasCompletedOnboarding: true, projects: {($d): {hasTrustDialogAccepted: true}}}' > "$HOME/.claude.json"; } \
+                || echo "island-intake: could not write $HOME/.claude.json (the workdir trust seed) — continuing"
+              # The island's toolchain (islands/intake/devbox.json + its lock). Bounded: the script's
+              # deadline arithmetic (RUN_DEADLINE_S, _fits) starts when the script does and keeps 600 s
+              # of slack against this pod's activeDeadlineSeconds — the install must fit inside it.
+              timeout 540 devbox install --config islands/intake || _dead "the island's devbox did not install (islands/intake/devbox.json)"
+              # `devbox run` starts its command in the devbox's own directory and re-quotes an inline
+              # script, so the launch is a two-line file: back to the clone root, then the script.
+              cat > /tmp/island-intake-launch.sh <<'LAUNCH'
+              cd /work/homelab || exit 1
+              exec bash islands/intake/scripts/sitting.sh
+              LAUNCH
+              exec devbox run --config islands/intake -- bash /tmp/island-intake-launch.sh
           resources:
-            requests: { cpu: "100m", memory: "256Mi" }
+            # 1Gi: measured in the pod on the first sitting under this image (2026-11-20, the gateway
+            # island, dry-run, 21 min with two lens runs): 360 MiB peak working set, and clone +
+            # `devbox install` done 14 s after the container started (the island devbox adds two
+            # packages to what the image pre-bakes; the pull-through nix cache serves them).
+            requests: { cpu: "100m", memory: "384Mi" }
             limits: { memory: "1Gi" }

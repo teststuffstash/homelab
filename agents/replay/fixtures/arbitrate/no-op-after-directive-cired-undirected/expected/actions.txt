@@ -1,0 +1,10 @@
+CALL gh pr view 1540 --repo teststuffstash/oracle-fleet --json comments,commits
+CALL gh pr list --repo teststuffstash/oracle-fleet --state all --limit 100 --json number,headRefName,body,comments
+CALL gh issue view 1530 --repo teststuffstash/oracle-fleet --json comments
+CALL gh api -X POST repos/teststuffstash/oracle-fleet/issues/1540/labels -f labels[]=agent/arbitrate
+CALL gh api repos/teststuffstash/oracle-fleet/issues/1540/comments --paginate
+CALL gh api --method PATCH repos/teststuffstash/oracle-fleet/issues/comments/901540 -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103).\n\n- `2026-09-09T10:05:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T10:05:00Z -->\n- `2026-09-09T11:00:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T11:00:00Z -->\n- `2026-09-09T11:10:00Z` · ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at 5b353fe9 and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table. <!-- agent-event kind=arbitrate ts=2026-09-09T11:10:00Z -->
+OUT ORPHANS [oracle-fleet] ci-red no-op on PR #1540 is not a re-run case — no ARBITRATE directive on the PR or its issue (homelab#1910)
+OUT ORPHANS [oracle-fleet] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #1540 (round 2 pushed nothing, still red @ 5b353fe9)
+OUT REACHED: end
+RC 0

@@ -48,9 +48,10 @@ variable "protected_repos" {
     # identity and a pull_request rule cannot be path-scoped (only require_code_owner_review
     # is), so the count is REPO-WIDE: on a PR touching no `**/specs/**` path the specs identity
     # approves mechanically (no LLM), so deploy pins / Renovate / bookkeeping still auto-merge
-    # on two bot approvals. The goal/** twin keeps 1 — a second gate on the children would
-    # serialise the fan-out exactly like the codeowner flag did (the 2026-08-06 split); the
-    # goal→master assembly PR carries the specs diff and meets the gate there.
+    # on two bot approvals. The goal/** twin carries the SAME count (ADR-155 amended 2026-11-01):
+    # at 1 a specs-touching child merged into goal/** before its specs verdict landed, and the
+    # assembly PR absorbed the whole specs gate as one oversized pack; the gate is a bot tick,
+    # not the human read the 2026-08-06 split kept off the children.
     required_approvals = optional(number, 1)
     # restrict_workflow_pushes=true → a PUSH ruleset rejects any push touching
     # `.github/workflows/**` (iac-lane.md §L0b: the enforcement-grade native version of the

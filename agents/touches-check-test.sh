@@ -118,8 +118,8 @@ test_escapes "multiple governance tiers" \
 # PR#547 defect. Non-replay escapes in the same diff still report.
 test_escapes "replay paths are never escapes" \
   "agents/coordinator-scan.sh" \
-  "$(printf 'agents/coordinator-scan.sh\nagents/replay/fixtures/new/fixture.yaml\nagents/replay/README.md\nagents/model-scout.sh\n')" \
-  "agents/model-scout.sh|governance"
+  "$(printf 'agents/coordinator-scan.sh\nagents/replay/fixtures/new/fixture.yaml\nagents/replay/README.md\nagents/review-reflex.sh\n')" \
+  "agents/review-reflex.sh|governance"
 
 # ── CASE 12: replay exempt even with an UNDECLARED footprint ────────────────────────────────
 test_escapes "replay exempt in the undeclared branch too" \
@@ -174,9 +174,9 @@ _sent_case "sentinel-only file skipped (undeclared branch)" \
 # sentinel_only_paths never emits a mixed file, so it never reaches arg 3)
 _sent_case "non-sentinel governance file still escapes beside a sentinel one" \
   "argocd/**" \
-  "$(printf 'agents/coordinator-session.sh\nagents/model-scout.sh\n')" \
+  "$(printf 'agents/coordinator-session.sh\nagents/review-reflex.sh\n')" \
   "agents/coordinator-session.sh" \
-  "agents/model-scout.sh|governance"
+  "agents/review-reflex.sh|governance"
 
 # ── CASE 15: the sentinel_only_paths classifier itself ─────────────────────────────────────
 _diff_fixture="$(cat <<'EOF_DIFF'

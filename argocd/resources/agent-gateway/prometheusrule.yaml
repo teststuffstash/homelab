@@ -90,7 +90,7 @@ spec:
             triage: dig
           annotations:
             summary: 'The latest refresh of the gateway''s Go catalog ({{ $labels.source }}) ended {{ $labels.outcome }} — its last good snapshot is in use'
-            description: 'parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_catalog / parse_config / parse_docs — the log line names the READ: the config source is models.dev''s api.json overlaid by the console''s config); implausible = it carried fewer than half the last good snapshot''s models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the line or count it stopped on; compare it with the vendor source (config: https://models.dev/api.json `opencode-go`, then GET https://opencode.ai/console/api/v2/config — the workspace overrides; docs: anomalyco/opencode services/www/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h.'
+            description: 'parse-failed = the answer did not match the shape gateway/src/agent_gateway/catalog.py parses (parse_catalog / parse_config / parse_docs — the log line names the READ: the config source is models.dev''s api.json overlaid by the console''s config); implausible = it carried fewer than half the last good snapshot''s models. Either the vendor source or the parser may be what changed. Check: kubectl -n agent-egress logs deploy/agent-gateway | grep "catalog: {{ $labels.source }}" names the line or count it stopped on; compare it with the vendor source (config: https://models.dev/api.json `opencode-go`, then GET https://opencode.ai/console/api/v2/config — the workspace overrides; docs: anomalyco/opencode services/site/src/docs/content/console/go.mdx). Clears on the next good refresh (every 6 h, or a pod restart); GoCatalogStale follows at 24 h.'
         - alert: GoCatalogPolicyModelMissing
           expr: |
             max by (source) (gateway_go_catalog_policy_models_missing{job="agent-gateway"}) > 0
@@ -136,6 +136,25 @@ spec:
           annotations:
             summary: 'The gateway''s tier evidence (benchmarks.json) is older than 7 days, or none is mounted'
             description: 'gateway_tier_evidence_age_seconds is past 7 d ({{ $value }}), or absent while the gateway serves: the deployed tier lists and the rail choice compare on stale prices. Re-cut it: bash gateway/scripts/benchmarks-snapshot.sh, then devbox run tiers -- apply, commit benchmarks.json + policy.json by PR (an undecided tier keeps its deployed list — check names it). Absent = argocd/resources/agent-gateway/kustomization.yaml no longer ships benchmarks.json in the policy ConfigMap, or GATEWAY_BENCHMARKS points elsewhere. The contract is gateway/specs/endpoints/catalog.md#gw-model-tiers.'
+    # ── The store mode (GW-METRICS §The store mode is a gauge, gateway/specs/endpoints/metrics.md) ──
+    # The gateway falls open to its in-memory store when the PVC is missing, read-only or corrupt at
+    # start: it keeps admitting rides, and forgets every session, capacity mark and rotated codex
+    # credential at its next restart. gateway_db_mode is 1 for the mode it opened in. Behaviour
+    # fixture: db-mode.promtool-{rules,test} beside this file.
+    #   GatewayStoreMemoryMode — the memory store has been the mode for 5 m. No absent() leg: an image
+    #                            older than the family is silent, a PVC store is silent.
+    - name: agent-gateway-db-mode
+      rules:
+        - alert: GatewayStoreMemoryMode
+          expr: |
+            max(gateway_db_mode{job="agent-gateway",mode="memory"}) == 1
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'The gateway runs on its fail-open memory store — sessions, caps and rotated credentials do not survive its next restart'
+            description: 'gateway_db_mode{mode="memory"} is 1: the gateway did not open its PVC store at start, so it admits rides from memory and forgets them at the next restart. Check: (1) kubectl -n agent-egress logs deploy/agent-gateway | grep "db: memory" names the path and the error (missing, read-only or corrupt); (2) GET /healthz on the gateway answers db: memory; (3) the agent-gateway Deployment mounts its /data PVC. The contract is gateway/specs/endpoints/health.md (GW-HEALTH) and gateway/specs/endpoints/metrics.md (GW-METRICS).'
     - name: agent-gateway-openrouter-catalog
       rules:
         - alert: OpenRouterCatalogStale

@@ -4,12 +4,18 @@
 # intent in rows.psv). A worker's `AGENT_INFEASIBLE:` verdict — one issue COMMENT whose FIRST
 # characters are exactly `AGENT_INFEASIBLE: <path/resource>` — parks the issue on `agent/blocked`
 # and takes it out of `c4c5-redispatch`, while the issue beside it — same state, no marker —
-# keeps today's behaviour exactly. Four properties are load-bearing:
+# keeps today's behaviour exactly. These properties are load-bearing:
 #   • ANCHORED at the start of a COMMENT body, never a substring. Talking ABOUT the terminal (a
 #     title, a `> quote`, a mid-sentence mention) latches nothing — the fix-debounce lane's
 #     `alert-fp:` lesson, one lane over (homelab#244). ISSUE COMMENTS ONLY, never the body: the
 #     body is written by the human who filed it.
-#   • THE MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands. The
+#   • THE MARKER COUNTS ONLY FOR THE RIDE THAT POSTED IT (homelab#3301/#3306): its comment must be
+#     CREATED AFTER the newest `<!-- agent-event kind=dispatch ts=… -->` stamp in the thread's
+#     `<!-- agent-summary -->` comment. An earlier ride's marker under a later dispatch parks
+#     nothing — the park comment's own "remove `agent/blocked` and re-queue" must work — and two
+#     rides' markers resolve to the newer. No stamp → no anchor → the marker counts (the
+#     `marker-*` rows; every older row's thread carries no stamp and is unchanged).
+#   • A CURRENT MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands. The
 #     write order is load-bearing: add `agent/blocked` FIRST, remove `agent/in-progress`
 #     SECOND, then RE-READ and prove the end state before a single word is commented (`gh issue
 #     edit` is not atomic; with neither label the issue is invisible to every clause). A

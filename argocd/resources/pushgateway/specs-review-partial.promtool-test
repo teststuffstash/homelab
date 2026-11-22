@@ -1,0 +1,63 @@
+# Behaviour fixture for SpecsReviewPartialRead (ADR-155's third belt) — the per-tick gauge that must
+# fire on ONE tick's `partial` and clear on its own once the 30 m window has passed.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/specs-review-partial.promtool-test
+#   (in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# specs_review_tick_verdicts{kind="partial"} is pushed EVERY tick (0 when no PR was held), so the
+# series never vanishes: a hold is a single 1 between 0s. Without max_over_time the alert would
+# live exactly one scrape and never reach its for: window.
+rule_files:
+  - specs-review-partial.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── (a) ticks that held nothing stay quiet ──────────────────────────────────────────────────────
+  - interval: 1m
+    name: "(a) every tick pushed 0 — quiet"
+    input_series:
+      - series: 'specs_review_tick_verdicts{job="specs-review",kind="partial"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: SpecsReviewPartialRead
+        exp_alerts: []
+
+  # ── (b) ONE tick's hold fires, stays up through the following 0s, clears after the window ─────
+  - interval: 1m
+    name: "(b) one partial tick fires for the 30 m window, then self-resolves"
+    input_series:
+      - series: 'specs_review_tick_verdicts{job="specs-review",kind="partial"}'
+        values: "0x5 1 0x40"
+    alert_rule_test:
+      # 5m: the 1 lands; 6m: pending → firing (for: 1m)
+      - eval_time: 7m
+        alertname: SpecsReviewPartialRead
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+              job: specs-review
+              kind: partial
+            exp_annotations:
+              summary: "specs-review: a PR is HELD on a PARTIAL READ — the context pack exceeds the reviewer's read; no second approval until the pack shrinks"
+              description: "A specs-review tick's model reported `Verdict: PARTIAL READ` (agents/lenses/specs.md): it could not read every touched section/table in full, so NO verdict was posted and the PR's content commit is held by a `PARTIAL READ:` comment from homelab-specs-reviewer naming what was not finished (the hold releases on a push). This is a fact about the PACK, not the rows: shrink it — split the PR, narrow the touched-rule scope (a page-preamble rewrite marks every rule on the page), or raise the read-map unit (oracle-fleet docs/process/read-map.yaml / allure-behavior-snippets). Find the PR: Loki tenant agent-coordinator, `{pod=~\"specs-review.*\"} |= \"PARTIAL READ\"`."
+      # 30m: the window [0m,30m] still holds the 1 → still firing
+      - eval_time: 30m
+        alertname: SpecsReviewPartialRead
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              triage: none
+              job: specs-review
+              kind: partial
+            exp_annotations:
+              summary: "specs-review: a PR is HELD on a PARTIAL READ — the context pack exceeds the reviewer's read; no second approval until the pack shrinks"
+              description: "A specs-review tick's model reported `Verdict: PARTIAL READ` (agents/lenses/specs.md): it could not read every touched section/table in full, so NO verdict was posted and the PR's content commit is held by a `PARTIAL READ:` comment from homelab-specs-reviewer naming what was not finished (the hold releases on a push). This is a fact about the PACK, not the rows: shrink it — split the PR, narrow the touched-rule scope (a page-preamble rewrite marks every rule on the page), or raise the read-map unit (oracle-fleet docs/process/read-map.yaml / allure-behavior-snippets). Find the PR: Loki tenant agent-coordinator, `{pod=~\"specs-review.*\"} |= \"PARTIAL READ\"`."
+      # 37m: the window [7m,37m] no longer holds the 1 → resolved on its own
+      - eval_time: 37m
+        alertname: SpecsReviewPartialRead
+        exp_alerts: []

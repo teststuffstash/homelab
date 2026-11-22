@@ -1,0 +1,2 @@
+$ cd /work/repo && devbox run diff-ci
+> build · minimax-m3.1-flash

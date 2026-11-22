@@ -1,0 +1,2 @@
+$ cd /work/repo && bash agents/replay/run.sh
+> build · minimax-m3.1-flash

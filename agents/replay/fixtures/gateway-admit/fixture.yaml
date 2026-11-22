@@ -1,0 +1,28 @@
+# gateway-admit — the SHARED admission helper's interface (agents/gateway-admit.sh; FU-270, operator
+# ruling 2026-11-01: one helper for gateway admission, adopted launcher by launcher). The launcher-
+# shaped contract (agent-session.sh's platform guard, its --model / interactive refusals, its bind)
+# stays pinned by gateway-sessions, which drives the SAME helper through that launcher's block; this
+# family drives `gw_admit` directly, through the arms no current launcher reaches.
+#
+# THE INTERFACE (the helper's header is the one home). `gw_admit --stack --role --task [--round]
+# [--attempt] [--tier] [--harness] [--rail] [--canary] (--bind <ns>/<sa>/<pod> | --env-file <path>)
+# [--harnesses <list>]` → rc 0 dispatch (GW_SESSION_ID / GW_RAIL / GW_HARNESS / GW_MODEL /
+# GW_WIRE_MODEL / GW_ENV_KEYS set; bound: GW_PULL_URL + GW_PULL_PRELUDE, no credential held;
+# unbound: the dispatch `env` written 0600 as KEY=VALUE lines to the caller's file, no helper
+# variable holds the session token) · rc 1 defer (GW_DEFER_REASON / GW_RETRY_AFTER from the gateway)
+# · rc 3 fail closed (non-200 / unreachable / unusable — an unusable dispatch released BEFORE the
+# return, nothing written) · rc 2 refused before any request (missing stack/role/task, neither or
+# both of --bind / --env-file, a malformed bind, a bad round). The helper never exits and installs
+# no trap; `gw_release` is idempotent (one DELETE however often it is called). Every row runs under
+# `set -u`, the strictest launcher's mode.
+#
+# `curl` is shadowed as the gateway seam exactly as in gateway-sessions (the POST body IS the asserted
+# request; the DELETE is the release). Row state (the gw_admit argv, the gateway's reply) lives in
+# rows/<id>/vars.sh.
+name: gateway-admit
+mode: table
+source: agents/gateway-admit.sh
+parts:
+  - file:bridge.sh
+  - file:post.sh
+rows: rows.psv

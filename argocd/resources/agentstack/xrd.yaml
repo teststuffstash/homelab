@@ -122,12 +122,11 @@ spec:
                     goalModel:
                       type: string
                       description: >-
-                        Claude model alias for the ASSEMBLY review only — a PR whose head is
-                        goal/** (the goal→master shape, review-goal.md). Rendered into the
-                        per-stack review reflex as REVIEW_GOAL_MODEL; every other PR keeps
-                        the reviewer default (sonnet). NB must DIFFER from the model that
-                        decomposed the goal (goal-decompose runs GOAL_MODEL, default opus) —
-                        model-routing-history.md §M10.
+                        DEPRECATED — ignored. The ASSEMBLY review (head goal/**) pins no model:
+                        it takes what every review takes, the gateway's pick (FU-270), and no
+                        decorrelation from the decomposing session is enforced. Kept in the
+                        schema only so claims still declaring it are not pruned into a
+                        permanent ArgoCD diff; drop it from your claim.
                 slo:
                   type: object
                   description: >-
@@ -215,6 +214,19 @@ spec:
                         caller with role `prober`), renders the codex provider block and exports
                         PROBE_CHILD_HARNESS=codex / PROBE_CHILD_MODEL; a gateway defer falls the
                         tick back to a claude child. The outer session stays claude either way.
+                    gateway:
+                      type: string
+                      enum: [sessions]
+                      description: >-
+                        FU-270 (operator ruling 2026-11-01) — the OUTER (parent) session's
+                        admission. Absent = the parent rides the probe pod's own env (the old
+                        proxy's ref rail), pinned to `model`. `sessions` = the probe pod admits one
+                        unbound prober session through the agent-gateway with the shared helper
+                        (agents/gateway-admit.sh; the stack's loop SA must be a policy caller with
+                        role `prober`), harness claude, and the gateway picks the model (`model`
+                        stays the model of a tick that fell back to the pod's env). A
+                        gateway defer defers the tick; a refusal or fail-closed falls the tick
+                        back to the pod's own env (transition fallback until the old proxy retires).
                 lenses:
                   type: object
                   description: >-
@@ -514,6 +526,56 @@ spec:
                               `<parent of root>/scripts/lib/snippets.sh` (`gateway/scripts/lib/
                               snippets.sh` for `gateway/specs`, `scripts/lib/snippets.sh` for
                               `specs`). Declare only when the repo keeps its pin elsewhere.
+                      intake:
+                        type: object
+                        required: [facts]
+                        description: >-
+                          Present = island intake holds a daily sitting for this repo (a STACK
+                          island, named `<stack>/<repo>`; homelab#3580). Absent = intake is off
+                          for the repo. Consumed by the island intake LAUNCHER, which reads the
+                          live claims (islands/intake/scripts/claims-read.sh → intake-select.sh
+                          `--claims`; scripts/sitting.sh clones the repo's default branch and
+                          reads the facts file there). Nothing is rendered by the Composition.
+                        properties:
+                          facts:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative path of the island's facts file, in THIS repo (ADR-160:
+                              a stack's facts stay in the stack). No leading/trailing slash, no
+                              dot-led segment. Its required parts: islands/intake/README.md
+                              §Stack islands.
+                      extraSpecs:
+                        type: array
+                        maxItems: 16
+                        description: >-
+                          The repo's FURTHER spec roots, beside `specs` (a monorepo of islands:
+                          homelab's gateway owns `specs`, each island adds its own root here).
+                          Consumed by the SPECS REVIEWER (specs-reviewer-session.sh
+                          pack_root_pairs): a PR touching a listed root gets that root's own
+                          context pack and rows review instead of the mechanical approval; a PR
+                          touching several roots gets one pass per root and ONE verdict. And by
+                          the worker launcher (agent-session.sh REPLAY:specs-process-volume): a
+                          ride whose footprint reaches a listed root (and not `specs`) gets the
+                          pinned process mount, versioned by that root's README.md
+                          `RULES.md @ v<version>` link (else the primary pin). Never an evidence
+                          source: the repo's evidence bucket belongs to `specs`, so an extra
+                          root's pack states it carries no evidence.
+                        items:
+                          type: object
+                          required: [root]
+                          properties:
+                            root:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: Repo-relative directory of the spec pages (same grammar as `specs.root`).
+                            tests:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: >-
+                                Repo-relative directory of the rule tests. Omit when the root has
+                                none yet — the reviewer then reaches rules through the spec pages
+                                alone; it never assumes a default tests root.
                       fixer:
                         type: object
                         description: >-
@@ -571,6 +633,24 @@ spec:
                               egress allowlist because dockerd's `registry-mirrors` is Hub-only
                               (the docker.io/ghcr pull-through mirrors themselves are BASELINE
                               egress for every ride — homelab#520 — not gated by docker=true).
+                          dockerPaths:
+                            type: array
+                            maxItems: 16
+                            items:
+                              type: string
+                              maxLength: 128
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._*-]*(/[A-Za-z0-9*][A-Za-z0-9._*-]*)*$'
+                            description: >-
+                              The PATH-SCOPED form of `docker`, for a repo that holds several
+                              projects (homelab: the gateway island under `gateway/**`). Each
+                              entry is a `Touches:` footprint path or glob. The worker launcher
+                              (agent-session.sh REPLAY:docker-paths) makes a dispatch a docker
+                              ride when the issue's declared `Touches:` reaches an entry, or
+                              when the issue declares no `Touches:` at all; every other ride
+                              of the repo stays a plain pod. Ignored when `docker` is true.
+                              Two things are per NAMESPACE and switch on with a non-empty
+                              list: the docker egress legs, and the need for a
+                              `storage.scratch` quota (20Gi × concurrent docker rides).
                           rideSize:
                             type: string
                             enum: [standard, large]

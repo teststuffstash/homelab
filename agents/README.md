@@ -14,7 +14,7 @@ The two other pieces live elsewhere, by design:
 
 | Piece | Repo | Why |
 |---|---|---|
-| **Harness image** (`agent-base`: goose + opencode) | [`agent-runtime`](https://github.com/teststuffstash/agent-runtime) | Artifact-producing; one-job CI (push→build→ghcr), own versioning/Renovate. Kept out of this IaC monorepo so the build rules stay trivial. |
+| **Harness image** (`agent-base`: goose + opencode) | [`agent-runtime`](https://github.com/teststuffstash/agent-runtime) | Artifact-producing; one-job CI (push→build→`registry.teststuff.net`; never ghcr, the image carries the Claude Code binary), own versioning/Renovate. Kept out of this IaC monorepo so the build rules stay trivial. |
 | **Per-app recipes** (`.agents/fix.yaml`) | each app repo | They know `parser.py`, `devbox run ci`, the coverage gate. |
 
 ## The one-image, two-modes model

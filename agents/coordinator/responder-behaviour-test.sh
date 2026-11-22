@@ -115,6 +115,9 @@ cat > "$BIN/claude" <<'EOF'
 # Never calls a model; captures the composed brief so the routing default, SUBJ, SELF_NOTE
 # and EGRESS_NOTE the real script built can be asserted on.
 printf '%s\n' "claude $*" >> "$H/calls.log"
+# Which LLM endpoint + credential the session was handed (FU-270: the gateway's dispatch env rides
+# `env` onto this call and must override the pod's old-proxy pair).
+printf 'claude-env ANTHROPIC_BASE_URL=%s ANTHROPIC_AUTH_TOKEN=%s\n' "${ANTHROPIC_BASE_URL:-}" "${ANTHROPIC_AUTH_TOKEN:-}" >> "$H/calls.log"
 for a in "$@"; do case "$a" in -*) ;; *) printf '%s' "$a" > "$H/brief.txt"; break;; esac; done
 # A real session prints its report; the §A1 capture tees that into triage.log, and an EMPTY file
 # is deliberately not uploaded — so the stub must speak or the capture assertions pass vacuously.
@@ -129,6 +132,17 @@ printf '%s\n' "curl $*" >> "$H/calls.log"
 # Alertmanager's alert list (the FU-230 claim read): served from $H/am.json when the scenario has
 # one. ABSENT = an empty 200, which the clause must read as UNREADABLE, never as "nothing firing".
 case "$*" in */api/v2/alerts*) [ -f "$H/am.json" ] && cat "$H/am.json" ;; esac
+# The agent-gateway's POST /sessions (FU-270, agents/gateway-admit.sh): the scenario's answer from
+# $H/gw-reply.json at $H/gw-http (default 200), written to curl's -o file; the code on stdout (the
+# helper's -w). No reply file = connection refused. DELETE (the release) succeeds.
+case "$*" in
+  *"-X DELETE"*/sessions/*) exit 0 ;;
+  *"-X POST"*/sessions*)
+    [ -f "$H/gw-reply.json" ] || { printf '000'; exit 7; }
+    _o=""; _p=""; for _a in "$@"; do [ "$_p" = "-o" ] && _o="$_a"; _p="$_a"; done
+    [ -z "$_o" ] || cat "$H/gw-reply.json" > "$_o"
+    cat "$H/gw-http" 2>/dev/null || printf '200'; exit 0 ;;
+esac
 exit 0
 EOF
 # §A1 capture (FU-210): the bucket write recorder. Present ALWAYS, so the difference between the
@@ -1128,6 +1142,81 @@ printf 'fix-verdict: report-only\nREMEDIATION-WOULD: delete monitoring/pod/loki-
 go_ts "$(alert rw3 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
 wantwould "report-only verdict + named imperative remediation → verdict recorded report-only" '.verdict == "report-only"'
 wantwould "…and the would-line is STILL typed (never suppressed by the verdict)" '.remediation_would | length == 1 and .[0].verb == "delete" and .[0].target == "monitoring/pod/loki-0"'
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-270 — the agent-gateway admits PLATFORM-routed triages (gateway rollout, #1640/#1769)"
+# The rollout rulings (2026-11-01): platform claim only, through the ONE helper's unbound lane shape
+# (agents/gateway-admit.sh gw_admit_lane); a gateway refusal before a request (rc 2) or fail-closed
+# (rc 3) falls back to the old proxy with one loud line (FU-270: transition fallback); a defer defers
+# as the latch does. The pod carries the old-proxy pair (manifest env), so "the gateway's env reached
+# claude" is the pair being OVERRIDDEN — asserted on the stub's claude-env line.
+OLD_BASE="http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+GW_BASE="http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic"
+printf 'fake-caller-token-projected' > "$TMP/gw-caller-token"
+go_gw() {
+  env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY -u AGENT_TS_BUCKET -u AGENT_TS_ENDPOINT \
+  AGENT_GATEWAY="${GW_KNOB-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
+  ANTHROPIC_BASE_URL="$OLD_BASE" ANTHROPIC_AUTH_TOKEN="ref:agent-coordinator/coordinator-claude" \
+  PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" RESPONDER_SCRATCH="$SCRATCH" \
+  PUSHGATEWAY="" PATH="$BIN:$PATH" \
+    bash "$TMP/respond.sh" > "$H/out.txt" 2> "$H/err.txt"
+  RC=$?; OUT="$(cat "$H/out.txt")"
+}
+wanterr() { grep -qF -- "$2" "$H/err.txt" && ok "$1" || bad "$1" "stderr lacks: $2"; }
+gw_dispatch_reply() {
+  printf '%s' '{"decision":"dispatch","session":{"id":"s-resp-gw","token":"gws_RESPONDERTOKEN","expires_at":"2026-11-01T16:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/gw-sonnet-x","env":{"ANTHROPIC_BASE_URL":"'"$GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_RESPONDERTOKEN","ANTHROPIC_MODEL":"gw-sonnet-x"},"context_tokens":200000}' > "$H/gw-reply.json"
+}
+# source=homelab routes PLATFORM (LEG 1's egress-homelab); source=oracle-fleet routes oracle.
+GW_PLATFORM_ALERT='{"alertname":"AgentWorkerEgressDropped","source":"homelab"}'
+
+scenario gw-platform-dispatch
+gw_dispatch_reply
+go_gw "$(alert gwp1 "$GW_PLATFORM_ALERT")"
+wantcall "platform route → POST /sessions as the responder, task alert-<fp>" '"stack":"platform","role":"responder","task":"alert-gwp1"'
+wantcall "…the session runs on the GATEWAY's model (rail prefix stripped)" "--model gw-sonnet-x"
+wantcall "…and its dispatch env overrides the pod's old-proxy pair" "claude-env ANTHROPIC_BASE_URL=$GW_BASE ANTHROPIC_AUTH_TOKEN=gws_RESPONDERTOKEN"
+wantcall "…and the session is released after the triage" "-X DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-resp-gw"
+wantnocall "…and the old-proxy pair never reached claude" "claude-env ANTHROPIC_BASE_URL=$OLD_BASE"
+[ "$RC" -eq 0 ] && ok "…and the workflow succeeds" || bad "gw dispatch rc" "rc=$RC $(tail -3 "$H/err.txt")"
+
+scenario gw-other-stack
+gw_dispatch_reply
+go_gw "$(alert gwo1 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet"}')"
+wantnocall "oracle route → NO /sessions call (the flip is platform-only)" "/sessions"
+wantcall "…the triage runs on the old proxy" "claude-env ANTHROPIC_BASE_URL=$OLD_BASE"
+wanterr "…and says why, naming the stack" "stack 'oracle' stays on the old proxy"
+
+scenario gw-fallback-503
+gw_dispatch_reply; printf '503' > "$H/gw-http"; printf '{"error":"tokenreview-transient"}' > "$H/gw-reply.json"
+go_gw "$(alert gwf1 "$GW_PLATFORM_ALERT")"
+wanterr "gateway 503 (fail-closed) → the ONE loud transition-fallback line" "gateway admission refused rc=3 — old-proxy fallback"
+wantcall "…and the triage still runs, on the old proxy" "claude-env ANTHROPIC_BASE_URL=$OLD_BASE"
+[ "$RC" -eq 0 ] && ok "…and a gateway outage never fails the lane" || bad "gw fallback rc" "rc=$RC"
+
+scenario gw-no-token-fallback
+gw_dispatch_reply
+mv "$TMP/gw-caller-token" "$TMP/gw-caller-token.off"
+go_gw "$(alert gwn1 "$GW_PLATFORM_ALERT")"
+mv "$TMP/gw-caller-token.off" "$TMP/gw-caller-token"
+wanterr "no caller token (refused before any request) → the fallback line, rc=2" "gateway admission refused rc=2 — old-proxy fallback"
+wantnocall "…and no /sessions request was sent" "-X POST http://agent-gateway"
+wantcall "…and the triage runs on the old proxy" "claude-env ANTHROPIC_BASE_URL=$OLD_BASE"
+
+scenario gw-defer
+printf '%s' '{"decision":"defer","reason":"subscription-sessions-full","retry_after_s":120}' > "$H/gw-reply.json"
+go_gw "$(alert gwd1 "$GW_PLATFORM_ALERT")"
+wantnocall "gateway defer → no session" "claude -p"
+want "…the defer is said, like the latch's" "triage DEFERRED — the gateway deferred AgentWorkerEgressDropped (gwd1) [subscription-sessions-full]"
+wantcall "…the fp is re-marked deferred- (no longer reads as triaged today)" '"fp-gwd1":"deferred-'
+grep -E 'patch cm responder-seen .*"subj-[0-9a-f]{16}":"deferred-' "$H/calls.log" >/dev/null \
+  && ok "…and so is its subject (the retry is not a subjdup)" || bad "gw defer subject" "no subj- deferred- re-mark"
+[ "$RC" -ne 0 ] && ok "…and the workflow exits non-zero → Argo's retry (FU-113b)" || bad "gw defer rc" "rc=$RC"
+
+scenario gw-knob-off
+gw_dispatch_reply
+GW_KNOB="" go_gw "$(alert gwk1 "$GW_PLATFORM_ALERT")"
+wantnocall "AGENT_GATEWAY unset → no /sessions call (today's path, byte-for-byte)" "/sessions"
+wantcall "…the triage runs on the old proxy" "claude-env ANTHROPIC_BASE_URL=$OLD_BASE"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi

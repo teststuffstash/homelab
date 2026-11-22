@@ -894,13 +894,19 @@ spec:
         # 24h, not shorter: a refusal is the DESIGNED outcome for a non-allowlisted address, so it
         # is normal for the hours between a merge and the operator's next session. A day of it is
         # the thing nobody noticed for four.
+        #
+        # PER SUBJECT (2026-11-17): the router's `ansible opnsense` refusal stood 2026-10-31 → 11-17
+        # while a newest-commit reading went 0 on every unrelated clean apply (11-11, 11-14) and blank on
+        # every status-less head. The exporter now reads the verdict stream of the last master commits
+        # and labels each standing refusal by its `subject` (the description's `<subject>:` prefix); an
+        # `ansible <group>` refusal ends only with a success for that group (collect_mgmt_apply).
         # platform_machinery: a human applies this by construction (docs/management-box.md §The
         # test surface) — the responder investigates, it never dispatches a fixer.
         - alert: MgmtApplyResidueStanding
           expr: |-
             (github_mgmt_apply_refused == 1)
-              and on (repo, context)
-            (time() - max by (repo, context) (github_mgmt_apply_refused_since_timestamp)) > 86400
+              and on (repo, context, subject)
+            (time() - max by (repo, context, subject) (github_mgmt_apply_refused_since_timestamp)) > 86400
           for: 1h
           labels:
             severity: warning
@@ -908,8 +914,8 @@ spec:
             # triage: residue is a pending human apply; addresses are in the box journal and GitHub status
             triage: none
           annotations:
-            summary: "The management box has been refusing to apply {{ $labels.repo }} master for over a day"
-            description: 'mgmt-apply has held a `{{ $labels.context }}` failure on {{ $labels.repo }} master for more than 24h. The count is github_mgmt_apply_outside_addresses{repo="{{ $labels.repo }}"} — addresses outside the apply allowlist. It RATCHETS: a refusal does not stamp the baseline, so every later master commit adds its residue to the same pending apply and the eventual human apply keeps growing. Read the addresses with `journalctl -u mgmt-apply -n50` on 192.168.2.53, or `gh api repos/teststuffstash/{{ $labels.repo }}/commits/master/status` (a STATUS, not a check-run). Apply with `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the walk found no success within its window.'
+            summary: "The management box has been refusing {{ $labels.subject }} on {{ $labels.repo }} master for over a day"
+            description: 'mgmt-apply has held a `{{ $labels.context }}` failure for `{{ $labels.subject }}` on {{ $labels.repo }} master for more than 24h. What ends one: a root, `stage 1` (the security boundary included) or `policy` refusal ends at the next span the box evaluates, or when a human `mgmt-tf apply` stamps the baseline (the box then posts `baseline: stamped by a human apply`); a root failure posted after an apply (`applied, POST-CHECK regressed` / `applied, STOPPED`) ends at the next clean apply of that root or the stamp; an `ansible <group>` refusal ends when that group reads clean — at the next span touching it, or the hourly re-read the box runs after a hand converge. Check: the refused commit (since_sha) and its status text (`gh api repos/teststuffstash/{{ $labels.repo }}/commits/<sha>/status` — a STATUS, not a check-run); `journalctl -u mgmt-apply -n50` on 192.168.2.53 (the re-read lines name the group and what still differs); github_mgmt_apply_outside_addresses for a root. A root refusal RATCHETS: it does not stamp the baseline, so every later master commit adds its residue to the same pending apply. A human apply is `devbox run mgmt-tf -- plan` then `apply` — never `-target` on the main root (FU-248). If github_mgmt_apply_since_floored is 1 the age is a LOWER bound: the retained history holds no clearing verdict for the subject.'
         # ── homelab#1992 / FU-125: Renovate liveness + the dependency coverage table ─────────
         # 2026-08-01: 115 GREEN renovate.yaml runs and ZERO PRs org-wide (every repo aborted after
         # extraction on a missing `statuses` permission). The workflow verdict is not a liveness
@@ -991,11 +997,15 @@ spec:
     #    failed/cancelled run's wall says nothing about how long a green run takes.
     #  - grouped by event: push runs execute the full suite; pull_request runs are diff-scoped since
     #    2026-10-09 (homelab#2408) — they drift (and drop) separately, never as one blended median.
-    #  - baseline = the 7-day window 21–28 days ago (`offset 21d`) — inside the 31d retention
-    #    (kube-prometheus-stack values), and three weeks back so a creep has had time to show.
-    #  - 1.5× the baseline median: a real step (a new job, a cold cache) is ≥1.5× within weeks;
-    #    week-to-week jitter on a 7-day median is far below it. A MEDIAN, not avg_over_time: one
-    #    hung run must not move it (the fixture's outlier case).
+    #  - baseline = the PREVIOUS 7-day window (`offset 7d`): 14 days of lookback. Retention is
+    #    size-capped (`retentionSize` binds long before `retention: 31d` — ~19 days held on
+    #    2026-11-13), and an offset past the oldest sample reads NOTHING: the first version's
+    #    28-day lookback went silently blind ~10-22 while homelab's push CI grew 1.46× in 11 days.
+    #    GithubCiWallTimeDriftBlind below holds the lookback inside what is held.
+    #  - 1.25× the baseline median, week over week: sized on the live table at the change
+    #    (docs/spikes/ci-runtime-2026-11.md) — homelab push sat at 1.18–1.33 through the creep,
+    #    every other (repo, workflow, event) at 0.82–1.16. A MEDIAN, not avg_over_time: one hung
+    #    run must not move it (the fixture's outlier case).
     #  - floor 120 s on the current median: a 40 s → 80 s workflow is 2× and nobody's problem.
     #  - ≥20 runs in BOTH windows, counted per run id (the same per-id collapse): a quiet repo's
     #    median of three runs is noise, so quiet repos stay silent by design.
@@ -1003,10 +1013,10 @@ spec:
     #    [7d] range over every run series is the most expensive read in this file — 1/60th of the
     #    default cadence. for: 6h = six consecutive hourly reads (a bad-scrape filter, no more).
     #
-    # Fixture: loop-health-ci-drift.promtool-{rules,test} beside this file (creep fires at the
-    # exact hour the run-count guard is met + 6h; flat, failed-run storm, single outlier, 1.4×,
+    # Fixture: loop-health-ci-drift.promtool-{rules,test} beside this file (a creep fires at the
+    # first hour its condition holds + 6h; flat, failed-run storm, single outlier, 1.2×,
     # under-floor and 10-run/two-pod shapes all silent, each with the contrast that shows it is
-    # its guard — not chance — holding it quiet).
+    # its guard — not chance — holding it quiet; the blind belt fires on short history).
     - name: github-ci-drift
       interval: 1h
       rules:
@@ -1015,14 +1025,14 @@ spec:
             (
               quantile by (repo, workflow, event) (0.5,
                 max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d])))
-              > 1.5 *
+              > 1.25 *
               quantile by (repo, workflow, event) (0.5,
-                max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d)))
+                max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 7d)))
             ) > 120
             and on (repo, workflow, event)
               count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d]))) >= 20
             and on (repo, workflow, event)
-              count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 21d))) >= 20
+              count by (repo, workflow, event) (max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{status="completed", conclusion="success"}[7d] offset 7d))) >= 20
           for: 6h
           labels:
             severity: warning
@@ -1031,4 +1041,19 @@ spec:
             triage: dig
           annotations:
             summary: "CI wall time drifting up: {{ $labels.repo }} {{ $labels.workflow }} ({{ $labels.event }})"
-            description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.5× the median of the 7-day window 21–28 days ago (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 21d))).'
+            description: 'The median successful {{ $labels.workflow }} run on {{ $labels.repo }} ({{ $labels.event }} events) took {{ $value | humanizeDuration }} over the last 7 days — more than 1.25× the median of the 7 days before that (both windows ≥20 runs; floor 2m). Slow creep, not an outage: the 2026-08/10 homelab `ci` creep (1.7 → 4.8 min PR median) went unseen for six weeks. Find which job grew: github_ci_job_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}"} week over week, then the workflow/script history for what joined that job. Baseline: quantile by (repo, workflow, event) (0.5, max by (repo, workflow, event, id) (max_over_time(github_workflow_run_duration_seconds{repo="{{ $labels.repo }}",workflow="{{ $labels.workflow }}",event="{{ $labels.event }}",status="completed",conclusion="success"}[7d] offset 7d))).'
+        # The belt for the rule above: its baseline is the window 7–14 days back, and an offset past
+        # the oldest sample Prometheus holds reads NOTHING — a silent, permanent blind spot, not an
+        # error. Fires while Prometheus holds under 15 days (the 14-day lookback + a day's margin).
+        # A deeper offset anywhere in this file raises this threshold with it.
+        - alert: GithubCiWallTimeDriftBlind
+          expr: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) < 15 * 86400
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            # triage: a sizing fact (retentionSize vs series count), read off one number; a daily dig
+            triage: dig
+          annotations:
+            summary: "Prometheus holds {{ $value | humanizeDuration }} of history — GithubCiWallTimeDrift's 14-day lookback is blind"
+            description: 'The oldest sample Prometheus holds is {{ $value | humanizeDuration }} old. GithubCiWallTimeDrift compares the last 7 days against the 7 days before them, so under 14 days of history its baseline reads nothing and it can never fire. Grow `retentionSize` (argocd/platform/values/kube-prometheus-stack.yaml) or cut series count; shortening the alert''s windows is the last resort. Check: (time() - min(prometheus_tsdb_lowest_timestamp_seconds)) / 86400.'

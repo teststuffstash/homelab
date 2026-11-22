@@ -1,0 +1,31 @@
+{
+ "data": {
+  "repository": {
+   "issue": {
+    "userContentEdits": {
+     "totalCount": 2,
+     "nodes": [
+      {
+       "createdAt": "2026-11-12T05:07:19Z",
+       "editedAt": "2026-11-12T05:07:19Z",
+       "deletedAt": null,
+       "diff": "---\nTouches: gateway/specs/endpoints/sessions.md, gateway/tests/test_sessions_outcome.py\nOrigin: teststuffstash/homelab#3119\nClass: fix\n\n---\n## Deliverable\n\nGW-SESSIONS-OUTCOME carries the judge-path row(s) for the relayed-429 no-strike rule: a judge's `wrong-verdict` reported on a session whose last relayed upstream answer was a 429 still counts a model-scoped strike, proven by a `rule(\"GW-SESSIONS-OUTCOME\")` case so the gate sees what today is prose only.\n\n## Acceptance\n\n1. `gateway/specs/endpoints/sessions.md` §GW-SESSIONS-OUTCOME (the store table that carries \"a consumer outcome after a relayed 429 strikes nothing ⚖\", shipped to master by the Goal #3118 assembly PR #3270) gains the two rows below; `gateway/tests/test_sessions_outcome.py` proves each as a `rule(\"GW-SESSIONS-OUTCOME\")`-labelled case naming its world, green.\n2. Removing the judge exemption from the 429 gate in `outcomes.py` (the `not judge` term PR #3125 describes) turns row 1 red — the prose judgment is now a proven row.\n3. The spec-join and hygiene ratchets do not rise; the prose sentence \"A judge's outcome (`wrong-verdict`) is on the verdict, not the ride, and still counts\" stays beside the rule and the rows prove it.\n\n## Spec changes\n\nRequirement: `GW-SESSIONS-OUTCOME` on `gateway/specs/endpoints/sessions.md` — world `policy-enforce · upstream-429` (the judge is a fixture caller of the enforce world; the fake upstream answers 429).\n\n| description | world | sequence | strikes? | series? |\n|---|---|---|---|---|\n| \"a judge's wrong-verdict after a relayed 429 still strikes ⚖\" | policy-enforce · upstream-429 | the worker session's request answered `upstream-429`, then the judge reports `wrong-verdict` | `{…, wrong-verdict, model, outcome}` | `{class=\"wrong-verdict\",source=\"outcome\"}` 1 |\n| \"two reporters on one 429'd session: the consumer's unknown strikes nothing, the judge's wrong-verdict counts ⚖\" | policy-enforce · upstream-429 | `upstream-429`, the platform loop reports `unknown`, then the judge reports `wrong-verdict` | one strike `{…, wrong-verdict, model, outcome}`; `GET` → `outcome.class` = `wrong-verdict` (the judge's outcome supersedes on GET, §When) | `{class=\"wrong-verdict\",source=\"outcome\"} 1`, `{class=\"unknown\",source=\"outcome\"} 0` |\n\nIndex row: none — no `⚑ gap` flag carries this; the shortfall is a prose judgment without a row.\n\nUnverified (verify during implementation): that the enforce world's fixture composes with the `upstream-429` fake-upstream behaviour for the worker session (the existing 429 rows ride `policy-default`); the strike cell literal is whatever cell the enforce world's worker session rides. The table these rows join is the one the assembly #3270 lands on master — master's sessions page is in the v0.6.9 row shape (PR #3188) while the goal branch's is not, so take the header from master after the merge.\n\n## Out of scope\n\n- The canary-ride exemption from the same gate (`not row.canary_provider`, pinned by `test_strike_after_429_not_the_verdict` under GW-CATALOG-OR's 2026-10-22 ruling) — changing it is an operator ruling, not this row.\n- The `⚑ gap: the fleet view` row on GW-SESSIONS-OUTCOME.\n\nOrigin: finding from the PR #3125 review, deferred by the Goal #3118 checkpoint (entry 1) as outside the Goal's acceptance; a sprout of child #3119. Body rewritten by island intake 2026-11-12 into the queue-ready shape; the original is in the edit history.\n",
+       "editor": {
+        "login": "homelab-agents-1234"
+       }
+      },
+      {
+       "createdAt": "2026-11-12T05:07:19Z",
+       "editedAt": "2026-11-11T21:41:50Z",
+       "deletedAt": null,
+       "diff": "---\nTouches: gateway/specs/endpoints/sessions.md, gateway/tests/test_sessions_outcome.py\nOrigin: teststuffstash/homelab#3119\n\n---\nFinding from PR #3125 review (Goal #3118 checkpoint, entry 1): add a GW-SESSIONS-OUTCOME row + test for the judge path — a judge-grant caller reporting a wrong verdict after a relayed 429 still counts a strike. Today the not-judge branch of \"a consumer outcome after a relayed 429 strikes nothing\" is prose-only: removing it would pass the gate.\n\nSurface: gateway/specs/endpoints/sessions.md, gateway/tests/test_sessions_outcome.py. Lands on master after the Goal #3118 assembly merge (the spec rows ship with it). Deferred by the checkpoint: real but outside this Goal's acceptance.\n",
+       "editor": {
+        "login": "homelab-agents-1234"
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

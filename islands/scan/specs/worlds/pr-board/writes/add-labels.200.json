@@ -1,0 +1,13 @@
+[
+  {
+    "id": 11431236377,
+    "node_id": "LA_kwDODboMws8AAAACqVrTGQ",
+    "url": "https://api.github.com/repos/teststuffstash/homelab/labels/merge-conflict",
+    "name": "merge-conflict",
+    "color": "e11d21",
+    "default": false,
+    "description": "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase",
+    "archived_at": null,
+    "archived_by": null
+  }
+]

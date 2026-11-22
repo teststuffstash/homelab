@@ -1,0 +1,19 @@
+# assembly-ci-red/green-nothing — the same assembly PR with `ci` green. The clause's own selection
+# (`block:ci-red-select`, the shipped jq) does not pick it, so nothing downstream runs.
+#
+# THE CONTRACT: no read, no unit, no report line.
+name: assembly-ci-red-green-nothing
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:state-fp-jq
+  - block:state-fp-pair
+  - file:../bridge.sh
+  - block:ci-red-select
+  - block:assembly-ci-red
+  - block:ci-red-goal-head-exclusion
+  - file:../post.sh
+env:
+  - IN_SLUG=teststuffstash/homelab
+  - IN_REPO=homelab
+  - IN_NOW=2026-11-12T12:00:00Z

@@ -325,6 +325,77 @@ tests:
         alertname: MgmtNodeMissing
         exp_alerts: []
 
+  # ── the ci-runner lost trigger (MgmtRunnerSeedDrift) ──────────────────────────────────────────
+  # The 2026-11-14 shape: the state holds a newer snippet than the one ci-runner-01 booted (sha
+  # prefixes shortened). 6h is two drained recreates with headroom; past it the alert fires.
+  - interval: 5m
+    name: "a runner booted on a seed the state no longer holds fires after 6h"
+    input_series:
+      - series: 'mgmt_runner_seed_declared_info{job="mgmt-node",instance="192.168.2.53:9100",vm="ci-runner-01",sha256="a20e295e"}'
+        values: "1x120"
+      - series: 'ci_runner_seed_info{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01",vm="ci-runner-01",sha256="790ef8fd"}'
+        values: "1x120"
+    alert_rule_test:
+      - eval_time: 5h45m
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts: []
+      - eval_time: 6h15m
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", vm: ci-runner-01, sha256: a20e295e }
+
+  # Declared and live agree on one VM, and the other VM's matching sha must not cover for it — the
+  # join is per (vm, sha256), never sha alone.
+  - interval: 5m
+    name: "matching seeds are silent; a sha match on ANOTHER vm does not count"
+    input_series:
+      - series: 'mgmt_runner_seed_declared_info{job="mgmt-node",instance="192.168.2.53:9100",vm="ci-runner-01",sha256="aaaa"}'
+        values: "1x120"
+      - series: 'ci_runner_seed_info{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01",vm="ci-runner-01",sha256="aaaa"}'
+        values: "1x120"
+      - series: 'mgmt_runner_seed_declared_info{job="mgmt-node",instance="192.168.2.53:9100",vm="ci-runner-02",sha256="bbbb"}'
+        values: "1x120"
+      - series: 'ci_runner_seed_info{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",vm="ci-runner-02",sha256="aaaa"}'
+        values: "1x120"
+    alert_rule_test:
+      - eval_time: 9h
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", vm: ci-runner-02, sha256: bbbb }
+
+  # A VM that publishes no seed at all (down, exporter gone, booted before the metric existed) while
+  # a declared sha exists is the same finding. A box recreate's few-minute gap stays under the for:.
+  - interval: 5m
+    name: "a declared seed with no live series fires after 6h; a short recreate gap does not"
+    input_series:
+      - series: 'mgmt_runner_seed_declared_info{job="mgmt-node",instance="192.168.2.53:9100",vm="ci-runner-01",sha256="cccc"}'
+        values: "1x150"
+      - series: 'mgmt_runner_seed_declared_info{job="mgmt-node",instance="192.168.2.53:9100",vm="ci-runner-02",sha256="dddd"}'
+        values: "1x150"
+      # ci-runner-02: recreated — 2h with no series (drain + boot), then the new seed matches
+      - series: 'ci_runner_seed_info{job="ci-runner-node",instance="192.168.2.66:9100",host="ci-runner-02",vm="ci-runner-02",sha256="dddd"}'
+        values: "1x12 _x24 1x110"
+    alert_rule_test:
+      - eval_time: 5h45m
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts: []
+      - eval_time: 6h15m
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100", vm: ci-runner-01, sha256: cccc }
+
+  # The belt could not read the state → no declared series → nothing to compare, silent (the
+  # stale/failing-belt alerts own that case), whatever the VM publishes.
+  - interval: 5m
+    name: "no declared series (state unreadable) is silent"
+    input_series:
+      - series: 'ci_runner_seed_info{job="ci-runner-node",instance="192.168.2.55:9100",host="ci-runner-01",vm="ci-runner-01",sha256="eeee"}'
+        values: "1x120"
+    alert_rule_test:
+      - eval_time: 9h
+        alertname: MgmtRunnerSeedDrift
+        exp_alerts: []
+
   # ── the belt itself ────────────────────────────────────────────────────────────────────────────
   - interval: 5m
     name: "a belt whose last run stops advancing fires after an hour plus 15m"

@@ -134,8 +134,10 @@ PROM="${NM_PROM:-http://192.168.40.13:9090}"
 TAINT_KEY=homelab.io/talos-behind
 WH_ACK="$DIR/workload-health.ack"   # FU-278: a human's ack of the workloads held right now
 mkdir -p "$DIR" || exit 1
-log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
-now() { date -u +%s; }
+# bash's own clock, not a `date` per call (the same output as `date -u +%H:%M:%SZ` / `date -u +%s`).
+# The local TZ is UTC for this printf only; log runs no child that could inherit it.
+log() { local TZ=UTC0; printf '%(%H:%M:%SZ)T %s\n' -1 "$*"; }
+now() { printf '%s\n' "$EPOCHSECONDS"; }
 
 exec 9>"$DIR/.lock"; flock -n 9 || { log "another tick holds the lock — a sync is running"; exit 0; }
 # Tools (FU-305): yq/kubectl/jq from the box's closure on PATH; tofu + talosctl as THIS checkout's
@@ -324,8 +326,41 @@ else
 fi
 jq -e 'type == "object"' "$tf" >/dev/null 2>&1 || { log "FATAL node_install_targets is not a map"; emit; exit 1; }
 jq -c --argjson a "$(printf '%s\n' "$auto" | jq -R . | jq -sc .)" 'with_entries(select(.key as $k | $a | index($k)))' "$tf" >"$tf.auto"
-keyof()  { jq -r --arg n "$1" '.[$n] | "\(.version)/\(.schematic)"' "$tf"; }
-decl()   { jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // ""' "$tf"; }   # <node> <field>
+# The declaration read ONCE (one jq pass, not one per node field — the rollout reads it hundreds of
+# times a tick). DECL[<node>/<field>] is exactly what `jq -r '.[$n][$f] // ""'` prints for the four
+# fields read here, DKEY[<node>] what `.[$n] | "\(.version)/\(.schematic)"` prints. The cache is used
+# only when every entry is an object whose four fields are strings (or absent/null) and no name or
+# value holds a tab, newline, NUL or \x1f (the separator); otherwise DECL_OK stays empty and every
+# read is the per-call jq below — the same output either way.
+declare -A DECL=() DKEY=(); DECL_OK=""
+if decl_rows="$(jq -r 'def safe: (explode | map(select(. == 0 or . == 9 or . == 10 or . == 31)) | length) == 0;
+      if all(to_entries[]; (.key | safe) and (.value | type) == "object"
+             and all(.value.version, .value.schematic, .value.role, .value.class;
+                     . == null or (type == "string" and safe)))
+      then to_entries[] | select(.key != "") | .value as $d
+        | [.key, ($d.version // ""), ($d.schematic // ""), ($d.role // ""), ($d.class // ""),
+           "\($d.version)/\($d.schematic)", "."] | join("\u001f")
+      else error("unsafe") end' "$tf" 2>/dev/null)"; then
+  while IFS=$'\x1f' read -r dn dv ds dr dc dk _; do
+    [ -n "$dn" ] || continue   # {} prints nothing: the one empty line <<< still feeds
+    DECL[$dn/version]="$dv"; DECL[$dn/schematic]="$ds"; DECL[$dn/role]="$dr"; DECL[$dn/class]="$dc"; DKEY[$dn]="$dk"
+  done <<<"$decl_rows"
+  DECL_OK=1
+fi
+unset decl_rows dn dv ds dr dc dk
+decl_cached() { [ -n "$DECL_OK" ] && [ -n "$1" ]; }   # <node>: the empty name is never cached
+keyof()  {  # <node> → version/schematic ("null/null" for a node the map lacks — jq's own answer)
+  if decl_cached "$1"; then printf '%s\n' "${DKEY[$1]-null/null}"; return; fi
+  jq -r --arg n "$1" '.[$n] | "\(.version)/\(.schematic)"' "$tf"
+}
+keyor()  {  # <node> → version/schematic, "" for a node the map lacks
+  if decl_cached "$1"; then printf '%s\n' "${DKEY[$1]-}"; return; fi
+  jq -r --arg n "$1" '.[$n] | if . == null then "" else "\(.version)/\(.schematic)" end' "$tf"
+}
+decl()   {  # <node> <field>
+  if decl_cached "$1"; then case "$2" in version|schematic|role|class) printf '%s\n' "${DECL[$1/$2]-}"; return ;; esac; fi
+  jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // ""' "$tf"
+}
 
 # ── 4. the diff: mgmt-probe.sh's check_nodes, for the auto nodes only ────────────────────────────
 # ONE diff (§MB4 layer 1: the detector first, the sync's completion condition second). DRY_RUN=1:
@@ -338,15 +373,32 @@ diff_nodes() {  # <targets-file> <out>
     bash "$REPO/mgmt/scripts/mgmt-probe.sh" >/dev/null 2>&1
   [ -s "$2" ]
 }
+# <node> <axis> → drift|ok|"": the second tab field of the FIRST line whose first field is "<node> <axis>".
+# AX holds $df parsed once, by ax_load in THIS shell right after each diff (axis runs inside $(…), so a
+# load there would die with the subshell). A key with a backslash goes to awk, whose -v would unescape it.
+declare -A AX=()
+ax_load() {
+  local line k rest
+  AX=()
+  while IFS= read -r line || [ -n "$line" ]; do
+    k="${line%%$'\t'*}"; [ -n "$k" ] || continue
+    if [ "$k" = "$line" ]; then rest=""; else rest="${line#*$'\t'}"; rest="${rest%%$'\t'*}"; fi
+    [ -n "${AX[$k]+x}" ] || AX[$k]="$rest"
+  done <"$df"
+}
+axis() {
+  case "$1 $2" in *\\*) awk -F'\t' -v k="$1 $2" '$1 == k {print $2; exit}' "$df"; return ;; esac
+  printf '%s' "${AX[$1 $2]-}"; [ -z "${AX[$1 $2]+x}" ] || printf '\n'
+}
 diff_nodes "$tf.auto" "$df" || { log "FATAL the node diff produced nothing — no tick"; emit; exit 1; }
-axis() { awk -F'\t' -v k="$1 $2" '$1 == k {print $2; exit}' "$df"; }   # <node> <axis> → drift|ok|""
+ax_load
 
 # ── 5. per node: idle / parked-on-this-key / candidate ──────────────────────────────────────────
 # INSYNC (diff zero) and BEHIND (a readable, non-zero diff — parked ones included) feed the rollout.
 cands=(); INSYNC=(); BEHIND=()
 for n in $auto; do
-  key="$(jq -r --arg n "$n" '.[$n] | if . == null then "" else "\(.version)/\(.schematic)" end' "$tf")"
-  role="$(jq -r --arg n "$n" '.[$n].role // ""' "$tf")"
+  key="$(keyor "$n")"
+  role="$(decl "$n" role)"
   if [ -z "$key" ]; then log "$n: auto but not in node_install_targets — nothing declared to sync to"; continue; fi
   if [ "$role" = controlplane ] && [ "$rollout_on" != true ]; then
     log "$n: declared controlplane — without the fleet rollout the reconciler never syncs a control plane (reconcile_rollout.enabled)"
@@ -689,8 +741,8 @@ if [ "$rollout_on" = true ]; then
   n="$PICK"; key="$(keyof "$n")"
 else
   if [ ${#cands[@]} -eq 0 ]; then save; emit stamp; log "tick done — nothing to sync"; exit 0; fi
-  n="${cands[0]}"; key="$(jq -r --arg n "$n" '.[$n] | "\(.version)/\(.schematic)"' "$tf")"
-  for q in "${cands[@]:1}"; do set_node "$q" pending "$(jq -r --arg n "$q" '.[$n] | "\(.version)/\(.schematic)"' "$tf")" "queued behind $n (WIP 1)"; done
+  n="${cands[0]}"; key="$(keyof "$n")"
+  for q in "${cands[@]:1}"; do set_node "$q" pending "$(keyof "$q")" "queued behind $n (WIP 1)"; done
 fi
 
 # Every live declared window is someone else's: the check runs before the verb opens ours. A
@@ -744,7 +796,9 @@ case "$rc" in
   0)
     # Completion is the DIFF, not the verb's word: re-read this node the same way the tick did.
     jq -c --arg n "$n" '{($n): .[$n]}' "$tf" >"$tf.auto"; : >"$df"
-    if diff_nodes "$tf.auto" "$df" && [ "$(axis "$n" version)" = ok ] && [ "$(axis "$n" schematic)" = ok ]; then
+    diff_ok=0; diff_nodes "$tf.auto" "$df" && diff_ok=1
+    ax_load   # whatever the re-diff left, read or not: the park line below reads it, as it always did
+    if [ "$diff_ok" = 1 ] && [ "$(axis "$n" version)" = ok ] && [ "$(axis "$n" schematic)" = ok ]; then
       set_node "$n" idle "$key" "synced $(date -u +%FT%TZ)"; log "$n: SYNCED — diff zero at $key"
       if [ "$rollout_on" = true ] && [ -n "$RO" ]; then
         # The rollout's record of this node, and its pressure lifted now rather than next tick.

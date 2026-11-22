@@ -1,0 +1,17 @@
+# agent-images-not-public — the two agent images are never named on a public registry.
+#
+# CONDITION UNDER REPLAY (FU-274): agent-base and agent-coordinator carry the Claude Code binary,
+# which is proprietary. Both were pinned at `ghcr.io/teststuffstash/agent-*`, and both ghcr
+# packages were public: an anonymous token listed their tags. They now live only on
+# registry.teststuff.net (ADR-121 — reachable from the LAN only). A pin, a launcher fallback or a
+# manifest that names the ghcr package again would send a pod to a public copy, or to nothing.
+#
+# mode: suite — reads the COMMITTED tree: the two pins in agents/images.env, the launchers'
+# fallback defaults, and every reference under agents/ and argocd/. Fixtures (frozen worlds) and
+# the TICK-LOG (a journal) are out of scope.
+name: agent-images-not-public
+mode: suite
+source: agents/images.env
+entrypoint: agents/replay/fixtures/agent-images-not-public/suite.sh
+requires:
+  - git

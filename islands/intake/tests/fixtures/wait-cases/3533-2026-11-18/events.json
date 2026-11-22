@@ -1,0 +1,74 @@
+[
+ {
+  "id": 36489258347,
+  "node_id": "LE_lADODboMws8AAAABgRHArM8AAAAIfu3law",
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/events/36489258347",
+  "actor": {
+   "login": "homelab-agents-1234[bot]",
+   "id": 297114375,
+   "node_id": "BOT_kgDOEbWbBw",
+   "avatar_url": "https://avatars.githubusercontent.com/u/97731433?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D",
+   "html_url": "https://github.com/apps/homelab-agents-1234",
+   "followers_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/followers",
+   "following_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/following{/other_user}",
+   "gists_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/subscriptions",
+   "organizations_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/orgs",
+   "repos_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/repos",
+   "events_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/received_events",
+   "type": "Bot",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "event": "labeled",
+  "commit_id": null,
+  "commit_url": null,
+  "created_at": "2026-11-18T05:03:50Z",
+  "label": {
+   "name": "agent-fix",
+   "color": "0e8a16"
+  },
+  "intent": null,
+  "performed_via_github_app": null
+ },
+ {
+  "id": 36489258389,
+  "node_id": "LE_lADODboMws8AAAABgRHArM8AAAAIfu3llQ",
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/events/36489258389",
+  "actor": {
+   "login": "homelab-agents-1234[bot]",
+   "id": 297114375,
+   "node_id": "BOT_kgDOEbWbBw",
+   "avatar_url": "https://avatars.githubusercontent.com/u/97731433?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D",
+   "html_url": "https://github.com/apps/homelab-agents-1234",
+   "followers_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/followers",
+   "following_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/following{/other_user}",
+   "gists_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/subscriptions",
+   "organizations_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/orgs",
+   "repos_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/repos",
+   "events_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/homelab-agents-1234%5Bbot%5D/received_events",
+   "type": "Bot",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "event": "labeled",
+  "commit_id": null,
+  "commit_url": null,
+  "created_at": "2026-11-18T05:03:50Z",
+  "label": {
+   "name": "agent/blocked",
+   "color": "b60205"
+  },
+  "intent": null,
+  "performed_via_github_app": null
+ }
+]

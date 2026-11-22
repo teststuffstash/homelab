@@ -1,0 +1,3 @@
+ERR Error from server (Forbidden): error when creating "STDIN": pods is forbidden: User "system:serviceaccount:sleep-agents:agentstack-loop" cannot create resource "pods" in API group "" in the namespace "agent-coordinator"
+ERR REVIEW REFUSED (atomic): create of reviewer-snore-recorder-37-d19389f4 in ns agent-coordinator is Forbidden — this SA cannot create pods there. The flagless default ns agent-coordinator is the legacy single-tenant one; a per-stack coordinator passes --loop-ns <stack>-agents.
+RC 3

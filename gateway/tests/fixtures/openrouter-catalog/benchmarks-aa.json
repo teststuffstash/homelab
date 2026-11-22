@@ -83,6 +83,15 @@
     "prompt": "0.0000044",
     "completion": "0.000022"
    }
+  },
+  {
+   "source": "artificial-analysis",
+   "model_permaslug": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+   "display_name": "NVIDIA Nemotron 3 Ultra 550B A55B",
+   "intelligence_index": 11.8,
+   "coding_index": 49.3,
+   "agentic_index": 20.1,
+   "pricing": null
   }
  ],
  "meta": {

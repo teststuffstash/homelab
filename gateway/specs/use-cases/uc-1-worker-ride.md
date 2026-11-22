@@ -85,6 +85,6 @@ resolvable; upstream behaviour `upstream-ok` unless the pair says otherwise.
 
 The ADR-096 ladder, strikes and cooldowns (the model is the policy's, every time); the
 capacity defers (window utilization, 429 latch, Go window draw — rows on
-[GW-SESSIONS-ADMIT](../endpoints/sessions.md#capacity--the-ladders-capacity-half), not this spine); the git token (the pod gets it from the broker, not from here — FU-269); the `codex`
+[GW-SESSIONS-CAPACITY](../endpoints/sessions.md#gw-sessions-capacity), not this spine); strikes and cooldowns are [GW-SESSIONS-RETRY](../endpoints/sessions.md#gw-sessions-retry)'s and GW-SESSIONS-CAPACITY's; the git token (the pod gets it from the broker, not from here — FU-269); the `codex`
 harness and its rail ([openai-responses.md](../endpoints/openai-responses.md)); a second
 replica. Each is a `⚑ gap` row on the requirement it belongs to.

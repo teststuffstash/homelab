@@ -505,6 +505,93 @@ want     "A6: identical arbitrate state DEBOUNCES"                  "arbitrate D
 wantnot  "A6: no unit emitted"                                      "UNITS arbitrate|"
 survives "A6"
 
+# ── 6c ── ASSEMBLY-CR ROUTES TO THE ARBITRATE FOLD (homelab#1939). The assembly-cr clause's
+# condition is a stale CHANGES_REQUESTED on a `goal/**` assembly PR — BEHIND by construction
+# (#1935), so the updater merges master into it and CI re-runs on every merge. Under the generic
+# STATE_FP_JQ both movers (raw head= and per-check conclusions) re-armed it: PR #1934's 09:39:49Z
+# ride (2026-09-23) was bought by a `Merge branch 'master'` head alone. Expected values come from
+# the issue's acceptance, not from running the code: assembly-cr == arbitrate on the same probe;
+# a master-merge head + a check flip are inert; a reviewDecision flip and a real push move it.
+section "6c — assembly-cr uses the arbitrate fold: master-merge heads and check flips are inert"
+fx_base
+UCLAUSE=assembly-cr _go probe; BASE_ASM="$(field CUR)"
+nonempty "AC0: assembly-cr fingerprint is non-empty"                  "$BASE_ASM"
+eq       "AC0: assembly-cr hashes exactly what arbitrate hashes"      "$BASE_ASM" "$BASE_ARB"
+# The updater merges master: a NEW head oid that IS the merge commit, and CI re-runs (e2e flips).
+fx ".headRefOid = \"eeeeeeee55555555555555555555555555555555\"
+    | .commits += [{\"oid\":\"eeeeeeee55555555555555555555555555555555\",\"messageHeadline\":\"Merge branch 'master' into goal/1640-launcher\"}]
+    | (.statusCheckRollup[] | select(.name==\"e2e\")) |= (.conclusion=\"\" | .status=\"IN_PROGRESS\")"
+UCLAUSE=assembly-cr _go probe
+same     "AC1: a master-merge head + CI re-run does NOT move assembly-cr" "$BASE_ASM" "$(field CUR)"
+# The push that dismisses the stale verdict (#1934 live: CHANGES_REQUESTED → REVIEW_REQUIRED).
+fx '.reviewDecision = "REVIEW_REQUIRED"'
+UCLAUSE=assembly-cr _go probe
+differs  "AC2: a reviewDecision flip MOVES the assembly-cr hash"      "$BASE_ASM" "$(field CUR)"
+fx_base
+fx ".headRefOid = \"ffffffff66666666666666666666666666666666\"
+    | .commits += [{\"oid\":\"ffffffff66666666666666666666666666666666\",\"messageHeadline\":\"fix: address the requested change\"}]"
+UCLAUSE=assembly-cr _go probe
+differs  "AC3: a real non-merge push MOVES the assembly-cr hash"      "$BASE_ASM" "$(field CUR)"
+
+# ── 6d ── THE UNARMED FOLD IGNORES AN IN-FLIGHT CHECK. `unarmed-major` rides
+# STATE_FP_JQ_UNARMED, whose `checks=` line carries only entries SETTLED on a non-passing
+# conclusion. The clause promises that a rebase or a master-merge buys no ride; each of those
+# re-runs CI, so a fold that counted a pending entry as non-passing broke the promise twice per
+# re-run (once into PENDING, once back out). Expected values come from the fold's contract, not
+# from running it: the base state's only non-passing entry is `e2e=FAILURE`, so `ci` leaving
+# SUCCESS for any in-flight shape and returning changes nothing in `checks=`; `ci` SETTLING on
+# FAILURE adds an entry and must move the hash. The stub serves no `pulls/<n>/files`, so the
+# fold runs on its documented `head=` fallback — the head is held fixed in every row here.
+section "6d — unarmed fold: a check going in flight and coming back is inert; a settled flip moves"
+fx_base
+UCLAUSE=unarmed-major _go probe; BASE_UM="$(field CUR)"
+nonempty "U0: unarmed-major fingerprint is non-empty"                 "$BASE_UM"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="IN_PROGRESS" | .conclusion=null)'
+UCLAUSE=unarmed-major _go probe
+same     "U1: green → IN_PROGRESS does NOT move the unarmed hash"     "$BASE_UM" "$(field CUR)"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="QUEUED" | .conclusion="")'
+UCLAUSE=unarmed-major _go probe
+same     "U1b: QUEUED (empty conclusion) is in flight too"            "$BASE_UM" "$(field CUR)"
+fx '.statusCheckRollup |= map(if .name == "ci" then {"__typename":"StatusContext","context":"ci","state":"PENDING"} else . end)'
+UCLAUSE=unarmed-major _go probe
+same     "U1c: a StatusContext in state PENDING is in flight too"     "$BASE_UM" "$(field CUR)"
+fx '.statusCheckRollup |= map(if .context == "ci" then {"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"} else . end)'
+UCLAUSE=unarmed-major _go probe
+same     "U2: …and settling green again lands on the SAME hash"       "$BASE_UM" "$(field CUR)"
+fx '(.statusCheckRollup[] | select(.name=="ci") | .conclusion) = "FAILURE"'
+UCLAUSE=unarmed-major _go probe
+differs  "U3: a SETTLED flip (green → FAILURE) MOVES the unarmed hash" "$BASE_UM" "$(field CUR)"
+# The generic fold keeps its own contract (M3: a check going in flight moves it) — ci-red and
+# merge-conflict want that sensitivity; only the unarmed fold subtracts the in-flight entry.
+fx_base; GEN_BASE="$(fp)"
+fx '(.statusCheckRollup[] | select(.name=="ci")) |= (.status="IN_PROGRESS" | .conclusion=null)'
+differs  "U4: (control) the GENERIC fold still moves on the same edit" "$GEN_BASE" "$(fp)"
+
+# ── 6e ── THE GOAL-CHECKPOINT-B FOLD IS THE PR'S IDENTITY (STATE_FP_JQ_IDENTITY). The hold it
+# keys releases only when the assembly PR closes or is replaced, so nothing that happens ON the PR
+# may move the hash and a different PR number must. The expected value comes from the contract,
+# not from running the fold: the fingerprint is the first 12 hex of sha256("pr=<number>").
+section "6e — goal-checkpoint-b fold: the PR's number and nothing that happens on the PR"
+fx_base
+UCLAUSE=goal-checkpoint-b _go probe; BASE_GB="$(field CUR)"
+eq       "I0: goal-checkpoint-b hashes pr=<number>"                   "$BASE_GB" "$(printf 'pr=%s' "$PR" | sha256sum | cut -c1-12)"
+differs  "I0: …which is not what unarmed-major hashes"                "$BASE_GB" "$BASE_UM"
+fx '.reviews += [{"state":"APPROVED","submittedAt":"2026-08-09T03:00:00Z"}] | .reviewDecision = "APPROVED"'
+UCLAUSE=goal-checkpoint-b _go probe
+same     "I1: a verdict and a reviewDecision flip do NOT move it"     "$BASE_GB" "$(field CUR)"
+fx '.headRefOid = "ffffffff66666666666666666666666666666666"
+    | .commits += [{"oid":"ffffffff66666666666666666666666666666666","messageHeadline":"fix: a real push"}]'
+UCLAUSE=goal-checkpoint-b _go probe
+same     "I2: a real non-merge push does NOT move it"                 "$BASE_GB" "$(field CUR)"
+fx '(.statusCheckRollup[] | select(.name=="ci") | .conclusion) = "FAILURE"'
+UCLAUSE=goal-checkpoint-b _go probe
+same     "I3: a SETTLED check flip does NOT move it"                  "$BASE_GB" "$(field CUR)"
+_PR_KEEP="$PR"; PR=$((PR + 1))
+UCLAUSE=goal-checkpoint-b _go probe
+differs  "I4: ANOTHER PR number (the assembly replaced) MOVES it"     "$BASE_GB" "$(field CUR)"
+eq       "I4: …to that PR's own identity, not to an empty probe"      "$(field CUR)" "$(printf 'pr=%s' "$PR" | sha256sum | cut -c1-12)"
+PR="$_PR_KEEP"
+
 # ── 7 ── FAIL-OPEN. An unreadable probe must behave exactly as the pre-#198 clause did: EMIT. The
 # guard is worth less than the loop it guards (FU-104), so every unknown resolves to "ride".
 section "7 — fail-open: an unreadable probe never holds a unit back"

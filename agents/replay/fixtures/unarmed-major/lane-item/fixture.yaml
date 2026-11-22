@@ -1,0 +1,14 @@
+# unarmed-major/lane-item (ADR-162; homelab#3233) — the dispatch site names the unit's class: an
+# `unarmed-major` unit whose (repo, item) the clause recorded in `um_lane_side` carries
+# ` bump-class=<class>` on the launcher's --item string; a unit of another clause, or an un-armed major
+# (no side-map entry), carries nothing. #3233's ride read "unarmed-major" on an armed automerge PR
+# and exited clean — the name was the only class it was given.
+name: unarmed-major-lane-item
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:lane-bridge.sh
+  - block:unarmed-major-lane-item
+  - file:lane-post.sh
+env:
+  - IN_SIDE= homelab:pr-3233:automerge sleep-tracking:pr-191:deps-review

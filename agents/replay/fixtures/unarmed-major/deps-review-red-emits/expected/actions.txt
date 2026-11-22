@@ -2,4 +2,5 @@ CALL gh pr view 191 --repo teststuffstash/sleep-tracking --json headRefOid,revie
 CALL gh api repos/teststuffstash/sleep-tracking/pulls/191/files --paginate
 OUT UNIT unarmed-major|sleep-tracking|pr-191
 OUT REACHED: end
+OUT LANE sleep-tracking:pr-191:deps-review
 RC 0

@@ -1,0 +1,29 @@
+# arbitrate/no-op-after-directive (b) ci-red, SECOND consecutive no-op → agent/arbitrate exactly as today (homelab#1910, Goal #1906 pin 3).
+#
+# The cired-first world one re-run later: the `kind=noop-rerun` event 12:05, then the re-run's
+# stats 13:00 with the head still unmoved. Completed rounds after the 11:30 directive = {12:00,
+# 13:00} = 2 ⇒ the brief's "a SECOND consecutive no-op is a terminal-ride finding" — the label +
+# the ARBITRATE (ci-red no-op round, FU-115b) event, byte-for-byte today's write, plus one report
+# line naming why it is not a re-run case. Nothing is launched.
+pins:
+  - IL-T31
+name: arbitrate-no-op-after-directive-cired-second
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - block:noop-rerun-predicate
+  - file:../no-op-after-directive/cired-bridge.sh
+  - block:ci-red-rounds
+  - block:ci-red-arbitrate
+  - file:../no-op-after-directive/cired-close.sh
+  - file:../no-op-after-directive/exec-bridge.sh
+  - block:noop-rerun-exec
+  - file:../no-op-after-directive/noop-post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
+  - IN_PR=1540
+  - IN_ISSUE=1530
+  - IN_HEAD=fix/issue-1530-red-step
+  - MC_NOW=2026-09-09T13:10:00Z

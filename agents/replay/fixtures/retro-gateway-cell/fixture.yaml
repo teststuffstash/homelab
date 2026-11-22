@@ -1,0 +1,31 @@
+# retro-gateway-cell — FU-270: the retro cell admits through the agent-gateway (platform only).
+#
+# THE CONTRACT (operator ruling 2026-11-01: the retro stops naming models — the gateway picks per
+# role/tier, the retro records the model it SERVED; the controlled two-cell comparison is given up).
+# A cell is a HARNESS. On the PLATFORM stack it is ONE agent-session.sh hand-off under
+# `AGENT_GATEWAY=sessions AGENT_GATEWAY_ROLE=retro` with `--harness` and NO `--model` — the
+# admission itself is agent-session.sh's gateway-sessions block over agents/gateway-admit.sh (pinned
+# by gateway-sessions / gateway-admit; never re-copied here). The hand-off also carries
+# `AGENT_GATEWAY_FALLBACK_EXIT=75` (FU-270: transition fallback): exit 75 = the admission was refused
+# before any request or failed closed, and the cell continues onto the OLD-proxy path with its
+# harness's transition model (claude → opus, goose → deepseek/deepseek-v4-pro — the two cells the
+# retro rode before); any other exit (a defer, a dead ride, success) ends the cell with that code.
+# A platform cell that names a model is refused before anything runs (exit 2). Off-platform stacks
+# never touch the gateway: a bare harness gets its transition model, `<harness>:<model>` keeps
+# pinning one.
+#
+# The bridge shadows `bash` (the hand-off) and records it with the gateway env it carries; the
+# observation point prints what the old-proxy path below the blocks would ride (HARNESS:MODEL).
+name: retro-gateway-cell
+mode: table
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-cell-path
+  - block:retro-gateway-cell
+  - file:post.sh
+env:
+  - STACK=platform
+  - CELL=claude
+  - HANDOFF_RC=0
+rows: rows.psv

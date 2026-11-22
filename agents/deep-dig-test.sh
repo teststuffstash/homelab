@@ -312,6 +312,94 @@ go
 jqok "…and a legacy finding on another subject explains nothing" '.counts.unexplained == 1'
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+# 3b RE-TEST (deep-dig-select.sh header): an issue / follow-up / meta-state explanation is
+# selected anyway when the alert fires now ∧ was present on each of the last DIG_RETEST_D (7)
+# daily reads ∧ no finding on (alert, subject) within DIG_RETEST_HOLD_D (14) days; marked
+# retest, carrying explained_by, grouped apart, ranked after every fresh group. Never a window,
+# never a prior finding. The two live shapes come from the REAL 2026-11-19 digest
+# (agents/deep-dig-fixtures/homelab/dig-2026-11-19/…/digest.json — its `explained` rows:
+# RouterRunModelUnverifiable ← issue #2555, ControlPlaneNodeMemoryLow ← follow-up FU-315, both
+# firing, 7/7 days, standing_h 12 / 11 — startsAt reset, so standing_h is not continuity), the
+# org search answer and the FU-315 item as they read that night; the alert labels are the rules'
+# own (argocd/resources/openrouter-proxy/prometheusrule.yaml, talos-substrate/prometheusrule.yaml).
+section "re-test — a stale issue / follow-up / meta-state explanation is dug once per hold"
+DFX="$REPO/agents/deep-dig-fixtures"
+RD="$DFX/homelab/dig-2026-11-19/dig-r1-20261119T033004Z/digest.json"
+real() { jq -c --arg n "$1" '.explained[] | select(.alertname == $n)' "$RD"; }   # the real explained row
+RR_L='{"rail":"opencode-go","stack":"platform","role":"worker","requested":"glm-5","severity":"warning","triage":"dig"}'
+CP_L='{"node":"wk-metal-02","instance":"192.168.2.183:9100","job":"node-exporter","severity":"warning","triage":"dig"}'
+rr_alert() { alert RouterRunModelUnverifiable $((NOW - $(real RouterRunModelUnverifiable | jq .standing_h) * 3600)) "$RR_L"; }
+cp_alert() { alert ControlPlaneNodeMemoryLow $((NOW - $(real ControlPlaneNodeMemoryLow | jq .standing_h) * 3600)) "$CP_L"; }
+all_days() { # <series-labels-json>… on every day 0..6, minus the days named in $SKIP
+  local k; for k in 0 1 2 3 4 5 6; do case " ${SKIP:-} " in *" $k "*) continue;; esac
+    promday "$k" "$(day "$@")"; done; }
+RR_S="$(jq -c '. + {alertname:"RouterRunModelUnverifiable", alertstate:"firing"}' <<< "$RR_L")"
+CP_S="$(jq -c '. + {alertname:"ControlPlaneNodeMemoryLow", alertstate:"firing"}' <<< "$CP_L")"
+fu315() { printf '# follow-ups\n## open\n' > "$REPO_SNAP/docs/follow-ups.md"; cat "$DFX/fu-315.txt" >> "$REPO_SNAP/docs/follow-ups.md"; }
+
+[ -s "$RD" ] && [ "$(real RouterRunModelUnverifiable | jq -r .explained_by)" = "issue teststuffstash/homelab#2555" ] \
+  && [ "$(real ControlPlaneNodeMemoryLow | jq -r .explained_by)" = "follow-up FU-315" ] \
+  && ok "the real 2026-11-19 digest is on disk with both standing explanations (a missing fixture is not a pass)" || bad "re-test fixture" "$RD"
+
+scenario retest-live-shapes
+am "[$(rr_alert), $(cp_alert)]"; all_days "$RR_S" "$CP_S"
+cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"; fu315
+go
+jqok "both live shapes are selected as re-tests (7/7 days, firing, no finding in 14 d)" \
+  '.counts.retests == 2 and .counts.explained == 0 and ([.groups[] | select(.retest)] | length) == 2'
+jqok "…each carries its explaining record verbatim (the session reads it, tests its claim)" \
+  "[.groups[].alerts[] | {alertname, subject, by: .retest.explained_by}] | sort_by(.alertname) == [
+     {alertname: \"ControlPlaneNodeMemoryLow\", subject: $(real ControlPlaneNodeMemoryLow | jq .subject), by: \"follow-up FU-315\"},
+     {alertname: \"RouterRunModelUnverifiable\", subject: $(real RouterRunModelUnverifiable | jq .subject), by: \"issue teststuffstash/homelab#2555\"}]"
+jqok "…in groups of their own (key retest|…)" '(.groups | length) == 2 and all(.groups[]; .key | startswith("retest|"))'
+want "…and the summary line says RE-TEST with the record" "RE-TEST ← issue teststuffstash/homelab#2555"
+
+scenario retest-meta-state
+am "[$(rr_alert)]"; all_days "$RR_S"
+printf -- '- `dig-explained: RouterRunModelUnverifiable` — latch self-clears in 7 d.\n' > "$REPO_SNAP/docs/agents/meta-state.md"
+go
+jqok "a dig-explained: line is the third re-testable kind" '.groups[0].retest and .groups[0].alerts[0].retest.explained_by == "meta-state: latch self-clears in 7 d."'
+rm -f "$REPO_SNAP/docs/agents/meta-state.md"
+
+scenario retest-hold
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+prior_from_run $((NOW - 10*86400)) explained    # 10 d: outside DIG_REDIG_DAYS (7), inside the 14-d hold
+go
+jqok "a finding on (alert, subject) 10 days ago holds the re-test: explained by the issue again, nothing selected" \
+  '.counts.selected == 0 and .explained[0].explained_by == "issue teststuffstash/homelab#2555"'
+scenario retest-hold-expired
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+prior_from_run $((NOW - 15*86400)) explained
+jq -e '.[0].members | length > 0' "$H/prior.json" >/dev/null 2>&1 || bad "re-test hold prior" "the harvested prior carries no members"
+go
+jqok "…past the 14-d hold it is re-tested again (once per hold)" '.counts.retests == 1'
+
+scenario retest-window
+am "[$(rr_alert)]"; all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+jq -n --arg u "$(iso $((NOW + 3600)))" '{data:{"w-1":({id:"w-rr", until:$u, reason:"r", alerts:["RouterRunModelUnverifiable"]} | tojson)}}' > "$H/window.json"
+go
+jqok "a declared window is never re-tested (present-tense, lease-bound)" '.counts.selected == 0 and (.explained[0].explained_by | startswith("window w-rr"))'
+
+scenario retest-not-continuous
+am "[$(rr_alert)]"; SKIP=3 all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+go
+jqok "6 of 7 days is not continuous: the issue still explains it" '.counts.selected == 0 and .explained[0].explained_by == "issue teststuffstash/homelab#2555"'
+am '[]'; all_days "$RR_S"
+go
+jqok "…nor is 7/7 days but quiet NOW" '.counts.selected == 0 and .counts.explained == 1'
+
+scenario retest-fresh-first
+am "[$(rr_alert), $(alert KubeDeploymentReplicasMismatch $((NOW - 8*3600)) "$(jq -nc --argjson k "$KSM" '$k + {namespace:"cf-api-proxy", deployment:"cf-api-proxy", triage:"dig"}')")]"
+all_days "$RR_S"; cp "$DFX/gh-search-RouterRunModelUnverifiable.json" "$H/gh-search.json"
+DIG_ENV="DIG_MAX_GROUPS=1" go
+jqok "with one slot the FRESH group is selected and the re-test is deferred by name (fresh first)" \
+  '.groups[0].retest == false and .groups[0].alerts[0].alertname == "KubeDeploymentReplicasMismatch" and .deferred[0].retest == true'
+rm -f "$REPO_SNAP/docs/follow-ups.md"
+
+grep -q 'retest: true' "$YAML" && grep -q 'retest.explained_by' "$YAML" \
+  && ok "the dig brief carries the re-test rule (deep-dig-argo.yaml)" || bad "re-test brief" "no retest rule in $YAML"
+
 section "grouping — onset and host are the correlation keys; the cap defers, never drops"
 
 scenario group-same-onset-host
@@ -465,10 +553,104 @@ _retry_backoff="$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-ret
 [ "$(yqw '.spec.workflowSpec.templates[] | select(.name == "dig-retry") | .steps[][] | .template')" = dig ] \
   && ok "…and the wrapper's step calls the dig leaf" || bad "FU-198 caller edge" "dig-retry does not call dig"
 
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "FU-270 — the dig's session is admitted by the agent-gateway (the manifest's script, run)"
+# The gateway rollout (#1640/#1769, rulings 2026-11-01): the dig acts for the platform, so its ONE
+# session admits as stack platform, role responder, through agents/gateway-admit.sh's unbound lane
+# shape; the dispatch env overrides the pod's old-proxy pair on the claude call. A refusal before a
+# request / a fail-closed falls back to the old proxy with one loud line (FU-270: transition
+# fallback); a defer defers as the latched rail does (exit 1 → Argo's retry). The script is EXTRACTED
+# from the manifest (island-intake-test.sh's seams: /tmp and the clone path redirected; the clone,
+# the selector, the latch and the model resolver stubbed — the selection is not what is under test).
+yq -r "$CW | .spec.workflowSpec.templates[] | select(.name == \"dig\") | .container.args[0]" "$YAML" \
+  | sed -e "s#/tmp/#$TMP/dr/#g" -e "s#/work/homelab#$TMP/dw/homelab#g" > "$TMP/dig-script.sh"   # /tmp/ FIRST: $TMP is under /tmp
+DBIN="$TMP/dbin"; mkdir -p "$DBIN"
+cat > "$DBIN/git" <<EOF
+#!/bin/bash
+[ -n "\${STUB_GIT_ACTIVE:-}" ] && { echo "git stub re-entered" >&2; exit 97; }; export STUB_GIT_ACTIVE=1
+dest="\${@: -1}"; mkdir -p "\$dest"; (cd "$REPO" && $(command -v git) ls-files -z | tar --null -T - -cf -) | (cd "\$dest" && tar -xf -)
+printf '#!/bin/bash\necho anthropic\n' > "\$dest/agents/subscription-latch.sh"
+printf '#!/bin/bash\necho old-proxy-model\n' > "\$dest/agents/resolve-model.sh"
+cat > "\$dest/agents/deep-dig-select.sh" <<'SEL'
+#!/bin/bash
+case "\$1" in
+  select) jq -n '{ts:"2026-10-04T06:00:00Z", params:{}, counts:{candidates:2, selected:1, explained:0},
+                  groups:[{key:"onset|wk-02"}], explained:[], deferred:[], windows:[]}' > "\$3";;
+  harvest) mkdir -p "\$3"; printf '{"verdict":"unexplained","group":"onset|wk-02","cause":"c","pr":""}' > "\$3/finding-1.json";;
+esac
+SEL
+EOF
+cat > "$DBIN/claude" <<'EOF'
+#!/bin/bash
+for a in "$@"; do case "$a" in --model) m=1;; *) [ -n "${m:-}" ] && { echo "claude --model $a" >> "$H/calls.log"; m=""; };; esac; done
+printf 'claude-env ANTHROPIC_BASE_URL=%s ANTHROPIC_AUTH_TOKEN=%s\n' "${ANTHROPIC_BASE_URL:-}" "${ANTHROPIC_AUTH_TOKEN:-}" >> "$H/calls.log"
+echo "BEGIN-DIG-FINDING"; echo '{}'; echo "END-DIG-FINDING"
+EOF
+cat > "$DBIN/curl" <<'EOF'
+#!/bin/bash
+echo "curl $*" >> "$H/calls.log"
+case "$*" in
+  *"-X DELETE"*/sessions/*) exit 0 ;;
+  *"-X POST"*/sessions*)
+    [ -f "$H/gw-reply.json" ] || { printf '000'; exit 7; }
+    _o=""; _p=""; for _a in "$@"; do [ "$_p" = "-o" ] && _o="$_a"; _p="$_a"; done
+    [ -z "$_o" ] || cat "$H/gw-reply.json" > "$_o"
+    cat "$H/gw-http" 2>/dev/null || printf '200'; exit 0 ;;
+esac
+exit 0
+EOF
+printf '#!/bin/bash\nexit 0\n' > "$DBIN/s5cmd"
+chmod +x "$DBIN"/*
+printf 'fake-caller-token-projected' > "$TMP/gw-caller-token"
+DIG_OLD_BASE="http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+DIG_GW_BASE="http://agent-gateway.agent-egress.svc.cluster.local:8080/anthropic"
+dig_run() { # <scenario> [knob]
+  H="$TMP/dig-$1"; rm -rf "$H" "$TMP/dr" "$TMP/dw"; mkdir -p "$H" "$TMP/dr" "$TMP/dw" "$TMP/dhome"; export H
+  [ "$1" = dispatch ] || [ "$1" = knob-off ] && printf '%s' '{"decision":"dispatch","session":{"id":"s-dig-1","token":"gws_DIGTOKEN","expires_at":"2026-10-04T10:00:00Z"},"rail":"anthropic","harness":"claude","model":"claude/gw-dig-model","env":{"ANTHROPIC_BASE_URL":"'"$DIG_GW_BASE"'","ANTHROPIC_AUTH_TOKEN":"gws_DIGTOKEN","ANTHROPIC_MODEL":"gw-dig-model"},"context_tokens":200000}' > "$H/gw-reply.json"
+  [ "$1" = defer ] && printf '%s' '{"decision":"defer","reason":"subscription-sessions-full","retry_after_s":600}' > "$H/gw-reply.json"
+  [ "$1" = fallback ] && { printf '{"error":"down"}' > "$H/gw-reply.json"; printf '502' > "$H/gw-http"; }
+  ( cd "$TMP" && env -u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY -u AGENT_TS_READER_ID -u AGENT_TS_READER_SECRET \
+      PATH="$DBIN:$PATH" HOME="$TMP/dhome" GH_TOKEN=x PUSHGATEWAY="" AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
+      AGENT_GATEWAY="${2-sessions}" AGENT_GATEWAY_CALLER_TOKEN_FILE="$TMP/gw-caller-token" \
+      ANTHROPIC_BASE_URL="$DIG_OLD_BASE" ANTHROPIC_AUTH_TOKEN="ref:agent-coordinator/coordinator-claude" \
+      bash "$TMP/dig-script.sh" ) > "$H/out.txt" 2> "$H/err.txt"
+  RC=$?
+}
+dcall()   { grep -qF -- "$2" "$H/calls.log" 2>/dev/null && ok "$1" || bad "$1" "no call: $2 | $(tail -3 "$H/err.txt" "$H/out.txt" 2>/dev/null | tr '\n' ' ')"; }
+dnocall() { grep -qF -- "$2" "$H/calls.log" 2>/dev/null && bad "$1" "unexpected call: $2" || ok "$1"; }
+
+dig_run dispatch
+dcall   "dispatch → POST /sessions as stack platform, role responder, task dig-<day>" '"stack":"platform","role":"responder","task":"dig-'
+dcall   "…the session runs on the GATEWAY's model (rail prefix stripped)" "claude --model gw-dig-model"
+dcall   "…and its dispatch env overrides the pod's old-proxy pair" "claude-env ANTHROPIC_BASE_URL=$DIG_GW_BASE ANTHROPIC_AUTH_TOKEN=gws_DIGTOKEN"
+dcall   "…and the EXIT trap releases the session" "-X DELETE http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-dig-1"
+[ "$RC" -eq 0 ] && ok "…and the run succeeds" || bad "dig gw dispatch rc" "rc=$RC $(tail -3 "$H/out.txt")"
+
+dig_run defer
+dnocall "defer → no session" "claude --model"
+grep -qF "the gateway deferred [subscription-sessions-full]" "$H/out.txt" && ok "…the defer is said" || bad "dig gw defer line" "$(tail -3 "$H/out.txt")"
+[ "$RC" -eq 1 ] && ok "…and exit 1 → the dig-retry wrapper's backoff (as a latched rail does)" || bad "dig gw defer rc" "rc=$RC"
+
+dig_run fallback
+grep -qF "gateway admission refused rc=3 — old-proxy fallback" "$H/err.txt" && ok "gateway 502 (fail-closed) → the ONE loud transition-fallback line" || bad "dig fallback line" "$(cat "$H/err.txt")"
+dcall   "…and the dig runs on the old proxy's model and pair" "claude --model old-proxy-model"
+dcall   "…(the old-proxy pair reached claude)" "claude-env ANTHROPIC_BASE_URL=$DIG_OLD_BASE"
+[ "$RC" -eq 0 ] && ok "…and a gateway outage never fails the dig" || bad "dig fallback rc" "rc=$RC"
+
+dig_run knob-off ""
+dnocall "AGENT_GATEWAY unset → no /sessions call" "/sessions"
+dcall   "…the old path, byte-for-byte" "claude --model old-proxy-model"
+
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 # The dig's CONSUMER (FU-320): island intake admits the dig's island findings, so its harness rides
 # this gate — diff-ci's deep-dig-test row also selects on the selector's path for that reason.
 printf '\n\033[1m── island intake (the dig'"'"'s consumer) ──\033[0m\n'
-bash "$REPO/agents/island-intake-test.sh"; INTAKE_RC=$?
+bash "$REPO/islands/intake/tests/island-intake-test.sh"; INTAKE_RC=$?
+# The island rules digest (FU-320) reads the selector's island table and rides the same CronWorkflow
+# shape, so its harness rides this gate too; its self-test pins the LIVE set, so diff-ci's deep-dig-test
+# row also selects the rule files that set is derived from (islands/intake/, gateway/*.md, docs/intake/, the digest brief).
+printf '\n\033[1m── island rules digest ──\033[0m\n'
+bash "$REPO/agents/island-rules-digest-test.sh"; DIGEST_RC=$?
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
 [ "$INTAKE_RC" -eq 0 ] || { echo "island-intake-test FAILED (rc=$INTAKE_RC)"; exit 1; }
+[ "$DIGEST_RC" -eq 0 ] || { echo "island-rules-digest-test FAILED (rc=$DIGEST_RC)"; exit 1; }

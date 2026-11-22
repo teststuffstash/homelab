@@ -47,7 +47,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `major` | a MAJOR dependency-bump PR — the migration-lens marker. **Un-armed** = human-gated, coordinator-owned (§Dependency major bumps); **armed** = the CI-exercised blast class (GitHub Actions majors, ADR-141) — the reflex's, not yours | `devbox-update.sh`, `renovate-global.json` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | `agents/major-handoff.sh` ONLY (requires the bot's APPROVED at head + the four migration headings; §Dependency major bumps step 5) — never by hand. The handoff's OTHER exit: a chart major whose approval opens `## Upstream` with `appVersion: unchanged (<v>)` is ARMED instead (ADR-141 as amended 2026-10-06, later — packaging-only, the lens's APPROVED completes the merge) |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
-| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and CI is green at the PR head — rule #6 holds all unreadable probes; human-applied latches (no marker) stay human-first. | any role |
+| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2); the same ruling also opens ONE `agent-fix` issue against the platform repo naming the gate that did not fire, and links it in the comment — a fleet ruling is filed, not asked. **Dedup first, like every filing surface**: search open issues for the same gate/`error_class` and extend the existing one instead of filing a second — a recurring fleet fault must sharpen one issue, not queue N (seat quickfix at the PR#947 gate read). **FLEET-FAULT UN-LATCH (homelab#1539):** when a PR carries `agent/error` from a fleet fault with a machine-readable marker (`<!-- fleet-fault cause=<owner/repo>#<n> prs=... -->` in its AGENT_ERROR comment), the scan automatically removes the label once the cited cause issue is CLOSED and the item's CI leg is satisfied — green CI at the PR head, or VACUOUS for an issue-side latch no open PR references (homelab#3048; the un-latch comment says which) — rule #6 holds all unreadable probes (an unreadable open-PR list is a HOLD, never "no PR"); human-applied latches (no marker) stay human-first. | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 5 **logic** rounds, ADR-127 —
 reviewer/CI verdicts; infra failures are **strikes** that swap the model instead of consuming a round — a second strike with the identical `(model, error_class)` pair on one issue is not a swap — it routes to the `agent/error` STRIKE-channel path (label + one `AGENT_ERROR:` comment + the one filed issue) instead of another ride; see the MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
@@ -85,6 +85,14 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
 > if `X` doesn't exist the add fails but the remove still lands, corrupting state (learned live on #18).
 > So: ensure the label exists first (`gh label create <name> --force`), and **add the new label before
 > removing the old** — verify the end-state labels after.
+> **An item whose purpose is gone is CLOSED — never left open with no lifecycle label.** When you
+> judge the issue you were dispatched for moot (its directive is stale, the PR it serves merged or
+> was superseded, the fault it names is gone), close it with the evidence:
+> `gh issue close <n> --reason "not planned" --comment "<what made it moot, with the PR/head/run>"`.
+> Removing `agent/queued` to stop the re-dispatch is not a terminal: an open issue with no `agent/*`
+> lifecycle label is read by no scan class, so it waits for a human to notice (ADR-162). The one
+> open-and-unlabelled state you may author is the INERT filing (§File INERT) — a new issue, never
+> the end of one that was already riding.
 
 > **Be visible; never stall silently.** Your state lives in **GitHub**, not your head. The moment you
 > pick up an issue, **claim it** (relabel + a one-line plan comment) — do this *before* investigating,
@@ -386,8 +394,10 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    `gh pr checkout`s the PR, runs `/code-review`, and submits exactly one
    `gh pr review --approve|--request-changes` as the review bot):
    ```sh
-   bash agents/reviewer-session.sh <project> <PR>
+   bash agents/reviewer-session.sh <project> <PR> --loop-ns <stack>-agents
    ```
+   `--loop-ns` is required from a per-stack coordinator: the flagless default ns `agent-coordinator` is the
+   legacy single-tenant one, which a per-stack SA cannot write.
    Then read the verdict and drive the round:
    ```sh
    gh pr view <PR> --repo teststuffstash/<project> --json reviewDecision -q .reviewDecision
@@ -822,8 +832,21 @@ WAKES this clause and never blocks it — an undispositioned member does not cou
 completion predicate, so (b) can fire in the same tick (#1315 held G-G's assembly ~10.5h under
 the old predicate, which counted every open member).
 
+Trigger (b) rides **once per assembly PR**. Its job is to get the assembly PR opened; while an
+OPEN `goal/**`-head PR carries this goal's `Assembly-for: #<goal>` trailer the scan holds (b)
+(the `state-fp:goal-checkpoint-b` hold, which hashes the PR's number and nothing else) and
+releases it only when that PR closes or is replaced by another. Nothing that happens ON the PR
+re-summons you through (b) — not a bot approval, a push, or a check result: a
+`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a settled red check on an
+assembly that changes only machine-merged paths arrives as `trigger=assembly-ci-red` (below; on
+any other assembly a red check stays on the scan's report surface, in front of the codeowner the
+PR is waiting on), and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
+not held.
+
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
-undispositioned member re-wakes this clause every tick until you rule it). Walk the goal's OPEN
+undispositioned member wakes this clause once per member SET — the `state-fp:goal-checkpoint-c`
+hold, homelab#2565: a ride that rules nothing buys no second ride until a member is ruled, added or
+removed, so an unruled member waits on the next set change, not the next tick). Walk the goal's OPEN
 descendants and rule each one that has no row yet — exactly one of:
 
 - **adopted** — it is in scope for this goal. Queue it under the goal's existing authorization
@@ -1020,6 +1043,14 @@ Rule exactly one of:
   `gh pr create --base master --head goal/<n>-<slug>` **non-draft**, body = the coverage-map
   outcome (every id owned / deferred-to-named-issue / evidenced) + a line-anchored
   `Assembly-for: #<goal>` trailer, then ARM it (`gh pr merge --auto --squash`).
+  **When the assembly diff touches the repo's specs root** (`git diff --name-only master...goal/<n>-<slug>`
+  against the claim's `repos[].specs.root`), the body ALSO carries the children's `Spec changes:`
+  sections, concatenated verbatim under ONE `Spec changes:` heading — `gh pr view <child> --json body`
+  for every merged child whose diff touched that root, each child's section copied as written (its
+  ⚖ rows, glossary terms, removed/moved proofs with their carriers), nothing re-summarised and
+  nothing added. The specs reviewer (ADR-155) reads the assembly diff as ONE PR and judges the body
+  against the pinned author brief the children already followed (ADR-156); a coverage map without
+  that section is a round lost on the body, not on the work.
   > ⚠ **NOT `Fixes #<goal>`, and this is load-bearing.** A closing keyword would close the goal on
   > merge, and under ADR-102 assembly merge is a **MIDPOINT**: the goal enters `goal/post-launch`
   > and stays open, shipping to production against the same budget, until a human applies a verdict
@@ -1032,7 +1063,7 @@ Rule exactly one of:
   deterministically (at assembly merge, or at tree-empty for a `Base: master` Goal — ADR-126,
   homelab#1450), and posts the assembly-complete audit comment with it. The armed PR is SAFE by construction:
   the reviewer bot's approval satisfies the approval rule (rubric `.agents/review-goal.md`,
-  model `reviewer.goalModel` on the claim), but master's codeowner gate (/specs/ is always in
+  no model pin — the gateway picks), but master's codeowner gate (/specs/ is always in
   the assembly diff) blocks auto-merge on a human — the operator merges via OrgAdmin override
   (their ruling: codeowners block agents). NEVER open this PR at decompose time: a half-built
   assembly draws a review of nothing, and a CHANGES_REQUESTED on it summons fix rounds at the
@@ -1043,6 +1074,29 @@ Rule exactly one of:
   `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
   reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
   — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
+  **`trigger=assembly-ci-red`:** the scan's ci-red clause emits a `goal-checkpoint` unit when an
+  assembly PR has a check that SETTLED red and every file it changes classifies `machine-merge`
+  (`classify_touches`, agents/footprint.sh) — no codeowner is waiting on that PR and no fix round
+  can push to its head, so you are its only mover. You are here by this trigger when the goal's
+  open assembly PR carries a `state-fp:assembly-ci-red:` marker the scan wrote at this dispatch.
+  Re-read the PR's checks first (`gh pr view <pr> --json statusCheckRollup`): green or in flight
+  → the red already moved; say so on the goal and mint nothing. Otherwise read the failing run
+  (`gh run view <run-id> --json jobs,attempt`, `gh run view <run-id> --log-failed`) and rule
+  exactly one of:
+  - **Environmental, and the failing run is still attempt 1** (the §ci-red test: a transient
+    network/vendor blip or infra cold-start, the diff demonstrably not implicated) →
+    `gh run rerun <run-id> --failed`, ONCE, with the diagnosis and its `ci-cause:` line (§ci-cause)
+    in a comment on the assembly PR. Mint nothing: a re-run that goes green leaves nothing behind,
+    and one that settles red again is a new state the scan summons you for.
+  - **Anything else — the diff's own red, or a red on attempt ≥ 2** → ONE new child on the goal,
+    by the rule above (native sub-issue, `Base: goal/<n>-<slug>`, narrowed `Touches:`,
+    `agent/queued`). Its deliverable is that check green on the goal branch: name the assembly PR,
+    the failing `<job>/<step>` and the first failing lines of the log, and make the child's first
+    acceptance line the reproduction — the named check, run on the current goal head. **Never a
+    second child for the same red**: if an open child of this goal already owns this check on this
+    assembly PR, add what is new as a comment there and mint nothing.
+  A child of this kind that is still open once the assembly PR's check is green has its
+  acceptance met: close it with the green run linked, on whichever ride sees it first.
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
@@ -1095,9 +1149,10 @@ Read the diff + the whole review thread, then rule — exactly one of:
 > fix round, it MUST begin with a line-anchored `ARBITRATE` word (e.g., `ARBITRATE: re-run
 > with the fix below` or `ARBITRATE (context): ...`) — never a bare heading or substring that
 > merely discusses arbitration. The marker may be followed by an optional `(<context>)` and a
-> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher searches
-> both the issue comments AND the PR's conversation comments for this marker; a comment without
-> it is invisible to the worker. The directive may be posted on **either** surface. The marker is
+> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher takes the
+> **newest** marked comment over the issue comments AND the PR's conversation comments together; a
+> comment without it is invisible to the worker. The directive may be posted on **either** surface
+> — no surface takes precedence, a newer ruling anywhere supersedes an older one. The marker is
 > a **documented contract**, not implicit — always begin your arbitration ruling with it.
 
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
@@ -1153,16 +1208,24 @@ Read the diff + the whole review thread, then rule — exactly one of:
 Any ruling that returns the PR to the ordinary path — re-dispatch, follow-up-class after the dismissal, or nothing to do — **removes `agent/arbitrate`** so the reflex picks the PR normally; only `escalate` keeps the label.
 
 **A round that posts stats without moving HEAD is a no-op round, not a consumed logic round**
-(retro r3 win-2). The scan hands you these already labelled — `ARBITRATE (changes-requested no-op
-round, FU-147)`, and the FU-115b equivalent on the red path — a completed round whose stats comment
-has no commit behind it. Rule it for what it is: the loop did not fail to converge, it did not
+(retro r3 win-2). **The scan re-runs the first no-op — you see the second** (IL-T31, Goal #1906):
+when a no-op round is the FIRST completed round after an `ARBITRATE` directive (yours, on the PR or
+the issue), the scan's deterministic pass re-runs it at the launcher — same round, same branch, the
+directive already in the ride's prefetch bundle — with no session at all, and records a
+`kind=noop-rerun` line on the PR's summary comment. So a no-op reaches you only when there is no
+directive to re-run, when the re-run itself completed no round, or as the SECOND consecutive no-op.
+Those arrive already labelled — `ARBITRATE (changes-requested no-op round, FU-147)`, and the FU-115b
+equivalent on the red path, each with a report line naming which case it is. Rule it for what it is: the loop did not fail to converge, it did not
 *run*, so the default ruling is the first bullet (re-dispatch, with the suggested fix verbatim) and
 the round it never spent goes back to the bound. circles#57 measured both halves on one PR: round 3
 posted clean stats at $0.0291/625s and pushed nothing, round 4 carried the literal edit and flipped
 `CHANGES_REQUESTED` → `APPROVED` first try at $0.0476/798s — charging round 3 to the 3-round budget
 would have bought nothing and cost the round that worked. Confirm against the commits, never the
 stats comment (`gh pr view <n> --json commits`). A SECOND consecutive no-op is not a third
-re-dispatch: that is a terminal-ride finding (pod, launcher, budget), exactly as on the red path.
+re-dispatch: that is a terminal-ride finding (pod, launcher, budget), exactly as on the red path —
+and since the scan already spent the directive's one re-run, a no-op labelled after your directive
+IS that second one. A re-dispatch ruling must therefore carry what changes (a stronger model via the
+`agent-budget/*` re-grade, a narrower directive), never the same directive restated.
 
 > **You get ONE ride per state (homelab#198).** Two of those four rulings leave `agent/arbitrate`
 > on the PR on purpose, so the scan's label selector used to re-emit this unit every tick for as
@@ -1219,6 +1282,11 @@ to prevent:
 2. **The loop reviewer's own verdict only** (`homelab-reviewer[bot]`). A human's
    changes-requested is a directive, not a stale status — dispatch the fix round it orders
    (step 7's human-CR bullet, ADR-127), or escalate when it asks a question rather than an edit.
+   The specs reviewer's verdict (`homelab-specs-reviewer[bot]`, ADR-155) is never follow-up-class
+   and never "out of scope": a finding on an UNCHANGED row that the pack put in scope (a
+   `page-preamble` touch puts the whole page in) still blocks under its pinned finding contract
+   (§Action disposition — "outside Touches" never downgrades). Order the round that fixes the row,
+   or escalate; a fix round told to leave the row alone re-earns the same verdict.
 3. **The message carries the ruling AND the filed follow-up id.** Say that the finding *stands
    as correct and is being acted on*, and that it is the merge-blocking **status** that is stale
    — not the review. A bare "superseded" reads as the coordinator overruling the reviewer, which
@@ -1304,7 +1372,8 @@ red loop is now edge-woken by the exporter's `/coordinate` red-doorbell + attemp
 with the review loop). The scan only dispatches `ci-red` for LOOP-AUTHORED PRs (the WORKER_AUTHOR
 predicate, homelab#88 2026-08-03) — a human's armed+red PR is a report-only line, never yours.
 The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
-your play: **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
+your play (a no-op fix round on a red PR is NOT yours on its first occurrence after your directive:
+**the scan re-runs the first no-op — you see the second**, the IL-T31 rule in §arbitrate above): **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
 context (the usual case — a worker's own Gate-A escape, a flaky base, a missing platform fact like
 sleep-tracking#67's kind mirror); **retry** when the red is ENVIRONMENTAL — a transient
 network/vendor blip or infra cold-start, the diff demonstrably not implicated:
@@ -1419,14 +1488,23 @@ issue.
 | producer | the **worker**, via its repo's `.agents/fix.yaml` | ONE issue comment whose first characters are exactly `AGENT_INFEASIBLE: <path or resource>`, then END the run **without pushing** |
 | consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
 
-Three properties are load-bearing, and each is pinned by
-`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail):
+Four properties are load-bearing, and each is pinned by
+`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail, and the four
+`marker-*` rows):
 
 - **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
   issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the
   string, and a human quoting a past exit writes `> AGENT_INFEASIBLE: …`. This is the fix-debounce
   lane's `alert-fp:` lesson (homelab#244) one lane over.
-- **The marker alone suppresses the redispatch**, whether or not the label write lands. A
+- **A marker counts only for the ride that posted it** — the marker comment must be newer than the
+  issue's newest dispatch stamp (the `<!-- agent-event kind=dispatch ts=… -->` line step 2's
+  `machine-comment.sh event --kind dispatch` appends to the summary comment). An earlier ride's
+  marker is history: once the issue is re-queued and dispatched again it rides, and only a marker
+  the NEW ride posts parks it. Without this the terminal was a latch with no release — the park
+  comment says "then remove `agent/blocked` and re-queue", and the scan re-parked the re-dispatched
+  issue on the old marker (homelab#3301/#3306). A thread with no dispatch stamp has no anchor, so
+  its newest marker counts. This is why step 2's stamp is not optional bookkeeping.
+- **A current marker alone suppresses the redispatch**, whether or not the label write lands. A
   failed/half-applied write reports loudly and the issue *still* leaves the unit list: re-riding a
   task a worker already proved impossible spends a paid session to re-derive a known answer, which
   is strictly worse than a report line. An **unreadable** comments probe is the other way round —
@@ -1438,8 +1516,9 @@ Three properties are load-bearing, and each is pinned by
 
 **What YOU do with one.** Nothing automatic — that is the point. The issue sits `agent/blocked` with
 the resource named on the thread. Either re-scope it so the deliverable is inside a fix-class
-worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
-it unchanged reaches the same verdict** — and unlike a strike, this one is free.
+worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue — nothing
+else to type or edit, the next dispatch's stamp is what retires the old marker. **Re-queueing it
+unchanged reaches the same verdict**, at the price of one more ride to re-derive it.
 
 > ⚠ **The producer half is per-repo — installed everywhere** (homelab `566fe38` 2026-08-11;
 > oracle-fleet, sleep-tracking, circles, snore-recorder verified 2026-10-14). A NEW stack repo
@@ -1563,6 +1642,11 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    `agent/arbitrate` + an event line, and a human adapts by hand, re-proposes, or abandons it through
    the Renovate config. Removing the label buys five more: the count is the markers NEWER than the
    last arbitrate event line, so the ruling re-opens the budget. Every class shares that cap.
+   **The unit names its class: `bump-class=deps-review` or `bump-class=automerge` on the dispatch line (ADR-162).**
+   The clause is called `unarmed-major` for all three classes; with a `bump-class=` the PR is armed by
+   design and the launcher line's "already armed → exit clean" does not apply to it. A ride that
+   leaves the state untouched is read by the scan as "nothing to do here" and the PR goes to a human
+   (`agent/arbitrate`) a day later — so act, park with a `blocked-on:` marker, or close; never exit silent.
    **And an ARMED `automerge` (mechanical-lane) bump in its RED state only (G12b, operator ruling
    2026-10-28: "S9 needs a new rule" — #2919, the weekly devbox-update PR, sat red and armed two days
    with no actor).** Green and pending are the auto-merge lane's own (renovate-approve + GitHub
@@ -1575,12 +1659,22 @@ like an `agent-fix` issue, but PR-first and keyed on the `major` label:
    writes the PR, e.g. `scripts/devbox-update.sh`): close the PR with a one-line why, and file the gap
    as an issue on the owning repo naming the failing step and the closed PR — a mechanical bump comes
    back on Renovate's next run, so the closed PR is not the record; the issue is. Same five-ride bound.
+   **The same class also arrives STALE (ADR-162): armed, open, and untouched for a day — no commit,
+   comment, review or check activity — red or not.** The
+   mechanical lane merges within the hour when it works, so find what is missing — an approval that
+   never came (both reviewers' verdicts at the head), a branch nobody updated, a required check that
+   never reported, a run that keeps dying (the `ci-retry` event lines say so) — and take the smallest
+   act that supplies it: re-fire the event, tick Renovate's rebase box, dispatch the worker as above.
+   If nothing on the PR can move it, close it with an issue naming the cause, or park it `blocked-on:`.
 2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
-   **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
-   *investigation* whose whole job is to explain the red — the reviewer's STEP 0 treats a concluded
-   FAILURE on an un-armed major as the subject, not a precondition, since 2026-09-28):
+   **reviewer directly** once the checks have **CONCLUDED — green or red**. Red is the subject: a major
+   review is an *investigation* whose whole job is to explain the red (the reviewer's STEP 0 treats a
+   concluded FAILURE on an un-armed major as the subject, not a precondition, since 2026-09-28). **Pending
+   is not reviewable**: the reviewer stands aside on pending and the run is spent, and the review reflex
+   never re-picks an un-armed `major` PR. If CI is still running, report that and let the next
+   `unarmed-major` dispatch pick it up:
    ```sh
-   bash agents/reviewer-session.sh <project> <PR>
+   bash agents/reviewer-session.sh <project> <PR> --loop-ns <stack>-agents
    ```
    The reviewer reads the tool's upstream migration notes, maps them onto this repo's usage, and comments
    exactly what must change (e.g. helm-4 needs `--verify=false` on `helm plugin install`).
@@ -1718,8 +1812,8 @@ The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
 (`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) +
 `agents/coordinator/kustomization.yaml` `newTag` (every in-cluster manifest, ArgoCD-synced); the
-repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The ghcr package
-is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
+repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The image lives on
+`registry.teststuff.net` (LAN-only, anonymous pull), never on ghcr: it carries the Claude Code binary. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 
 ## Logs & behaviour analysis
@@ -1745,8 +1839,9 @@ labels) + **`pull_requests:write`** + **`contents`** (merge). It is minted from 
 `homelab-agents` GitHub App as the worker token (ESO generator, [`git-token.yaml`](git-token.yaml),
 ~1h) — no hand PAT; the App private key in Infisical is the only long-lived secret.
 
-The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
-(`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
+The **image-build CI** pushes to `registry.teststuff.net` with the `REGISTRY_PUSH_TOKEN` repo secret (a
+copy of the registry's push credential — `scripts/github-secrets-sync.sh`). The only *new* credential the
+coordinator adds at runtime is `coordinator-git`.
 
 ## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
 

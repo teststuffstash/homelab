@@ -24,7 +24,7 @@ spec:
     # and semaphore slots no longer leaked when the limit fetch fails on release (#16471 —
     # FU-198). Both were 4.0-branch cherry-picks (#16408/#16405) that landed natively upstream
     # ahead of v4.1.0-rc1, so v4.1.4 carries them directly — retained, not reverted.
-    targetRevision: 2.0.14
+    targetRevision: 2.0.18
     helm:
       valuesObject:
         crds:
@@ -38,6 +38,20 @@ spec:
               limits: { memory: "128Mi" }
         singleNamespace: false
         controller:
+          # Two controllers, one per node, PDB (ADR-140 shape): a lone controller down stops every
+          # cron tick and workflow step. At replicas > 1 the chart drops LEADER_ELECTION_DISABLE and
+          # the Recreate strategy, so one pod leads (lease) and the standby serves an empty /metrics
+          # (the argo-workflows-alerts sums read the leader only). Selector = the chart's selector labels.
+          replicas: 2
+          pdb: { enabled: true, maxUnavailable: 1 }
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: argo-workflows-workflow-controller
+                      app.kubernetes.io/instance: argo-workflows
+                  topologyKey: kubernetes.io/hostname
           workflowNamespaces:
             - agent-coordinator
           # The controller must be able to CREATE ConfigMaps in the workflow namespaces: since

@@ -25,7 +25,13 @@ for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; d
   [ -n "$d" ] && [ -d "$d/homelab-pve-ssh" ] && CRED="$d" && break
 done
 [ -n "$CRED" ] || { echo "mgmt-bmc: cred dir not found (homelab-pve-ssh/ — the key the box trusts)" >&2; exit 1; }
-SSH=(ssh -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -i "$CRED/homelab-pve-ssh/id_ed25519")
+# The box's host key is PINNED from the wallet cache (mgmt-ssh-host, via scripts/wallet-files.sh),
+# never trusted on first use — the rule mgmt-state-pull.sh and mgmt-provision-secrets.sh follow.
+HOSTPUB="$CRED/homelab-mgmt/extra-files/etc/ssh/ssh_host_ed25519_key.pub"
+[ -f "$HOSTPUB" ] || { echo "mgmt-bmc: no pinned host key at $HOSTPUB — run scripts/wallet-files.sh" >&2; exit 1; }
+KH="$(mktemp)"; trap 'rm -f "$KH"' EXIT
+echo "$HOST $(cut -d' ' -f1,2 "$HOSTPUB")" > "$KH"
+SSH=(ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" -o IdentitiesOnly=yes -i "$CRED/homelab-pve-ssh/id_ed25519")
 
 entry="$(jq -r --arg n "$node-bmc" '.[$n] // empty | "\(.ip) \(.wallet)"' "$ROOT/mgmt/nixos/hosts/mgmt/bmc.json")"
 [ -n "$entry" ] || { echo "mgmt-bmc: $node has no bmc: entry in machines/machines.yaml (known: $(jq -r 'keys|join(" ")' "$ROOT/mgmt/nixos/hosts/mgmt/bmc.json"))" >&2; exit 2; }
@@ -34,7 +40,7 @@ read -r ip wallet <<<"$entry"
 if [ "$mode" = web ]; then
   port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
   echo "mgmt-bmc: $node-bmc web GUI → https://localhost:$port  (self-signed; Ctrl+C closes the tunnel)" >&2
-  exec "${SSH[@]}" -N -L "127.0.0.1:$port:$ip:443" "root@$HOST"
+  "${SSH[@]}" -N -L "127.0.0.1:$port:$ip:443" "root@$HOST"; exit   # not exec: the EXIT trap removes $KH
 fi
 [ "$mode" = ipmi ] && [ $# -ge 1 ] || usage
 
@@ -54,7 +60,7 @@ base="ipmitool -I lanplus -H $ip -U $(printf '%q' "$user")"
 if [ "$1" = sol ]; then
   f="$(printf '%s' "$pw" | "${SSH[@]}" "root@$HOST" 'umask 077; f=$(mktemp); cat > "$f"; echo "$f"')"
   # shellcheck disable=SC2064
-  trap "${SSH[*]} root@$HOST rm -f $f" EXIT
+  trap "${SSH[*]} root@$HOST rm -f $f; rm -f $KH" EXIT
   echo "mgmt-bmc: $node-bmc SOL — ~~. ends it (ssh eats one ~; a bare ~. drops the ssh instead)" >&2
   "${SSH[@]}" -t "root@$HOST" "$base -f $f $args"
 else

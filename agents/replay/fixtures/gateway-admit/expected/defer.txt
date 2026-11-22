@@ -1,0 +1,9 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions [auth: Bearer fake-caller-token-projected] {"stack":"platform","role":"coordinator","task":"t","round":3,"attempt":2,"bind":{"namespace":"platform-agents","serviceaccount":"agentstack-loop","pod":"p1"}}
+OUT rc=1
+OUT GW_SESSION_ID='' GW_RAIL='' GW_HARNESS='' GW_MODEL='' GW_WIRE_MODEL=''
+OUT GW_ENV_KEYS='' GW_PULL_URL='' GW_PULL_PRELUDE set: no
+OUT GW_DEFER_REASON='subscription-sessions-full' GW_RETRY_AFTER='120'
+OUT env file: absent
+OUT gws_ in shell state: 0
+ERR → gateway(sessions): defer — [subscription-sessions-full] retry_after=120s — not dispatching (task=t, round=3).
+RC 0

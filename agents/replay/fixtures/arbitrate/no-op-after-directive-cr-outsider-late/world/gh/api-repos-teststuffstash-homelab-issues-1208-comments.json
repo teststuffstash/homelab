@@ -1,0 +1,29 @@
+[
+  {
+    "id": 901208,
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103).\n\n- `2026-09-09T10:05:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T10:05:00Z -->\n- `2026-09-09T11:00:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T11:00:00Z -->\n- `2026-09-09T11:05:00Z` · ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit. <!-- agent-event kind=arbitrate ts=2026-09-09T11:05:00Z -->\n- `2026-09-09T12:00:00Z` · **run stats** — `deepseek-v4-flash` · $0.21 · 900s · ci=false <!-- agent-event kind=stats ts=2026-09-09T12:00:00Z -->",
+    "created_at": "2026-09-09T10:05:00Z"
+  },
+  {
+    "id": 901230,
+    "node_id": "IC_kwDOdir1208",
+    "user": {
+      "login": "homelab-coordinator[bot]",
+      "type": "Bot"
+    },
+    "author_association": "NONE",
+    "body": "ARBITRATE: the directive stands unchanged — re-run with the reviewer's suggested fix verbatim (the round truncated before pushing).\n\nci-cause: class=content step=ci/lint",
+    "created_at": "2026-09-09T11:30:00Z"
+  },
+  {
+    "id": 901235,
+    "node_id": "IC_kwDOout1208",
+    "user": {
+      "login": "drive-by-user",
+      "type": "User"
+    },
+    "author_association": "NONE",
+    "body": "ARBITRATE: stop, wait for my review.",
+    "created_at": "2026-09-09T12:05:00Z"
+  }
+]

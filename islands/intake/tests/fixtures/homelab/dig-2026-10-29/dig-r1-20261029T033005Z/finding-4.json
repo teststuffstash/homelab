@@ -1,0 +1,32 @@
+{
+  "schema": "dig-finding/v1",
+  "group": "2026-10-28T21:00:00Z|cluster",
+  "alerts": [
+    "GoCatalogParseFailed (alert:GoCatalogParseFailed, source=docs)"
+  ],
+  "verdict": "cause-found",
+  "cause": "The OpenCode Go docs page (anomalyco/opencode `go.mdx`) gained a third row in its Plan table, `| **Go Teams** | **$20/member/month** | Every member gets their own Go limits, plus $5/month on every model |`. `parse_docs` in `gateway/src/agent_gateway/catalog.py` (line ~411) only accepts plan names in `_FEE_PLANS = {\"**Go**\", \"**Go Plus**\"}` and raises ParseError on any other row. The code comment records a deliberate ruling that the docs leg keeps its parse failure on an unknown plan name rather than dropping it. The gateway therefore keeps the last good docs snapshot (30 models, fetched 2026-10-28T15:16Z, 44,000 s old at query time). Prices and limits are stale and not wrong yet. GoCatalogStale will follow at 24 h, around 10-29 15:16Z. The gateway log shows the same error at every refresh since 21:21Z. Teams is a new plan, not a typo, so the fix needs a decision: parse and ignore it (Go Teams is not in PLANS), or model it as a third plan. That is a gateway code and policy change, so no mechanical PR.",
+  "evidence": [
+    "kubectl logs deploy/agent-gateway (agent-egress) → `catalog: docs parse failed (docs read — ParseError: Plan row ['**Go Teams**', '**$20/member/month**', 'Every member gets their own Go limits, plus $5/month on every model']: expected Plan | Price | Included usage naming **Go** / **Go Plus**) — keeping the last good snapshot`",
+    "Prometheus gateway_go_catalog_age_seconds{source=docs} → 44,084 s; gateway_go_catalog_models{source=docs} → 30 (last good snapshot)",
+    "gateway/src/agent_gateway/catalog.py:323-324,408-412 → _FEE_PLANS has only Go and Go Plus; unknown plan row raises ParseError",
+    "catalog.py docstring of parse_docs → ruling: unknown plan row stays a parse failure on the docs leg (#2933 case (a))",
+    "gh pr list / issue list -R teststuffstash/homelab 'GoCatalog' → only the merged leg PRs #2695/#2766/#2961 (the #2961 dialect-drop fix covers the config leg, not this docs row); no open fix"
+  ],
+  "recommendation": "Seat/operator, before GoCatalogStale at ~10-29 15:16Z: decide whether `**Go Teams**` is a plan the gateway should price or just skip, then a small PR in catalog.py. The least risky version is to skip known-but-unmodelled plan rows (add `**Go Teams**` to an ignore set) and keep failing on unknown ones, with a test fixture of the new row. Until then pricing is frozen at the 10-28 15:16Z snapshot, so no routing decision is wrong yet.",
+  "pr": "",
+  "related": [
+    "homelab#2695",
+    "homelab#2766",
+    "homelab#2961"
+  ],
+  "tool_gaps": [],
+  "ts": "2026-10-29T03:32:29Z",
+  "run": "dig-2026-10-29/dig-r1-20261029T033005Z",
+  "members": [
+    {
+      "alertname": "GoCatalogParseFailed",
+      "subject": "alert:GoCatalogParseFailed"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+CALL curl POST http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/0123abcd/outcome {"class":"unknown","subclass":"oom"}
+CALL gw_release 0123abcd
+OUT → gateway(sessions): outcome unknown reported for 0123abcd (attempt 1) — strike unknown counted
+OUT → gateway(sessions): strike unknown at attempt 1 — no automatic re-admission (salvage=unknown, tasked=1, cap 2); the coordinator decides, as today
+OUT GW_OUTCOME='unknown' GW_STRUCK='unknown' GW_SESSION_ID=''
+RC 0

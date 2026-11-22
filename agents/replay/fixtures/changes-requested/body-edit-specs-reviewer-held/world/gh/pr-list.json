@@ -1,0 +1,12 @@
+[
+  {
+    "number": 1097,
+    "labels": [],
+    "reviewDecision": "CHANGES_REQUESTED",
+    "author": {
+      "login": "app/homelab-agents-1234"
+    },
+    "headRefName": "fix/issue-2168-body-only",
+    "body": "A fix answered by editing the PR body"
+  }
+]

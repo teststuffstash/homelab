@@ -1,0 +1,33 @@
+{
+  "headRefOid": "845cccc5555dddd6666eeee7777ffff8888aaaa",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "ci",
+      "conclusion": "SUCCESS"
+    },
+    {
+      "name": "iac-sentinel",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "reviews": [],
+  "comments": [
+    {
+      "createdAt": "2026-10-10T17:33:00Z",
+      "body": "🤖 `state-fp:goal-checkpoint-b:a04172e75052` — deterministic scan dispatching a `goal-checkpoint` unit (trigger=b, child-set complete pre-launch) for goal 29 at 2026-10-10T17:33:00Z.\n\nMachine-readable hold marker (homelab#2477), written by `agents/coordinator-scan.sh`, not by the session that follows. It hashes this PR's identity (its number) and nothing that happens on it, so trigger (b) rides once per assembly PR."
+    }
+  ],
+  "commits": [
+    {
+      "oid": "845aaaa1111bbbb2222cccc3333dddd4444eeee",
+      "messageHeadline": "assembly: the P0 slice",
+      "committedDate": "2026-10-10T17:20:00Z"
+    },
+    {
+      "oid": "845cccc5555dddd6666eeee7777ffff8888aaaa",
+      "messageHeadline": "specs: correct the coverage map",
+      "committedDate": "2026-10-10T18:10:00Z"
+    }
+  ]
+}

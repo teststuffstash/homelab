@@ -10,9 +10,11 @@ a single-world module declares it once in its docstring and omits it from row id
 
 | world | file | what it is |
 |---|---|---|
-| `policy-default` | [policy-default.json](policy-default.json) | the test policy (plan `go` on the opencode rail — [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go)): two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json` (the opencode rail's from the world's Go catalog — below) — two tiers name ordered LISTS (anthropic heavy `[claude/sonnet, claude/opus]`, openrouter light `[deepseek/deepseek-v4-flash, deepseek/deepseek-v4.1-flash]`, the `coding` chain_head order), the rest bare strings; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with three fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth) — and a judge, `outcome: any`, [GW-SESSIONS-OUTCOME](../endpoints/sessions.md#gw-sessions-outcome)), so a row that sends no caller token is admitted; `outcome_window_s` 86400; the per-rail header and recovery keys: `user_agent` (`forward` on anthropic and openrouter, `fixed` on opencode) and `credential_probe` (opencode: `POST /v1/chat/completions`, 1 token on its light model; openrouter: `GET /v1/key`; anthropic none, so `credential_hold_s` defaults to 900) — [§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half) |
+| `policy-default` | [policy-default.json](policy-default.json) | the test policy (plan `go` on the opencode rail — [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go)): two stacks (`platform`, `oracle`), all seven roles, three rails with the model ids copied from `model-classes.json` (the opencode rail's from the world's Go catalog — below) — two tiers name ordered LISTS (anthropic heavy `[claude/sonnet, claude/opus]`, openrouter light `[deepseek/deepseek-v4-flash, deepseek/deepseek-v4.1-flash]`, the `coding` chain_head order), the rest bare strings; caps small enough to fill in a test (`anthropic` 5, `opencode` 3, `openrouter` 20); the anthropic rail's `side_models` = `claude/haiku` (claude-code's side-call family, [GW-MODEL-RESOLVE](../endpoints/anthropic-messages.md#gw-model-resolve) ⚖); `control_plane_auth: observe` with three fixture `callers` (the platform loop, the specs reviewer — [GW-SESSIONS-AUTH](../endpoints/sessions.md#gw-sessions-auth) — and a judge, `outcome: any`, [GW-SESSIONS-OUTCOME](../endpoints/sessions.md#gw-sessions-outcome)), so a row that sends no caller token is admitted; `outcome_window_s` 86400; the per-rail header and recovery keys: `user_agent` (`forward` on anthropic and openrouter, `fixed` on opencode) and `credential_probe` (opencode: `POST /v1/chat/completions`, 1 token on its light model; openrouter: `GET /v1/key`; anthropic none, so `credential_hold_s` defaults to 900) — [§Capacity](../endpoints/sessions.md#gw-sessions-capacity) |
 | `policy-enforce` | [policy-enforce.json](policy-enforce.json) | `policy-default` with `control_plane_auth: enforce` and nothing else changed — for the GW-SESSIONS-AUTH enforce rows only |
-| `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30), its roles shaped as the 2026-10-23 ruling (every role lists `anthropic`, `opencode` and `codex`; `prober` = `anthropic`, `codex`) — the codex rows and the GW-SESSIONS-ADMIT §The harness follows the cell rows (its opencode `standard` list is `[deepseek-v4.1-flash, claude-haiku-5-5]`: both dialect shapes, so a cell row can skip the openai one and take the anthropic); the deployed policy's lists are its own |
+| `policy-codex` | [policy-codex.json](policy-codex.json) | `policy-default` plus the codex rail (`max_sessions` 2, the fixture model `codex/fixture-model`, `headroom` 120 s / 0.95 / the 300- and 10080-minute windows, `oauth.refresh_margin_s` 30), its roles shaped as the 2026-10-23 ruling (every role lists `anthropic`, `opencode` and `codex`; `prober` = `anthropic`, `codex`) — the codex rows and the GW-SESSIONS-ADMIT §The harness follows the cell rows (its opencode `standard` list is `[deepseek-v4.1-flash, claude-haiku-5-5]`: both dialect shapes, so a cell row can skip the openai one and take the anthropic; its anthropic `heavy` list is `[claude/sonnet, claude/opus, claude/fable]` — three models, so a [§The preferred end of the list](../endpoints/sessions.md#the-preferred-end-of-the-list) row can tell the next-strongest from the list's head); the deployed policy's lists are its own |
+| `policy-go` | [policy-go.json](policy-go.json) | `policy-default` plus `rails.opencode.headroom` (120 s freshness, 0.95 ceiling, the named windows `rolling` / `weekly` / `monthly`, 30 s poll — ⚖ fixture values, not production policy), for the GW-SESSIONS-CAPACITY [Go account headroom](../endpoints/sessions.md#go-account-headroom) rows ONLY; the usage URL is the test's, the Go key is the fixture's |
+| `wire-codex` | [wire-codex.json](wire-codex.json) | not a policy: the **declarations world** of [GW-WIRE-PROBE](../endpoints/wire.md#gw-wire-probe), read from the path `GATEWAY_WIRE` names beside `policy-codex` — one probe, `codex-models` (rail `codex`, path `/models`, `client_version=0.155.0`, every 21600 s), no allowlisted key; fixture hosts only (byte-identical twin: `../../tests/fixtures/wire-codex.json`). The deployed declarations are `argocd/resources/agent-gateway/wire.json`, the codeowner's |
 
 Names in the test policy (namespaces, Secret names) are **fixture names**, not production
 ones; the production policy is the ConfigMap in `argocd/resources/agent-gateway/`. Model ids
@@ -34,6 +36,18 @@ bands 0.9 / 0.75 / 0.5, cap 3 — [GW-MODEL-TIERS](../endpoints/catalog.md#gw-mo
 loader shape holds everywhere, but its LISTS stay the fixture ids above: the derivation applies to
 the deployed policy only ⚖.
 
+## Where worlds come from
+
+A wire shape in a fixture is **mined from a recorded answer**, never hand-copied and never invented
+(Goal #3300). The gateway records what its vendors answered ([GW-WIRE-RECORD](../endpoints/wire.md#gw-wire-record))
+and serves it read-only ([GW-WIRE-VIEW](../endpoints/wire.md#gw-wire-view)); a fixture is cut from that
+answer with `devbox run wire-quarry -- cut <source> --path <a.b.c> --out tests/fixtures/<name>.json`
+([GW-WIRE-QUARRY](../endpoints/wire.md#gw-wire-quarry)). The sidecar it writes beside the fixture
+(`<name>.provenance.json`: source, class, url, sha256, fetched_at, path) is committed with it. A shape no source
+has recorded is not written: a missing record is the finding (the tool exits `4`), and the fixture waits for the
+gateway to record it. The fixtures cut by hand before the tool have no sidecar (the gap in the
+[index](../README.md#index)); they are not re-cut here.
+
 ## Upstream behaviours (fake upstreams)
 
 Each rail's upstream is an in-process fake mounted per test — offline, deterministic, no network.
@@ -50,7 +64,7 @@ received** (URL, headers, body) as much as on the response the gateway returned.
 | `upstream-429` | 429 with `retry-after: 30` | 429 passthrough with `retry-after`; the subscription latch rows |
 | `upstream-429-no-header` | 429 with no reset header at all | the hold / `defer_retry_s` fallbacks |
 | `upstream-429-shared-pool` | OpenRouter's shared-pool 429 (the 2026-10-22 tap on `kimi-k3@baseten`, homelab#2775): `retry-after: 30`, body `{error: {message: "Provider returned error", code: 429, metadata: {raw, provider_name, is_byok: false, limit_source: upstream_provider_shared_pool, retry_after_seconds: 30, …}}}` — the PINNED provider throttles OpenRouter's shared upstream account; a per-provider behaviour | the 429'd-canary rows ([GW-CATALOG-OR §The entry canary](../endpoints/catalog.md#the-entry-canary)) |
-| `upstream-429-reset` | OpenRouter's 429 shape (the 2026-10-17 tap): `x-ratelimit-limit: 20`, `-remaining: 0`, `-reset` = the row's epoch **milliseconds**, no `retry-after` (a row may add one), body `limit_source: openrouter_free_tier_per_minute` | the cell-cooldown rows ([§Capacity](../endpoints/sessions.md#capacity--the-ladders-capacity-half)) |
+| `upstream-429-reset` | OpenRouter's 429 shape (the 2026-10-17 tap): `x-ratelimit-limit: 20`, `-remaining: 0`, `-reset` = the row's epoch **milliseconds**, no `retry-after` (a row may add one), body `limit_source: openrouter_free_tier_per_minute` | the cell-cooldown rows ([§Capacity](../endpoints/sessions.md#gw-sessions-capacity)) |
 | `upstream-401` | 401 with a body mentioning the key | 424 `upstream-auth`, body never forwarded; the credential rejected |
 | `upstream-401-key-expired` | 401 `{type: authentication_error, code: api_key_expired}` — the Go vendor's live answer to an expired key (the 2026-10-17 tap) | 424 `upstream-auth` on the opencode rail |
 | `upstream-500` | 500 `{error: {message, code: 500, metadata: {provider_name}}}` — OpenRouter's wrap of a provider's 5xx (the `metadata.provider_name` names the pinned provider when the request carried a pin) | the relayed-5xx rows; the failover rows |
@@ -82,9 +96,9 @@ Headroom reports enter through the in-process seam (`app.state.codex.headroom.ob
 
 ## The Go catalog's fakes
 
-`tests/_catalog_world.py`'s `FakeVendor` answers the three reads of
+`tests/_catalog_world.py`'s `FakeVendor` answers the four reads of
 [GW-CATALOG-GO](../endpoints/catalog.md#gw-catalog-go) in process, on fixture hosts
-(`models.dev.test`, `console.opencode.test`, `raw.vendor.test`). `tests/fixtures/go-catalog/models-dev.json`
+(`models.dev.test`, `console.opencode.test`, `raw.vendor.test`, and `inference.opencode.test` for the limits read). `tests/fixtures/go-catalog/models-dev.json`
 is models.dev's `api.json` cut to the `opencode-go` provider and six of its models — the five
 listed (`claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash`, `longcat-2.5-preview-free`,
 `step-5-preview`) plus `step-5-preview-free`, a live `status: deprecated` row — from the **live
@@ -134,6 +148,9 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `docs-no-plan-table` | the Plan table (the fee's home) removed |
 | `docs-shrunk` | only the two DeepSeek models' rows |
 | `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
+| `limits-ok` | 200, `{"object": "list", "data": [], "synthetic": "not a vendor answer"}` — the limits read's answer (the `limits` knob; fixture host `inference.opencode.test`) |
+| `limits-503` | the limits read answers 503 |
+| `limits-down` | a connect failure on the limits read |
 
 ## The openrouter-endpoints world
 
@@ -169,10 +186,14 @@ snapshot trimmed to `open-inference/fp4`, `alibaba` and `parasail/fp8` (`seed_op
 **live MCP answers of 2026-10-19**: `rankings-programming.json` / `rankings-tool_calling.json`
 (`list-daily-model-rankings`, period week — the latest week's top rows of each slice, 14 and 12
 dated permaslugs plus `other`, and one older-week row), `benchmarks-aa.json` (`list-benchmarks`,
-source artificial-analysis — seven of the 350 rows: the models the two slices rank that AA
-benches), `deepseek-v4.1-flash.json` (the ten-endpoint fixture of the openrouter-endpoints world)
-and `glm-5.3-flash.json` (seven of `z-ai/glm-5.3-flash`'s 34 endpoints). Ranked ∩ benched = seven
-candidates; two have endpoint fixtures, the other five 404 (unreadable, absent from the refresh).
+source artificial-analysis — seven of the 350 rows of the 2026-10-19 answer, plus one row built by hand:
+the `nvidia/nemotron-3-ultra-550b-a55b` family, whose three indices are the wire's observed values of
+2026-11-11 (`display_name` and `pricing` are placeholders the leg does not read; the row is not
+checked against the MCP's own answer, which a worker pod cannot call — verify when a refresh next runs
+against it), `deepseek-v4.1-flash.json` (the ten-endpoint fixture of the openrouter-endpoints world)
+and `glm-5.3-flash.json` (seven of `z-ai/glm-5.3-flash`'s 34 endpoints). Ranked ∩ benched = eight
+candidates (the `:free` id joins the family row); two have endpoint fixtures, the other six 404
+(unreadable, absent from the refresh).
 Unlike the openrouter-endpoints world, nothing is seeded: a refresh (`app.state.orcatalog.refresh()`)
 builds the snapshot, and every cell enters as `candidate`.
 
@@ -183,6 +204,7 @@ builds the snapshot, and every cell enters as `candidate`.
 | `mcp` malformed | a tool result whose text is not JSON | parse-failed |
 | `rankings-undated` | ranking rows without `date` | parse-failed |
 | `benchmarks-empty` | an empty AA list | implausible (no candidate) |
+| `benchmarks-no-family` | the AA list without the `nvidia/nemotron-3-ultra-550b-a55b` family row | a `:free` id whose family does not bench is no candidate |
 | `endpoints_behaviour[model]` = `endpoints-503` / `endpoints-malformed` | 503 / a row without the fields the parser reads, for that model | the unreadable-candidate rows |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime` | the fixture with its first endpoint's `uptime_last_1d` set to `null` (what the vendor answers for a fresh or idle endpoint — read live 2026-10-20 under `anthropic/claude-opus-5`) | the no-uptime row |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime@<tag>` | the same, on the endpoint whose `tag` is named (`endpoints-null-uptime@inference-net/fp8`: the one M endpoint every harness could otherwise pin) | the floors-verdict rows (`pinnable` / `floor`) |

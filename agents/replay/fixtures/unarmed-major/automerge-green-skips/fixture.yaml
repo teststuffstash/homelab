@@ -1,4 +1,4 @@
-# unarmed-major/automerge-green-skips (2026-10-28, G12b): the same armed `automerge` PR, CI green — the auto-merge
+# unarmed-major/automerge-green-skips (2026-10-28, G12b): the same `automerge` PR, armed four hours, CI green — the auto-merge
 # lane's own (renovate-approve + GitHub auto-merge). Expected: NO unit, no report line; the files probe never happens.
 name: unarmed-major-automerge-green-skips
 mode: actions

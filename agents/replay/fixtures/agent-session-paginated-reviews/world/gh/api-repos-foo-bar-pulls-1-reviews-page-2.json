@@ -2,15 +2,23 @@
   {
     "id": 3,
     "state": "CHANGES_REQUESTED",
-    "user": {"login": "reviewer3"},
+    "user": {
+      "login": "reviewer3",
+      "type": "Bot"
+    },
     "submitted_at": "2026-09-08T12:00:00Z",
-    "body": "Second page, first review — this is the newest"
+    "body": "Second page, first review — this is the newest",
+    "author_association": "NONE"
   },
   {
     "id": 4,
     "state": "COMMENTED",
-    "user": {"login": "reviewer4"},
+    "user": {
+      "login": "reviewer4",
+      "type": "Bot"
+    },
     "submitted_at": "2026-09-08T09:00:00Z",
-    "body": "Second page, second review — older than page 1"
+    "body": "Second page, second review — older than page 1",
+    "author_association": "NONE"
   }
 ]

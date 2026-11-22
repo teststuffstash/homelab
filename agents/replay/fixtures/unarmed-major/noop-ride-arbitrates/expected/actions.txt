@@ -1,0 +1,8 @@
+CALL gh pr view 30 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+CALL gh api repos/teststuffstash/homelab/pulls/30/files --paginate
+CALL gh api -X POST repos/teststuffstash/homelab/issues/30/labels -f labels[]=agent/arbitrate
+CALL gh api repos/teststuffstash/homelab/issues/30/comments --paginate
+CALL gh api --method POST repos/teststuffstash/homelab/issues/30/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-09-29T10:10:00Z` · ARBITRATE (ride changed nothing, ADR-162): the `unarmed-major` ride dispatched on this unarmed-major PR left its state exactly as it found it (`state-fp:unarmed-major:33966ccac27f`, 25h ago), so no further ride is owed and nothing else owns it. A human decides; removing `agent/arbitrate` re-opens the rides. <!-- agent-event kind=arbitrate ts=2026-09-29T10:10:00Z -->
+OUT ORPHAN [homelab] ⚠ unarmed-major RIDE CHANGED NOTHING → agent/arbitrate: PR #30 (unarmed-major, state unchanged 25h after its ride) — a human decides
+OUT REACHED: end
+RC 0

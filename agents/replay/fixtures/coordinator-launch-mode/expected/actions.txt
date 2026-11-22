@@ -1,0 +1,4 @@
+OUT LABEL , "homelab.teststuff.net/launch": agent-session
+OUT RUNNER bash /work/homelab/agents/agent-session.sh oracle-fleet --task issue-1530 --round 3 --work-branch fix/issue-1530-red-step --recipe /work/oracle-fleet/.agents/fix.yaml; RC=$?
+OUT REACHED: end
+RC 0

@@ -1,0 +1,30 @@
+# probe-parent-admit — the AgentStack prober's PARENT-session admission (the probe cron's in-pod
+# script, argocd/resources/agentstack/composition.yaml, block probe-parent-admit; FU-270, operator
+# ruling 2026-11-01: the platform claim's lanes move onto the agent-gateway through ONE shared
+# helper, agents/gateway-admit.sh). The knob is the claim's `prober.gateway: sessions`, rendered
+# into the pod as PROBE_GATEWAY (+ PROBE_STACK); without it the block is inert and the parent rides
+# the pod's own env (the old proxy's ref rail).
+#
+# THE CONTRACT (the composition's prober comment + the XRD's prober.gateway description):
+# rc 0 → the outer claude runs under the session's env (PROBE_PARENT_ENV, `env` args over the pod
+# env) at the gateway's wire model; a claude child takes the same model; the EXIT trap releases the
+# session AND a codex child's session if one was admitted · rc 1 → the tick defers exactly as the
+# subscription latch defers it (stdout line, exit 0) · rc 2 / rc 3 → ONE loud line
+# `gateway admission refused rc=N — old-proxy fallback` and the tick runs on the pod's env
+# (FU-270: transition fallback). The env file never outlives the block.
+#
+# The bridge sources the block as the pod runs it, with the pod env the composition renders for the
+# platform claim; `curl` is the gateway seam (gateway-admit's shape); post.sh is the observation
+# point — what the `env "${PROBE_PARENT_ENV[@]}" claude … --model "$PROBE_PARENT_MODEL"` line hands
+# the harness. Row state lives in rows/<id>/vars.sh.
+name: probe-parent-admit
+mode: table
+source: argocd/resources/agentstack/composition.yaml
+parts:
+  - file:bridge.sh
+  - block:probe-parent-admit
+  - file:post.sh
+rows: rows.psv
+# The unbound env file is a mktemp path (the pod's /tmp): scrubbed, its removal is asserted by post.sh.
+scrub:
+  - 's#/tmp/tmp\.[A-Za-z0-9]*#$MKTEMP#g'
