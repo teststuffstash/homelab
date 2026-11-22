@@ -79,9 +79,15 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   no postgres 19 proposal). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
   (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
-  security PRs that skip the cooldown — openrouter-operator#111 would land virtualenv 0.9 d old); close #110 (its target
-  virtualenv 21.14.9 is itself vulnerable; #113 closed 11-21); admin-merge #111 after ~11-28 once lock-intake-lint clears;
-  the scan routing armed non-major #111 to unarmed-major (second jail's claim, unchecked — a loop component: stop-and-ask).
+  security PRs that skip the cooldown; worker `uv lock` additions are the other un-aged intake — 2 versions <7 d in ~4
+  months; an optional reviewer line "a new direct dep names its importer" rides the same call). openrouter-operator:
+  #113 closed 11-21; #110 (target virtualenv 21.14.9, itself vulnerable) stays OPEN until #111 merges — Renovate
+  recreates a closed vulnerability PR while master is still vulnerable. #111 (armed, approved, red on deps-pin-guard =
+  ADR-154's admin-merge route): "wait for the 7-day floor" does NOT converge — Renovate re-locked it 11-21 22:44Z to
+  virtualenv 21.15.12 (uploaded 22:12Z, floor 11-28 ~22:12Z) and virtualenv ships every 1–3 days. Converging route is
+  docs/renovate.md's own: `[tool.uv] exclude-newer` ≥7 d back + `uv lock` (fixed ≥21.14.13 exists aged, e.g. 21.15.6
+  of 11-06), or admin-merge whichever head lock-intake-lint passes. Scan routing armed non-major #111 to unarmed-major:
+  unchecked, a loop component → stop-and-ask.
 - **⚑ PICKUP (2026-11-21 — #3627 for the next session, operator).** `ci: run the scan, launch and retro island suites (#3391)`,
   opened 13:56Z under the operator login (not the primary seat's), UN-ARMED, no review, BEHIND master. It touches
   `.github/workflows/ci.yaml` (a governance path the bot cannot gate) + `scripts/diff-ci.sh`, so the path is

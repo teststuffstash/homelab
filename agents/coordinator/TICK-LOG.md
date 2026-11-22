@@ -15784,3 +15784,14 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Dropped: "flaky test_codex_sqlite crash test" — no run id given, and the second jail's two red CI runs
   (44912746004, 44912737472) were the ADR-103 replay ratchet, not that test. Refile on a resight with a run.
 - Noted only: the #818 dial binds `agentstack-loop` with no reader; ADR-165 §Considered already records it.
+
+## 2026-11-22 (afternoon) — seat: checked a second jail's Renovate/OSV transcript (openrouter-operator #110/#111)
+
+- Verified live: #113 CLOSED 11-21; #110 open (`agent/blocked`, `agent/arbitrate`); #111 armed + APPROVED, red on
+  deps-pin-guard. OSV: virtualenv 21.14.9 → GHSA-4f8h-vr72-p32c (fixed 21.14.10), GHSA-cx6f-vjhg-g3cc (fixed 21.14.13),
+  PYSEC-2026-4372; 21.15.11/21.15.12 clean. The transcript's "floor clears 11-28 00:03Z" was already stale: #111 was
+  re-locked 22:44Z (4802ab68) to virtualenv 21.15.12 (PyPI 22:12Z); virtualenv released 8 times since 11-17 → the wait
+  never converges while Renovate re-locks. Correction: docs/renovate.md:73 prescribes `exclude-newer`, not waiting.
+- Already homed, nothing new filed: the renovate.md transitive-OSV correction and the "renovate:44 floats" ruling
+  (pin rejected, operator 11-21) are in #3652; lock-intake-lint-into-stacks is an open operator call in meta-state.
+  Updated that meta-state pickup (hold #110, the non-converging floor, the worker-intake + reviewer-line notes).
