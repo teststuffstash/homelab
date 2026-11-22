@@ -1,0 +1,16 @@
+# Node-disk bound per container in jail-clusters (ADR-167): the ResourceQuota's ephemeral-storage
+# lines need a request/limit on every container, and the dind sidecar (extracted unchanged from
+# agents/agent-session.sh) declares none — so the default comes from here. The max caps any one
+# container's writable layer + logs; the runner asks for the max itself (a cold `devbox install`
+# writes the nix closure into its rootfs). Exceeding a limit gets the pod evicted by the kubelet.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: jail-clusters
+  namespace: jail-clusters
+spec:
+  limits:
+    - type: Container
+      default: { ephemeral-storage: 1Gi }
+      defaultRequest: { ephemeral-storage: 256Mi }
+      max: { ephemeral-storage: 10Gi }

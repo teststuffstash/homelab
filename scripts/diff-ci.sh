@@ -165,6 +165,10 @@ MAP=(
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"
+  # the jail-cluster verb + its admission policy (ADR-167): render, the policy decision table, the verb vs a
+  # fake kubectl. Scoped to the rig's OWN files — the rig is optional (ADR-108), so an edit elsewhere
+  # (agents/agent-session.sh, agents/images.env) never runs it; no ci.yaml step.
+  "jail-cluster-self-test:^(scripts/jail-cluster|scripts/fixtures/jail-cluster/|argocd/resources/jail-clusters/)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
   # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows

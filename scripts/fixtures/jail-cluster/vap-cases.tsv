@@ -1,0 +1,46 @@
+# jail-clusters-pod-guard decision table (argocd/resources/jail-clusters/admission-policy.yaml).
+# Each row patches the pod `jail-cluster run --dry-run` renders (the base) with ONE yq expression
+# and states the verdict the policy contract (ADR-167, the policy header's clauses a–n) demands:
+#   pass = admitted · fail = refused BY the named clause · skip = not matched (outside jail-clusters)
+# Every fail row breaks exactly one clause, and the clause letter is asserted from kyverno's message,
+# so a row cannot pass by tripping a different rule. Run by scripts/jail-cluster-test.sh.
+# case	expect	clause	yq patch
+rendered	pass	-	.
+agent-base-other-tag	pass	-	.spec.containers[0].image = "registry.teststuff.net/agent-base:2099.1.1-gdeadbeef.1"
+nodename-nx01	pass	-	.spec.nodeName = "nx-01"
+runc-no-runtimeclass	fail	a	del(.spec.runtimeClassName)
+other-runtimeclass	fail	a	.spec.runtimeClassName = "runc"
+no-node-pin	fail	b	del(.spec.nodeSelector)
+other-node	fail	b	.spec.nodeSelector."kubernetes.io/hostname" = "wk-metal-03"
+nodename-elsewhere	fail	b	.spec.nodeName = "wk-01"
+no-dind	fail	c	del(.spec.initContainers[] | select(.name == "dind"))
+unpinned-dind-tag	fail	c	(.spec.initContainers[] | select(.name == "dind") | .image) = "ghcr.io/k3d-io/k3d:5-dind"
+foreign-runner-image	fail	d	.spec.containers[0].image = "docker.io/library/alpine:3.20"
+agent-base-latest	fail	d	.spec.containers[0].image = "registry.teststuff.net/agent-base:latest"
+agent-base-lookalike-registry	fail	d	.spec.containers[0].image = "registry.teststuff.net.evil.example/agent-base:2026.11.16-g7296793e6ee9.135"
+foreign-init-image	fail	d	(.spec.initContainers[] | select(.name == "tools") | .image) = "docker.io/library/busybox:1.36"
+privileged-runner	fail	e	.spec.containers[0].securityContext.privileged = true
+capability-add-runner	fail	e	.spec.containers[0].securityContext.capabilities.add = ["SYS_ADMIN"]
+host-network	fail	f	.spec.hostNetwork = true
+host-pid	fail	f	.spec.hostPID = true
+host-port	fail	f	.spec.containers[0].ports = [{"containerPort": 6443, "hostPort": 6443}]
+hostpath-volume	fail	g	.spec.volumes += [{"name": "host", "hostPath": {"path": "/"}}]
+projected-sa-token	fail	g	.spec.volumes += [{"name": "tok", "projected": {"sources": [{"serviceAccountToken": {"path": "t", "expirationSeconds": 315360000}}]}}]
+projected-configmap	fail	g	.spec.volumes += [{"name": "cm", "projected": {"sources": [{"configMap": {"name": "x"}}]}}]
+pvc-volume	fail	g	.spec.volumes += [{"name": "other", "persistentVolumeClaim": {"claimName": "someone-elses"}}]
+ephemeral-container	fail	h	.spec.ephemeralContainers = [{"name": "dbg", "image": "registry.teststuff.net/agent-base:x"}]
+no-deadline	fail	i	del(.spec.activeDeadlineSeconds)
+deadline-over-cap	fail	i	.spec.activeDeadlineSeconds = 86400
+no-priority-class	fail	j	del(.spec.priorityClassName)
+other-priority-class	fail	j	.spec.priorityClassName = "node-maintenance"
+other-namespace-runc	skip	-	.metadata.namespace = "oracle-fleet" | del(.spec.runtimeClassName)
+automount-token-true	fail	k	.spec.automountServiceAccountToken = true
+automount-token-unset	fail	k	del(.spec.automountServiceAccountToken)
+sa-jail-cluster	fail	l	.spec.serviceAccountName = "jail-cluster"
+sa-default	fail	l	.spec.serviceAccountName = "default"
+sa-unset	fail	l	del(.spec.serviceAccountName)
+no-app-label	fail	m	del(.metadata.labels.app)
+other-app-label	fail	m	.metadata.labels.app = "hidden"
+emptydir-no-sizelimit	fail	n	(.spec.volumes[] | select(.name == "jail-tools") | .emptyDir) = {}
+emptydir-over-cap	fail	n	(.spec.volumes[] | select(.name == "jail-tools") | .emptyDir.sizeLimit) = "100Gi"
+emptydir-at-cap	pass	-	(.spec.volumes[] | select(.name == "jail-tools") | .emptyDir.sizeLimit) = "1Gi"

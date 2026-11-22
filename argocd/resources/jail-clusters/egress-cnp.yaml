@@ -1,0 +1,73 @@
+# jail-cluster egress (ADR-167) — the docker-mode ride's egress legs, minus everything a gate
+# runner does not need (no apiserver, no LLM/credential proxy, no git/GitHub, no transcript or
+# metrics sinks). The legs are copied from agent-worker-egress in
+# argocd/resources/agentstack/composition.yaml (the tier table: docs/agents/agentstack.md §The
+# egress dial) — keep them in step with it, leg by leg:
+#   DNS              kube-dns (the kata pod keeps the cluster dnsPolicy, FU-072)
+#   registry mirrors registry-cache (docker.io/ghcr/mcr) + pypi-cache + npm-cache, identity + VIPs
+#   nix caches       nix-cache (devbox install) + devbox-search (devbox add), identity + VIPs
+#   ghcr.io:443      the docker-ride leg: dockerd's registry-mirrors is Hub-only, so k3d's own
+#                    helper images (k3d-proxy / k3d-tools) pull direct
+# Default deny both ways: egress beyond these legs drops, and nothing may connect IN — a k3d/kind
+# API published inside the microVM listens on the pod IP. kubectl exec does not use the pod
+# network (apiserver → kubelet → runtime), so the verb is unaffected.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: jail-cluster-egress
+  namespace: jail-clusters
+spec:
+  endpointSelector: {}
+  enableDefaultDeny:
+    egress: true
+    ingress: true
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Registry mirrors (ADR-091) — identity is the primary match (pod→LB-VIP is DNAT'd before
+    # policy), the VIP CIDRs are the belt for an untranslated path.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: registry-cache
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: pypi-cache
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: npm-cache
+    - toCIDR:
+        - 192.168.40.20/32 # docker.io mirror VIP
+        - 192.168.40.21/32 # ghcr mirror VIP
+        - 192.168.40.31/32 # mcr.microsoft.com mirror VIP
+        - 192.168.40.34/32 # pypi.org mirror VIP
+        - 192.168.40.35/32 # registry.npmjs.org mirror VIP
+      toPorts:
+        - ports:
+            - { port: "80", protocol: TCP }
+    # Nix caches — `devbox install` (ADR-083) and `devbox add` (FU-118b).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: nix-cache
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: devbox-search
+    - toCIDR:
+        - 192.168.40.23/32 # nix-cache VIP (the docker-mode NIX_CACHE_URL)
+        - 192.168.40.27/32 # devbox-search VIP
+      toPorts:
+        - ports:
+            - { port: "80", protocol: TCP }
+    - toFQDNs:
+        - { matchName: ghcr.io }
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
