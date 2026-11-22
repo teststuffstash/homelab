@@ -19,5 +19,9 @@ curl() {
   done
   printf 'CALL curl POST %s %s\n' "$_u" "$_d" >> "$REPLAY_ACTIONS"
   [ -z "$GW_OUTCOME_FAILS" ] || return 22
-  printf '{"id":"0123abcd","outcome":{"class":"x"},"strike":%s,"refuted":0,"replay":false}' "$GW_REPLY_STRIKE"
+  # a `clean` outcome never counts a strike (sessions.schema.json x-scope clean: null) — the row's
+  # GW_REPLY_STRIKE answers only a non-clean class, as the live gateway does
+  local _strike="$GW_REPLY_STRIKE"
+  case "$_d" in *'"class":"clean"'*) _strike="null";; esac
+  printf '{"id":"0123abcd","outcome":{"class":"x"},"strike":%s,"refuted":0,"replay":false}' "$_strike"
 }
