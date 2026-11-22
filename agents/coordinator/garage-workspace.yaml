@@ -35,12 +35,17 @@ spec:
         max_size     = 21474836480 # 20Gi
       }
 
-      resource "garage_key" "writer" { name = "agent-transcripts-writer" }
+      # Rotation = a NEW resource address (+ name suffix): provider-terraform creates the new key,
+      # rewrites the connection Secret, destroys the old one in the same apply. r2: 2026-11-22,
+      # the r1 key was printed into a worker's prompt served by a later-breached provider
+      # (docs/incidents/2026-10-29-worker-env-dump-to-breached-provider.md); write-only + LAN-only,
+      # so hygiene, not containment. Rotate by bumping the suffix, never by hand in Garage.
+      resource "garage_key" "writer_r2" { name = "agent-transcripts-writer-r2" }
       resource "garage_key" "reader" { name = "agent-transcripts-reader" }
 
       resource "garage_bucket_permission" "writer_write" {
         bucket_id     = garage_bucket.transcripts.id
-        access_key_id = garage_key.writer.id
+        access_key_id = garage_key.writer_r2.id
         read  = false
         write = true
         owner = false
@@ -57,10 +62,10 @@ spec:
         value = garage_bucket.transcripts.global_alias
       }
       output "writer_access_key_id" {
-        value = garage_key.writer.id
+        value = garage_key.writer_r2.id
       }
       output "writer_secret_access_key" {
-        value     = garage_key.writer.secret_access_key
+        value     = garage_key.writer_r2.secret_access_key
         sensitive = true
       }
       output "reader_access_key_id" {

@@ -52,6 +52,7 @@ the same exemption the TICK-LOG and ADRs carry.
 
 | Date | Incident | Residual |
 |---|---|---|
+| 2026-10-29 | [A worker printed its env into a prompt; the provider that served it was breached](2026-10-29-worker-env-dump-to-breached-provider.md) | the writer-key rotation (this PR); scanner belt + boundary rollout as FUs from the 2026-11-22 second-jail handoff |
 | 2026-07-27 | [Kata ride OOM cascade — agents killed platform daemons on three nodes](2026-07-27-kata-ride-oom-cascade.md) | FU-112, FU-116 |
 | 2026-07-27 | [The ghcr mirror filled four times in eight days — three mechanisms, five peer issues](2026-07-27-ghcr-mirror-recurring-fill.md) | FU-093 |
 | 2026-07-27 | [Responder deferred an alert into silence](2026-07-27-responder-silent-defer.md) | FU-113 |
