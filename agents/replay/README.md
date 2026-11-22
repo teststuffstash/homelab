@@ -259,7 +259,12 @@ is stale, so it cannot drift the way the prose register did.
 | `context-prefetch/ci-red` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-arbitration-newer-on-issue` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-arbitration-newer-on-pr` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-cm-forbidden` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-cm-live-pod` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-cm-refused` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-cm-stale-failed-pod` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-cm-stale-no-owner` | actions | - | `agents/agent-session.sh` | - |
+| `context-prefetch/fix-round-cm-stale-no-pod` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-unreadable` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round-with-arbitration` | actions | - | `agents/agent-session.sh` | - |
 | `context-prefetch/fix-round` | actions | - | `agents/agent-session.sh` | - |
