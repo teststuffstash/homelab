@@ -49,6 +49,10 @@
 #     `↺ INFEASIBLE REFUTED` report line, and the issue falls through to its C4/C5 handling. One
 #     refutation per issue (an older one → park); another repo, a non-path payload, or an
 #     unsourceable classifier parks as before (the `refuted*`/`devbox-root`/`resource-slash` rows).
+#     The path is CANONICAL before it is classified (classify_touches matches literal arms): the
+#     markdown wrapping is stripped, leading `./` dropped, `//` and `/./` collapsed, and a `.`/`..`
+#     segment still left parks — a non-canonical spelling never refutes a correct claim (the
+#     `dot-slash`/`dot-segment`/`refuted-backtick` rows).
 #   • AN UNREADABLE PROBE is the other way round (rule #6, never fail INTO a write): an
 #     unreadable comments probe keeps today's behaviour — belt and unit included — plus one
 #     report line naming the issue. `STUB_GH=fail` is the harness's own failure-mode seam

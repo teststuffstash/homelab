@@ -85,3 +85,15 @@ devbox-root          | verdict |                                           |    
 resource-slash       | verdict |                                           |                    | resource-slash
 refuted-other-repo   | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/gateway-marker.jq | INFEAS_GUARDED_REPO=circles | parks-gateway
 refuted-no-footprint | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/gateway-marker.jq | INFEAS_NO_FOOTPRINT=1 | parks-gateway
+# ── PR #3681 review: the path is CANONICAL before it is classified. classify_touches matches literal
+# case arms, so a non-canonical spelling of a never-touch path read machine-merge and a CORRECT claim
+# was refuted (fail-open). Leading `./` is dropped, `//` and `/./` collapse, any `.`/`..` segment
+# left parks (fail closed); markdown wrapping (backticks, quotes, trailing `:,.;)`) is stripped fully.
+# dot-slash        = `./devbox.json` (patches/dot-slash-marker.jq) → codeowner-author → parked. RED on
+#                    6766aca06, which refuted it.
+# dot-segment      = `scripts/./node-maintenance.sh` (patches/dot-segment-marker.jq) → parked.
+# refuted-backtick = `` `gateway/devbox.json`: `` (patches/backtick-marker.jq) → classified, refuted
+#                    exactly as `refuted` (the same expected stream).
+dot-slash            | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/dot-slash-marker.jq   |  | dot-slash
+dot-segment          | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/dot-segment-marker.jq |  | dot-segment
+refuted-backtick     | verdict | gh/api-repos-teststuffstash-homelab-issues-66-comments-per-page-100.json @ patches/backtick-marker.jq    |  | refuted

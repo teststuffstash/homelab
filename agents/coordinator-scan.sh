@@ -5042,9 +5042,21 @@ EOF_GTHEMES_OPEN
               ipath=""; iverdict=""; irefuted=""
               if [ "$repo" = "${GUARDED_REPO:-}" ]; then
                 command -v classify_touches_repo >/dev/null 2>&1 || { . "${HERE:-/nonexistent}/footprint.sh"; } 2>/dev/null || true
-                ipath="${ipay%%[[:space:]]*}"; ipath="${ipath#['`']}"; ipath="${ipath%['`',;:]}"
+                # CANONICAL before classifying: classify_touches matches literal case arms, so
+                # `./devbox.json` or `scripts/./x.sh` would miss the ❌ arm and read machine-merge —
+                # refuting a CORRECT claim (fail-open). Strip the markdown wrapping fully (`` `p`: ``,
+                # `"p",` — leading `` `'"( ``, trailing `` `'":,;) `` and a sentence `.` that does not
+                # end a `.`/`..` segment), drop leading `./`, collapse `//` and `/./`, drop a trailing
+                # `/`; any `.`/`..` segment still left fails closed (no verdict → park).
+                ipath="${ipay%%[[:space:]]*}"
+                while :; do case "$ipath" in ['`'\'\"\(]*) ipath="${ipath#?}" ;; *) break ;; esac; done
+                while :; do case "$ipath" in *['`'\'\":,\;\)]) ipath="${ipath%?}" ;; *[!./].) ipath="${ipath%?}" ;; *) break ;; esac; done
+                while [[ "$ipath" == ./* ]]; do ipath="${ipath#./}"; done
+                while [[ "$ipath" == *//* ]]; do ipath="${ipath//\/\//\/}"; done
+                while [[ "$ipath" == */./* ]]; do ipath="${ipath//\/.\//\/}"; done
+                ipath="${ipath%/}"
                 if command -v classify_touches_repo >/dev/null 2>&1 && [ -n "${_FP_DIR:-}" ] \
-                   && [[ "$ipath" =~ ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$ ]] && [[ "$ipath" != *..* ]] \
+                   && [[ "$ipath" =~ ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$ ]] && [[ "/$ipath/" != */./* && "/$ipath/" != */../* ]] \
                    && { [ -e "${_FP_DIR}/../${ipath}" ] || { [ "${ipath%/*}" != "$ipath" ] && [ -d "${_FP_DIR}/../${ipath%/*}" ]; }; }; then
                   iverdict="$(classify_touches_repo "$slug" "$ipath" 2>/dev/null)" || iverdict=""
                   case "$iverdict" in machine-merge|codeowner-merge) ;; *) iverdict="" ;; esac
