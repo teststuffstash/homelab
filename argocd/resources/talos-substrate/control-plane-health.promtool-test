@@ -198,7 +198,7 @@ tests:
               instance: "192.168.2.183:6443"
               job: apiserver
             exp_annotations:
-              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5) — heap pinned at its GOMEMLIMIT"
+              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
       # still exactly that one member two hours in
       - eval_time: 185m
         alertname: ControlPlaneApiserverGCThrash
@@ -209,7 +209,7 @@ tests:
               instance: "192.168.2.183:6443"
               job: apiserver
             exp_annotations:
-              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5) — heap pinned at its GOMEMLIMIT"
+              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
       # 30 m after the restart: cleared
       - eval_time: 215m
         alertname: ControlPlaneApiserverGCThrash

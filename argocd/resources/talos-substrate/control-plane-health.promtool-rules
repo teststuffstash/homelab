@@ -23,7 +23,7 @@ groups:
         for: 30m
         labels: { severity: warning, triage: now }
         annotations:
-          summary: "kube-apiserver {{ $labels.instance }} runs {{ $value | printf \"%.2f\" }} GC cycles/s (30 m over 0.5) — heap pinned at its GOMEMLIMIT"
+          summary: "kube-apiserver {{ $labels.instance }} runs {{ $value | printf \"%.2f\" }} GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
       - alert: ControlPlaneComponentRestarted
         expr: |
           increase(kube_pod_container_status_restarts_total{job="kube-state-metrics", namespace="kube-system", container=~"kube-apiserver|kube-controller-manager|kube-scheduler"}[30m]) > 0

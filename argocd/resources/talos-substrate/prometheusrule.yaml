@@ -131,16 +131,19 @@ spec:
           # triage now: a control-plane member is burning its cores in GC; the remedy is a windowed restart
           labels: { severity: warning, triage: now }
           annotations:
-            summary: "kube-apiserver {{ $labels.instance }} runs {{ $value | printf \"%.2f\" }} GC cycles/s (30 m over 0.5) — heap pinned at its GOMEMLIMIT"
+            summary: "kube-apiserver {{ $labels.instance }} runs {{ $value | printf \"%.2f\" }} GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
             description: >-
-              This kube-apiserver has run more than 0.5 Go GC cycles per second for 30 minutes. A
-              healthy member on this fleet runs under 0.1/s. The live heap has reached the member's
-              GOMEMLIMIT (`go_memstats_heap_inuse_bytes{job="apiserver"}` against
-              `go_gc_gomemlimit_bytes{job="apiserver"}`), so the process spends its CPU collecting
-              (`rate(process_cpu_seconds_total{job="apiserver"}[30m])`; 3.55 cores on wk-metal-02 on
-              2026-11-18). The member stays up and serves slowly. The remedy is a windowed
-              `talosctl restart -k` of the apiserver on that member (an attended act), and the
-              sizing decision behind it is FU-315.
+              This kube-apiserver has run more than 0.5 Go GC cycles per second for 30 minutes; a
+              healthy member on this fleet runs under 0.1/s. This is the symptom only: it can be
+              a heap sitting at its GOMEMLIMIT, or an allocation storm with the heap well under the
+              limit. Tell them apart with `go_memstats_heap_inuse_bytes{job="apiserver"}` against
+              `go_gc_gomemlimit_bytes{job="apiserver"}` (heap at the limit), the request and LIST
+              rate (`apiserver_request_total{job="apiserver"}`, an allocation storm), and the
+              member's CPU (`rate(process_cpu_seconds_total{job="apiserver"}[30m])`). On 2026-11-18
+              on wk-metal-02 this was heap-at-limit at 3.55 cores, and a restart cleared it. For the
+              heap-at-limit case the remedy is a windowed `talosctl restart -k` of the apiserver on
+              that member (an attended act), and the sizing decision behind it is FU-315; an
+              allocation storm is a different act, find its source first.
         - alert: ControlPlaneComponentRestarted
           expr: |
             increase(kube_pod_container_status_restarts_total{job="kube-state-metrics", namespace="kube-system", container=~"kube-apiserver|kube-controller-manager|kube-scheduler"}[30m]) > 0
