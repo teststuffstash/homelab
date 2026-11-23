@@ -15855,3 +15855,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Renovate after ADR-166: the image clock works on all three scheduled runs since the merge (36 packages, 52 rules,
   oracle-fleet postgres rule in the effective config). The meta-state pickup is narrowed to the operator calls it carried.
 - `timeout 590` double launch → FU-324 (launcher idempotency per issue+round; the gateway's supersede is the only guard).
+
+## 2026-11-23 ~20:00–21:30Z — /board-sweep (window since 10-31 23:40Z; island-first, no corpus load; 2 read-only subagents) (seat)
+
+- Throughput-stall line → #3594/#3596 (grafana-pg WAL) were fixed by quickfix `85b7c85c3` during the nx-02 incident; closed with evidence, branch `fix/issue-3596-*` deleted.
+- Board (129 homelab closes in window; HANDLED by substance, list in this session's report): ESCALATED-UNSEEN acted — oracle-fleet#965 un-latched (prod Garage v2.5.0 = pin; #3663 closes when `AgentErrorFlagged` clears); #3501 re-queued (its environmental park cause #3088 fixed); #1563/#1571 re-queued fresh (half un-latch; resumable branches had no merge-base with master — deleted); circles#135 un-latched → queued (the struck cell is retired); `agent/blocked` stripped from 34 closed issues, `agent/queued` from #3088; stale `goal/1906-scan` deleted.
+- Classes filed: #3709 (latched items whose recorded cause is gone are never re-read), #3710 (non-merge closes keep agent/* labels — extend the #1106 belt).
+- Lanes: 43 dig findings / 21 responder sessions, chain healthy (dig every night). 10 remediation-would rows scored (3 right, 5 wrong, 2 unsafe, all counts:no). Alert names written where the dig matches them: FU-250 (CrossplaneManagedResourceNotSynced, the #3650 positive control as expected), FU-315 (refill ~40 h, not weeks — #3695), FU-093 (nx-01 NodeDiskIOSaturation), #3538 title (GoCatalogStale), meta-state `dig-explained: TierEvidenceStale`.
+- OPERATOR (in the report): goal branches #3656/#3480/#3482 still uncut after the 11-23 05:00Z sitting; #2588 infeasible (`islands/**` in no fix tier); #3704 kyverno 1.20 (policy/**, seat/operator-direct); snippets#36 re-armed by Renovate despite the py3.15 park.
