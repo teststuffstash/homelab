@@ -117,6 +117,30 @@ spec:
               against `node_memory_MemTotal_bytes`; the levers are the apiserver's size (object set,
               `cluster.apiServer.env` GOMEMLIMIT / `resources`), the member's RAM, or the member role
               (ADR-133). Tracked: FU-304.
+        # The GC-at-the-limit belt (FU-315) — a later event than the group header's two belts, and
+        # recorded here, not there. A kube-apiserver whose live heap reaches its GOMEMLIMIT
+        # does not die — it collects continuously. Replay 2026-11-18 on wk-metal-02 (GOMEMLIMIT
+        # 3200MiB): GC rate crept 0.05 → 0.23/s over 12 days, then jumped to 0.92/s at ~00:45Z and held
+        # there with 3.55 cores of apiserver CPU for 43 h, until restart #3 at 11-19 19:30Z. Nothing
+        # alerted. With `> 0.5` over 30 m and `for: 30m` this fires about 45 m after the jump. Over the same
+        # 17 days the other two members peaked at 0.09/s (cp-01) and 0.05/s (cp-02).
+        - alert: ControlPlaneApiserverGCThrash
+          expr: |
+            rate(go_gc_duration_seconds_count{job="apiserver"}[30m]) > 0.5
+          for: 30m
+          # triage now: a control-plane member is burning its cores in GC; the remedy is a windowed restart
+          labels: { severity: warning, triage: now }
+          annotations:
+            summary: "kube-apiserver {{ $labels.instance }} runs {{ $value | printf \"%.2f\" }} GC cycles/s (30 m over 0.5) — heap pinned at its GOMEMLIMIT"
+            description: >-
+              This kube-apiserver has run more than 0.5 Go GC cycles per second for 30 minutes. A
+              healthy member on this fleet runs under 0.1/s. The live heap has reached the member's
+              GOMEMLIMIT (`go_memstats_heap_inuse_bytes{job="apiserver"}` against
+              `go_gc_gomemlimit_bytes{job="apiserver"}`), so the process spends its CPU collecting
+              (`rate(process_cpu_seconds_total{job="apiserver"}[30m])`; 3.55 cores on wk-metal-02 on
+              2026-11-18). The member stays up and serves slowly. The remedy is a windowed
+              `talosctl restart -k` of the apiserver on that member (an attended act), and the
+              sizing decision behind it is FU-315.
         - alert: ControlPlaneComponentRestarted
           expr: |
             increase(kube_pod_container_status_restarts_total{job="kube-state-metrics", namespace="kube-system", container=~"kube-apiserver|kube-controller-manager|kube-scheduler"}[30m]) > 0
