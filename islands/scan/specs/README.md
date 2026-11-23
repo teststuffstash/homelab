@@ -36,16 +36,17 @@ What this island adds, by rule:
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
   The specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379;
-  `agents/specs-reviewer-session.sh` `pack_root_pairs`), a rows review with no tests root and no
+  `agents/specs-reviewer-session.sh` `pack_root_pairs`), a rows review with no tests root declared and no
   evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** the prefix is `SCAN-`; areas `WAKE`, `CLAUSE`, `HOLD`, `LANE`, `DISPATCH`,
   `GH`, `UPDATER`, `REFLEX`, `HANDOFF`, `SIGNAL`.
 - **Rule 5 (evidence):** The tests root is `islands/scan/tests/`, run by
-  `islands/scan/scripts/ci.sh` at the worker's `pr-open` through `diff-ci`. GitHub CI does not
-  run it yet (seat issue #3391).
+  `islands/scan/scripts/ci.sh` at the worker's `pr-open` through `diff-ci` and in required `ci`
+  (#3391).
   A case drives the island's code through one replay row of the fixture the requirement names,
-  carries `rule("SCAN-…")` and the row id, and writes raw Allure results locally. Nothing is
-  published, and no `git.commit` stamp is attached.
+  carries `rule("SCAN-…")` and the row id, and writes raw Allure results locally. The specs site above renders them for
+  browsing; nothing reaches the specs reviewer (an `extraSpecs` root carries no evidence), and no
+  `git.commit` stamp is attached.
   A requirement with rule-labelled tests says `🚧 WIP → #3389 — rule-labelled tests in <file>;
   no evidence publisher for this root (fixture: <dir>)` in its Status. A requirement whose
   rule-labelled cases are sourced from its page over a recorded world says `🚧 WIP → #3490 —

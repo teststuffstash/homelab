@@ -114,11 +114,13 @@ unless its build adds an image; its detector + revert drill are unbuilt (⚑
 ## Open
 
 - **The spec root has a rows review, no evidence.** homelab's claim lists `islands/scan/specs`
-  under `extraSpecs` (#3379): the specs reviewer reviews these pages' rows, with no tests root and
+  under `extraSpecs` (#3379): the specs reviewer reviews these pages' rows, with no tests root declared and
   no evidence, so an unproven row needs its `🚧 WIP` / `⚑ gap` mark.
-- **No evidence pipeline.** The replay harness asserts action streams, not Allure stories; every
-  requirement is `🚧 WIP` until a `rule()`-labelled runner exists (P4/P5 of §The plan, #1224) —
-  the first deliverable of the build.
+- **Evidence is local and partial.** `tests/` (run by `scripts/ci.sh` at `pr-open` via `diff-ci` and
+  in required `ci`, #3391) carries `rule()`-labelled cases for six requirements (`SCAN-UPDATER-*`,
+  `SCAN-HANDOFF-*`, Goal #3490) over recorded worlds; the specs site renders them for browsing, and
+  nothing reaches the specs reviewer, so every requirement stays `🚧 WIP` / `⚑ gap`
+  ([specs/README.md](specs/README.md) §Rule 5).
 - **Self-routing in the old scan** (`coordinator_rail`, `rail_model`, the goal-lane Go deferral,
   the reflex's tick gate via `subscription-latch.sh`, the `/router-status` and `/report/latest`
   reads): each is a ⚑ gap on its page. The new build admits through the gateway and carries none

@@ -35,14 +35,18 @@ Body shape: spec
   and the new component, and every difference gets a ruling (`spec` / `old` / `new`); equality is not
   required and is not the acceptance. A build item never edits a fixture (an existing
   assertion changed is a red flag, `agents/jail-subagent-card.md`). The brief clauses the pages cite (`agents/coordinator/README.md`) stay the decision text.
-- **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first
-  deliverable is a tests root under `islands/scan/` whose `rule("SCAN-…")`-labelled tests take
-  their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
+- **Evidence first**: no requirement is proven. Of the 35 in the spec index
+  ([`islands/scan/specs/README.md`](../../islands/scan/specs/README.md)), 6 (`SCAN-UPDATER-*`,
+  `SCAN-HANDOFF-*`) carry `🚧 WIP → #3490` with `rule("SCAN-…")`-labelled tests in
+  `islands/scan/tests/` over recorded worlds; 21 carry `🚧 WIP → #3448` or `→ #3461` with no tests;
+  7 (`SCAN-DISPATCH-*`, `SCAN-SIGNAL-PHASE`/`-DISPATCH`/`-CLASS`) carry `🚧 WIP` naming no issue;
+  and `SCAN-SIGNAL-REVERT` carries `⚑ gap` alone (counted 2026-11-23). A component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
 - **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
   `islands/scan/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
-  this root. No tests root is declared and no evidence exists, so the review sees none: an
-  unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark. `gateway/scripts/spec_gate.py`
+  this root. The claim's `extraSpecs` entry declares no `tests` root (the labelled tests under
+  `islands/scan/tests/` exist, undeclared) and the specs site's evidence is for browsing only, so the
+  review sees neither: an unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark. `gateway/scripts/spec_gate.py`
   reads `gateway/specs` only (no spec gate or join ratchet here). A worker whose `Touches:`
   reaches this root gets the pinned spec process mounted, versioned by `islands/scan/specs/README.md`. **Nothing deploys**: no pod, manifest or image reads `islands/`.
 - **Switch-over is `seat`**, never `queue`/`goal`: making any live caller (a scan, a workflow, a

@@ -205,6 +205,6 @@ page); the first experiment verdict (#3607).
 - The intake page could not confirm that the scheduled run reached oracle-fleet. The seat read
   that run's workflow the same day: the `oracle/oracle-fleet` sitting ran and succeeded
   (07:07–07:20 UTC).
-- Stale text the pages found and this spike did not fix:
-  [`docs/intake/scan.md`](../../intake/scan.md) and the scan README still say the island has no
-  evidence pipeline; `islands/intake/CONTRACT.md` still says no stack has turned intake on.
+- Stale text the pages found and this spike did not fix — `docs/intake/scan.md` and the scan
+  README saying the island has no evidence pipeline, `islands/intake/CONTRACT.md` saying no stack
+  has turned intake on — was fixed by the 2026-11-23 docs comb.
