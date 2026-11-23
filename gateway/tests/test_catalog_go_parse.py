@@ -4,7 +4,7 @@ constants, the config's cost rows, the view's shape; and the policy's plan (spec
 
 World: policy-default (plan go) · the fake vendor (tests/_catalog_world.py): `catalog-ok` =
 models.dev's `opencode-go` (five listed models + one deprecated row), `config-ok` = the console's
-override-only answer, `docs-ok` = the vendor's Go page. T0 = the test clock. The tables are the
+override-only answer, `docs-ok` = the vendor's Go page, `limits-ok` = the vendor's Go models list. T0 = the test clock. The tables are the
 spec's, verbatim (the header is the parameter list).
 """
 
@@ -63,21 +63,21 @@ async def test_model_dialect(cworld, vendor, catalog, model, expected_dialect):
             catalog={"actual": catalog}, model={"actual": model})
 
 
-# ── What the page says, per model ────────────────────────────────────────────────────────────
+# ── What the limits answer says, per model ────────────────────────────────────────────────────────────
 LIMIT_ROWS = [
-    pytest.param("deepseek-v4.1-flash", "$80", "$160", "—", "0.3 / 1.2 / 0.006 / —", id="a plain row gives the monthly limit per plan"),
-    pytest.param("step-5-preview", "$60", "$240", "4", "—", id="a promotion reads the current limit, not the struck one"),
-    pytest.param("longcat-2.5-preview-free", "unlimited", "unlimited", "—", "—", id="Unlimited is unlimited"),
-    pytest.param("claude-haiku-5-5", "$15", "$60", "—", "—", id="context-tier rows are one model with one limit"),
+    pytest.param("deepseek-v4.1-flash", "$80", "$160", "—", "0.3 / 1.2 / 0.006 / —",
+                 id="a plain row gives the monthly limit per plan, and its peak row is its prices times the factor ⚖"),
+    pytest.param("step-5-preview", "$60", "$240", "—", "—", id="the answer carries no bonus ⚖"),
+    pytest.param("longcat-2.5-preview-free", "unlimited", "unlimited", "—", "—", id="a null monthly_usage is unlimited ⚖"),
 ]
 
 
 @pytest.mark.parametrize(("model", "expected_go", "expected_go_plus", "expected_bonus", "expected_peak"), LIMIT_ROWS,
                          ids=[p.id for p in LIMIT_ROWS])
 async def test_page_per_model(cworld, vendor, model, expected_go, expected_go_plus, expected_bonus, expected_peak):
-    world(upstream="catalog-ok · config-ok · docs-ok")
+    world(upstream="catalog-ok · config-ok · docs-ok · limits-ok")
     app = cworld.build()
-    with given(f"both sources refreshed once: catalog-ok + config-ok + docs-ok; the page's rows of model = {model}"):
+    with given(f"both sources refreshed once: catalog-ok + config-ok + docs-ok + limits-ok; the limits answer's row of model = {model}"):
         await app.state.catalog.refresh()
     with when(f"GET /catalog/opencode → models.{model} (plan go); the docs snapshot's go-plus row"):
         v = await _view(app)
@@ -94,14 +94,14 @@ async def test_page_per_model(cworld, vendor, model, expected_go, expected_go_pl
             model={"actual": model})
 
 
-# ── The page's constants ─────────────────────────────────────────────────────────────────────
+# ── The docs source's constants ─────────────────────────────────────────────────────────────────────
 def _constant(v: dict, docs: dict, field: str) -> str:
     if field == "plan_fees":
         return " / ".join(f"{p} {num(x)}" for p, x in docs["plan_fees"].items())
     if field == "peak_hours_utc":
-        return ", ".join(f"{a:02d}-{b:02d}" for a, b in v["peak_hours_utc"])
+        return ", ".join(f"{a:02d}-{b:02d}" for a, b in v["peak_hours_utc"]) or "none"
     if field == "peak_weekdays":
-        return ", ".join(v["peak_weekdays"])
+        return ", ".join(v["peak_weekdays"]) or "none"
     if field == "window_shares":
         return " · ".join(f"{w} {num(x)}" for w, x in v["window_shares"].items())
     if field.startswith("models.") and field.endswith(".windows_usd"):
@@ -111,28 +111,30 @@ def _constant(v: dict, docs: dict, field: str) -> str:
 
 
 CONSTANT_ROWS = [
-    pytest.param("docs-ok", "plan_fees", "go 10 / go-plus 40", id="the plan fees come from the page ⚖"),
-    pytest.param("docs-ok", "peak_hours_utc", "01-04, 06-10", id="the peak hours come from the page ⚖"),
-    pytest.param("docs-ok", "peak_weekdays", "mon, tue, wed, thu, fri", id="the peak weekdays come from the page"),
-    pytest.param("docs-ok", "window_shares", "5h 0.2 · 7d 0.5 · 30d 1", id="the window shares come from the page ⚖"),
-    pytest.param("docs-ok", "models.deepseek-v4.1-flash.windows_usd", "5h 16 · 7d 40 · 30d 80",
+    pytest.param("docs-ok", "limits-ok", "plan_fees", "go 10 / go-plus 40", id="the plan fees come from the page ⚖"),
+    pytest.param("docs-ok", "limits-ok", "peak_hours_utc", "01-04, 06-10", id="the peak hours come from the multipliers' hour ranges ⚖"),
+    pytest.param("docs-ok", "limits-ok", "peak_weekdays", "mon, tue, wed, thu, fri", id="the peak weekdays come from the multipliers' days"),
+    pytest.param("docs-ok", "limits-ok", "window_shares", "5h 0.2 · 7d 0.5 · 30d 1", id="the window shares come from the page's bullets ⚖"),
+    pytest.param("docs-ok", "limits-ok", "models.deepseek-v4.1-flash.windows_usd", "5h 16 · 7d 40 · 30d 80",
                  id="a model's windows are its monthly limit times the shares"),
+    pytest.param("docs-ok", "limits-no-peak", "peak_hours_utc", "none", id="an answer with no peak multiplier has no peak hours ⚖"),
+    pytest.param("docs-ok", "limits-no-peak", "peak_weekdays", "none", id="an answer with no peak multiplier has no peak weekdays"),
 ]
 
 
-@pytest.mark.parametrize(("docs", "field", "expected_value"), CONSTANT_ROWS, ids=[p.id for p in CONSTANT_ROWS])
-async def test_page_constants(cworld, vendor, docs, field, expected_value):
-    world(upstream=f"catalog-ok · config-ok · {docs}")
+@pytest.mark.parametrize(("docs", "limits", "field", "expected_value"), CONSTANT_ROWS, ids=[p.id for p in CONSTANT_ROWS])
+async def test_docs_constants(cworld, vendor, docs, limits, field, expected_value):
+    world(upstream=f"catalog-ok · config-ok · {docs} · {limits}")
     app = cworld.build()
-    with given(f"docs = {docs}: the vendor's Go page; both sources refresh"):
-        vendor.docs = docs
+    with given(f"docs = {docs}: the vendor's Go page · limits = {limits}: its Go models list; both sources refresh"):
+        vendor.docs, vendor.limits = docs, limits
         await app.state.catalog.refresh()
     with when(f"GET /catalog/opencode → field = {field}"):
         v = await _view(app)
         snap = app.state.catalog.snapshots["docs"].body
         got = _constant(v, snap, field)
         attach_json(field, got)
-    verdict(f"{field} = {expected_value}", expected_value={"expected": expected_value, "actual": got}, docs={"actual": docs}, field={"actual": field})
+    verdict(f"{field} = {expected_value}", expected_value={"expected": expected_value, "actual": got}, docs={"actual": docs}, limits={"actual": limits}, field={"actual": field})
 
 
 # ── The model's cost rows ────────────────────────────────────────────────────────────────────
@@ -156,20 +158,20 @@ async def test_cost_rows(cworld, vendor, catalog, model, expected_cost):
             catalog={"actual": catalog}, model={"actual": model})
 
 
-# ── A model the page tabulates but the config does not list ─────────────────────────────────
+# ── A model the limits answer holds but the config does not list ─────────────────────────────────
 UNLISTED_ROWS = [
-    pytest.param("catalog-trimmed", "docs-ok", "step-5-preview", "false", "$60",
-                 id="a model the page tabulates but the config does not list is shown unlisted"),
+    pytest.param("catalog-trimmed", "docs-ok", "limits-ok", "step-5-preview", "false", "$60",
+                 id="a model the limits answer holds but the config does not list is shown unlisted"),
 ]
 
 
-@pytest.mark.parametrize(("catalog", "docs", "model", "expected_listed", "expected_monthly_limit_usd"), UNLISTED_ROWS,
+@pytest.mark.parametrize(("catalog", "docs", "limits", "model", "expected_listed", "expected_monthly_limit_usd"), UNLISTED_ROWS,
                          ids=[p.id for p in UNLISTED_ROWS])
-async def test_tabulated_but_unlisted(cworld, vendor, catalog, docs, model, expected_listed, expected_monthly_limit_usd):
-    world(upstream=f"{catalog} · config-ok · {docs}")
+async def test_limited_but_unlisted(cworld, vendor, catalog, docs, limits, model, expected_listed, expected_monthly_limit_usd):
+    world(upstream=f"{catalog} · config-ok · {docs} · {limits}")
     app = cworld.build()
-    with given(f"catalog = {catalog} (no {model} row) · docs = {docs} (its plan rows tabulate {model})"):
-        vendor.catalog, vendor.docs = catalog, docs
+    with given(f"catalog = {catalog} (no {model} row) · docs = {docs} · limits = {limits} (its rows hold {model})"):
+        vendor.catalog, vendor.docs, vendor.limits = catalog, docs, limits
     with when(f"both sources refresh; GET /catalog/opencode → models.{model}"):
         await app.state.catalog.refresh()
         row = (await _view(app))["models"][model]
@@ -177,7 +179,7 @@ async def test_tabulated_but_unlisted(cworld, vendor, catalog, docs, model, expe
     verdict(f"listed = {expected_listed} · monthly_limit_usd = {expected_monthly_limit_usd}",
             expected_listed={"expected": expected_listed, "actual": str(row["listed"]).lower()},
             expected_monthly_limit_usd={"expected": expected_monthly_limit_usd, "actual": _usd(row["monthly_limit_usd"])},
-            catalog={"actual": catalog}, docs={"actual": docs}, model={"actual": model})
+            catalog={"actual": catalog}, docs={"actual": docs}, limits={"actual": limits}, model={"actual": model})
 
 
 # ── The view's shape ─────────────────────────────────────────────────────────────────────────

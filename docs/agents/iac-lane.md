@@ -309,7 +309,7 @@ reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`. _
 #1985):_ **what** every Composition renders is diffed too — `devbox run xr-render` renders every
 committed XR/claim at the cluster-pinned engine + functions, docker-free (`scripts/xr-render-lib.sh`,
 which `publicroute-tf-validate` now shares), and `-- --diff <base>` fails a PR whose render changed
-unless its body declares `Render-change: <reason>`.
+unless its body declares `Render-change: <reason>` or the diff is pin-only (only `image:` tags/digests moved, the repository unchanged — homelab#2605).
 
 The sentinel covers homelab since the 2026-08-18 enforcement flip (the `policy/iac/exceptions/homelab.yaml`
 baseline, §L0b), so tier 1's return to unowned is now the operator's trust call on the governance
