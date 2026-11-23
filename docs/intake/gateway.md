@@ -10,8 +10,9 @@ Body shape: spec
 - Repo `teststuffstash/homelab`; island root `gateway/`; specs `gateway/specs/` (`GW-` ids, pages
   under `specs/endpoints/`, worlds under `specs/worlds/`, each row names its world); tests
   `gateway/tests/`; the deploy surface `argocd/resources/agent-gateway/` (an image bump rolls the pod).
-- Membership: `Touches` entirely under `gateway/**`, or a title starting `gateway` / naming a
-  `GW-` id. `.github/workflows/gateway-image.yaml` is `codeowner-author` (entry (d)).
+- Membership: `Touches` entirely under `gateway/**` or `islands/intake/**` (island intake's own
+  files ride this sitting — `intake-select.sh`'s gateway row), or a title starting `gateway` /
+  naming a `GW-` id. `.github/workflows/gateway-image.yaml` is `codeowner-author` (entry (d)).
 - The specs reviewer is the second required approval on `gateway/specs/**` + `gateway/tests/**`
   (ADR-155); the `Spec changes:` PR-body heading, ⚖ on judgment rows, per-row OBSERVED values —
   the review classes that cost rounds.
@@ -33,7 +34,7 @@ Body shape: spec
   approvals; the Goal's verdict is the operator's point.
 - An entry canary is the loop's to launch, on every rail, capped at ONE ride per rail per catalog
   refresh: the trigger that launches it is island work like any other, never a `seat`.
-- Operator-only: (a) the Go key mint (FU-313), the codex login (seed); (b) a window on an `attended` or `manual` surface;
+- Operator-only: (a) the Go key mint (rolled 2026-11-16, ≈1-year key; FU-156 carries the pre-expiry warning), the codex login (seed); (b) a window on an `attended` or `manual` surface;
   (e) any ruling the tracker marks "ruling pending" (FU-270 names them).
 
 ## Sources
