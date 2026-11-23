@@ -41,7 +41,7 @@ Body shape: spec
   that pass locally and nothing published — and 2 (`LAUNCH-ADMIT-NO-MODEL`, `LAUNCH-BUDGET-CR`)
   carry `⚑ gap` alone (counted 2026-11-20). The tests
   root `islands/launch/tests/` exists: its `rule("LAUNCH-…")`-labelled tests (`LAUNCH-ADMIT-BOUND`, `LAUNCH-ADMIT-HELPER`, under #3390; read 2026-11-23)
-  take their cases from the page's rows over recorded worlds and run locally only; a component row is queue-ready only once the evidence it would turn green
+  take their cases from the page's rows over recorded worlds, run by `scripts/ci.sh` at `pr-open` and in required `ci` (#3391); nothing is published; a component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
 - **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
   `islands/launch/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
