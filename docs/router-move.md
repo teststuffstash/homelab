@@ -443,6 +443,13 @@ the hypervisor's flooding, not the node's config.
 
 ## Status
 
+- 2026-11-21: **both nodes' disks 8 → 32 GB + a root-filesystem belt** (#3621, after
+  [`incidents/2026-11-20-nx-02-boot-disk.md`](incidents/2026-11-20-nx-02-boot-disk.md)) — §Disk size above;
+  `MgmtRouterDiskLow`/`MgmtRouterDiskUnread` in [`management-box.md`](management-box.md) §the router firmware
+  currency check.
+- 2026-11-17: **both nodes converged from master** inside windows (dnsmasq/Kea 0 differences — the
+  MASTER's stale wk-metal-04 MAC below is gone); the nightly cert carry runs on the box as `automation`
+  (#3526); the firmware currency belt reads both nodes (#3525). What is still owed: FU-297's **Next**.
 - 2026-10-27 00:29Z: **the box converged the BACKUP unattended** (#2955, `mode: backup-only`):
   opnsense-pve, dnsmasq-dhcp.py=4 (two reservation descrs), node-local restore armed → cancelled,
   `check pve` ok, CARP unchanged, writes attributed to `automation@192.168.2.53`; MASTER untouched
@@ -562,7 +569,7 @@ the hypervisor's flooding, not the node's config.
   Realtek 378/378 Mbit/s (operator speedtest, wired) — the ISP is the ceiling. nx-02's WAN gate restarted
   while BACKUP (flood-off script, kill switch stays retired) — no blip, which is the shape for any future
   gate change. The dead-man fired at 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, pve dark at :46, ~9 s
-  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307) is now
+  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307 → homelab#3711) is now
   unblocked — the gate's carrier export can ride the same BACKUP-side restart.
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no

@@ -28,12 +28,12 @@ What this island adds, by rule:
 - **Rule 1 (gate):** reviewer-gated, not codeowner-gated
   ([§Direction 2](../../../docs/spikes/context-and-autonomy.md#direction-operator-2026-10-05--recorded-not-decided-here)).
   The specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379), a rows
-  review with no tests root and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
+  review with no tests root declared and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** the prefix is `LAUNCH-`; areas are `DISPATCH`, `PREFLIGHT`, `ADMIT`, `POD`,
   `BUNDLE`, `CARD`, `OUTCOME`, `BUDGET`.
 - **Rule 5 (evidence):** raw Allure results are generated locally by `islands/launch/tests/` (run by
-  `islands/launch/scripts/ci.sh`, gated at the worker's `pr-open` through `diff-ci`, not by GitHub
-  CI). A labelled case runs one replay row with `agents/replay/run.sh` from a temporary copy of the
+  `islands/launch/scripts/ci.sh`, gated at the worker's `pr-open` through `diff-ci` and in required
+  `ci` (#3391)). A labelled case runs one replay row with `agents/replay/run.sh` from a temporary copy of the
   harness in which the path `agents/gateway-admit.sh` (today's helper, the one being replaced) holds
   the file under test, and records that file as its
   target. Nothing is published, so every row stays unproven to the specs reviewer. The Status-cell

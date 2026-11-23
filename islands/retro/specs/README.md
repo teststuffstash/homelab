@@ -26,12 +26,15 @@ What this island adds, by rule:
 - **Rule 1 (gate):** intended reviewer-gated, not codeowner-gated
   ([context-and-autonomy.md §Direction 2](../../../docs/spikes/context-and-autonomy.md)). The
   specs reviewer reads this root: homelab's claim lists it under `extraSpecs` (#3379), a rows
-  review with no tests root and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
+  review with no tests root declared and no evidence — an unproven row carries its `🚧 WIP` / `⚑ gap` mark.
 - **Rule 3 (IDs):** prefix `RETRO-`; areas `GUARD`, `WINDOW`, `BUNDLE`, `LEDGER`, `PUBLISH`, `STORE`,
   `ACTIVITY`, `RANK`, `CELL`, `REPORT`, `HARVEST`, `BELT`, `FINDINGS`, `ACCEPT`, `KPI`.
-- **Rule 5 (evidence):** **no evidence is generated yet** — this island has no Allure run and no
-  `rule()` decorator. Its proofs today are the replay harness's fixtures
-  ([`agents/replay/`](../../../agents/replay/README.md) — the island's tests root candidate, P4/P5 of
+- **Rule 5 (evidence):** raw Allure results are generated locally by `islands/retro/tests/`
+  (`rule("RETRO-…")`-labelled cases for `RETRO-GUARD-EXPR` and `RETRO-REPORT-FLOOR`, Goal #3384) and
+  packed by `islands/retro/scripts/evidence.sh`, both run by `islands/retro/scripts/ci.sh` — at the
+  worker's `pr-open` through `diff-ci` and in required `ci` (#3391). Nothing is published, so every
+  row stays unproven to the specs reviewer. The comparison beside them is the replay harness's fixtures
+  ([`agents/replay/`](../../../agents/replay/README.md), P4/P5 of
   [§The plan](../../../docs/spikes/context-and-autonomy.md)) and three in-process unittest suites
   (`agents/retro-{activity,pipeline,findings}-test.py`, run by the replay suite fixture
   `retro-activity-window` via `agents/retro-cadence-test.sh`). A requirement whose clause has a

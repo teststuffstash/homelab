@@ -39,14 +39,15 @@ Body shape: spec
   ([`islands/launch/specs/README.md`](../../islands/launch/specs/README.md)), 29 carry `🚧 WIP` on
   their page's Status cell — 26 as `no evidence pipeline yet`, 3 as `→ #3390` / `→ #3408` with rows
   that pass locally and nothing published — and 2 (`LAUNCH-ADMIT-NO-MODEL`, `LAUNCH-BUDGET-CR`)
-  carry `⚑ gap` alone (counted 2026-11-20). The first
-  deliverable is a tests root under `islands/launch/` whose `rule("LAUNCH-…")`-labelled tests take
-  their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
+  carry `⚑ gap` alone (counted 2026-11-20). The tests
+  root `islands/launch/tests/` exists: its `rule("LAUNCH-…")`-labelled tests (`LAUNCH-ADMIT-BOUND`, `LAUNCH-ADMIT-HELPER`, under #3390; read 2026-11-23)
+  take their cases from the page's rows over recorded worlds, run by `scripts/ci.sh` at `pr-open` and in required `ci` (#3391); nothing is published; a component row is queue-ready only once the evidence it would turn green
   can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
 - **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
   `islands/launch/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
-  this root. No tests root is declared and no evidence exists, so the review sees none: an
-  unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark. `gateway/scripts/spec_gate.py`
+  this root. The claim's `extraSpecs` entry declares no `tests` root (the labelled tests under
+  `islands/launch/tests/` exist, undeclared) and no evidence is published, so the review sees
+  neither: an unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark. `gateway/scripts/spec_gate.py`
   reads `gateway/specs` only (no spec gate or join ratchet here). A worker whose `Touches:`
   reaches this root gets the pinned spec process mounted, versioned by `islands/launch/specs/README.md`. **Nothing deploys**: no pod, manifest or image reads `islands/`.
 - **Switch-over is `seat`**, never `queue`/`goal`: making any live caller (a scan, a workflow, a

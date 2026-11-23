@@ -33,14 +33,15 @@ Not started: `review` (the code and specs reviewers, the IAC-G04 sentinel) and a
 
 ## What every island shares (and what is not built)
 
-- **Evidence starts empty.** Replay (`agents/replay/`) emits no `rule()` labels and no Allure
-  stories, so a requirement is `🚧 WIP — no evidence pipeline yet` until the island's own tests
-  root proves it. That tests root is each island's first deliverable, built under the four rules
-  below.
+- **Evidence is the island's own tests root.** Replay (`agents/replay/`) emits no `rule()` labels
+  and no Allure stories, so a requirement is `🚧 WIP` until the island's own tests root proves it.
+  scan, launch and retro each have one (`islands/<island>/tests/`, run by its `scripts/ci.sh` at
+  `pr-open` and in required `ci`, #3391), built under the four rules below; few rows are labelled
+  yet (each specs index says which).
 - **A rows review, no evidence.** homelab's claim lists each island's `specs/` under `extraSpecs`
   (#3379): a PR touching `islands/<island>/specs` gets the specs reviewer's rows review over that
   root, and a worker whose `Touches:` reaches it gets the pinned spec process mounted, versioned by
-  that root's `README.md`. No tests root is declared and the pack carries no evidence, so an
+  that root's `README.md`. The claim declares no tests root for these entries and the pack carries no evidence, so an
   unproven row needs its `🚧 WIP → #<issue>` or `⚑ gap` mark.
 - **A browsable site, for an island that opts in.** [`scripts/specs-site.sh`](scripts/specs-site.sh)
   renders an island's README + `specs/` the way the gateway's site does — each rule's tables joined
