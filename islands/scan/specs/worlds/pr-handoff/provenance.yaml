@@ -17,6 +17,11 @@ reads:
   - argv: ["api", "repos/teststuffstash/homelab/pulls/3344"]
     file: "api.pulls.3344.json"
     auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3344/commits?per_page=100"]
+    file: "api.pulls.3344.commits@per_page=100.json"
+    auth: "token"
+    recorded_at: "2026-11-23T06:17:36Z"
+    recorder_commit: "6ee13da3bf20d09baf41cf10ca214292b3186e7f"
 writes:
   - op: "add-labels"
     method: "POST"
