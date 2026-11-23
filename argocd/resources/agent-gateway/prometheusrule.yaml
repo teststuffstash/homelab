@@ -227,3 +227,43 @@ spec:
           annotations:
             summary: 'The codex rail is declared but its usage poll has not run for 15 m — the rail sits on quota-unknown'
             description: 'gateway_codex_usage_poll_total renders (the policy declares the codex rail) but no poll ran in 15 m. The poll runs only with CODEX_USAGE_URL set AND a credential backend (CODEX_UPSTREAM + CODEX_SEED_FILE with a mounted seed — ESO Secret agent-egress/codex-seed): kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll dark" names which is missing; a live schedule that died logs "codex usage poll: one pass failed". Until a poll is accepted every codex admission defers quota-unknown.'
+    # ── The gateway's own request outcomes (GW-METRICS, gateway/specs/endpoints/metrics.md) ──
+    # Every other rule here reads catalog, credential or store state; these two read what the gateway
+    # does to its callers. Behaviour fixture: requests.promtool-{rules,test}.
+    #   GatewayAbsent     — no scrape of the gateway answered for 5 m: no ride can be admitted or
+    #                       served. Sizing: over 14 d (read 2026-11-23) `up` had 23 minutes at 0, every
+    #                       gap exactly 1 minute (a pod roll), so for: 5m is five times the longest gap.
+    #   GatewayErrorShare — more than 20 % of the REAL requests (traffic="real"; synthetic probes are
+    #                       left out) answered 5xx over 30 m. 4xx is not counted: 429 and 424 are the
+    #                       upstream's answers passed through. The floor (>= 10 real requests in the
+    #                       window) exists because 59 % of 30-minute windows carry no real request and
+    #                       the thin rails cannot carry a ratio, hence one share over all rails. Replayed
+    #                       over the 14 d: true in no minute (the floor held in 3 005 of them, all since
+    #                       the traffic label went live on 2026-11-17). The numerator `or vector(0)`
+    #                       makes an all-success window read 0 rather than no sample.
+    - name: agent-gateway-requests
+      rules:
+        - alert: GatewayAbsent
+          expr: |
+            absent(up{job="agent-gateway"} == 1)
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'No agent-gateway pod has answered a scrape for 5 minutes — every ride''s admission and every rail call goes through it'
+            description: 'up{job="agent-gateway"} has had no series at 1 for 5 m: the Deployment has no ready pod, or Prometheus cannot scrape it. Check: (1) kubectl -n agent-egress get deploy,pods -l app=agent-gateway; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=50; (3) the agent-gateway ServiceMonitor still selects the Service. A pod roll leaves a gap of about one minute and does not fire this.'
+        - alert: GatewayErrorShare
+          expr: |
+            (
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[30m])) or vector(0))
+              /
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) >= 10)
+            ) > 0.2
+          for: 10m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'More than 20 % of the gateway''s real requests were answered 5xx over the last 30 minutes'
+            description: '{{ $value | humanizePercentage }} of the real-traffic requests (traffic="real", at least 10 in the window) got a 5xx from the gateway. Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=100; (3) GET /healthz on the gateway. A 4xx is not counted: 429 and 424 are the upstream''s answers passed through (a 424 on the opencode rail has its own alert, GoRailCredentialRejected). The contract is gateway/specs/endpoints/metrics.md (GW-METRICS).'
