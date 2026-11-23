@@ -10,6 +10,30 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-290** *(archived 2026-11-23)* — **homelab-agents pool drains.** Detectors live (#1979 graphql, #2442 core);
+      label writes → REST (#2483/#2484), loop storms fixed (#2204/#2366). No drain in the 18 d Prometheus held on
+      11-23 (coordinator-git min graphql 1215 / core 2157). Build the per-consumer meter on the next
+      `GithubRateLimitLow{token=~".*-git"}`.
+- **FU-324** *(archived 2026-11-23)* — **Coordinator double launch under `timeout 590`.** Not built — moved to the
+      launch island (LAUNCH-POD-IDENTITY beyond pod create): homelab#3713.
+- **FU-174** *(archived 2026-11-23)* — **Reasoning effort unmodeled.** Not built — moved to the gateway (policy, not
+      the old `model-classes.json`): homelab#3714.
+- **FU-170** *(archived 2026-11-23)* — **Go-rail spend/limit residual belts.** Window-draw admission (0.80, gateway
+      `policy.json`) covers the near-limit leg; the account-headroom read that makes the jail-ingest gauge moot is
+      the gateway's: Goal #3118 (post-launch) + #3538 (console read 403s — `GoCatalogStale`).
+- **FU-181** *(archived 2026-11-23)* — **Go-rail meter-vs-console parity.** Moot once the gateway reads the account's
+      own headroom — same home as FU-170: Goal #3118 + #3538.
+- **FU-307** *(archived 2026-11-23)* — **No belt for "the pair's MASTER has no WAN".** Not built — moved to
+      its island: homelab#3711 (router-pair intake; `RouterMasterWanDark` from the gate's carrier export).
+- **FU-310** *(archived 2026-11-23)* — **dind tries HTTPS first against the HTTP-only mirrors.** Not built — moved
+      to the launch island (rebuilding the launcher): homelab#3712, means decided by its intake.
+- **FU-286** *(archived 2026-11-23)* — **Box talosctl flake-ref pin reverted to `latest`.** PR#1963's nixpkgs-rev
+      pin (devbox index stuck at 1.13.8) switched back by #2899 (10-24, `latest` = 1.14.2; lock resolves nixpkgs
+      e126e9e7, 11-13). `mgmt_probe_check{check="talos"}` = 1, 30-day minimum 1.
+- **FU-186** *(archived 2026-11-23)* — **Provider selection priced per successful job (ADR-115).** Step 1
+      (Exacto suffix on paid OpenRouter picks, PR#1639) stood on the old router; #1238 closed superseded
+      2026-11-01 and per-job provider pricing is now the gateway's tier evidence (GW-MODEL-TIERS). Design
+      record: [`spikes/model-routing-history.md`](spikes/model-routing-history.md) §M14.
 - **FU-313** *(archived 2026-11-16)* — **OpenCode Go key: 30-day key → service-account key.** The operator minted a 1-year
       service-account key (permission `models: request` only) and rolled it 2026-11-16 (ExternalSecret synced 18:43:59Z,
       `agent-gateway` + `openrouter-proxy` restarted 18:44Z). Probed with the deployed key: `GET /console/api/v2/config` 200,
