@@ -59,7 +59,7 @@ instructions: |
     your PR body, never into that file)
   - `argocd/platform/**` (prune: true — an edit here DELETES services)
   - `tofu/*.tf`, `ansible/**`, `opnsense/**`, `machines/**` (applied out-of-band to live machines)
-  - `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` — the loop runs from
+  - `agents/**`, `tofu/github/**`, `tofu/cloudflare/**` — the loop runs from
     `master`, so your edit is a proposal until a code owner merges it. ⚠ EXCEPT
     `agents/replay/**` and `agents/*-test.sh`, which CI executes FROM YOUR BRANCH: ADDITIVE
     rows and fixtures are ordinary build work (the ADR-103 ratchet demands them); EDITING or
@@ -67,7 +67,8 @@ instructions: |
     deliberately changes pinned behaviour, stated explicitly in the PR body (homelab#354).
 
   NEVER TOUCH — refuse and report, even if the issue asks:
-  - `.github/**`, `devbox.json`/`devbox.lock`, `.agents/**`, `mgmt/scripts/**` + the three
+  - `.github/**`, `devbox.json`/`devbox.lock`, `.agents/**`, `policy/**`, `CODEOWNERS`,
+    `mgmt/scripts/**` + the three
     box-executed `scripts/` verbs (node-maintenance, maintenance-window, controlplane-upgrade) —
     these take effect BEFORE a human approves (the rest of `scripts/` is authorable under the
     ADR-142 trial; the reviewer's gate-change lens reads it) (CI runs your branch's copy; a fix round reads its
