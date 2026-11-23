@@ -172,14 +172,14 @@ def test_pr_handoff_serves_the_major_handoff_gate_and_arm_paths():
     # the recorded APPROVED (15:35:56Z) post-dates the newest content commit (14:36:46Z; later ones are merges)
     # and carries the four headings, so the handoff writes and re-reads the labels
     assert run.rc == 0, run.stdout + run.stderr
-    assert [c.get("op", c.get("file")) for c in run.calls] == [HANDOFF_VIEW, "add-labels", "remove-label", "api.issues.3344.labels.json"]
+    assert [c.get("op", c.get("file")) for c in run.calls] == [HANDOFF_VIEW, "api.pulls.3344.commits@per_page=100.json", "add-labels", "remove-label", "api.issues.3344.labels.json"]
 
     arm = World("pr-handoff").set(HANDOFF_VIEW, ("state",), "OPEN")
     body = json.loads((WORLDS / "pr-handoff" / HANDOFF_VIEW).read_text())["reviews"][1]["body"]
     arm.set(HANDOFF_VIEW, ("reviews", 1, "body"), body + "\n\nappVersion: unchanged\n")
     run = arm.run([sys.executable, "-m", "scan_island.major_handoff", REPO, "3344"])
     assert run.rc == 0, run.stdout + run.stderr
-    assert [c.get("op", c.get("file")) for c in run.calls] == [HANDOFF_VIEW, "pr-merge-auto", "remove-label", "writes/get-pull-after-arm.200.json"]
+    assert [c.get("op", c.get("file")) for c in run.calls] == [HANDOFF_VIEW, "api.pulls.3344.commits@per_page=100.json", "pr-merge-auto", "remove-label", "writes/get-pull-after-arm.200.json"]
 
 
 def test_pr_board_serves_the_updater_pick_and_unstrand_reads():
@@ -201,10 +201,12 @@ def test_pr_board_serves_the_updater_pick_and_unstrand_reads():
     assert [c.get("op", c.get("file")) for c in run.calls] == [
         "pr-list.json",
         "pr-view-3557.commits.json",
+        "api.pulls.3557.commits@per_page=100.json",
         f"api.commits.{oid}.check-runs@per_page=100.json",
         f"api.commits.{oid}.status.json",
         "update-branch",
         "pr-view-3147.commits,reviews.json",  # leg 2: no bot verdict recorded on #3147 → no update
+        "api.pulls.3147.commits@per_page=100.json",
     ]
     assert "updating #3557 (oldest armed+BEHIND, FIFO)" in run.stdout
 
