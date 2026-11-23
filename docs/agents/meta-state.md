@@ -17,8 +17,32 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
-- **⚑ PICKUP (2026-11-23 — cleanup trio).** #3722 (islands+intake docs comb) waits the OPERATOR's codeowner merge
-  (touches `.claude/skills/intake/SKILL.md`); #3721 (gateway docs comb) waits the specs reviewer. Operator list: TICK-LOG 11-23.
+- **⚑ PICKUP (2026-11-23 — cleanup trio; RULINGS OWED, operator: "too late to rule today"; TICK-LOG 11-23 ×2).**
+  OPERATOR, recommendation first:
+  1. Merge #3722 (islands+intake docs comb; governance path `.claude/skills/intake/SKILL.md`, bot-approved). #3721 (gateway
+     comb) waits the specs reviewer only.
+  2. Goal branches `goal/3656-…`, `goal/3480-…`, `goal/3482-…` still UNCUT. The fix is on master (#3676 + #3682, 11-22), but no
+     sitting re-read them: #3656 parked `blocked-on: human` (re-read releases only `issue=`, and skips parks <3 d); #3482 waits
+     `issue=3438` (open, the cut never happens there); #3480 has no marker and was not offered. Same class as #3709. CONFLICT:
+     the 11-16 bullet below holds #3480/#3482 uncut ON PURPOSE until the gateway is self-sufficient — is that hold lifted?
+     Rec: seat cuts all three now if lifted, else #3656 only; comment each so 13 children unblock.
+  3. #2588 `AGENT_INFEASIBLE` (`islands/**` in no fix tier). Rec: re-scope into the scan island's updater rows.
+  4. Old-scan FUs FU-168/201/147/199/221 → scan island intake? Rec: yes.
+  5. FU-315: wk-metal-02 apiserver refills in ~40 h. Rec: CP role → a 16 GB box (#3695).
+  6. FU-297: BACKUP router firmware route. Rec: low-priority gateway via the peer's LAN address.
+  7. FU-250: Rec: drop `cloudflare_web_analytics_site`/`_rule` from the composition.
+  8. FU-311: user rate pool hit 0 on 11-13. Rec: App installation tokens per jail class.
+  9. FU-134: `/search` zero calls in two windows. Rec: drop it.
+  10. Second sweep running (framing signal): FU-298 (file upstream or accept the workaround as permanent), FU-280 (accept),
+      FU-293 (ADR-142 re-read overdue since 10-28), FU-318 (land or drop #2798's workflow).
+  OPEN, no ruling needed: #3704 kyverno 1.20 rejects the legacy `policy/iac` PolicyException (policy/** → seat/operator-direct);
+  oracle's first full-walk sitting OOMKilled 11-23 07:09Z at the 1Gi limit #3609 set (untracked — raise the limit or split);
+  snippets#36 re-armed by Renovate despite the py3.15 park (`ArmedBehindNoApprovalStranded`); openrouter-operator#110/#111
+  (bullet below). Docs-comb judgment calls (PR reports #3719–#3722): codex column in `gateway/specs/access.md` + its
+  10-15 stamp; ROADMAP's done three-CP-promotion section; ARCHITECTURE "OPNsense firewall as code" planned → partial?;
+  CONTEXT.md rebuild-over-HA wording; claim `extraSpecs` `tests:` for scan/launch/retro; facts files call Goal admission
+  operator-only vs ADR-164 letting intake admit within the ceiling; 7 ownerless WIP scan rows; the intake skill's subagent
+  sittings write as the operator — `argo submit --from cronworkflow/island-intake` instead?
 - **⚑ PICKUP (2026-11-22 — intake on its own App; island suites gated by required `ci`; FU-320).**
   #3627 merged: master `ci` runs the scan/launch/retro suites (run 45048719148, all three green). #3672/#3676/#3677/#3682
   merged: intake sits as `homelab-intake` (Secret `intake-git`; read-only `intake-read-git` for oracle-iac), and
