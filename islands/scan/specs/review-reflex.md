@@ -69,8 +69,7 @@ not `automerge` (the mechanical class — no review), not `agent/error`, not `ag
 newer than its newest non-merge commit (`review-pick` block, `review-reflex.sh:271-398`). Green
 means every check context's newest non-CANCELLED conclusion is SUCCESS/NEUTRAL/SKIPPED and every
 required context of the default branch's ruleset is present (an unreadable ruleset is treated as
-none required, fail-open). A merge commit — any of GitHub's three default merge-message shapes —
-is not new content. BEHIND is admitted for a first review (ADR-125: an update-branch merge does
+none required, fail-open). A [merge commit](glossary.md#merge-commit) is not new content. BEHIND is admitted for a first review (ADR-125: an update-branch merge does
 not dismiss a review); DIRTY is not. A PR that already has a live `app=agent-reviewer` pod is
 skipped. An assembly PR (head `goal/**`) is reviewed with the goal rubric
 (`--rubric .agents/review-goal.md`) and, like every review, names no model.

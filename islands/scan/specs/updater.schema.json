@@ -8,6 +8,7 @@
     "/properties/pr": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-CONFLICT", "SCAN-UPDATER-RENOVATE"],
     "/properties/commit_probe": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-RENOVATE"],
     "/properties/commit_review_probe": ["SCAN-UPDATER-UNSTRAND"],
+    "/properties/pull_commits_read": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-RENOVATE"],
     "/properties/check_runs_read": ["SCAN-UPDATER-RENOVATE"],
     "/properties/status_read": ["SCAN-UPDATER-RENOVATE"],
     "/properties/action/oneOf/0": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND"],
@@ -17,7 +18,7 @@
   "$defs": {
     "reviewAuthor": {"type": ["object", "null"], "required": ["login"], "properties": {"login": {"type": "string"}}, "description": "null = a deleted account: no one's verdict"},
     "reviews": {"type": "array", "items": {"type": "object", "required": ["author", "state", "submittedAt"], "properties": {"author": {"$ref": "#/$defs/reviewAuthor"}, "state": {"type": "string"}, "submittedAt": {"type": "string", "description": "a pending review (null) is visible only to its author, never to the pass's identity"}}}},
-    "commits": {"type": "array", "items": {"type": "object", "required": ["messageHeadline", "committedDate", "authors"], "properties": {"messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}, "authors": {"type": "array", "items": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}}}}}}
+    "commits": {"type": "array", "items": {"type": "object", "required": ["oid", "messageHeadline", "committedDate", "authors"], "properties": {"oid": {"type": "string"}, "messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}, "authors": {"type": "array", "items": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}}}}}}
   },
   "properties": {
     "invocation": {
@@ -61,6 +62,11 @@
       "type": "object",
       "required": ["commits", "reviews"],
       "properties": {"commits": {"$ref": "#/$defs/commits"}, "reviews": {"$ref": "#/$defs/reviews"}}
+    },
+    "pull_commits_read": {
+      "description": "the raw answer of `gh api repos/<slug>/pulls/<n>/commits?per_page=100`: which commit of the PR view is a merge commit (two or more parents; glossary.md merge commit). Lacking a field, or an element for a commit of the view, the probe is unreadable and that PR holds.",
+      "type": "array",
+      "items": {"type": "object", "required": ["sha", "parents"], "properties": {"sha": {"type": "string"}, "parents": {"type": "array", "items": {"type": "object", "required": ["sha"], "properties": {"sha": {"type": "string"}}}}}}
     },
     "check_runs_read": {
       "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/check-runs?per_page=100`. Lacking a field, the rollup is unreadable and that PR holds.",

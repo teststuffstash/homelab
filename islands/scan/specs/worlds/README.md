@@ -15,7 +15,7 @@ A **recorded world** is a directory beside this page holding the whole answer of
 surface makes, one file per read, as `gh` printed it: no field removed. Its `provenance.yaml` names
 the repo, the item numbers, each read (the `gh` argv, REST path included), the recording time and
 the recorder's commit. The recorder is
-[`scripts/record_world.py`](../../scripts/record_world.py); a world is re-recorded, never hand-edited.
+[`scripts/record_world.py`](../../scripts/record_world.py); a world is re-recorded, never hand-edited. A read a surface starts to make after a world was recorded is added by the recorder for the world's recorded items (`--add`), with its own recording time and recorder commit in `provenance.yaml`; the reads already recorded are not performed again.
 
 - **Public repos only, no credential.** The recorder reads the repo's visibility first and refuses a
   repo GitHub reports as private. A world holds response bodies only: no request or response
@@ -24,7 +24,7 @@ the recorder's commit. The recorder is
   `provenance.yaml` and answered by a hand-written file, `writes/<op>.<status>.json`. Each answer
   validates against that operation's response schema, extracted from GitHub's published REST
   description into `schemas/<op>.<status>.json`; `provenance.yaml` names the description's commit.
-  `gh pr merge --auto` prints no JSON: its answer is an exit status.
+  `gh pr merge --auto` prints no JSON: its answer is an exit status. A world that declares no write has no `schemas/` and no `writes/` directory, and its `provenance.yaml` names no description.
 - **A row's state is the recorded answer with the row's cells applied as value overrides.** An
   override changes the value of a field that exists, or adds a list element copied from a recorded
   element of the same list. It never removes a field.
@@ -36,6 +36,7 @@ the recorder's commit. The recorder is
 |---|---|---|
 | `pr-handoff` | one pull request of `teststuffstash/homelab` as the major handoff reads it, recorded whole | SCAN-HANDOFF-GATE, SCAN-HANDOFF-ARM (from child 3 of the Goal) |
 | `pr-board` | the open pull requests of `teststuffstash/homelab` as the updater reads them, with the per-PR reads, recorded whole | SCAN-UPDATER-PICK, -UNSTRAND, -CONFLICT, -RENOVATE (from child 4 of the Goal) |
+| `pr-merges` | the commits of one pull request of `teststuffstash/homelab` (#3615) as the PR view and the pull-commits read list them, recorded whole: hand-titled two-parent merges beside GitHub-titled ones | the [merge commit](../glossary.md#merge-commit) definition's wire fact; no row |
 
 ## Registry worlds (shared by name — `agents/replay/worlds/`)
 

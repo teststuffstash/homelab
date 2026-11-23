@@ -12,7 +12,7 @@ Body shape: spec
 - **Repo** `teststuffstash/homelab`; island root `islands/scan/` (provisional location — the
   operator picks the final home); specs `islands/scan/specs/` (`SCAN-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
-  `specs/use-cases/`). Code (`src/scan_island/`), a tests root (`tests/`), the recorder (`scripts/record_world.py`) and two recorded worlds (`pr-handoff`, `pr-board`) exist since Goals #3389 and #3490; no deploy surface exists.
+  `specs/use-cases/`). Code (`src/scan_island/`), a tests root (`tests/`), the recorder (`scripts/record_world.py`) and three recorded worlds (`pr-handoff`, `pr-board`, `pr-merges`) exist since Goals #3389 and #3490; no deploy surface exists.
 - **Membership** — every `Touches` entry under `islands/scan/`, or a title starting
   `scan island:`. An item on the OLD scan (`coordinator-scan.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
