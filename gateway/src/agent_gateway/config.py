@@ -70,7 +70,7 @@ GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
-    # the docs source's second read (GW-CATALOG-GO, the limits read): the Go models list, public; recorded, parsed by nothing
+    # the docs source's second read (GW-CATALOG-GO, the limits read): the Go models list, public; recorded and parsed
     "limits": "https://opencode.ai/inference/go/v1/models",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger

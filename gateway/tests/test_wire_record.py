@@ -23,7 +23,7 @@ from agent_gateway.metrics import Metrics
 from agent_gateway.wire import WireDeclarationError, parse_declarations
 
 from ._catalog_rows import T0, at_offset
-from ._catalog_world import LIMITS_BODY, catalog_doc
+from ._catalog_world import catalog_doc, limits_doc
 from ._codex_rows import row, verdicts
 from ._codex_world import CODEX_BASE, CODEX_POLICY
 from .conftest import GO_KEY, attach_json, given, quiet, rule, when, world
@@ -119,7 +119,7 @@ async def test_a_reads_answer_is_kept(cworld, vendor, vendor_transport, clock, c
         app = cworld.build()
         with when(f"the docs source refreshes: {read}"), quiet():
             await app.state.catalog.refresh_source("docs")
-        want_bytes = JSONResponse(LIMITS_BODY).body
+        want_bytes = JSONResponse(limits_doc("limits-ok")).body
     else:
         with when(f"the config source refreshes: {read}"):
             app = await _read(cworld, vendor, vendor_transport, clock, read)

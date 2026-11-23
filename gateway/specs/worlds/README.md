@@ -106,12 +106,8 @@ answer of 2026-10-20**. `tests/fixtures/go-catalog/config.json` is `GET /console
 the same day's live answer carries it: the workspace's OVERRIDES on a default catalog (the
 pay-as-you-go `opencode` provider's `disabled: true` rows, cut to five; `opencode-go` with
 `models: {}`), the account's org-id header dropped — every `config-*` variant adds one override to
-the Go provider in memory. `tests/fixtures/go-catalog/go.mdx` is the vendor's page cut to its Plan table (the two plans'
-monthly fees, verbatim from the live page of 2026-10-20 — the [Go price](../glossary.md#go-price)
-divides the policy plan's), its Usage-limits section and Endpoints table for the same five
-models, rows otherwise verbatim. Every variant below is derived
-from those two files in memory. **Every world's gateway starts from this catalog**:
-`conftest.seed_go_catalog` stores the `catalog-ok` + `config-ok` (merged) and `docs-ok` snapshots
+the Go provider in memory. `tests/fixtures/go-catalog/go.mdx` is the vendor's Go page whole, as the gateway recorded it (wire source `go-docs`; `wire: source=go-docs class=public sha256=2401b190fb4c883ff71752c63349cdcb4d853e020c080fa6228c361195b7183e fetched_at=2026-11-23T00:05:53Z`): its Plan table (the three plans' monthly fees — the [Go price](../glossary.md#go-price) divides the policy plan's) and the two share bullets, no model table. `tests/fixtures/go-catalog/limits.json` is the `data[]` list of the recorded limits answer (wire source `go-limits`; its provenance is `limits.provenance.json` beside it). Every variant below is derived from those files in memory. **Every world's gateway starts from this catalog**:
+`conftest.seed_go_catalog` stores the `catalog-ok` + `config-ok` (merged) and `docs-ok` + `limits-ok` snapshots
 (parsed by the leg's own parsers, fetched at T0) before the gateway is built, as a production gateway starts from its
 persisted last good snapshot — so the opencode rail's admission rows price from it. A row that
 needs another catalog refreshes against the fake vendor first (`catalog-retired`, `docs-retired`).
@@ -136,21 +132,22 @@ needs another catalog refreshes against the fake vendor first (`catalog-retired`
 | `config-503` / `config-down` | 503 / a connect failure on the console read |
 | `config-401-echo` | 401 whose body names the test Go key (the redaction row) |
 | `catalog-google` | the models.dev fixture + `gemini-4-argon` on `npm @ai-sdk/google` — a dialect the parser does not know, DROPPED (drop-and-count, #2933); the other five land |
-| `docs-ok` | 200, the page fixture |
+| `docs-ok` | 200, the recorded page (`go.mdx`; it carries the **Go Teams** Plan row and the share bullets, no model table) |
 | `docs-404` | 404 (the page moved) |
-| `docs-unknown-model` | a `DeepSeek V4.2 Flash` plan row the Endpoints table does not name |
-| `docs-teams` | the page + the Plan table's **Go Teams** row under Go Plus (`**$20/member/month**`, "Every member gets their own Go limits, plus $5/month on every model" — the live row of 2026-10-28): a plan the leg does not model, passed over with one log line (#3011) |
+| `docs-no-shares` | the page without its two share bullets |
+| `docs-no-plan-table` | the page without its Plan table (the fee's home) |
 | `docs-no-go-plus` | the Plan table without its **Go Plus** row — the fees cannot price both plans (a whole-source parse failure beside `docs-no-plan-table`) |
-| `docs-promo` | the page + the live page of 2026-10-25's Gemini 4 Argon rows: a plan-row name with the trailing ` (50% off)` that the Endpoints table has, both plan tabs and the Endpoints table (the promotion multiplier, #2933 case (a)) |
-| `docs-short-endpoint-row` | the Endpoints table's `Step 5 Preview` row cut to one cell |
-| `docs-header-drift` | the plan tables' `Monthly limit` column renamed `Limit` |
-| `docs-no-peak-hours` / `docs-no-shares` | the peak-hours sentence / the 5-hour-weekly-monthly share sentence removed |
-| `docs-no-plan-table` | the Plan table (the fee's home) removed |
-| `docs-shrunk` | only the two DeepSeek models' rows |
-| `docs-retired` | the page without `claude-haiku-5-5`'s plan rows (still listed by the console: no monthly limit) |
-| `limits-ok` | 200, `{"object": "list", "data": [], "synthetic": "not a vendor answer"}` — the limits read's answer (the `limits` knob; fixture host `inference.opencode.test`) |
-| `limits-503` | the limits read answers 503 |
-| `limits-down` | a connect failure on the limits read |
+| `docs-retired` | the limits answer without `claude-haiku-5-5`'s row (the page is `docs-ok`; still listed by the console: no monthly limit) |
+| `limits-ok` | 200, `{"object": "list", "data": [five rows]}` derived in memory from `limits.json`: the fixture's rows of `claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash` and `step-5-preview`, plus its first `monthly_usage: null` row (`beam-free`) under the id `longcat-2.5-preview-free`, with the world's limits written into `go.monthly_usage` (`go` / `go-plus`: `deepseek-v4.1-flash` 80 / 160, `step-5-preview` 60 / 240, `deepseek-v4-pro` 15 / 60, `claude-haiku-5-5` 15 / 60) and, on the two DeepSeek rows, the peak inputs (`cost.text` 0.15 / 0.6 / 0.003 and 0.66 / 1.98 / 0.022) and one `cost.multipliers` peak window (mon–fri, 01:00–04:00 and 06:00–10:00 UTC, factor 2) — the limits read's answer (the `limits` knob; fixture host `inference.opencode.test`) |
+| `limits-recorded` | 200, the fixture's `data[]` whole and untouched |
+| `limits-503` / `limits-down` | the limits read answers 503 / a connect failure on it |
+| `limits-shrunk` | `limits-ok` cut to the two DeepSeek rows |
+| `limits-no-data` | `{"object": "list"}` |
+| `limits-no-go-plus` | `limits-ok` with `go-plus` removed from `deepseek-v4-pro`'s `monthly_usage` |
+| `limits-odd-when` | `limits-ok` with `deepseek-v4-pro`'s multiplier `when` replaced by `{"region": {"in": ["eu"]}}` |
+| `limits-two-windows` | `limits-ok` with `deepseek-v4-pro`'s second hour range moved to 07:00–10:00 |
+| `limits-no-peak` | `limits-ok` with `cost.multipliers` removed from both DeepSeek rows |
+| `limits-dated` | `limits-ok` plus a sixth row, `step-5-preview`'s under the id `gemini-4-argon`, with `cost.multipliers` = `[{"when": {"date": {"gte": "2026-12-01"}}, "factor": 2}]` |
 
 ## The openrouter-endpoints world
 
