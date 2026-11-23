@@ -31,6 +31,9 @@
 #     brings current ONLY a PR that has nothing but currency + CI left before auto-merge — the
 #     platform's own merge queue, built where a GitHub merge queue could not go (private stack
 #     repos copy this repo, so the fix must be platform-native). See the leg-1 comment below.
+#   - INHERITED-RED (2026-11-23, homelab#2588): leg 1 also updates an armed BEHIND PR the merge-ready
+#     admission did not take when it is red and its newest `CI` run started before the base's newest
+#     successful `CI` run — a red inherited from a since-healed base, which only an update-branch heals.
 set -euo pipefail
 
 REPO="${1:?usage: update-pr-branch.sh <owner/repo>}"
@@ -209,6 +212,36 @@ LEG_DOMAINS_JQ='
                       | length) == 0);
   def leg2_domain: .autoMergeRequest != null and .mergeStateStatus == "BEHIND"
                 and .reviewDecision == "CHANGES_REQUESTED";'
+# INHERITED-RED (homelab#2588, live #2582: BEHIND + red + REVIEW_REQUIRED for 19h, red FROM master's
+# docs-graph-lint bug that was fixed hours earlier). A PR whose CI ran while its base was red never
+# earns the approval that makes it merge-ready, and a re-run reuses the old merge ref — only an
+# update-branch carries the fix in. ONE predicate, called from leg 1's loop for a candidate the
+# merge-ready admission did NOT take: the PR is not breakered, its newest `CI` run is RED
+# (completed/failure — scripts/pr-wait.sh's definition), the base's newest SUCCESSFUL `CI` run is
+# readable, and the PR's run started before it (ISO-8601 strings, compared as submittedAt/
+# committedDate are). Anything unreadable, empty, in flight or not-failed ⇒ 1 (today's behaviour).
+# The base watermark is read at most once per base per pass (INHERITED_RED_BASES, "base<TAB>ts",
+# ts "-" = unreadable/none). It retires itself: after the update the PR's newest run post-dates it.
+INHERITED_RED_BASES=""
+inherited_red() {   # inherited_red <pr json>
+  local pr="$1" head base run ts bts
+  jq -e "$LEG_DOMAINS_JQ"' breakered | not' <<<"$pr" >/dev/null 2>&1 || return 1
+  head="$(jq -r '.headRefName // ""' <<<"$pr")"; base="$(jq -r '.baseRefName // ""' <<<"$pr")"
+  [ -n "$head" ] && [ -n "$base" ] || return 1
+  run="$(gh run list --repo "$REPO" --branch "$head" --workflow CI --limit 1 \
+    --json status,conclusion,startedAt 2>/dev/null)" || return 1
+  ts="$(jq -er 'if type == "array" and length > 0 and .[0].status == "completed"
+                   and .[0].conclusion == "failure" then .[0].startedAt // empty else empty end' \
+    <<<"$run" 2>/dev/null)" || return 1
+  bts="$(printf '%s\n' "$INHERITED_RED_BASES" | awk -F'\t' -v b="$base" '$1 == b { print $2; exit }')"
+  if [ -z "$bts" ]; then
+    bts="$(gh run list --repo "$REPO" --branch "$base" --workflow CI --status success --limit 1 \
+      --json startedAt 2>/dev/null | jq -er '.[0].startedAt // empty' 2>/dev/null)" || bts=""
+    [ -n "$bts" ] || bts="-"
+    INHERITED_RED_BASES="${INHERITED_RED_BASES}${base}"$'\t'"${bts}"$'\n'
+  fi
+  [ "$bts" != "-" ] && [[ "$ts" < "$bts" ]]
+}
 cands="$(jq -c "$LEG_DOMAINS_JQ"' .[] | select(leg1_cand)' <<<"$PRS")"
 ready="[]"
 while read -r pr; do
@@ -240,7 +273,10 @@ while read -r pr; do
   # GitHub's own computation: a review it requires has not been given, so there is more than
   # currency + CI left, and no reconstruction of the bot's review history may overrule that. This
   # also makes the guard probe-free — a park costs zero API calls, not just zero updates.
-  if [ "$(jq -r '.reviewDecision' <<<"$pr")" = REVIEW_REQUIRED ]; then continue; fi
+  if [ "$(jq -r '.reviewDecision' <<<"$pr")" = REVIEW_REQUIRED ]; then
+    if inherited_red "$pr"; then ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; fi
+    continue
+  fi
   # ARM 2, THE SKIP-CLASS HALF (homelab#1896). reviewDecision == "" here means the repo's ruleset
   # requires no approval (an approval-required repo reports REVIEW_REQUIRED/APPROVED/
   # CHANGES_REQUESTED, never ""). On such a repo the PR is merge-ready when EITHER the reviewer bot
@@ -264,7 +300,10 @@ while read -r pr; do
   approved_at="$(jq -r --arg bot "$REVIEWER_LOGIN" '
     [ .reviews[]? | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
       | select(.state == "APPROVED") | .submittedAt ] | max // ""' <<<"$pr")"
-  [ -n "$approved_at" ] || continue
+  if [ -z "$approved_at" ]; then
+    if inherited_red "$pr"; then ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"; fi
+    continue
+  fi
   # Unreadable = the call failed OR the body is not the JSON asked for (a 200 that is not JSON is
   # the `garbage` stub mode, and the shape a proxy error takes live) — both HOLD, never a silent skip.
   if [ -z "$cj" ]; then   # not probed above (a non-Renovate author) — one probe per candidate
@@ -277,6 +316,8 @@ while read -r pr; do
   if jq -e --arg a "$approved_at" '
        ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not)
           | .committedDate ] | max // "") as $c | $a > $c' <<<"$cj" >/dev/null 2>&1; then
+    ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"
+  elif inherited_red "$pr"; then   # stale approval — a red inherited from the base still needs the update
     ready="$(jq -c --argjson n "$n" '. + [$n]' <<<"$ready")"
   fi
 done <<<"$cands"

@@ -1,0 +1,6 @@
+CALL gh pr list --repo teststuffstash/testrepo --state open --limit 100 --json number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName
+CALL gh run list --repo teststuffstash/testrepo --branch fix/red170 --workflow CI --limit 1 --json status,conclusion,startedAt
+CALL gh run list --repo teststuffstash/testrepo --branch master --workflow CI --status success --limit 1 --json startedAt
+CALL gh api -X PUT repos/teststuffstash/testrepo/pulls/170/update-branch -f expected_head_sha=red170oid789
+OUT updater[teststuffstash/testrepo]: updating #170 (oldest armed+BEHIND, FIFO)
+RC 0

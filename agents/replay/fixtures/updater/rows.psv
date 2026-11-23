@@ -100,3 +100,14 @@ renovate-merged-park-red-handback    | board | gh/pr-list.json @ patches/add-ren
 # source (which tested `! renovate_green`).
 renovate-merged-current-pending-noop  | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1 | p1=153 oid=ren153oid789
 renovate-merged-current-nochecks-noop | board | gh/pr-list.json @ patches/add-renovate-current-review.jq | | sweep-silent-probe1 | p1=153 oid=ren153oid789
+# ── homelab#2588 (the #2582 world): leg 1 also takes an armed BEHIND PR the merge-ready admission did
+# not, when it is red and its newest CI run started before the base's newest SUCCESSFUL CI run (a red
+# inherited from a since-healed base). The first row is the pin (RED on the pre-#2588 source: no PUT);
+# the rest are the negative controls — base not healed, PR run fresher than the heal, the untouched
+# Renovate skip, the agent/error breaker, an unreadable base read (all ⇒ no update, today's behaviour).
+inherited-red-stale-update | board | gh/pr-list.json @ patches/add-inherited-red.jq | | inherited-red-pick |
+inherited-red-base-not-green-no-update | board | gh/pr-list.json @ patches/add-inherited-red.jq | | inherited-red-noop |
+inherited-red-fresh-no-update | board | gh/pr-list.json @ patches/add-inherited-red.jq | | inherited-red-noop |
+inherited-red-renovate-untouched-no-update | board | gh/pr-list.json @ patches/add-inherited-red-renovate.jq | | renovate-skip-probe1 | p1=150 oid=ren150oid789
+inherited-red-breakered-no-update | board | gh/pr-list.json @ patches/add-inherited-red-breakered.jq | | noop |
+inherited-red-probe-unreadable-no-update | board | gh/pr-list.json @ patches/add-inherited-red.jq | STUB_GH_run_list_master_ci_success=fail | inherited-red-noop |

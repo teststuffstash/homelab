@@ -40,6 +40,12 @@
 #      bot review) is the `unreviewed-behind-no-update` row: `reviewDecision: ""` with no bot
 #      APPROVED is not merge-ready, so it stays BEHIND. #1896 owns that arm's fix; this family
 #      pins the boundary it must move.
+#      ⚠ #2588 (INHERITED-RED): the same leg ALSO takes an armed BEHIND candidate the admission above did
+#      not (a park, a missing bot approval, a stale one) when it is red ∧ its newest `CI` run started
+#      before the base's newest SUCCESSFUL `CI` run — a red inherited from a since-healed base, which only
+#      an update-branch heals. Probed per candidate (`gh run list`), the base read cached per base per
+#      pass; unreadable/empty either side ⇒ no update. Six `inherited-red-*` rows pin it; the first is RED
+#      on the pre-#2588 source. Rows without `headRefName` never reach the probe (no stream moved).
 #   2. unstrand (the CR∧BEHIND crack, narrowed 2026-08-17): armed ∧ BEHIND ∧ CHANGES_REQUESTED,
 #      breaker labels excluded, updated ONLY when the newest NON-merge commit post-dates the
 #      newest homelab-reviewer verdict; unreadable commit/review data HOLDS (rule #6).

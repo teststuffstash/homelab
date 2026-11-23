@@ -80,7 +80,8 @@ transitions:
     owner: in-cluster updater (ADR-111 — exporter edge + */15 Argo CronWorkflow → agents/update-pr-branch.sh, homelab-merge App via ESO; hosted reusable retired 2026-08-26, homelab#745)
     when: "behind ∧ armed ∧ ¬conflicted ∧ MERGE-READY (bot-approved at head / reviewDecision
       APPROVED — homelab#1452, so ¬changes_requested and the #887 codeowner park fall out of the
-      predicate) — oldest first WITHIN a (repo, base) LANE, ONE update per lane per run
+      predicate) ∨ INHERITED-RED (red ∧ newest CI run started before the base's newest green CI
+      run — homelab#2588) — oldest first WITHIN a (repo, base) LANE, ONE update per lane per run
       (ADR-125 (2); it was one per REPO until homelab#1422)"
     emits: branch_updated
     status: guarded
