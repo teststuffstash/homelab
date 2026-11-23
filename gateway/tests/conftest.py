@@ -835,15 +835,18 @@ def seed_openrouter_endpoints(store: Store, upstream: FakeUpstream | None = None
 def seed_go_catalog(store: Store, fetched_at: float = 1_800_000_000.0) -> Store:
     """Every world's Go catalog (specs/worlds/README.md §The Go catalog's fakes): the last good
     snapshots a gateway starts from — the `catalog-ok` + `config-ok` fixtures merged (models.dev's
-    rows under the console's overrides) and `docs-ok`, parsed by the leg's own parsers and stored as
+    rows under the console's overrides) and `docs-ok` + `limits-ok`, parsed by the leg's own parsers and stored as
     one refresh would store them (GW-CATALOG-GO). Admission reads them."""
-    from agent_gateway.catalog import merge, parse_catalog, parse_config, parse_docs
+    from agent_gateway.catalog import build_docs, merge, parse_catalog, parse_config, parse_limits, parse_page
 
     cat, cat_dropped = parse_catalog(json.loads((GO_CATALOG_FIXTURES / "models-dev.json").read_text(encoding="utf-8")))
     store.snapshot_save("config", fetched_at, merge(
         cat, parse_config(json.loads((GO_CATALOG_FIXTURES / "config.json").read_text(encoding="utf-8")))[0],
         {d["model"] for d in cat_dropped}))
-    store.snapshot_save("docs", fetched_at, parse_docs((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8"))[0])
+    from ._catalog_world import limits_doc
+
+    store.snapshot_save("docs", fetched_at, build_docs(parse_page((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8")),
+                                                       parse_limits(limits_doc("limits-ok"))))
     return store
 
 
