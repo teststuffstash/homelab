@@ -33,8 +33,11 @@ resources:
   - rbac.yaml
   - reflexes-argo.yaml
   - responder-argo.yaml
+  - responder-git.yaml
   - deep-dig-argo.yaml
   - island-intake-argo.yaml
+  - island-rules-digest-argo.yaml
+  - kargo-prod-diagnose-argo.yaml
   - sentinel-argo.yaml
   - specs-review-argo.yaml
   - responder-budget-alerts.yaml
@@ -52,6 +55,8 @@ resources:
   - update-pr-argo.yaml
   - updater-git.yaml
   - specs-reviewer-git.yaml
+  - intake-git.yaml
+  - intake-read-git.yaml
 
 # THE PIN. This is the only line the deploy-pin writes, and the only path CODEOWNERS carves out for
 # it. The manifests reference the image WITHOUT a tag; kustomize supplies it here.
@@ -63,4 +68,14 @@ configurations:
 
 images:
   - name: registry.teststuff.net/agent-coordinator
-    newTag: 2026.11.16-g703b436ee38d.45
+    newTag: 2026.11.23-g703b436ee38d
+  # The WORKER BASE image (agent-base) — the island intake sitting's (island-intake-argo.yaml,
+  # homelab#3577): the tag the AgentStack Composition pins (argocd/resources/agentstack/
+  # composition.yaml, its `agent-base:` literal). ⚠ ONE LINE, flow style, ON PURPOSE: the
+  # agent-coordinator deploy-pin rewrites EVERY line that starts with `newTag:` in this file
+  # (`sed 's#^(\s+newTag: ).*#…'`, agent-coordinator build-image.yaml) and pin-only-lint (k) reads
+  # such a line as a coordinator pin — a block-style `newTag:` here would be overwritten with a
+  # coordinator tag at the next coordinator build, and the sitting's pod would never pull.
+  # agent-runtime's deploy-pin does not write this file yet (it bumps agents/images.env and the
+  # Composition literal): until it does, this tag moves by hand, with the Composition's.
+  - { name: registry.teststuff.net/agent-base, newTag: 2026.11.16-g7296793e6ee9.135 }

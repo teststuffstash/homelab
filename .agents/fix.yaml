@@ -52,8 +52,8 @@ instructions: |
   - `tofu/*.tf`, `ansible/**`, `opnsense/**`, `machines/**` (applied out-of-band to live machines)
 
   MAY AUTHOR, but a HUMAN merges it — the loop's own machinery. Say so in the PR body:
-  - `agents/**` (the launcher, the scan, the reflexes, their manifests), `policy/**`,
-    `tofu/github/**`, `tofu/cloudflare/**`
+  - `agents/**` (the launcher, the scan, the reflexes, their manifests), `tofu/github/**`,
+    `tofu/cloudflare/**`
   ⚠ These LOOK like they must be off-limits, and the old rule said so — "an agent that can edit
   them is not gated at all". That reasoning is WRONG here, and the correction matters (operator,
   2026-08-07): **the loop runs from `master`.** Every coordinator/reviewer/worker pod does
@@ -84,6 +84,8 @@ instructions: |
     (homelab#1793). Never write them any other way.
   - `mgmt/scripts/**` and `scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh`
     — the management box runs them from master, unattended.
+  - `policy/**` and `CODEOWNERS` — `ci` reads the policies from your branch, so an edit can loosen
+    the checks judging its own diff; governance-lint reds any worker PR touching either.
   ⚖ `scripts/**` otherwise IS authorable since 2026-09-28 (ADR-142 trial) — it holds this repo's
   CI checks, so the reviewer reads every edit under the BLOCKING gate-change lens with CI's
   gate-drift report (master's side of your edit, replayed on your branch). Loosening a check is

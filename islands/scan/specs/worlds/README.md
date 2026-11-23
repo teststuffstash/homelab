@@ -4,10 +4,39 @@ A **world** is a named fixture state: expected behaviour is a function of (syste
 row that does not name its world is lying by omission. For this island a world is a set of
 **recorded or constructed answers** the replay stubs serve — `gh` (issue/PR lists, views, REST
 endpoints) and `kubectl` (pods, workflows) — plus, where a row varies it, an **env condition**
-(a stub failure injection, a knob). The worlds live where the harness keeps them; nothing is
-copied here. Mechanism: [agents/replay/README.md](../../../../agents/replay/README.md) (§The cleanup
+(a stub failure injection, a knob). The replay worlds — the registry and family worlds tabled below — live where the harness keeps
+them; nothing of them is copied here. Mechanism: [agents/replay/README.md](../../../../agents/replay/README.md) (§The cleanup
 contract, moves 1–2: named registry worlds, table mode, `patches/*.jq` that must change the
 base). Terms: [../glossary.md](../glossary.md), [docs/glossary.md](../../../../docs/glossary.md).
+
+## Recorded worlds (`worlds/<name>/` — here)
+
+A **recorded world** is a directory beside this page holding the whole answer of each GitHub read a
+surface makes, one file per read, as `gh` printed it: no field removed. Its `provenance.yaml` names
+the repo, the item numbers, each read (the `gh` argv, REST path included), the recording time and
+the recorder's commit. The recorder is
+[`scripts/record_world.py`](../../scripts/record_world.py); a world is re-recorded, never hand-edited. A read a surface starts to make after a world was recorded is added by the recorder for the world's recorded items (`--add`), with its own recording time and recorder commit in `provenance.yaml`; the reads already recorded are not performed again.
+
+- **Public repos only, no credential.** The recorder reads the repo's visibility first and refuses a
+  repo GitHub reports as private. A world holds response bodies only: no request or response
+  header, no token.
+- **A write is never recorded by performing it.** Each write the surface issues is declared in
+  `provenance.yaml` and answered by a hand-written file, `writes/<op>.<status>.json`. Each answer
+  validates against that operation's response schema, extracted from GitHub's published REST
+  description into `schemas/<op>.<status>.json`; `provenance.yaml` names the description's commit.
+  `gh pr merge --auto` prints no JSON: its answer is an exit status. A world that declares no write has no `schemas/` and no `writes/` directory, and its `provenance.yaml` names no description.
+- **A row's state is the recorded answer with the row's cells applied as value overrides.** An
+  override changes the value of a field that exists, or adds a list element copied from a recorded
+  element of the same list. It never removes a field.
+- **Reading is strict on both sides.** The world answers only a read it holds: an unrecorded read
+  fails the case. A component that reads an answer lacking a field its page's schema requires
+  treats the answer as unreadable and issues no write; it never substitutes a default.
+
+| world | what it is | used by |
+|---|---|---|
+| `pr-handoff` | one pull request of `teststuffstash/homelab` as the major handoff reads it, recorded whole | SCAN-HANDOFF-GATE, SCAN-HANDOFF-ARM (from child 3 of the Goal) |
+| `pr-board` | the open pull requests of `teststuffstash/homelab` as the updater reads them, with the per-PR reads, recorded whole | SCAN-UPDATER-PICK, -UNSTRAND, -CONFLICT, -RENOVATE (from child 4 of the Goal) |
+| `pr-merges` | the commits of one pull request of `teststuffstash/homelab` (#3615) as the PR view and the pull-commits read list them, recorded whole: hand-titled two-parent merges beside GitHub-titled ones | the [merge commit](../glossary.md#merge-commit) definition's wire fact; no row |
 
 ## Registry worlds (shared by name — `agents/replay/worlds/`)
 

@@ -104,7 +104,7 @@ test row.
 A size label on a session — `light` | `standard` | `heavy` — that selects the model within the
 chosen rail: `rails.<rail>.models.<tier>`, an ORDERED list the walk takes the first admissible
 model of (not struck by this task, not cooled; a bare string = a one-item list —
-[§The retry contract](endpoints/sessions.md#the-retry-contract--model-lists-strikes-attempt)). The role's default comes from the policy; the caller
+[§The retry contract](endpoints/sessions.md#gw-sessions-retry)). The role's default comes from the policy; the caller
 may override it, and may ask for the list to be walked from its END (`prefer: strongest` —
 [§The preferred end of the list](endpoints/sessions.md#the-preferred-end-of-the-list)). Not the ADR-096 model tier (`cheap`/`large`/`premium`), which is a gap. The
 deployed policy's lists are derived from the [tier evidence](#tier-evidence).
@@ -121,13 +121,13 @@ openrouter model's endpoint snapshot has no provider that clears the policy floo
 `retry_after_s`: every cell is struck for this task — escalate, do not poll), and the codex rail's headroom verdicts `quota-unknown`,
 `quota-stale`, `quota-limited` ([GW-CODEX-HEADROOM](endpoints/openai-responses.md#gw-codex-headroom)).
 The caller polls after `retry_after_s` — for a capacity-blocked rail, the moment the block lifts
-([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half)).
+([sessions.md §Capacity](endpoints/sessions.md#gw-sessions-capacity)).
 
 ## cell
 
 A (rail, model, **provider**) triple — one model served on one rail by one provider, the unit a
 429 cools, a strike excludes and an outcome judges
-([sessions.md §Capacity](endpoints/sessions.md#capacity--the-ladders-capacity-half),
+([sessions.md §Capacity](endpoints/sessions.md#gw-sessions-capacity),
 [§The provider axis](endpoints/sessions.md#the-provider-axis-openrouter)). The provider is the
 endpoint tag's base slug on the openrouter rail — what `provider.order` names, joined from the
 answer's display name through the [endpoint snapshot](#endpoint-snapshot)
@@ -167,8 +167,7 @@ never decides it.
 
 The opencode rail's vendor facts as the gateway last read them: two **snapshots**, one per
 source — `config` (models.dev's `opencode-go` catalog with the console's V2 config as the
-workspace's overlay — listed models, cost tiers, context/output limits, tool support) and `docs` (the vendor's Go page: each model's monthly limit per **plan**, promotion
-multipliers, peak rows and hours, the 5h/weekly/monthly shares). Refreshed on a schedule; a failed,
+workspace's overlay — listed models, cost tiers, context/output limits, tool support) and `docs` (the vendor's Go page — the plan fees and the 5h/weekly/monthly shares — and the Go models list, the limits read: each model's monthly limit per **plan**, the peak rows and hours). Refreshed on a schedule; a failed,
 unparseable or implausible refresh keeps the last good snapshot, which the store persists
 ([GW-CATALOG-GO](endpoints/catalog.md#gw-catalog-go)). *Listed* means in the config snapshot — the merged
 listing, models.dev's rows under the workspace's **overrides** (the console's overlay) — an account
@@ -369,7 +368,7 @@ A row of the outcome store keyed `(stack, task, rail, model, provider, harness)`
 **scope** and a **source**: `outcome` when the consumer reported how its ride ended, `gateway` when
 the gateway saw the transport fact itself ([GW-SESSIONS-OUTCOME](endpoints/sessions.md#gw-sessions-outcome)).
 Scope says what the next [walk](#walk) excludes for the task: a cell-scoped strike the
-[cell](#cell), a model-scoped one the policy id on every rail, a harness-scoped one every cell the
+[cell](#cell), a model-scoped one the policy id and its [twins](#twin) on every rail, a harness-scoped one every cell the
 struck harness would ride. A strike is **counted** until a `clean` outcome on the same cell, model
 or harness refutes it (it stays as history with `refuted_at` set); a bare 2xx refutes nothing. Not a
 round: a logic failure is the consumer's round counter's, never a class here.
@@ -385,8 +384,9 @@ takes the tier list's next model; a 429 writes no [strike](#strike)
 ## latch
 
 A whole [rail](#rail) held after an upstream 429, because the policy declares the rail one account
-whose limits are account windows (`latch_scope: account` — the anthropic subscription, the Go rail
-since 2026-11-01): the 429 cools its cell AND latches the rail for the same reset, or the rail's
+whose limits are account windows (`latch_scope: account` — the Go rail since 2026-11-01, and the
+anthropic rail in the worlds; the deployed anthropic rail declares `latch_scope: model`, so its 429
+only cools the cell): the 429 cools its cell AND latches the rail for the same reset, or the rail's
 `latch_429_hold_s` when none was named; any 2xx on the rail clears it. A rail that declares no latch
 (openrouter) is never latched — its 429s are per-model facts, a [cooldown](#cooldown) each
 ([GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity)).
@@ -400,3 +400,19 @@ backoff and the next re-verification) and `hold` (the backoff a credential's nex
 from) — never a credential value. A new gateway on the same DB reloads them at start, dropping only
 what the in-memory logic would already have let go
 ([GW-SESSIONS-CAPACITY §Kept across a restart](endpoints/sessions.md#kept-across-a-restart)).
+
+## wire source
+
+One vendor read the gateway makes, named (`go-models-dev`, `codex-usage`, …) and classed `public`
+(the read sent no credential and no account header — its bytes are kept verbatim) or `account`
+(anything else — kept as structure with every string not under an allowlisted key
+([GW-WIRE-PROBE](endpoints/wire.md#gw-wire-probe)'s `keep_keys`; a credential-shaped value stays a length, and so does a value equal to the rail's account id) reduced to its length). Each source has one
+[wire record](#wire-record)
+([GW-WIRE-RECORD](endpoints/wire.md#gw-wire-record)).
+
+## wire record
+
+The latest answer of a [wire source](#wire-source) as the gateway's store keeps it — the stored bytes, their provenance
+(class, url, status, bytes, sha256, fetched_at, complete) and the latest failed read beside it — recorded before the
+parser reads the answer, replaced by the next good one, served read-only at `GET /wire/<source>`
+([GW-WIRE-VIEW](endpoints/wire.md#gw-wire-view)).

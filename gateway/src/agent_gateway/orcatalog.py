@@ -60,6 +60,7 @@ CANARY_ADMISSIONS = ("dispatch", "budget", "not-due", "not-in-catalog")
 # The ranking slices the policy may name → the MCP tool's arguments (period week on both).
 SLICES: dict[str, dict] = {"programming": {"period": "week", "category": "programming"},
                            "tool_calling": {"period": "week", "modality": "tool_calling"}}
+MCP_WIRE = {"list-daily-model-rankings": "openrouter-mcp-rankings", "list-benchmarks": "openrouter-mcp-benchmarks"}  # GW-WIRE-RECORD
 MCP_URL = "https://mcp.openrouter.ai/mcp"
 USER_AGENT = f"agent-gateway/{__version__} (openrouter-catalog)"
 FETCH_TIMEOUT_S = 30.0
@@ -81,7 +82,7 @@ def permaslug_id(slug: str) -> str:
     return _STAMP.sub("", slug)
 
 
-async def mcp_call(client: httpx.AsyncClient, url: str, key: str, tool: str, arguments: dict) -> dict:
+async def mcp_call(client: httpx.AsyncClient, url: str, key: str, tool: str, arguments: dict, wire=None) -> dict:
     """One `tools/call` as JSON-RPC over HTTP (an `initialize` first — the server takes both in
     sequence without a session header; the old proxy's `_mcp_call`). Returns the tool's JSON."""
     headers = {"content-type": "application/json", "accept": "application/json, text/event-stream",
@@ -92,7 +93,14 @@ async def mcp_call(client: httpx.AsyncClient, url: str, key: str, tool: str, arg
     if r.status_code != 200:
         raise McpUnavailable(f"initialize answered {r.status_code}")
     call = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}
-    r = await client.post(url, json=call, headers=headers, timeout=FETCH_TIMEOUT_S)
+    try:
+        r = await client.post(url, json=call, headers=headers, timeout=FETCH_TIMEOUT_S)
+    except httpx.HTTPError:
+        if wire is not None and tool in MCP_WIRE:
+            wire.record(MCP_WIRE[tool], url, None, None, headers)
+        raise
+    if wire is not None and tool in MCP_WIRE:  # GW-WIRE-RECORD: before the parser reads it
+        wire.record(MCP_WIRE[tool], url, r.status_code, r.content, headers, r.headers.get("content-type", ""), secrets=(key,))
     if r.status_code != 200:
         raise McpUnavailable(f"tools/call {tool} answered {r.status_code}")
     try:
@@ -157,7 +165,8 @@ class OpenRouterCatalog:
     the selection and the canary admission read, the budget meter, the view and the families."""
 
     def __init__(self, policy: Policy, store: Store, client: httpx.AsyncClient, resolver: CredentialResolver,
-                 snapshot: EndpointSnapshot, upstream_base: str, mcp_url: str, clock, refresh_s: float):
+                 snapshot: EndpointSnapshot, upstream_base: str, mcp_url: str, clock, refresh_s: float, wire=None):
+        self.wire = wire  # GW-WIRE-RECORD
         self.policy = policy
         self.store = store
         self.client = client
@@ -211,10 +220,10 @@ class OpenRouterCatalog:
         ranked: dict[str, dict[str, int]] = {}
         try:
             for s in cat.ranking_slices:
-                doc = await mcp_call(self.client, self.mcp_url, key, "list-daily-model-rankings", {"request": SLICES[s]})
+                doc = await mcp_call(self.client, self.mcp_url, key, "list-daily-model-rankings", {"request": SLICES[s]}, self.wire)
                 for mid, tokens in latest_week(doc.get("data"), cat.ranking_top_n).items():
                     ranked.setdefault(mid, {})[s] = tokens
-            bench_doc = await mcp_call(self.client, self.mcp_url, key, "list-benchmarks", {"request": {"source": "artificial-analysis"}})
+            bench_doc = await mcp_call(self.client, self.mcp_url, key, "list-benchmarks", {"request": {"source": "artificial-analysis"}}, self.wire)
             aa = benched(bench_doc.get("data"))
         except (httpx.HTTPError, McpUnavailable) as e:
             log.warning("orcatalog: the MCP source failed (%s: %s) — keeping the last good snapshot", type(e).__name__, e)
@@ -227,9 +236,13 @@ class OpenRouterCatalog:
         failures = 0
         for mid, slices in sorted(candidates.items()):
             try:
-                r = await self.client.get(f"{self.upstream_base}/v1/models/{mid}/endpoints",
-                                          headers={"user-agent": USER_AGENT}, timeout=FETCH_TIMEOUT_S)
+                ep_url, ep_headers = f"{self.upstream_base}/v1/models/{mid}/endpoints", {"user-agent": USER_AGENT}
+                r = await self.client.get(ep_url, headers=ep_headers, timeout=FETCH_TIMEOUT_S)
+                if self.wire is not None:  # GW-WIRE-RECORD: the latest model's answer, before the parser
+                    self.wire.record("openrouter-endpoints", ep_url, r.status_code, r.content, ep_headers, r.headers.get("content-type", ""))
             except httpx.HTTPError as e:
+                if self.wire is not None:
+                    self.wire.record("openrouter-endpoints", ep_url, None, None, ep_headers)
                 log.warning("orcatalog: endpoints of %s unreachable (%s) — absent from this refresh", mid, type(e).__name__)
                 failures += 1
                 continue

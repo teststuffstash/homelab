@@ -135,7 +135,24 @@ groups:
         expr: |
           avg_over_time(garage:cluster_health:availability_ratio_1h[30d])
 
+      # The two-sided form (#3087) — the expr below is byte-identical to the CR's
+      # `garage:s3_server_error_ratio:30d` (prometheusrule.yaml). The drift pin does not cover
+      # recording rules yet (#1563), so that equality is checked BY HAND in the PR, not by the lint.
+      # Why it is two-sided: the old bare `/` needed a 5xx counter series to exist inside the 30d
+      # window, and Garage only exports one after a 5xx — so on a healthy store the numerator was
+      # ABSENT and the whole 30d ratio was absent. The floor is taken from the request series (never
+      # a global `or vector(0)`, which would put a series on the chart for a store that is not being
+      # scraped at all). See the CR's comment for the measured evidence.
       - record: garage:s3_server_error_ratio:30d
         expr: |
-          sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
-          / sum(increase(api_s3_request_duration_count[30d]))
+          (
+            sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d]))
+            or
+            sum(increase(api_s3_request_duration_count[30d])) * 0
+          )
+          / clamp_min(
+            sum(increase(api_s3_request_duration_count[30d]))
+            or
+            sum(increase(api_s3_error_counter{status_code=~"500|503"}[30d])),
+            1e-9
+          )

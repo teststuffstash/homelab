@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "_comment": "intake island TESTS toolchain (the spec root's tests, islands/intake/specs/): python 3.15 + uv (the launch island's shape, same nixpkgs flake ref) and yq (package yq-go) for the YAML records. Kept apart from islands/intake/devbox.json on purpose: that file is what every live sitting's bootstrap installs, and the tests must not grow it. Run `bash ../scripts/ci.sh` (it enters this devbox); the repo-root diff-ci row `-- bash islands/intake/scripts/ci.sh` reaches it. The repo-root devbox.json/devbox.lock are never touched.",
+  "packages": {
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
+    "uv": "latest",
+    "yq-go": "latest"
+  },
+  "env": {
+    "UV_PYTHON_PREFERENCE": "only-system",
+    "UV_PROJECT_ENVIRONMENT": "$HOME/.cache/devbox-venv/intake-island-specs-tests$VENV_SUFFIX"
+  },
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "ci": [
+        "bash ../scripts/ci.sh"
+      ],
+      "test": [
+        "uv run --frozen pytest -q \"$@\""
+      ]
+    }
+  }
+}

@@ -1,0 +1,53 @@
+# Island intake's READ-ONLY source token: the same homelab-intake App (docs/github-apps.yaml) as
+# intake-git.yaml, minted with `contents: read` only, into Secret `intake-read-git`, which the
+# sitting's leaf of island-intake-argo.yaml reads as INTAKE_READ_GH_TOKEN (optional — a platform
+# island never needs it).
+#
+# `repositories` here are STACKS' READ-ONLY SOURCE REPOS — a deployment repo a stack island's facts
+# file reads (`GH_TOKEN="$INTAKE_READ_GH_TOKEN" gh api …`), never an island's own repo (those are
+# intake-git.yaml's, with the sitting's writes). Read-only by this mint, whatever the App's grant.
+# The App must be installed on a repo BEFORE the repo is listed: a token request naming a repo the
+# App is not installed on fails whole. That is why this is its own file and generator — a failed
+# mint here never takes the sitting's main token (intake-git) down with it.
+#
+# It reuses the App key Secret `intake-github-app` that intake-git.yaml's ExternalSecret writes (one
+# copy of the key). ArgoCD-managed through kustomization.yaml like the sibling *-git.yaml chains.
+---
+# 1) The generator: a read-only installation token for the source repos.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: intake-read-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "5877266"         # homelab-intake App
+  installID: "184743579"   # the teststuffstash installation of homelab-intake
+  auth:
+    privateKey:
+      secretRef: { name: intake-github-app, key: privateKey }
+  permissions:
+    contents: read           #   read a source repo's files — the only grant this token carries
+  repositories:              #   stacks' read-only source repos; the install FIRST (see the header)
+    - oracle-iac             #   oracle's deployment repo (oracle-fleet docs/intake.md §Sources)
+---
+# 2) Drive the generator → the Secret the sitting's leaf reads (key `token` → GH_TOKEN).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: intake-read-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: intake-read-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: intake-read-git-gen

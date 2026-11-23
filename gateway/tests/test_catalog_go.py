@@ -3,7 +3,7 @@ serves, what /metrics says (specs/endpoints/catalog.md §The Go catalog).
 
 World: policy-default (plan go; Go ids deepseek-v4.1-flash, claude-haiku-5-5) · the fake vendor
 (tests/_catalog_world.py): the `catalog` knob is what models.dev answers, the `config` knob what the
-console answers — together the `config` source — and the `docs` knob the Go page. T0 = the test clock
+console answers — together the `config` source — the `docs` knob the Go page and the `limits` knob the Go models list. T0 = the test clock
 (2027-01-15T08:00:00Z); every refresh runs at T0 unless the row's `at` says otherwise. The tables are
 the spec's, verbatim (the header is the parameter list).
 """
@@ -19,7 +19,7 @@ import pytest
 from agent_gateway import __version__
 
 from ._catalog_rows import T0, at_iso, at_offset, iso, joined, listed, num, verdict, verdict_block
-from ._catalog_world import catalog_doc, config_doc, gw_client
+from ._catalog_world import catalog_doc, config_doc, gw_client, limits_fixture
 from .conftest import GO_KEY, attach_json, given, quiet, rule, when, world
 
 pytestmark = rule("GW-CATALOG-GO")
@@ -197,85 +197,126 @@ async def test_override_fields(cworld, vendor, config, model, expected_family, e
 
 
 # ── What a refresh keeps: the `docs` source ──────────────────────────────────────────────────
-GO_TEAMS = "**Go Teams**"
-# (description, last_good, docs, outcome?, models?, promotion?, limits?, plan_fees?, passed_over?)
+# The Go page lands or the last good stands
+# (description, last_good, docs, limits, outcome?, models?)
 DOCS_ROWS = [
-    pytest.param("none", "docs-ok", "ok", 5, "none", "none", "go 10 / go-plus 40", "none", id="the page parses"),
-    pytest.param("5", "docs-404", "fetch-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="a 404 keeps the last good — the page moved"),
-    pytest.param("5", "docs-shrunk", "implausible", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="a drop below half the models is implausible"),
-    pytest.param("5", "docs-unknown-model", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="a plan row naming a model the Endpoints table lacks is a parse failure"),
-    pytest.param("5", "docs-short-endpoint-row", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="an Endpoints row with one cell is a parse failure"),
-    pytest.param("5", "docs-header-drift", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="a renamed limit column is a parse failure"),
-    pytest.param("5", "docs-no-peak-hours", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="peak rows without the peak-hours sentence are a parse failure"),
-    pytest.param("5", "docs-no-shares", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="no share sentence is a parse failure ⚖"),
-    pytest.param("5", "docs-no-plan-table", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="no plan table is a parse failure ⚖"),
-    pytest.param("5", "docs-no-go-plus", "parse-failed", 5, "none", "none", "go 10 / go-plus 40", "none",
-                 id="a Plan table without the Go Plus row is a parse failure"),
-    pytest.param("5", "docs-promo", "ok", 6, "gemini-4-argon ×0.5", "gemini-4-argon $30 / $120", "go 10 / go-plus 40", "none",
-                 id="a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖"),
-    pytest.param("5", "docs-teams", "ok", 5, "none", "none", "go 10 / go-plus 40", GO_TEAMS,
+    pytest.param("none", "docs-ok", "limits-ok", "ok", 5, id="the page and the limits answer parse"),
+    pytest.param("5", "docs-404", "limits-ok", "fetch-failed", 5, id="a 404 keeps the last good — the page moved"),
+    pytest.param("5", "docs-ok", "limits-shrunk", "implausible", 5, id="a drop below half the models is implausible"),
+    pytest.param("none", "docs-ok", "limits-recorded", "ok", 30, id="the recorded answer lands whole ⚖"),
+    # a page shape the parser does not know
+    pytest.param("5", "docs-no-shares", "limits-ok", "parse-failed", 5, id="no share bullets is a parse failure ⚖"),
+    pytest.param("5", "docs-no-plan-table", "limits-ok", "parse-failed", 5, id="no plan table is a parse failure ⚖"),
+    pytest.param("5", "docs-no-go-plus", "limits-ok", "parse-failed", 5, id="a Plan table without the Go Plus row is a parse failure"),
+    # a limits answer the parser does not know
+    pytest.param("5", "docs-ok", "limits-no-data", "parse-failed", 5, id="an answer with no `data` list is a parse failure"),
+    pytest.param("5", "docs-ok", "limits-no-go-plus", "parse-failed", 5, id="a `monthly_usage` without `go-plus` is a parse failure"),
+    pytest.param("5", "docs-ok", "limits-odd-when", "parse-failed", 5, id="a multiplier condition the parser does not know is a parse failure ⚖"),
+    pytest.param("5", "docs-ok", "limits-two-windows", "parse-failed", 5, id="two peak windows in one answer are a parse failure ⚖"),
+]
+
+
+@pytest.mark.parametrize(("last_good", "docs", "limits", "expected_outcome", "expected_models"), DOCS_ROWS, ids=[p.id for p in DOCS_ROWS])
+async def test_docs_refresh(cworld, vendor, clock, last_good, docs, limits, expected_outcome, expected_models):
+    world(upstream=f"{docs} · {limits}")
+    app = cworld.build()
+    recorded = limits == "limits-recorded"
+    expected_models = expected_models if not recorded else len(limits_fixture())
+    with given(f"last_good = {last_good} (docs-ok · limits-ok at T0)" if last_good != "none" else "last_good = none"):
+        if last_good != "none":
+            vendor.docs, vendor.limits = "docs-ok", "limits-ok"
+            with quiet():
+                assert await app.state.catalog.refresh_source("docs") == "ok"
+    clock.advance(60)
+    with given(f"docs = {docs}: the fake vendor's Go page · limits = {limits}: its Go models list"):
+        vendor.docs, vendor.limits = docs, limits
+    with when(f"the docs source refreshes at T0 + 60 s (docs = {docs}, limits = {limits})"), quiet():
+        got = await app.state.catalog.refresh_source("docs")
+        v = await _view(app)
+    verdict(f"outcome = {expected_outcome} · models = {expected_models}",
+            expected_outcome={"expected": expected_outcome, "actual": got},
+            expected_models={"expected": expected_models, "actual": v["sources"]["docs"]["models"]},
+            last_good={"actual": last_good}, docs={"actual": docs}, limits={"actual": limits})
+
+
+# ── The page's promotion and plan rows ───────────────────────────────────────────────────────
+GO_TEAMS = "**Go Teams**"
+# (description, docs, limits, outcome?, models?, promotion?, peak_models?, plan_fees?, passed_over?)
+PASSED_OVER_ROWS = [
+    pytest.param("docs-ok", "limits-dated", "ok", 6, "none", "deepseek-v4-pro, deepseek-v4.1-flash", "go 10 / go-plus 40",
+                 f"{GO_TEAMS}, gemini-4-argon", id="a dated multiplier is passed over: no promotion, no peak row ⚖"),
+    pytest.param("docs-ok", "limits-ok", "ok", 5, "none", "deepseek-v4-pro, deepseek-v4.1-flash", "go 10 / go-plus 40", GO_TEAMS,
                  id="a Plan-table row naming a plan the leg does not model is passed over ⚖"),
 ]
 
 
-def _docs_cells(docs_body: dict | None) -> dict[str, str]:
-    if not docs_body:
-        return {"promotion": "none", "limits": "none", "plan_fees": "none"}
-    promo = docs_body.get("promotion") or {}
-    fees = docs_body.get("plan_fees")
-    return {"promotion": ", ".join(f"{m} ×{num(x)}" for m, x in sorted(promo.items())) or "none",
-            "limits": ", ".join(f"{m} ${num(docs_body['plans']['go'][m])} / ${num(docs_body['plans']['go-plus'][m])}" for m in sorted(promo)) or "none",
-            "plan_fees": " / ".join(f"{p} {num(x)}" for p, x in fees.items()) if fees else "none"}
-
-
-@pytest.mark.parametrize(("last_good", "docs", "expected_outcome", "expected_models", "expected_promotion", "expected_limits",
-                          "expected_plan_fees", "expected_passed_over"), DOCS_ROWS, ids=[p.id for p in DOCS_ROWS])
-async def test_docs_refresh(cworld, vendor, clock, caplog, last_good, docs, expected_outcome, expected_models, expected_promotion,
-                            expected_limits, expected_plan_fees, expected_passed_over):
+@pytest.mark.parametrize(("docs", "limits", "expected_outcome", "expected_models", "expected_promotion", "expected_peak_models",
+                          "expected_plan_fees", "expected_passed_over"), PASSED_OVER_ROWS, ids=[p.id for p in PASSED_OVER_ROWS])
+async def test_docs_passed_over(cworld, vendor, clock, caplog, docs, limits, expected_outcome, expected_models, expected_promotion,
+                                expected_peak_models, expected_plan_fees, expected_passed_over):
     caplog.set_level(logging.INFO, logger="gateway.catalog")
-    world(upstream=docs)
+    world(upstream=f"{docs} · {limits}")
     app = cworld.build()
-    with given(f"last_good = {last_good} (docs-ok at T0)" if last_good != "none" else "last_good = none"):
-        if last_good != "none":
-            vendor.docs = "docs-ok"
-            assert await app.state.catalog.refresh_source("docs") == "ok"
-    clock.advance(60)
-    caplog.clear()
-    with given(f"docs = {docs}: the fake vendor's Go page"):
-        vendor.docs = docs
-    with when(f"the docs source refreshes at T0 + 60 s (docs = {docs})"):
+    with given(f"docs = {docs}: the fake vendor's Go page · limits = {limits}: its Go models list"):
+        vendor.docs, vendor.limits = docs, limits
+    with when("the docs source refreshes"):
         got = await app.state.catalog.refresh_source("docs")
         v = await _view(app)
         lines = [r.getMessage() for r in caplog.records if r.name == "gateway.catalog"]
         snap = app.state.catalog.snapshots.get("docs")
         attach_json("gateway.catalog lines", lines)
-    cells = _docs_cells(snap.body if snap else None)
-    passed_over = [m.group(1) for m in (re.match(r"^catalog: docs plan row passed over — (.+?) \(", x) for x in lines) if m]
-    expected_at = iso(T0 + 60) if expected_outcome == "ok" else (iso(T0) if last_good != "none" else None)
-    verdict(f"outcome = {expected_outcome} · models = {expected_models} · promotion = {expected_promotion} · limits = {expected_limits} · "
-            f"plan_fees = {expected_plan_fees} · passed_over = {expected_passed_over}",
+    body = snap.body if snap else {}
+    promo = ", ".join(f"{m} ×{num(x)}" for m, x in sorted((body.get("promotion") or {}).items())) or "none"
+    fees = " / ".join(f"{p} {num(x)}" for p, x in (body.get("plan_fees") or {}).items()) or "none"
+    passed_over = [m.group(1) for m in (re.match(r"^catalog: docs (?:plan row|limits multiplier) passed over — (.+?) \(", x) for x in lines) if m]
+    verdict(f"outcome = {expected_outcome} · models = {expected_models} · promotion = {expected_promotion} · "
+            f"peak_models = {expected_peak_models} · plan_fees = {expected_plan_fees} · passed_over = {expected_passed_over}",
             expected_outcome={"expected": expected_outcome, "actual": got},
             expected_models={"expected": expected_models, "actual": v["sources"]["docs"]["models"]},
-            expected_promotion={"expected": expected_promotion, "actual": cells["promotion"]},
-            expected_limits={"expected": expected_limits, "actual": cells["limits"]},
-            expected_plan_fees={"expected": expected_plan_fees, "actual": cells["plan_fees"]},
+            expected_promotion={"expected": expected_promotion, "actual": promo},
+            expected_peak_models={"expected": expected_peak_models, "actual": joined(sorted(body.get("peak") or {}))},
+            expected_plan_fees={"expected": expected_plan_fees, "actual": fees},
             expected_passed_over={"expected": expected_passed_over, "actual": joined(passed_over)},
-            fetched_at={"expected": expected_at, "actual": v["sources"]["docs"]["fetched_at"]},
-            last_good={"actual": last_good}, docs={"actual": docs})
-    if docs == "docs-promo":
-        with verdict_block("every other model's plan rows are unchanged; the bonus map stays the Nx multipliers only"):
-            body = snap.body
-            assert sorted(set(body["plans"]["go"]) - {"gemini-4-argon"}) == sorted(LISTED_FIVE)
-            assert sorted(set(body["plans"]["go-plus"]) - {"gemini-4-argon"}) == sorted(LISTED_FIVE)
-            assert body["bonus"].get("gemini-4-argon") is None
+            docs={"actual": docs}, limits={"actual": limits})
+
+
+# ── The two docs reads are one refresh ───────────────────────────────────────────────────────
+LIMITS_ROWS = [
+    pytest.param("none", "docs-ok", "limits-ok", "ok", 5, 1, id="the limits read goes out with the page read"),
+    pytest.param("5", "docs-ok", "limits-503", "fetch-failed", 5, 1, id="a failed limits read keeps the last good ⚖"),
+    pytest.param("5", "docs-ok", "limits-down", "fetch-failed", 5, 1, id="an unreachable limits host keeps the last good"),
+    pytest.param("5", "docs-no-shares", "limits-ok", "parse-failed", 5, 1, id="a page the parser refuses still sends the limits read ⚖"),
+    pytest.param("5", "docs-404", "limits-ok", "fetch-failed", 5, 1, id="a page that cannot be fetched still sends the limits read"),
+    pytest.param("5", "docs-no-shares", "limits-503", "parse-failed", 5, 1, id="the page's failure names the outcome when both fail ⚖"),
+]
+
+
+@pytest.mark.parametrize(("last_good", "docs", "limits", "expected_outcome", "expected_models", "expected_limits_requests"), LIMITS_ROWS,
+                         ids=[p.id for p in LIMITS_ROWS])
+async def test_limits_read(cworld, vendor, vendor_transport, clock, last_good, docs, limits, expected_outcome, expected_models,
+                           expected_limits_requests):
+    world(upstream=f"{docs} · {limits}")
+    app = cworld.build()
+    with given(f"last_good = {last_good} (docs-ok · limits-ok at T0)" if last_good != "none" else "last_good = none"):
+        if last_good != "none":
+            vendor.docs, vendor.limits = "docs-ok", "limits-ok"
+            with quiet():
+                assert await app.state.catalog.refresh_source("docs") == "ok"
+    clock.advance(60)
+    with given(f"docs = {docs} · limits = {limits}"):
+        vendor.docs, vendor.limits = docs, limits
+        if limits.endswith("-down"):
+            vendor_transport.down.add("limits")
+        vendor_transport.attempts.clear()
+    with when(f"the docs source refreshes at T0 + 60 s (docs = {docs}, limits = {limits})"), quiet():
+        got = await app.state.catalog.refresh_source("docs")
+        v = await _view(app)
+    attempted = vendor_transport.attempts.get("limits", 0)
+    verdict(f"outcome = {expected_outcome} · models = {expected_models} · limits_requests = {expected_limits_requests}",
+            expected_outcome={"expected": expected_outcome, "actual": got},
+            expected_models={"expected": expected_models, "actual": v["sources"]["docs"]["models"]},
+            expected_limits_requests={"expected": expected_limits_requests, "actual": attempted},
+            last_good={"actual": last_good}, docs={"actual": docs}, limits={"actual": limits})
 
 
 # ── What a fetch sends ───────────────────────────────────────────────────────────────────────
@@ -283,15 +324,16 @@ SEND_ROWS = [
     pytest.param("config", "Bearer <the Go key>", UA_CELL, "a UUID, new on every fetch", id="the console read carries the key and a client identity"),
     pytest.param("catalog", "absent", UA_CELL, "absent", id="the catalog read carries no credential"),
     pytest.param("docs", "absent", UA_CELL, "absent", id="the docs fetch carries no credential"),
+    pytest.param("limits", "absent", UA_CELL, "absent", id="the limits read carries no credential ⚖"),
 ]
 
 
 @pytest.mark.parametrize(("read", "expected_authorization", "expected_user_agent", "expected_x_opencode_session"), SEND_ROWS,
                          ids=[p.id for p in SEND_ROWS])
 async def test_fetch_sends(cworld, vendor, read, expected_authorization, expected_user_agent, expected_x_opencode_session):
-    world(upstream="catalog-ok · config-ok · docs-ok")
+    world(upstream="catalog-ok · config-ok · docs-ok · limits-ok")
     app = cworld.build()
-    source = "docs" if read == "docs" else "config"
+    source = "docs" if read in ("docs", "limits") else "config"
     with when(f"the {source} source refreshes twice; the vendor's journal of the {read} read"):
         await app.state.catalog.refresh_source(source)
         await app.state.catalog.refresh_source(source)
@@ -436,7 +478,7 @@ async def test_metrics(cworld, vendor, clock, refreshes, read_at, series, expect
 MISSING_ROWS = [
     pytest.param("none", "config", "catalog-ok", 0, "none", id="every policy Go model listed: none missing"),
     pytest.param("none", "config", "catalog-shrunk", 1, "claude-haiku-5-5", id="policy Go models the config does not list are counted"),
-    pytest.param("none", "docs", "docs-shrunk", 1, "claude-haiku-5-5", id="policy Go models without a limit row under the plan are counted"),
+    pytest.param("none", "docs", "limits-shrunk", 1, "claude-haiku-5-5", id="policy Go models without a limit row under the plan are counted"),
 ]
 
 
@@ -447,12 +489,12 @@ async def test_policy_models_missing(cworld, vendor, last_good, source, behaviou
     ids = app.state.catalog.policy_models
     with given(f"last_good = {last_good}"):
         if last_good != "none":  # one good refresh of the source first: the plausibility floor then holds a shrunk answer
-            vendor.catalog, vendor.config, vendor.docs = "catalog-ok", "config-ok", "docs-ok"
+            vendor.catalog, vendor.config, vendor.docs, vendor.limits = "catalog-ok", "config-ok", "docs-ok", "limits-ok"
             with quiet():
                 assert await app.state.catalog.refresh_source(source) == "ok"
     with given(f"policy-default's Go ids (tiers + side_models, wire spelling): {', '.join(ids)}; source = {source} answers behaviour = {behaviour}"):
         attach_json("policy Go ids", list(ids))
-        setattr(vendor, "catalog" if behaviour.startswith("catalog-") else source, behaviour)
+        setattr(vendor, "catalog" if behaviour.startswith("catalog-") else "limits" if behaviour.startswith("limits-") else source, behaviour)
     with when(f"the {source} source refreshes ({behaviour}); GET /metrics + GET /catalog/opencode"):
         await app.state.catalog.refresh_source(source)
         text = await _metrics(app)

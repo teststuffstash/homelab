@@ -1,0 +1,7 @@
+# raw Allure results (pytest --alluredir) — local only, never committed
+allure-results/
+.devbox/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

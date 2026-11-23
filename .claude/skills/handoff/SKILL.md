@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Process the cross-jail handoff queue — claim the oldest task a STACK jail filed for homelab-side work, do it, write the result back, and file the durable record. Use on "/handoff", "check the handoff inbox", "anything from the circles/oracle jail?", "is there a handoff/proposal from <stack>", "<stack>'s inbox", or when running `/loop /handoff` on a rollout day.
+description: Process the cross-jail handoff queue — claim the oldest task a STACK jail filed for homelab-side work, do it, write the result back, and file the durable record; also files a second jail's one-time wind-down handoff (`seat/`). Use on "/handoff", "file the second jail's handoff", "check the handoff inbox", "anything from the circles/oracle jail?", "is there a handoff/proposal from <stack>", "<stack>'s inbox", or when running `/loop /handoff` on a rollout day.
 ---
 
 # handoff — the stack-jail → mono-jail work channel
@@ -24,6 +24,9 @@ are frequently right about *what* is wrong and wrong about *where* it lives.
 
 1. **Look.** `ls /workspace/.handoff/*/inbox/` — every stack's subtree is visible here (a stack jail
    sees only its own). Oldest filename first; the names sort chronologically by construction.
+   `seat/` is not a stack and is not this loop: it holds second jails' one-time wind-down
+   handoffs, filed by the primary as [`seat-records.md`](seat-records.md) says (no claim, no
+   Result, nothing goes back).
 2. **Claim it atomically.** `mv` the file into that stack's `doing/`. Never work a file in place in
    `inbox/` — the `mv` IS the claim, and a second session (or a `/loop /handoff`) must be able to
    see it is taken. **No skipping an old one as "already resolved"**: it gets the same verify as
@@ -50,9 +53,9 @@ are frequently right about *what* is wrong and wrong about *where* it lives.
 6. **Close it.** `mv` the file to `done/`. Then make it durable: the handoff file is runtime data,
    so anything worth remembering past today goes to its real home — a GitHub issue on the owning
    repo, `docs/follow-ups.md`, an ADR, or the doc the change belongs to. In a
-   [second jail](../second-jail/SKILL.md) those records are not yours: the durable record goes to
-   the primary's final message (and the PR body) for the primary to file (promoted 2026-10-26, GAPS
-   handoff-G4).
+   [second jail](../second-jail/SKILL.md) those records are not yours: the durable record goes
+   into its wind-down handoff ([`seat-records.md`](seat-records.md)) for the primary to file
+   (promoted 2026-10-26, GAPS handoff-G4).
 
 ## Rules that keep it honest
 

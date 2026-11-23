@@ -13,7 +13,7 @@ the Go catalog on 2026-10-14 and nothing noticed
 its vendor facts on a schedule, keeps the last good snapshot of each source in its store, and shows
 them on the two views here and on `/metrics`. Admission reads the snapshots — the Go window draw's
 prices, each model's own windows, `not-in-catalog`
-([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); this page owns
+([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)); this page owns
 only the reading. The design input and the operator's rulings are the spike's §Rulings.
 
 Three legs, two rules each: **the Go catalog** — the refresh ([GW-CATALOG-GO](#gw-catalog-go)) and
@@ -67,7 +67,7 @@ flowchart LR
   click MD href "#gw-catalog-go" "GW-CATALOG-GO — the config source" _self
   click GP href "#gw-catalog-go" "GW-CATALOG-GO — the docs source" _self
   click CS href "#the-models-dialect" "GW-CATALOG-GO-PARSE — the dialect" _self
-  click DS href "#what-the-page-says-per-model" "GW-CATALOG-GO-PARSE — the limits" _self
+  click DS href "#what-the-limits-answer-says-per-model" "GW-CATALOG-GO-PARSE — the limits" _self
   click GV href "#the-views-shape-go" "GW-CATALOG-GO-PARSE — the view" _self
   click RK href "#a-refresh-builds-the-snapshot" "GW-CATALOG-OR — ranked ∩ benched" _self
   click EP href "#a-refresh-builds-the-snapshot" "GW-CATALOG-OR — the endpoints per candidate" _self
@@ -115,7 +115,8 @@ flowchart LR
   B --> C{"parses? ≥ half the\nlast good's models?"}
   C -->|no| K["keep the last good\n(fetch-failed / parse-failed / implausible)"]
   C -->|yes| S["config snapshot\n→ the store"]
-  D["go.mdx\n(the docs read)"] --> E{"Plan + Endpoints tables,\nshares, peak hours parse?"}
+  D["go.mdx\n(the docs read)"] --> E{"the page's Plan table + shares,\nthe limits answer parse?"}
+  D2["inference/go/v1/models\n(the limits read)"] --> E
   E -->|no| K
   E -->|yes| T["docs snapshot\n→ the store"]
   S --> V["GET /catalog/opencode\n+ /metrics"]
@@ -168,21 +169,7 @@ each with its own snapshot:
   the one snapshot admission reads.
 - **`docs`** — the vendor's Go page source, `go.mdx` on the vendor repo's default branch
   (`raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx`),
-  fetched with no credential. The leg reads each plan's **monthly fee** (the page's Plan table —
-  `| **Go** | **$10/month** |`; the [Go price](../glossary.md#go-price) divides the policy plan's),
-  each model's **monthly limit** under each plan tab (`go`, `go-plus`), a promotion's multiplier,
-  the `(Peak)` price rows, the peak-hours sentence and the 5-hour / weekly / monthly share of the
-  monthly limit. A plan row's trailing **` (<N>% off)`** is the page's promotion spelling on a
-  name the Endpoints table has: the row is read under the stripped name and the multiplier **N/100**
-  (0.5 at 50 % off) is kept per model in the snapshot's `promotion` map, beside the limit cells'
-  Nx `bonus` multiplier (a price promotion, not a usage one — #2933, ruling 2026-10-26, case (a)).
-  The fees are read from the Plan table's `**Go**` / `**Go Plus**` rows only; a Plan-table row
-  naming any other plan (the vendor's **Go Teams**, #3011) is passed over with one log line naming
-  the row — not a plan this leg models, and no third key enters `plan_fees`. Rows are keyed by
-  **model id** through the page's own Endpoints table (display name → Model ID); the fees by the
-  Plan table's plan names. ⚖ `go-models.ts` (the spike's second file) is not read: it keys rows by
-  family (`deepseek-flash`), and limits are per model (ruling 3); `go.mdx` carries every fact the
-  leg needs.
+  fetched with no credential. The source is two reads, sent at every refresh whatever the other's outcome. The **page read** gives each plan's **monthly fee** (the page's Plan table — `| **Go** | **$10/month** | … |`; the [Go price](../glossary.md#go-price) divides the policy plan's) and the 5-hour / weekly share of the monthly allowance (the bullets "The **5-hour limit** is 20% of your monthly allowance." and "The **weekly limit** is 50% of your monthly allowance."; the monthly share is 1). The fees are read from the Plan table's `**Go**` / `**Go Plus**` rows only; a Plan-table row naming any other plan (the vendor's **Go Teams**, #3011) is passed over with one log line naming the row. The **limits read** — `GET https://opencode.ai/inference/go/v1/models`, the endpoint the page's own §Models names, sent with no credential and recorded ([GW-WIRE-RECORD](wire.md#gw-wire-record), source `go-limits`) — gives, per row of `data[]` keyed by its `id`: the **monthly limit** under each plan (`go.monthly_usage.go`, `go.monthly_usage["go-plus"]`, USD; `monthly_usage: null` is `unlimited` ⚖; any other key of `monthly_usage` — the vendor's `go-teams` — is passed over without a log line ⚖), and the **peak facts** from `cost.multipliers[]`: a multiplier whose `when` holds `utc_days.in` and an `any` list of `all: [{utc_hours: {gte}}, {utc_hours: {lt}}]` pairs is the model's peak — the weekdays, the hour ranges, and the `(Peak)` price row = the row's own `cost.text` prices (`input.price`, `output.price`, `input.cache.read`, and `input.cache.write` when it is a number) × `factor`. Every peak multiplier of an answer names the same weekdays and hours — the snapshot keeps one window; an answer whose peak multipliers differ is a parse failure ⚖. A multiplier whose `when` holds only `date` is a dated price change, not a peak: passed over with one log line naming the model ⚖. The answer carries no usage `bonus` and no `(N% off)` promotion, so the snapshot's `bonus` and `promotion` maps are empty ⚖. The source's model count is the number of `data[]` rows. The two reads are one source: the page read's failure is the refresh's outcome, else the limits read's (the log line names the read: unverified — expected, no row). ⚖ `go-models.ts` is not read (it keys rows by family; limits are per model, ruling 3).
 
 The parse is **strict**: a shape the parser does not know is a parse failure, never a guess —
 whatever the parser raises on it is counted `parse-failed`, and one source's failure never skips
@@ -207,8 +194,8 @@ start: the gateway starts as with no snapshot of that source (no age, the first 
 
 ⚖ **The rail serving an id is not an allowance** ([#2768's ruling](https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677)). *Listed* is the
 vendor's client view — models.dev minus its deprecated rows, under the workspace's overrides —
-never the Go rail's own model list. The leg does not read that list (`/zen/go/v1/models`): its
-reads are the three under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
+never the Go rail's own model list. The leg never lists from that list (`/zen/go/v1/models`, the same answer the limits read fetches at `/inference/go/v1/models`): its
+reads are the four under [§What a fetch sends](#what-a-fetch-sends), and the view carries no
 `served` flag and no reference price (unverified — expected, no row). An id the rail serves and the catalog does not list — a
 deprecated row the vendor still serves, a pay-as-you-go model with no Go row, an id with no vendor
 row at all (the kinds: unverified — expected, no row) — is unlisted like any other: an admission naming it defers `not-in-catalog`
@@ -221,8 +208,7 @@ pay-as-you-go row is not a Go price.
 `catalog` knob is what models.dev answers (`catalog-ok` = `tests/fixtures/go-catalog/models-dev.json`,
 models.dev's `opencode-go` — five listed models and one `status: deprecated` row), the `config` knob
 what the console answers (`config-ok` = the override-only answer, `opencode-go.models: {}`), the
-`docs` knob the Go page (`docs-ok` = `go.mdx`, the same five models); the first two trimmed from the
-live answers of 2026-10-20, the page from 2026-10-17/20. T0 = 2027-01-15T08:00:00Z; a refresh runs at
+`docs` knob the Go page (`docs-ok` = `go.mdx`, the recorded page: the Plan table and the share bullets, no model table), the `limits` knob what the limits read answers (`limits-ok` = five rows derived from `limits.json`, the same five models); the first two trimmed from the live answers of 2026-10-20, the page and the limits fixture cut from the gateway's wire record (their provenance: worlds/README.md §The Go catalog's fakes). T0 = 2027-01-15T08:00:00Z; a refresh runs at
 T0 unless an `at` cell says otherwise. Legend, every table below: `last_good` = the snapshot before
 the refresh (`none`; `5, fetched T0` = one good refresh at T0, five models); `outcome?` = the
 refresh's outcome; `fetched_at?` = the snapshot's `fetched_at` after it; `models?` = the snapshot's
@@ -302,58 +288,65 @@ Legend: `catalog-shrunk` = two listed models; `catalog-trimmed` = three; `catalo
 
 #### The Go page lands or the last good stands
 
-The `docs` source keeps its snapshot by the same rules; its model count is the number of model ids
-with a row in either plan tab. Legend, the three docs tables: `last_good` = `none` or `5` (one good
-page read at T0, five models); the refresh runs at T0 + 60 s; `docs-shrunk` = the page's tables cut
-to two models.
+The `docs` source keeps its snapshot by the same rules; its model count is the number of rows the limits answer holds. Legend, the docs tables: `last_good` = `none` or `5` (one good refresh at T0, five models); the refresh runs at T0 + 60 s; `docs` = what the fake answers on the page read (`docs-ok` = the recorded page (`tests/fixtures/go-catalog/go.mdx`; it carries the **Go Teams** Plan row and the share bullets, no model table); `docs-404` = 404; `docs-no-shares` = the page without its two share bullets; `docs-no-plan-table` = the page without its Plan table; `docs-no-go-plus` = the Plan table without its Go Plus row); `limits` = what it answers on the limits read (`limits-ok` = 200, `{"object": "list", "data": [five rows]}` derived in memory from the recorded fixture `limits.json` as the other knobs derive from theirs: the fixture's rows of `claude-haiku-5-5`, `deepseek-v4-pro`, `deepseek-v4.1-flash` and `step-5-preview`, plus the fixture's row of `beam-free` (a `monthly_usage: null` row) under the id `longcat-2.5-preview-free`, with the world's limits written into `go.monthly_usage` (`go` / `go-plus`): `deepseek-v4.1-flash` 80 / 160, `step-5-preview` 60 / 240, `deepseek-v4-pro` 15 / 60, `claude-haiku-5-5` 15 / 60 — and, on the two DeepSeek rows, the peak inputs written in as the record of 2026-11-23T00:05:52Z holds them: `cost.text` `input.price` / `output.price` / `input.cache.read` = 0.15 / 0.6 / 0.003 on `deepseek-v4.1-flash` (whose `input.cache.write` is written as `null`) and 0.66 / 1.98 / 0.022 on `deepseek-v4-pro`, and on both `cost.multipliers` = `[{"when": {"utc_days": {"in": ["mon", "tue", "wed", "thu", "fri"]}, "any": [{"all": [{"utc_hours": {"gte": "01:00"}}, {"utc_hours": {"lt": "04:00"}}]}, {"all": [{"utc_hours": {"gte": "06:00"}}, {"utc_hours": {"lt": "10:00"}}]}]}, "factor": 2}]`; the other three rows carry no `cost.multipliers`; every other field as recorded; `limits-recorded` = 200, the fixture's `data[]` whole and untouched under `{"object": "list", "data": …}` (its length is the row's `models?`: 30 in the record of 2026-11-23T00:05:52Z); `limits-503` / `limits-down` = 503 / a connect failure on that read; `limits-shrunk` = `limits-ok` cut to the two DeepSeek rows; `limits-no-data` = `{"object": "list"}`; `limits-no-go-plus` = `limits-ok` with `go-plus` removed from `deepseek-v4-pro`'s `monthly_usage`; `limits-odd-when` = `limits-ok` with `deepseek-v4-pro`'s multiplier `when` replaced by `{"region": {"in": ["eu"]}}`; `limits-two-windows` = `limits-ok` with `deepseek-v4-pro`'s second hour range moved to 07:00–10:00; `limits-no-peak` = `limits-ok` with `cost.multipliers` removed from both DeepSeek rows; `limits-dated` = `limits-ok` plus a sixth row, `limits-ok`'s `step-5-preview` row under the id `gemini-4-argon` with `cost.multipliers` = `[{"when": {"date": {"gte": "2026-12-01"}}, "factor": 2}]` (the shape the vendor's own `gemini-4-argon` row carries in the record of 2026-11-23T00:05:52Z, written here so the knob does not depend on the record at the cut); `docs-retired` = `limits-ok` without `claude-haiku-5-5`'s row).
 
-| description | last_good | docs | outcome? | models? |
-|---|---|---|---|---|
-| the page parses | none | docs-ok | ok | 5 |
-| a 404 keeps the last good — the page moved | 5 | docs-404 | fetch-failed | 5 |
-| a drop below half the models is implausible | 5 | docs-shrunk | implausible | 5 |
+| description | last_good | docs | limits | outcome? | models? |
+|---|---|---|---|---|---|
+| the page and the limits answer parse | none | docs-ok | limits-ok | ok | 5 |
+| a 404 keeps the last good — the page moved | 5 | docs-404 | limits-ok | fetch-failed | 5 |
+| a drop below half the models is implausible | 5 | docs-ok | limits-shrunk | implausible | 5 |
+| the recorded answer lands whole ⚖ | none | docs-ok | limits-recorded | ok | 30 |
 
 #### A page shape the parser does not know
 
-Legend: `docs-unknown-model` = a `DeepSeek V4.2 Flash` plan row the Endpoints table lacks;
-`docs-short-endpoint-row` = an Endpoints row `| Step 5 Preview |`; `docs-header-drift` = the limit
-column renamed `Limit`; `docs-no-peak-hours` / `docs-no-shares` = the page without that sentence;
-`docs-no-plan-table` = no Plan table; `docs-no-go-plus` = a Plan table without its Go Plus row.
+| description | last_good | docs | limits | outcome? | models? |
+|---|---|---|---|---|---|
+| no share bullets is a parse failure ⚖ | 5 | docs-no-shares | limits-ok | parse-failed | 5 |
+| no plan table is a parse failure ⚖ | 5 | docs-no-plan-table | limits-ok | parse-failed | 5 |
+| a Plan table without the Go Plus row is a parse failure | 5 | docs-no-go-plus | limits-ok | parse-failed | 5 |
 
-| description | last_good | docs | outcome? | models? |
-|---|---|---|---|---|
-| a plan row naming a model the Endpoints table lacks is a parse failure | 5 | docs-unknown-model | parse-failed | 5 |
-| an Endpoints row with one cell is a parse failure | 5 | docs-short-endpoint-row | parse-failed | 5 |
-| a renamed limit column is a parse failure | 5 | docs-header-drift | parse-failed | 5 |
-| peak rows without the peak-hours sentence are a parse failure | 5 | docs-no-peak-hours | parse-failed | 5 |
-| no share sentence is a parse failure ⚖ | 5 | docs-no-shares | parse-failed | 5 |
-| no plan table is a parse failure ⚖ | 5 | docs-no-plan-table | parse-failed | 5 |
-| a Plan table without the Go Plus row is a parse failure | 5 | docs-no-go-plus | parse-failed | 5 |
+#### A limits answer the parser does not know
+
+| description | last_good | docs | limits | outcome? | models? |
+|---|---|---|---|---|---|
+| an answer with no `data` list is a parse failure | 5 | docs-ok | limits-no-data | parse-failed | 5 |
+| a `monthly_usage` without `go-plus` is a parse failure | 5 | docs-ok | limits-no-go-plus | parse-failed | 5 |
+| a multiplier condition the parser does not know is a parse failure ⚖ | 5 | docs-ok | limits-odd-when | parse-failed | 5 |
+| two peak windows in one answer are a parse failure ⚖ | 5 | docs-ok | limits-two-windows | parse-failed | 5 |
 
 #### The page's promotion and plan rows
 
-Legend: `docs-promo` = the live Gemini 4 Argon rows (ruling 2026-10-26 case (a)): `| Gemini 4 Argon
-(50% off) | …` under both plan tabs plus its Endpoints row; `docs-teams` = the live **Go Teams**
-Plan-table row under Go Plus (`**Go Teams**` / `**$20/member/month**`, read 2026-10-28);
-`promotion?` = the snapshot's `promotion` map (`model ×multiplier`); `limits?` = the promoted
-models' limits (`go / go-plus`); `plan_fees?` = the snapshot's `plan_fees`; `passed_over?` = the
-Plan-table rows the refresh's log names as passed over.
+Legend: `promotion?` = the snapshot's `promotion` map and `plan_fees?` as on the page; `passed_over?` = what the refresh's log names as passed over (Plan-table rows and model ids) — a `go-teams` key of `monthly_usage` is not logged, so it is never in the cell; `peak_models?` = the model ids the snapshot's `peak` map holds.
 
-| description | docs | outcome? | models? | promotion? | limits? | plan_fees? | passed_over? |
-|---|---|---|---|---|---|---|---|
-| a plan row's (50% off) suffix is a promotion multiplier, the name is the Endpoints row ⚖ | docs-promo | ok | 6 | gemini-4-argon ×0.5 | gemini-4-argon $30 / $120 | go 10 / go-plus 40 | none |
-| a Plan-table row naming a plan the leg does not model is passed over ⚖ | docs-teams | ok | 5 | none | none | go 10 / go-plus 40 | `**Go Teams**` |
+| description | docs | limits | outcome? | models? | promotion? | peak_models? | plan_fees? | passed_over? |
+|---|---|---|---|---|---|---|---|---|
+| a dated multiplier is passed over: no promotion, no peak row ⚖ | docs-ok | limits-dated | ok | 6 | none | deepseek-v4-pro, deepseek-v4.1-flash | go 10 / go-plus 40 | `**Go Teams**`, `gemini-4-argon` |
+| a Plan-table row naming a plan the leg does not model is passed over ⚖ | docs-ok | limits-ok | ok | 5 | none | deepseek-v4-pro, deepseek-v4.1-flash | go 10 / go-plus 40 | `**Go Teams**` |
 
 #### What a fetch sends
 
-Legend: `read` = which of the three reads (`config` = the console, `catalog` = models.dev, `docs` =
-the page); `x_opencode_session?` = the `x-opencode-session` header over two fetches.
+Legend: `read` = which of the four reads (`config` = the console, `catalog` = models.dev, `docs` =
+the page, `limits` = the Go models list); `x_opencode_session?` = the `x-opencode-session` header over two fetches.
 
 | description | read | authorization? | user_agent? | x_opencode_session? |
 |---|---|---|---|---|
 | the console read carries the key and a client identity | config | `Bearer <the Go key>` | `agent-gateway/<version> (go-catalog)` | a UUID, new on every fetch |
 | the catalog read carries no credential | catalog | absent | `agent-gateway/<version> (go-catalog)` | absent |
 | the docs fetch carries no credential | docs | absent | `agent-gateway/<version> (go-catalog)` | absent |
+| the limits read carries no credential ⚖ | limits | absent | `agent-gateway/<version> (go-catalog)` | absent |
+
+#### The two docs reads are one refresh
+
+Legend: `limits_requests?` = the limits reads the gateway attempted during the refresh, as the fake counts them (a request it answered and a connection it refused each count one); `last_good`, `docs`, `limits`, `outcome?`, `models?` as in the docs tables above (the refresh runs at T0 + 60 s).
+
+| description | last_good | docs | limits | outcome? | models? | limits_requests? |
+|---|---|---|---|---|---|---|
+| the limits read goes out with the page read | none | docs-ok | limits-ok | ok | 5 | 1 |
+| a failed limits read keeps the last good ⚖ | 5 | docs-ok | limits-503 | fetch-failed | 5 | 1 |
+| an unreachable limits host keeps the last good | 5 | docs-ok | limits-down | fetch-failed | 5 | 1 |
+| a page the parser refuses still sends the limits read ⚖ | 5 | docs-no-shares | limits-ok | parse-failed | 5 | 1 |
+| a page that cannot be fetched still sends the limits read | 5 | docs-404 | limits-ok | fetch-failed | 5 | 1 |
+| the page's failure names the outcome when both fail ⚖ | 5 | docs-no-shares | limits-503 | parse-failed | 5 | 1 |
 
 #### No key, no fetch; the key never logged
 
@@ -412,19 +405,19 @@ Legend: `refreshes` = the config source's refreshes before the read, in order; `
 `gateway_go_catalog_policy_models_missing{source=…}`; `uncovered?` = the policy Go models the view's
 `policy_models` shows without a listing (config) or without a limit row under the plan (docs);
 `last_good` = the source's snapshot before the refresh (`none` = the refresh is the first, so no
-plausibility floor holds it).
+plausibility floor holds it). For a `docs` row the `behaviour` cell names the limits knob (the page is `docs-ok`).
 
 | description | last_good | source | behaviour | missing? | uncovered? |
 |---|---|---|---|---|---|
 | every policy Go model listed: none missing | none | config | catalog-ok | 0 | none |
 | policy Go models the config does not list are counted | none | config | catalog-shrunk | 1 | claude-haiku-5-5 |
-| policy Go models without a limit row under the plan are counted | none | docs | docs-shrunk | 1 | claude-haiku-5-5 |
+| policy Go models without a limit row under the plan are counted | none | docs | limits-shrunk | 1 | claude-haiku-5-5 |
 
 #### Named gaps — the Go catalog
 
 | description | input | v0 answer | the gap |
 |---|---|---|---|
-| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are ([#3293](https://github.com/teststuffstash/homelab/issues/3293)); the rail's own `/models` answer stays unread |
+| ⚑ gap: listed is not alive | a listed id that answers 400 `Model is unavailable` | listed | the spike's §F3 / gap 4: no vendor source is a liveness signal; the shadow cells and the 4xx/5xx belts are ([#3293](https://github.com/teststuffstash/homelab/issues/3293)); the rail's own `/models` answer is never a listing source |
 | ⚑ gap: a vendor reset time | a Go 429 | — (this leg reads no usage) | the spike's gap 6: no real Go 429 has been observed; the account's windows and their reset are the headroom Goal's read ([#3118](https://github.com/teststuffstash/homelab/issues/3118)) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
@@ -448,11 +441,11 @@ a catalog-level fault like a missing provider object is a parse failure whole,
 no override, is `openai`: unverified — expected, no row), and the admission walk takes the harness
 from it ([GW-SESSIONS-ADMIT §The harness follows the cell](sessions.md#the-harness-follows-the-cell)).
 
-**The page's facts.** The view `GET /catalog/opencode` shows, per model, the monthly limit under
+**The docs source's facts.** The view `GET /catalog/opencode` shows, per model, the monthly limit under
 the policy's plan, the `bonus` multiplier, the `(Peak)` price row and the model's windows (its
 monthly limit × the page's 5-hour / weekly / monthly shares); the docs snapshot keeps both plans'
 limits, the plan fees, the peak hours and weekdays and the shares; the config snapshot keeps each
-model's cost rows (the base rate and each context tier above N tokens). A model the page tabulates
+model's cost rows (the base rate and each context tier above N tokens). A model the limits answer holds
 that the config does not list is shown with `listed: false` and its limit — the limit is the
 page's fact, the listing the catalog's.
 
@@ -463,14 +456,14 @@ the vendor facts live in the snapshot, so a policy that still carries one refuse
 stale hand copy can never shadow the catalog. Two entries of `rails.<rail>.admission` are closed
 sets, and a value outside one refuses the load: a window under `window_draw.windows` is one the
 page gives a share — `5h`, `7d`, `30d`, the snapshot's `window_shares` — and `latch_scope` is
-`account` (the default) or `model` ([GW-SESSIONS-CAPACITY](sessions.md#capacity--the-ladders-capacity-half)). The same rule holds a Go model's harness window:
+`account` (the default) or `model` ([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)). The same rule holds a Go model's harness window:
 the dispatch answer's `context_tokens` is the snapshot's `context`, and a policy `context_tokens`
 entry for an `opencode-go/*` model refuses the load — the rows live on
 [GW-SESSIONS-ENV](sessions.md#gw-sessions-env).
 
 **World: [`policy-default`](../worlds/README.md#policy-worlds) · the fake vendor** as above:
-`catalog-ok` + `config-ok` + `docs-ok` unless a cell names another knob; a `$` cell is a monthly
-limit in USD, `unlimited` the page's word.
+`catalog-ok` + `config-ok` + `docs-ok` + `limits-ok` unless a cell names another knob; a `$` cell is a monthly
+limit in USD, `unlimited` = a `monthly_usage` of `null`.
 
 #### The model's dialect
 
@@ -480,7 +473,7 @@ limit in USD, `unlimited` the page's word.
 | a model with no provider override is the openai dialect | catalog-ok | deepseek-v4.1-flash | openai |
 | an npm the parser does not know drops the row ⚖ | catalog-google | gemini-4-argon | absent |
 
-#### What the page says, per model
+#### What the limits answer says, per model
 
 Legend: `go?` = the view's `monthly_limit_usd` (plan `go`); `go_plus?` = the docs snapshot's
 `go-plus` row; `bonus?` = the Nx multiplier (`—` = none); `peak?` = the `(Peak)` row as `in / out /
@@ -488,23 +481,24 @@ cache_read / cache_write` (`—` = none).
 
 | description | model | go? | go_plus? | bonus? | peak? |
 |---|---|---|---|---|---|
-| a plain row gives the monthly limit per plan | deepseek-v4.1-flash | $80 | $160 | — | 0.3 / 1.2 / 0.006 / — |
-| a promotion reads the current limit, not the struck one | step-5-preview | $60 | $240 | 4 | — |
-| Unlimited is unlimited | longcat-2.5-preview-free | unlimited | unlimited | — | — |
-| context-tier rows are one model with one limit | claude-haiku-5-5 | $15 | $60 | — | — |
+| a plain row gives the monthly limit per plan, and its peak row is its prices times the factor ⚖ | deepseek-v4.1-flash | $80 | $160 | — | 0.3 / 1.2 / 0.006 / — |
+| the answer carries no bonus ⚖ | step-5-preview | $60 | $240 | — | — |
+| a null monthly_usage is unlimited ⚖ | longcat-2.5-preview-free | unlimited | unlimited | — | — |
 
-#### The page's constants
+#### The docs source's constants
 
 Legend: `field` = the view's key (`plan_fees` = the docs snapshot's); `peak_hours_utc` as
 `HH-HH` ranges; `window_shares` / `windows_usd` as `window value`.
 
-| description | docs | field | value? |
-|---|---|---|---|
-| the plan fees come from the page ⚖ | docs-ok | plan_fees | go 10 / go-plus 40 |
-| the peak hours come from the page ⚖ | docs-ok | peak_hours_utc | 01-04, 06-10 |
-| the peak weekdays come from the page | docs-ok | peak_weekdays | mon, tue, wed, thu, fri |
-| the window shares come from the page ⚖ | docs-ok | window_shares | 5h 0.2 · 7d 0.5 · 30d 1 |
-| a model's windows are its monthly limit times the shares | docs-ok | models.deepseek-v4.1-flash.windows_usd | 5h 16 · 7d 40 · 30d 80 |
+| description | docs | limits | field | value? |
+|---|---|---|---|---|
+| the plan fees come from the page ⚖ | docs-ok | limits-ok | plan_fees | go 10 / go-plus 40 |
+| the peak hours come from the multipliers' hour ranges ⚖ | docs-ok | limits-ok | peak_hours_utc | 01-04, 06-10 |
+| the peak weekdays come from the multipliers' days | docs-ok | limits-ok | peak_weekdays | mon, tue, wed, thu, fri |
+| the window shares come from the page's bullets ⚖ | docs-ok | limits-ok | window_shares | 5h 0.2 · 7d 0.5 · 30d 1 |
+| a model's windows are its monthly limit times the shares | docs-ok | limits-ok | models.deepseek-v4.1-flash.windows_usd | 5h 16 · 7d 40 · 30d 80 |
+| an answer with no peak multiplier has no peak hours ⚖ | docs-ok | limits-no-peak | peak_hours_utc | none |
+| an answer with no peak multiplier has no peak weekdays | docs-ok | limits-no-peak | peak_weekdays | none |
 
 #### The model's cost rows
 
@@ -515,13 +509,13 @@ above N:` the tier above N tokens (models.dev's `cost` + its `tiers[0]`).
 |---|---|---|---|
 | the config's prices are the model's cost rows | catalog-ok | claude-haiku-5-5 | 0.1 / 0.5 / 0.01 / 0.125; above 100000: 0.5 / 2.5 / 0.05 / 0.625 |
 
-#### A model the page tabulates but the config does not list
+#### A model the limits answer holds but the config does not list
 
 Legend: `catalog-trimmed` = three listed models, no `step-5-preview`.
 
-| description | catalog | docs | model | listed? | monthly_limit_usd? |
-|---|---|---|---|---|---|
-| a model the page tabulates but the config does not list is shown unlisted | catalog-trimmed | docs-ok | step-5-preview | false | $60 |
+| description | catalog | docs | limits | model | listed? | monthly_limit_usd? |
+|---|---|---|---|---|---|---|
+| a model the limits answer holds but the config does not list is shown unlisted | catalog-trimmed | docs-ok | limits-ok | step-5-preview | false | $60 |
 
 #### The view's shape (Go)
 
@@ -872,7 +866,7 @@ the horizon it is due again — judged whenever the provider serves our traffic,
 Any verdict (a clean ride, a strike) resets the horizon and the step; a strike reported on a ride
 that saw a 429 on its cell is the task's strike as ever but **not** the cell's verdict — the 429 is
 the likelier cause. The capacity half's own 30/60 s cell cooldown
-([sessions.md §Capacity](sessions.md#capacity--the-ladders-capacity-half)) is untouched by this:
+([sessions.md §Capacity](sessions.md#gw-sessions-capacity)) is untouched by this:
 that is selection's signal, this is the entry gate's.
 
 **The budget cap** ⚖ — policy knobs, never code constants (`rails.openrouter.canary`):
@@ -1113,6 +1107,8 @@ parts, each a reviewable file in git:
   [§Cost per clean ride](#cost-per-clean-ride)); the `cost` block is required, `ride_tokens_out_m` a
   positive number, `min_rides` a positive integer. Unknown keys refuse the load like every other
   policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
+  The block itself is optional ⚖: a policy without `tiers` loads with no rules (`Policy.tiers`
+  None), and `tiers check` refuses to run, naming `tiers`.
 - **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
   `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
   derive | check | apply`). The deployed lists EQUAL the derivation, order included — a hand edit
@@ -1147,7 +1143,7 @@ limit)`** — the fee buys at least the model's own allowance (`promise`), and a
 every Go token cheaper (`measured`); an unlimited model prices at 0 (`unlimited`). The fee is the
 Go page's Plan table ([GW-CATALOG-GO-PARSE](#gw-catalog-go-parse), never a policy copy — ruling 5);
 the draw is the gateway's own ledger at the catalog's list rates, the window draw's arithmetic
-([GW-SESSIONS-ADMIT §Capacity](sessions.md#capacity--the-ladders-capacity-half)); the model's
+([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)); the model's
 windows stay the gate — a window at its threshold holds the cell whatever its price. Shown on
 `GET /catalog/opencode` `pricing` (`output.pricing`), read by the snapshot and the rail choice.
 
@@ -1450,8 +1446,8 @@ per clean ride and by price alone), `clean-rate` (the measured rate flipped the 
 `headroom`, `not-in-catalog` (unverified — expected: no row drives it), `no-eligible-endpoint`, and
 ⚖ `order` — the two twin cells cost exactly the same per clean ride, so the role's rail order
 decides and the answer says so (unverified — expected: no row drives an exact tie; the sixth value
-of `RAIL_CHOICE_REASONS`, which neither `metrics.schema.json`'s `gateway_rail_choice_total.reason`
-nor `sessions.schema.json`'s `rail_choice.reason` enumerates yet). A failed-over request bills the serving provider: its row names that
+of `RAIL_CHOICE_REASONS`, enumerated by both `metrics.schema.json`'s `gateway_rail_choice_total.reason`
+and `sessions.schema.json`'s `rail_choice.reason`). A failed-over request bills the serving provider: its row names that
 provider, its outcome judges that cell
 ([§Failover](openai-chat.md#failover--before-the-first-byte-only) — the choice does not change it).
 

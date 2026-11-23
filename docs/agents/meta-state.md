@@ -18,8 +18,105 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-22 — intake on its own App; island suites gated by required `ci`; FU-320).**
+  #3627 merged: master `ci` runs the scan/launch/retro suites (run 45048719148, all three green). #3672/#3676/#3677/#3682
+  merged: intake sits as `homelab-intake` (Secret `intake-git`; read-only `intake-read-git` for oracle-iac), and
+  `required-checks` has `do_not_enforce_on_create` (probe: goal ref create 201 / delete 204). NEXT:
+  - After the 2026-11-23 05:00Z `island-intake` run: its first write is authored by `homelab-intake[bot]`, and it cut
+    `goal/3656-…` and the #3480/#3482 Goal branches (or said why not). Then weigh a create+delete rule on `goal/**` with
+    homelab-intake the only non-admin bypass (it can delete a goal ref today — gap row on the access page); fix
+    `meta-throughput.sh` (counts intake writes by the old author) and the stale coordinator-git cell in `gateway/specs/access.md`.
+  - #3683 and #3678 (jail-cluster rig, ADR-167) MERGED 11-22; #3688 fixed the rig's ghcr blob egress + `list`; smoke PASSED
+    (SERVICES row LIVE). Operator: k3d is not a goal (kind is proven) — if k3d breaks again, document it unsupported, no rework.
+- **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
+  The pair is whole: nx-02 MASTER, both router disks 32 GB, `check` 18/18. Owed:
+  - Route the draft §Lessons with the operator: WAL-vs-service, mirrored boot (boot-only pair; ZFS+UEFI vs LVM raid1),
+    backup target on two hosts, paging.
+  - Bay-swap test if the SA400 drops again.
+  - hp-01 Longhorn default disk at 79 % (`LonghornDiskBelowSchedulingFloor`, responder's).
+  - Gateway #3622 LIVE (anthropic 5h/7d 0.95, `latch_scope: model`); the rail was unlatched from the second jail on 11-21 and
+    reviews flow. The `catalog: docs parse failed (no Endpoints table)` warning is #3533 (blocked on one operator ruling:
+    may the `docs` source read the rail's public `/go/v1/models` for limits only).
+  - Fable weekly limit spent 11-21 (second jail: role `coordinator`, 45 sessions / ~1.2M output tokens in 7 d vs 3
+    reviewer sessions). The only `--prefer strongest` caller is the intake sitting (`islands/intake/scripts/sitting.sh`,
+    tier heavy → Fable), so this is FU-320's spend. It also killed the seat's Fable subagents. `latch_scope: model`
+    (#3622) keeps opus serving next time; open: whether intake's prefer=strongest needs a Fable budget share (FU-320).
+  - Open question: why reviewer sessions only ever land on anthropic (policy lists opencode + codex).
+- **⚑ PICKUP (2026-11-19 — island rules learning loop; TICK-LOG 11-19 second entry; FU-320, FU-249, ADR-164).**
+  FIRST LIVE RESULTS READ 11-20 (TICK-LOG 11-20): dig re-test, the sitting's forward/release/wait read and the digest's
+  unattended merge (#3565) all worked. STILL OWED: read #3533's release on the 11-21/22 05:00Z sitting (it and #3538
+  were not offered — parked <3 d); `TierEvidenceStale` re-cut is due (dig: seat; intake folded it).
+  NEXT BUILDS: the replay runner + the edit-PR leg (cases in `islands/intake/tests/fixtures/wait-cases/`); cron
+  sittings for the other islands (17 waits parked there, unclassified: scan 6, agent-loop 5, commons 3, retro 2,
+  launch 1). FU-315: next apiserver refill on wk-metal-02 due ~2026-12-11; no detector for GC-at-the-limit.
+- **⚑ PICKUP (2026-11-20 evening — intake IS its own island; outcome experiments in build; TICK-LOG 11-20 third entry; FU-320).**
+  Goal #3574 BUILT BY SEAT SUBAGENTS AND ON MASTER (assembly #3598, 18:37Z; children #3575–#3581 closed; the operator said
+  "finish this" for the codeowner merge). LIVE-PROVEN 11-20: `can-i` as `island-intake` (reads yes; pods/exec/configmaps/
+  secrets no), one dry-run sitting `island-intake-cpsr9` (gateway island, 21 min, Succeeded: base image, install 14 s,
+  gateway admitted the caller on Fable, two lens runs, uploads, metrics; peak 360 MiB → limit 3Gi → 1Gi, #3609
+  merged). NOT YET SEEN: the first FULL WALK (05:00Z 11-21, nine islands in sequence under `parallelism: 1` — read that every
+  island got a step, that one failing does not stop the rest, the `island_intake_listed_timestamp_seconds` push, the 23 h
+  deadline); anything for a stack island (no stack declares `repos[].intake.facts`; oracle was told via
+  `/workspace/.handoff/oracle/done/20261120-1915-platform-island-intake-contract-ready.md`). Verdict on #3574 is the
+  operator's (human authority) — it stays open, post-launch.
+  RESIDUE: intake's own items still ride the GATEWAY's sitting (no membership row or facts file for `islands/intake/`);
+  `docs/intake/{launch,retro}.md` say no tests root is declared while both hold labelled tests (unchecked against the
+  claim); the wait ledger double-counts 22 lines moved into `docs/intake/gateway.md` (ages out in 30 d);
+  `.claude/skills/intake/SKILL.md` step 4 stale (operator-direct path); nothing bumps the agent-base tag in
+  `agents/coordinator/kustomization.yaml` (agent-runtime deploy-pin needs one sed); the island devbox lock has no update lane
+  and pins a newer nixpkgs than the image (harmless in the dry run); three facts-file reads are seat-only.
+  GOAL #3586 ASSEMBLED + ON MASTER 11-21 (assembly #3637 admin-merged 18:30Z on the operator's word, `a330c03f`; children
+  A–E #3608 #3610 #3611 #3624 #3632 + assembly fixes #3642 #3645). LIVE: `island-intake` runs `experiments → islands →
+  sitting → experiments-failed`; label `experiment/open` provisioned (quickfix `50634967`: its 174-char description
+  422'd every repo's IssueLabels — alert for that class is #3650); #3563 labelled, dry-run read = `pending`.
+  NEXT: the Production-leg read — #3563 decided at its bound (2026-11-27T13:14Z with the 5-min settle): exactly ONE
+  verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
+- **ADR-166 Renovate follow-through (#3652, merged 2026-11-22 17:15Z).** The image clock is VERIFIED: every scheduled run
+  since (23:04Z, 05:09Z, 17:03Z 11-23) logs `image-clock: 36 package(s) observed … 52 allowedVersions rule(s)`, and the
+  postgres N-alpine rule for oracle-fleet is in the effective config. oracle-fleet#1098 stays open as "abandoned", not autoclosed (FU-323).
+  Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
+  security PRs that skip the cooldown; worker `uv lock` additions are the other un-aged intake — 2 versions <7 d in ~4
+  months; an optional reviewer line "a new direct dep names its importer" rides the same call). openrouter-operator:
+  #113 closed 11-21; #110 (target virtualenv 21.14.9, itself vulnerable) stays OPEN until #111 merges — Renovate
+  recreates a closed vulnerability PR while master is still vulnerable. #111 (armed, approved, red on deps-pin-guard =
+  ADR-154's admin-merge route): "wait for the 7-day floor" does NOT converge — Renovate re-locked it 11-21 22:44Z to
+  virtualenv 21.15.12 (uploaded 22:12Z, floor 11-28 ~22:12Z) and virtualenv ships every 1–3 days. Converging route is
+  docs/renovate.md's own: `[tool.uv] exclude-newer` ≥7 d back + `uv lock` (fixed ≥21.14.13 exists aged, e.g. 21.15.6
+  of 11-06), or admin-merge whichever head lock-intake-lint passes. Scan routing armed non-major #111 to unarmed-major:
+  unchecked, a loop component → stop-and-ask.
+- **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650 MERGED 19:54Z `31491512`).** Scrape live (3/3 providers
+  `up=1`); `CrossplaneManagedResourceNotSynced` was PENDING at 19:56Z — confirm it FIRED `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
+  Workspace `pr-oracle-fleet-minutark` (Synced=False, "failed to make http request"; the oracle stack's). Not firing = the
+  PodMonitor or the expr is wrong. Coordinator scan fix #3636 LIVE (a gateway stack's goal lane no longer defers on the old
+  proxy's latch; proven 16:10Z by #3586's checkpoint opening #3637).
+- **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
+  window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
+  on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.
+  Then the attended window: test VM → BACKUP (snapshot) → MASTER, 26.7.5 → 26.7.9_3, 73 packages, reboot; ask before the
+  failover leg; try `carp-maintenance enter|leave` as `automation` on the test VM first (still root today).
+  FIRING BY DESIGN until then: `MgmtRouterFirmwareBehind` (nx02) and `MgmtRouterFirmwareUnread` (pve — the same missing
+  route; it needs a rule for "the BACKUP has no WAN" or the egress fix). `MgmtOpnsenseDrillScoreRegressed`: a drill run was
+  started on the box 11-19 at wind-down and NOT read — expect ~17 (the dnsmasq rows gone, the rest wait on the firmware).
+  #3539 (content-keyed test-VM verdict) MERGED 11-19 05:47Z — the first bot update of an open router PR should
+  post "PASS carried from"; unproven live. Also unproven live from #3528: the hourly re-read of a drifted group and the
+  7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. Same host-key class
+  as #3527 still in `opnsense-test-vm.sh`, `opnsense-drill.sh`, `host-maintenance.sh`, `node-maintenance.sh`,
+  `mgmt-tf.sh`, `mgmt-bmc.sh`, `mgmt-human-plan.sh` (default `known_hosts`, not the pinned file). JAIL: the running
+  image has no `ssh` (the Dockerfile lists openssh-client — rebuild the container); `~/.ssh/known_hosts` starts empty.
+
+- **⚑ PICKUP (2026-11-20 — scan island Goal #3490 on master, built overnight by seat subagents; TICK-LOG 11-19/20).**
+  Operator instruction 11-19 evening: build unattended, "I can redo decisions in the morning". DONE: #3561 merged
+  (`a715541b`; island gate 324 passed on master; required `ci` runs it since #3627). OPERATOR
+  READS: the ⚖ choices + the reviewer's open spec questions, both in #3561's body and on #3490. NEXT, none started:
+  (a) #3550 is not one ride — the split into cuts A–F is on the issue; its `blocked-on: issue=3491` is now a closed
+  target, so the next scan sitting re-decides it (no scan sitting is scheduled); (b) #3448's wait fact (#3490's assembly
+  on master) is true — next sitting cuts it into a Goal; (c) #3553 trace is on the issue (FU-199), ruling unmade;
+  (d) `docs/intake/scan.md` got a one-line currency fix only — the 13 unowned index rows and the ADR-164 wording are
+  still owed (FU-320); (e) the intake identity still cannot cut a `goal/**` branch (422, IL-G02) — untracked class.
+
 - **⚑ PICKUP (2026-11-16 — the gateway becomes self-sufficient before any new island leg; TICK-LOG 11-16; FU-320).**
-  OPERATOR GATE: retro #3482, launch #3480, scan #3490 are written and their goal branches UNCUT on purpose. Order when it
+  OPERATOR GATE: retro #3482 and launch #3480 are written and their goal branches UNCUT on purpose (scan #3490 was
+  lifted for one night by the operator and is on master — the 11-20 bullet below). Order when it
   lifts: gateway first, then retro — with retro's own intake doing the work on the schedule. The bar: the island defines and
   ships its OWN metrics, monitors and improves them (the oracle-fleet#1082 shape: a claim per change — PromQL + pass
   threshold + baseline — judged on prod). RULED the same evening: (1) Kargo for the gateway POSTPONED — metric claims first,
@@ -29,8 +126,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   `~/.claude/oracle-mining-2026-11-16/` (seat prep list vs the loop's Goal are both in there) — release identity on
   `/healthz`, a synthetic-traffic label, outcome alerts, its dashboard as code (it has none), the claims file + judge, loop
   self-metrics; and the open question from 11-16: the gateway path dropped the per-session OpenRouter budget key with no
-  ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: adopt the nameable-split size test (handoff
-  `20261116-2130-…`, unclaimed); split the gateway's FACTS out of `gateway/intake.md`; the specs-reviewer rule tally, THEN
+  ruling recorded (prompt in TICK-LOG 11-16). SEAT, from the intake report: split the gateway's FACTS out of `islands/intake/rules/intake.md`; the specs-reviewer rule tally, THEN
   rule #3495 (the escape read's first filing against intake's own rules); a `wait: stalled` re-read kind in `intake-select.sh`.
   OVERNIGHT TRIAL (operator: "lets see in the morning how it went"): five operator-origin gateway inputs filed 11-16
   ~21:00Z — #3501 (release on /healthz), #3502 (real vs synthetic traffic), #3503 (dashboard as code), #3504 (outcome
@@ -78,8 +174,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   the hop cap have run only in the selector tests and one hand-written comment (#3427).
 
 - **⚑ PICKUP (2026-11-15 — intake review stage live, islands scan/launch/retro started; TICK-LOG 11-14 → 15; FU-320).**
-  OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — the `.github/workflows/ci.yaml`
-  steps so required `ci` runs each island's suite; (c) launch island: fresh launcher = bash carrying the same blocks over
+  OPERATOR: (a) verdicts on Goals #3384 #3390 #3389 when their assemblies land; (b) #3391 — DONE by #3627; (c) launch island: fresh launcher = bash carrying the same blocks over
   the same shell variables, or a new shape with its own test hooks? — the rest of that island stays unfiled until
   answered; (d) intake-workflow defects, unfixed: a dry-run's author/repair sessions hold the write token (only the
   prompt stops a write); unanswered findings miss the issue when a repair half-runs; a queue ruling without a hold line
@@ -95,9 +190,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **⚑ PICKUP (2026-11-14 — runner recreate on; TICK-LOG 11-14).** The next ci-runner template change is the first unattended
   recreate expected to need no seat close (#3372): read its journal for "window closed by the verb" + `management-apply=success`.
 - **⚑ HANDOFF INBOX (2026-11-16; oracle ×2, circles empty).** Grafana plugin handoff CLOSED (the chart already defaulted
-  `preinstall_auto_update` off; #3499 states it explicitly). NEW, unread: `20261116-2130-intake-size-test-nameable-split.md`.
+  `preinstall_auto_update` off; #3499 states it explicitly). Both 11-16/11-21 oracle tasks answered 11-22 (#3685; #3686/#3687).
   `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
-  `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `gateway/intake.md` or oracle-only;
+  `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `islands/intake/rules/intake.md` or oracle-only;
   (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.
 - **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** On/after **2026-11-21**: re-run the burst-pickup table
   (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) — PR job pickup should flatten toward ~3 s after #3348
@@ -164,7 +259,7 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   verdict (replace it if it doesn't change behaviour); the ADR-142 re-read **2026-10-28** (gate-change PRs, lens
   verdicts, DIFFERS lines, weakened gates; revert = `/scripts/` in CODEOWNERS + governance-lint GOVERNANCE); the r8
   reports (#2522, merged on the bot by ruling — read after).
-  (4) Prod routers on 26.7.5 with 26.7.6 pending on the official path (39 packages, no reboot) — an attended window.
+  (4) Prod routers: see the 2026-11-17 router PICKUP above (26.7.9_3 offered, REBOOT needed).
   (5) pop-os `~/.talos/config` may still hold the pre-rotation identity (FU-264 rotated the CA 09-22).
   #1882's "3 flagged choices" were never recorded.
   (6) pve's CMOS clear reset "Restore on AC Power Loss" — UNREADABLE headless: a monitor/GPU visit or a deliberate

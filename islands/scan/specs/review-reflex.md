@@ -27,11 +27,11 @@ argv and the breaker actions.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-REFLEX-GATE](#scan-reflex-gate) | `tick` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-tick`, `slo-teeth`, `reviewer-optout`) · ⚑ gap: rail probe is self-routing |
-| [SCAN-REFLEX-PICK](#scan-reflex-pick) | `pick`, `dispatch` | 🚧 WIP — no evidence pipeline yet (fixture: `review-pick`, `assembly-review-dispatch`) |
-| [SCAN-REFLEX-BREAKER](#scan-reflex-breaker) | `breaker` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-breaker`) |
-| [SCAN-REFLEX-REARM](#scan-reflex-rearm) | `rearm` | 🚧 WIP — no evidence pipeline yet (fixture: `c9-rearm`) |
-| [SCAN-REFLEX-DECORRELATE](#scan-reflex-decorrelate) | `dispatch.decorrelate_from` | 🚧 WIP (fixture: `decorrelate-resolution`) · ⚑ gap: reads the old proxy's `/report/latest` |
+| [SCAN-REFLEX-GATE](#scan-reflex-gate) | `tick` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `reflex-tick`, `slo-teeth`, `reviewer-optout`) · ⚑ gap: rail probe is self-routing |
+| [SCAN-REFLEX-PICK](#scan-reflex-pick) | `pick`, `dispatch` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `review-pick`, `assembly-review-dispatch`) ⚑ gap (2026-11-23, PR #3698 → work #3448): the reflex and its review-pick fixtures tell a merge commit by its headline, not its parents |
+| [SCAN-REFLEX-BREAKER](#scan-reflex-breaker) | `breaker` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `reflex-breaker`) |
+| [SCAN-REFLEX-REARM](#scan-reflex-rearm) | `rearm` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c9-rearm`) |
+| [SCAN-REFLEX-DECORRELATE](#scan-reflex-decorrelate) | `dispatch.decorrelate_from` | 🚧 WIP → #3448 (fixture: `decorrelate-resolution`) · ⚑ gap: reads the old proxy's `/report/latest` |
 
 ### SCAN-REFLEX-GATE
 
@@ -69,8 +69,7 @@ not `automerge` (the mechanical class — no review), not `agent/error`, not `ag
 newer than its newest non-merge commit (`review-pick` block, `review-reflex.sh:271-398`). Green
 means every check context's newest non-CANCELLED conclusion is SUCCESS/NEUTRAL/SKIPPED and every
 required context of the default branch's ruleset is present (an unreadable ruleset is treated as
-none required, fail-open). A merge commit — any of GitHub's three default merge-message shapes —
-is not new content. BEHIND is admitted for a first review (ADR-125: an update-branch merge does
+none required, fail-open). A [merge commit](glossary.md#merge-commit) is not new content. BEHIND is admitted for a first review (ADR-125: an update-branch merge does
 not dismiss a review); DIRTY is not. A PR that already has a live `app=agent-reviewer` pod is
 skipped. An assembly PR (head `goal/**`) is reviewed with the goal rubric
 (`--rubric .agents/review-goal.md`) and, like every review, names no model.

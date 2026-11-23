@@ -1,0 +1,21 @@
+# Jail clusters lose to rides and CI (ADR-167). No PriorityClass exists for rides or ARC runners
+# (ADR-159 deferred one until a pending ride is observed), so every workload pod runs at the
+# default 0. The smallest mechanism that puts jail pods strictly LAST is one class below 0, used
+# only here (the admission policy requires it on every pod in jail-clusters):
+#   value -1000             the scheduler preempts a jail pod to place a pending ride/CI pod, and
+#                           the kubelet ranks it first among pods over their requests under
+#                           node-pressure eviction
+#   preemptionPolicy Never  a pending jail pod waits in the queue; it never evicts anything
+# Nothing else changes: rides, CI and every other pod keep priority 0 and today's behaviour.
+# Cluster-scoped: baselined by name in policy/iac/exceptions/homelab.yaml (iac-no-cluster-scoped).
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: jail-clusters
+value: -1000
+globalDefault: false
+preemptionPolicy: Never
+description: >-
+  Jail clusters (ADR-167): throwaway kata+dind pods a jail session starts on nx-01. Below every
+  workload (default 0) and never preempting, so rides and CI always win; a jail pod is the first
+  thing the scheduler preempts and the kubelet evicts.

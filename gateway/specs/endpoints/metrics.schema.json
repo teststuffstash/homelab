@@ -16,6 +16,13 @@
         "none"
       ]
     },
+    "traffic": {
+      "enum": [
+        "real",
+        "synthetic",
+        "none"
+      ]
+    },
     "role": {
       "enum": [
         "worker",
@@ -192,7 +199,8 @@
         "clean-rate",
         "headroom",
         "not-in-catalog",
-        "no-eligible-endpoint"
+        "no-eligible-endpoint",
+        "order"
       ],
       "description": "why one rail's twin cell went first (sessions.schema.json $defs.rail_choice.reason)"
     }
@@ -241,6 +249,9 @@
         },
         "status": {
           "$ref": "#/$defs/status"
+        },
+        "traffic": {
+          "$ref": "#/$defs/traffic"
         }
       },
       "x-requirements": [
@@ -252,6 +263,9 @@
       "labels": {
         "rail": {
           "$ref": "#/$defs/rail"
+        },
+        "traffic": {
+          "$ref": "#/$defs/traffic"
         }
       },
       "x-requirements": [
@@ -266,6 +280,9 @@
         },
         "class": {
           "$ref": "#/$defs/class"
+        },
+        "traffic": {
+          "$ref": "#/$defs/traffic"
         }
       },
       "x-requirements": [
@@ -415,6 +432,26 @@
         "GW-SESSIONS-ADMIT"
       ]
     },
+    "gateway_wire_probe_total": {
+      "type": "counter",
+      "labels": {
+        "source": {
+          "type": "string",
+          "description": "a probe name the declarations file declares (GW-WIRE-PROBE) — never a free value"
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "no-credential",
+            "fetch-failed"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-WIRE-PROBE"
+      ]
+    },
     "gateway_codex_usage_poll_total": {
       "type": "counter",
       "labels": {
@@ -468,6 +505,9 @@
         },
         "reason": {
           "$ref": "#/$defs/incomplete_reason"
+        },
+        "traffic": {
+          "$ref": "#/$defs/traffic"
         }
       },
       "x-requirements": [

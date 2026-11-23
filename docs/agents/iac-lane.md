@@ -113,8 +113,8 @@ cannot key on the repo. It keys on the **path**.
 | `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services — *trial: CI + bot + sentinel* |
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) — *trial: CI + bot; the apply is still the seat's* |
 | `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply — *trial: CI + bot; the apply is still the seat's* |
-| `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below (*trial: `tofu/cloudflare/**` rides with `tofu/`*) |
-| `.github/**`, `devbox.json`, `.agents/**`, `mgmt/scripts/**` + the three box-executed `scripts/` verbs | executes BEFORE review (or the box runs it from master) | ❌ **never** | operator only |
+| `agents/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below (*trial: `tofu/cloudflare/**` rides with `tofu/`*) |
+| `.github/**`, `devbox.json`, `.agents/**`, `policy/**`, `CODEOWNERS`, `mgmt/scripts/**` + the three box-executed `scripts/` verbs | executes BEFORE review (or the box runs it from master), or governance-lint reds the PR | ❌ **never** | operator only |
 | the rest of `scripts/**` — the repo's CI checks | executes BEFORE review | ✅ *ADR-142 trial (2026-09-28)* | **bot review under the gate-change lens** + the gate-drift report; no human codeowner |
 
 ### ⚠ The trap: one root cause, N alert issues, N concurrent fixers
@@ -188,7 +188,7 @@ is granted ONLY by the set-judged debouncer:
   (latch-gated, subscription-semaphore held only across decide) emits cause/downstream/
   independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned
   code acts). Downstream issues get `agent/linked` + a comment naming the cause; `unsure` waits.
-- **Queue-time deny = the ❌ table only** (`.github/`, `.agents/`, `devbox.json|lock`,
+- **Queue-time deny = the ❌ table only** (`.github/`, `.agents/`, `devbox.json|lock`, `policy/`, `CODEOWNERS`,
   `mgmt/scripts/**` + the three box-executed `scripts/` verbs — the rest of `scripts/` left it in the ADR-142 trial): the paths where authoring takes effect before a human approves. Everything else
   queues freely — CODEOWNERS gates the MERGE (the §above correction). `self-referential: true`
   bodies are skipped at wake: dispatch onto broken substrate stays a human call.
@@ -221,12 +221,16 @@ them: **the loop runs from `master`** — every coordinator/reviewer/worker pod 
 or `agent-session.sh` changes nothing that is running. It is a proposal, and the codeowner gate is
 a human. Authoring is not effect.
 
-Three things genuinely do take effect first, and they are the whole ❌ list:
+These take effect first — or can never land as a worker PR — and they are the whole ❌ list. The
+list itself is one line: `GOVERNANCE=` in `scripts/governance-lint.sh`, which `classify_touches`
+(`agents/footprint.sh`) reads; this table gives the reasons:
 
 | path | why it beats the gate |
 |---|---|
 | `.github/**` | `on: pull_request` runs the PR's OWN workflow — arbitrary code on the runner with its token, and a green `ci` by fiat, before anyone looks |
 | `devbox.json` + CI-invoked `scripts/**` | CI executes them from the branch; here the scripts ARE the checks (adding a tool is normal in a STACK repo, not in this one). ⚖ **`scripts/**` is in a TRIAL outside this list since 2026-09-28** ([ADR-142](../adr.md)): the check runs from the branch still, but the reviewer's gate-change lens reads every edit to it with CI's gate-drift report — master's side of the edit replayed on the PR — as evidence; `mgmt/scripts/**` + the three box-executed `scripts/` verbs stay |
+| `policy/**` | `ci` reads it from the branch (the sentinel smoke, gitleaks' `--config`, component-check, the mgmt policy fixtures), so an edit can loosen the checks judging its own diff — the live sentinel reads its master clone, `ci` does not; governance-lint reds any worker PR touching it |
+| `CODEOWNERS` | it defines the merge gate itself; governance-lint reds any worker PR touching it |
 | `.agents/**` | a fix round resumes with `--work-branch` on the PR's branch, so the NEXT round reads its recipe from there — it can loosen its own ceiling mid-PR |
 
 ⚠ Consequence worth stating: a faked green does NOT merge anything here, because every remaining
@@ -305,7 +309,7 @@ reads) is rendered + `tofu validate`d by `devbox run publicroute-tf-validate`. _
 #1985):_ **what** every Composition renders is diffed too — `devbox run xr-render` renders every
 committed XR/claim at the cluster-pinned engine + functions, docker-free (`scripts/xr-render-lib.sh`,
 which `publicroute-tf-validate` now shares), and `-- --diff <base>` fails a PR whose render changed
-unless its body declares `Render-change: <reason>`.
+unless its body declares `Render-change: <reason>` or the diff is pin-only (only `image:` tags/digests moved, the repository unchanged — homelab#2605).
 
 The sentinel covers homelab since the 2026-08-18 enforcement flip (the `policy/iac/exceptions/homelab.yaml`
 baseline, §L0b), so tier 1's return to unowned is now the operator's trust call on the governance
@@ -598,6 +602,11 @@ by design) supports three rungs; **eventually Cloudflare fronts all services** (
 - **Probe placement corollary:** once Cloudflare fronts a service, the SLO probe needs an
   outside-in leg through the same path users take — an all-green LAN probe over a broken edge is
   the FU-108 lesson (a probe that returns cleanly is not a probe that looked) at network scale.
+  That leg must START outside the homelab: an in-cluster probe of a public URL puts cluster DNS,
+  the router's Unbound and our own egress into the path and fails together with a WAN loss, so it
+  never stands in for a public-path check (operator, 2026-11-21) — the outside check is
+  Cloudflare's own tunnel health notification, and the in-cluster `CloudflaredTunnelDown` only
+  records an outage after the fact ([cloudflare.md](../cloudflare.md) §Observability).
 
 Oracle is where this is the business idea; sleep gets rung 0 now purely to prove the shape.
 

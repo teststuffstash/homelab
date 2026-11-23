@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-13T02:18:11Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "3c86aab4bb369c2d",
+  "subject": "workload:homelab/agent-homelab-issue-3308-r1",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-66g9z-respond-1313645698",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3303-r1",
+      "reason": "pod in Error for about 2h is holding a 20Gi longhorn-scratch PVC and blocking the quota for a queued agent pod.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3303-r1 — pod in Error for about 2h is holding a 20Gi longhorn-scratch PVC and blocking the quota for a queued agent pod."
+    }
+  ]
+}

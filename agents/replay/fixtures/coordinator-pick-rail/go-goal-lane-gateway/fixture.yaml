@@ -1,0 +1,13 @@
+# coordinator-pick-rail-go-goal-lane-gateway — the goal lane's Go-pick defer applies only where the old
+# proxy is the capacity answer.
+#
+# CONDITION: the old proxy's ladder picks Go (one model's 429 reads as "Anthropic latched"), and the unit's
+# clause is goal-shaped.
+# EXPECTED: a stack whose coordinator admits through the agent-gateway (platform, coordinator-session.sh
+# GW_COORD) DISPATCHES the goal-lane unit with its own subscription model — the gateway answers capacity
+# per model; every other stack still DEFERS (go-goal-lane). Non-goal clauses take the Go pick everywhere.
+name: coordinator-pick-rail-go-goal-lane-gateway
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh

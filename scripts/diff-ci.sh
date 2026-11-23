@@ -85,6 +85,8 @@ MAP=(
   # row renders every input at the worktree. Its ci.yaml step lands operator-direct (pin-only-guarded).
   "xr-render:$XR_RENDER_PATHS"
   "argo-lint:^agents/coordinator/"
+  # the users role's key plan (one pair on every router node) — its ci.yaml step lands operator-direct
+  "opnsense-users-self-test:^(ansible/roles/opnsense-users/|scripts/opnsense-api-users)"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
   # The gateway island's ONE gate (gateway/scripts/ci.sh via its own devbox: uv sync, ruff, pytest
@@ -109,12 +111,12 @@ MAP=(
   # via docker: every spec page's Mermaid diagrams render, every flowchart node link lands on its
   # requirement heading — the oracle-fleet e2e-specs-site shape). Inputs: the site config, the
   # staged renderer init, any spec page, the build and the leg itself. Docker pull + WAN → PUSH_HEAVY.
-  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/e2e/test_specs_site\.py$)"
+  "gateway-specs-site-e2e:^gateway/(mkdocs\.yml$|site-assets/|specs/.*\.md$|scripts/(specs-build|e2e-specs-site)\.sh$|scripts/lib/site-build\.sh$|scripts/e2e/test_specs_site\.py$)"
   "responder-behaviour-test:^agents/"
   # the retro collector/pipeline contract tests: their only inputs are the two modules + the two tests (FU-058)
   "retro-test:^agents/retro[_-](activity|pipeline)"
   # + the island intake selector: intake is the dig's consumer and its harness runs in this gate (FU-320)
-  "deep-dig-test:^(agents/|gateway/scripts/intake-select)"
+  "deep-dig-test:^(agents/|islands/intake/|gateway/[^/]+\.md$|docs/intake/|docs/agents/retros/ISLAND-RULES-BRIEF\.md$)"
   "estimate-budget -- --self-test:^agents/"
   "rail-degrade-replay:^agents/"
   "state-fp-replay:^agents/"
@@ -150,20 +152,35 @@ MAP=(
   "diff-ci -- --coverage-only:^(scripts/diff-ci(-test)?\.sh|\.github/workflows/ci\.yaml)$"
   "machines-lint:^(machines/|mgmt/nixos/hosts/mgmt/bmc\.json$)"
   # the scan island's gate (homelab#3389, islands/scan/): ruff + pytest incl. the replay-family adapter.
-  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). No ci.yaml
-  # step exists for it yet (seat #3391, operator-direct) — so only the ride's pr-gate runs it, not CI. ⚖
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author (no named root task). CI runs it
+  # as the "Scan island suite" step (#3391).
   "-- bash islands/scan/scripts/ci.sh:^(islands/scan/|agents/replay/(fixtures/(major-handoff|updater)/|stubs/|run\.sh$)|agents/(major-handoff|update-pr-branch|renovate-currency|machine-comment)\.sh$)"
+  # the scan island's browsable specs site (islands/scripts/specs-site.sh: the suite for its evidence,
+  # the mkdocs build, the mirror to the scan-specs bucket; soft-skips the upload without
+  # GATEWAY_SPECS_S3_* creds, so locally it is the dogfood build). Inputs: the island, the script, and
+  # the gateway pieces it shares (config, assets, the build/upload/evidence libs). WAN-bound and
+  # minutes long → kept off the pre-push hook by PUSH_HEAVY_CMDS below.
+  "-- bash islands/scripts/specs-site.sh publish scan:^(islands/(scan|scripts)/|gateway/(mkdocs\.yml$|site-assets/|site-overrides/|scripts/allure-report\.sh$|scripts/lib/(site-build|s3-publish|snippets)\.sh$))"
   "maint-self-test:^(scripts/(maintenance-window|node-maintenance\.sh$|host-maintenance\.sh$)|agents/seat-window\.sh$)"
   # the self-test drives the verb against stubs; mgmt-tf's `summary` line format is its plan-scope input.
   # Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "runner-maint-self-test:^(scripts/runner-maintenance|mgmt/scripts/mgmt-tf\.sh$|tofu/ci-runner\.tf$|machines/machines\.yaml$)"
+  # the jail-cluster verb + its admission policy (ADR-167): render, the policy decision table, the verb vs a
+  # fake kubectl. Scoped to the rig's OWN files — the rig is optional (ADR-108), so an edit elsewhere
+  # (agents/agent-session.sh, agents/images.env) never runs it; no ci.yaml step.
+  "jail-cluster-self-test:^(scripts/jail-cluster|scripts/fixtures/jail-cluster/|argocd/resources/jail-clusters/)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
   # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
-  # as rule()-labelled cases + the stub control; enters the island's own devbox). GitHub CI has no step
-  # for it yet — a ci.yaml edit is operator-direct (pin-only-guarded) — so the worker's pr-open and the
-  # pre-push hook are what run it. Island-only trigger: an agents/replay/ change does not re-run it.
+  # as rule()-labelled cases + the stub control; enters the island's own devbox). CI runs it as the
+  # "Launch island suite" step (#3391). Island-only trigger: an agents/replay/ change does not re-run it.
   "-- bash islands/launch/scripts/ci.sh:^islands/launch/"
+  # island intake's SPEC ROOT gate (islands/intake/scripts/ci.sh: uv sync, ruff, the access page's
+  # rule()-labelled cases; enters islands/intake/specs-tests/'s own devbox). Its inputs are the island's
+  # spec root + tests root and the declared records the access rows read: the rulesets, the sitting's
+  # workflow and the token's mint site, the App declaration, the gateway policy. Not in GitHub CI yet
+  # (a ci.yaml step is an operator-direct change, the #3627 pattern).
+  "-- bash islands/intake/scripts/ci.sh:^(islands/intake/(specs/|specs-tests/|scripts/ci\.sh$)|tofu/github/|agents/coordinator/(island-intake-argo|git-token)\.yaml$|docs/github-apps\.yaml$|argocd/resources/agent-gateway/policy\.json$)"
   # bash -n + the jq predicates of the specs reviewer's tick on fixtures (ADR-155); its only input
   # is the script. Its ci.yaml step lands operator-direct (ci.yaml is pin-only-guarded); the row is ready for it.
   "specs-review-self-test:^agents/specs-reviewer-session\.sh$"
@@ -172,8 +189,7 @@ MAP=(
   "pr-open-self-test:^agents/pr-open\.sh$"
   "-- tofu fmt -check -recursive tofu/:^tofu/"
   # the retro island's tests root (Goal #3384): uv sync --frozen + ruff + pytest over the replay oracle.
-  # No ci.yaml step runs it yet (ci.yaml is pin-only-guarded; the step lands operator-direct, like the
-  # specs-review-self-test row) — so pr-gate is the only place it runs today.
+  # CI runs it as the "Retro island suite" step (#3391).
   "-- bash islands/retro/scripts/ci.sh:^islands/retro/"
   "follow-ups-lint:^docs/"
   # docs-graph-lint's INPUTS are wider than .md: checks #4/#4b read §-code refs out of
@@ -188,6 +204,14 @@ MAP=(
   "docs-graph-lint:."
   "mermaid-lint:(\.md$|^scripts/mermaid-lint)"
   "lock-intake-lint-test:^scripts/lock-intake-lint"
+  # the OFFLINE half of lock-intake-lint's 7-day floor, for uv projects (homelab#3425): every uv.lock
+  # the change touches carries `[options] exclude-newer` at least 7 days old. The full lint stays PR_ONLY below (it needs
+  # the PR's base, api.osv.dev and the registries — a worker pod reaches none of the last two), so
+  # without this row a ride's pr-gate was green on a fresh lock that `ci` then refused (PR #3400).
+  # The `-- <cmd>` form because the root devbox.json is codeowner-author; no ci.yaml step — `ci`
+  # runs the full lint.
+  "-- python3 scripts/lock-intake-lint.py --uv-floor:(^|/)uv\.lock$"
+  "image-clock-test:^scripts/image-clock"
   # request-flow-self-test renders docs/patterns/request-flow/{platform,example-*}.yaml with
   # scripts/request-flow-render.py and byte-compares the committed example-*-rendered.md — those
   # are its only inputs (#1390; the round-5 worker on PR#1386 proposed an `agents/` arm too, which
@@ -228,6 +252,43 @@ PR_ONLY="pin-only-lint governance-lint lock-intake-lint"
 #                           prometheus-community, cloudsmith, …) — real WAN on every run, ~2 min
 #                           wall measured 2026-10-25 in a jail clone (69 Applications, ~860 docs).
 PUSH_HEAVY="argocd-validate-pins component-check manifest-lint mgmt-policy-test prometheus-rules-lint publicroute-tf-validate xr-render gateway-specs-publish gateway-evidence gateway-evidence-publish gateway-specs-site-e2e"
+# The same exclusion for `-- <cmd>` rows, which have no task name to list above: a prefix per line.
+PUSH_HEAVY_CMDS="-- bash islands/scripts/specs-site.sh "
+
+# EGRESS_NEEDS — `task:host`, space-separated: the one host a task cannot run without (the task is
+# the first word of its MAP row). The run loop below probes the host before the task and SKIPS the
+# task, by name, when the host does not answer: behind an egress allowlist (an agent ride's pod —
+# homelab#3088) these gates cannot tell "the tree is wrong" from "the network said no", and their
+# red made pr-open refuse every PR touching argocd/. A skip is printed and summed up, never
+# counted as a failure. pr-open prints the gate's output only on red, so on a green ride the
+# skip is in its gate.log, not on the worker's screen. CI does not go through this loop:
+#   argocd-validate-pins  the version-set leg: `helm show chart --repo` at prometheus-community.
+#                         CI runs it as its own step (--ci-outputs): a skip here loses nothing.
+#   component-check       the kyverno-policies chart, rendered first (exit 2 without it). It has
+#                         no CI step (see its MAP row) and is report-only: skipped here, it runs
+#                         nowhere for that PR.
+# The probe asks only for the host a task cannot start without: a task whose host answers runs
+# as before, whatever its other hosts do.
+# DIFF_CI_EGRESS_PROBE replaces the probe command (it gets the host as its one argument) — the
+# seam scripts/diff-ci-test.sh drives; `--egress-probe` prints what the loop would decide now.
+EGRESS_NEEDS="argocd-validate-pins:prometheus-community.github.io component-check:kyverno.github.io"
+egress_ok() {
+  if [ -n "${DIFF_CI_EGRESS_PROBE:-}" ]; then "$DIFF_CI_EGRESS_PROBE" "$1" >/dev/null 2>&1; return; fi
+  curl -s -o /dev/null --connect-timeout 5 -m 10 "https://$1/"
+}
+# egress_need <task> — the host the task needs, or nothing
+egress_need() {
+  local en
+  for en in $EGRESS_NEEDS; do
+    if [ "${en%%:*}" = "${1%% *}" ]; then printf '%s\n' "${en#*:}"; fi
+  done
+}
+if [ "${1:-}" = "--egress-probe" ]; then
+  for en in $EGRESS_NEEDS; do
+    if egress_ok "${en#*:}"; then echo "${en%%:*} RUN (${en#*:} answers)"; else echo "${en%%:*} SKIP (${en#*:} does not answer)"; fi
+  done
+  exit 0
+fi
 
 # --coverage-only: run the belt and stop (the CI form — see the header). Parsed before the
 # base-ref positional so `devbox run diff-ci -- --coverage-only` needs no origin/master.
@@ -324,6 +385,7 @@ if [ "${1:-}" = "--push-gates" ]; then
   for entry in "${MAP[@]}"; do
     task="${entry%%:*}"; regex="${entry#*:}"
     case " $PUSH_HEAVY " in *" ${task%% *} "*) continue ;; esac
+    case "$task" in "$PUSH_HEAVY_CMDS"*) continue ;; esac
     if $all || grep -qE "$regex" "$list"; then printf '%s\n' "$task"; fi
   done
   exit 0
@@ -395,7 +457,7 @@ changed=$( { git diff --name-only "$base"; git diff --name-only --cached; git st
 [ -n "$changed" ] || { echo "diff-ci: no changes vs $BASE — nothing to run"; exit 0; }
 echo "diff-ci: $(printf '%s\n' "$changed" | grep -c .) changed file(s) vs $BASE"
 
-run=0; skipped=0; failed=""
+run=0; skipped=0; failed=""; egress_skipped=""
 if grep -qE '^devbox\.(json|lock)$' <<< "$changed"; then
   echo "diff-ci: devbox pins changed — running EVERYTHING"
   match_all=true
@@ -408,6 +470,12 @@ for entry in "${MAP[@]}"; do
     skipped=$((skipped+1)); continue
   fi
   echo "── devbox run $task"
+  need="$(egress_need "$task")"
+  if [ -n "$need" ] && ! egress_ok "$need"; then
+    echo "   SKIP (${task%% *}: $need does not answer from here — an egress fact, not a finding about the diff)"
+    egress_skipped="$egress_skipped ${task%% *}"
+    continue
+  fi
   t0=$SECONDS
   # shellcheck disable=SC2086  # task strings intentionally word-split (args ride along)
   if devbox run $task; then
@@ -419,4 +487,5 @@ for entry in "${MAP[@]}"; do
   run=$((run+1))
 done
 echo "diff-ci: $run task(s) run, $skipped skipped (PR-context gates run only in CI)"
+[ -z "$egress_skipped" ] || echo "diff-ci: NOT RUN — egress:$egress_skipped (their hosts do not answer from here)"
 [ -z "$failed" ] || { echo "diff-ci: FAILED:$failed" >&2; exit 1; }

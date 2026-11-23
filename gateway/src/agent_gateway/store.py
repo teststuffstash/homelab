@@ -119,6 +119,20 @@ CREATE TABLE IF NOT EXISTS captures (
     record     TEXT NOT NULL,
     PRIMARY KEY (session_id, seq)
 );
+CREATE TABLE IF NOT EXISTS wire_records (
+  source TEXT PRIMARY KEY,
+  class TEXT NOT NULL,
+  url TEXT NOT NULL,
+  status INTEGER,
+  content_type TEXT,
+  body BLOB,
+  bytes INTEGER,
+  sha256 TEXT,
+  fetched_at REAL,
+  complete INTEGER,
+  last_error TEXT,
+  last_error_at REAL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value REAL NOT NULL
@@ -590,7 +604,7 @@ class Store:
             return cur.rowcount == 1
 
     def refute_strikes(self, stack: str, task: str, rail: str, model: str, at: float, providers: set[str] = frozenset(),
-                       harness: str = "") -> int:
+                       harness: str = "", twins: set[str] = frozenset()) -> int:
         """A clean outcome on (rail, model) refutes the task's counted model strikes on that model and
         its cell strikes on the cells the ride touched: (rail, model, '') and (rail, model, p) for each
         provider p the session rode (GW-RAIL-OPENROUTER: a provider-scoped strike is refuted only by
@@ -598,13 +612,16 @@ class Store:
         cell (§Harness-scoped strikes: a clean ride proves the harness's machinery works)."""
         ps = sorted(providers)
         marks = ",".join("?" for _ in ps)
+        ts = sorted(twins)  # the model's twins: a model-scoped strike on one is refuted from either (GW-SESSIONS-RETRY §A strike crosses the twins)
+        tmarks = ",".join("?" for _ in ts)
         with self._lock:
             cur = self._db.execute(
                 "UPDATE strikes SET refuted_at = ? WHERE stack = ? AND task = ? AND refuted_at IS NULL AND at <= ?"
                 " AND ((scope = 'harness' AND harness = ? AND harness != '')"
                 " OR (scope != 'harness' AND model = ? AND (scope = 'model' OR (rail = ? AND (provider = ''"
-                + (f" OR provider IN ({marks})" if ps else "") + ")))))",
-                (at, stack, task, at, harness, model, rail, *ps),
+                + (f" OR provider IN ({marks})" if ps else "") + "))))"
+                + (f" OR (scope = 'model' AND model IN ({tmarks}))" if ts else "") + ")",
+                (at, stack, task, at, harness, model, rail, *ps, *ts),
             )
             return cur.rowcount
 
@@ -641,6 +658,36 @@ class Store:
         except ValueError:
             log.error("db: catalog_snapshots.%s is not JSON — ignored (the next refresh replaces it)", source)
             return None
+
+    # -- the wire record (GW-WIRE-RECORD): the latest answer of each vendor read, one row per source ----
+    def wire_ok(self, source: str, cls: str, url: str, status: int, content_type: str, body: bytes, sha256: str,
+                fetched_at: float, complete: bool) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO wire_records (source, class, url, status, content_type, body, bytes, sha256, fetched_at, complete,"
+                " last_error, last_error_at) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)"
+                " ON CONFLICT(source) DO UPDATE SET class = excluded.class, url = excluded.url, status = excluded.status,"
+                " content_type = excluded.content_type, body = excluded.body, bytes = excluded.bytes, sha256 = excluded.sha256,"
+                " fetched_at = excluded.fetched_at, complete = excluded.complete, last_error = NULL, last_error_at = NULL",
+                (source, cls, url, status, content_type, body, len(body), sha256, fetched_at, 1 if complete else 0))
+
+    def wire_fail(self, source: str, cls: str, url: str, error: str, at: float) -> None:
+        """A failed read: the last good answer stays; the failure is recorded beside it."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO wire_records (source, class, url, last_error, last_error_at) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(source) DO UPDATE SET last_error = excluded.last_error, last_error_at = excluded.last_error_at",
+                (source, cls, url, error, at))
+
+    def wire_get(self, source: str) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT * FROM wire_records WHERE source = ?", (source,)).fetchone()
+        return dict(row) if row is not None else None
+
+    def wire_all(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM wire_records ORDER BY source").fetchall()
+        return [dict(r) for r in rows]
 
     # -- the OpenRouter catalog's cells + the canary meter (GW-CATALOG-OR) ----------------------
     def cells_sync(self, pairs: list[tuple[str, str]], now: float) -> int:

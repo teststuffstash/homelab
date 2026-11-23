@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-17T00:31:17Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "41235cba59738cef",
+  "subject": "workload:homelab/agent-homelab-issue-3303-r2",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-7sfg7-respond-3846175502",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3303-r2",
+      "reason": "stuck Pending 141m on the scratch-storage quota; deleting it clears the alert if the launcher doesn't need this attempt.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3303-r2 — stuck Pending 141m on the scratch-storage quota; deleting it clears the alert if the launcher doesn't need this attempt."
+    }
+  ]
+}

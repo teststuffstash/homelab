@@ -10,7 +10,7 @@ echo "== uv sync --frozen"
 uv sync --frozen --quiet
 
 echo "== ruff check"
-uv run --frozen ruff check src tests
+uv run --frozen ruff check src tests scripts
 
 echo "== pytest"
 uv run --frozen pytest -q

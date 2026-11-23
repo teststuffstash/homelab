@@ -137,12 +137,12 @@ spec:
       # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
       # fails fast at CREATE" promise was never in force. A docker ride takes a 20Gi scratch
       # volume, so the cap is a declared decision instead of a silent draw on the pool: this
-      # repo's docker rides are the gateway island's only (fixer.dockerPaths below), sized for two.
+      # repo's docker rides are the gateway island's only (fixer.dockerPaths below), sized like the docker stacks (docs/storage-ledger.md).
       storage:
         standard: "5Gi"
         bulk: "0"
         fast: "0"
-        scratch: "40Gi" # 20Gi × 2 concurrent gateway docker rides (fixer.dockerPaths)
+        scratch: "100Gi" # 20Gi × 5: three live docker rides (the scan's REPO_MAX_WIP) + two finished pods inside the janitor's grace — the stacks' number (homelab#1321, homelab#3563)
       # FIXER BLOCK 2026-08-04 — homelab becomes a dispatch target. The gate it lands behind is
       # PATH-based, not repo-based (docs/agents/iac-lane.md §The platform lane): CODEOWNERS owns
       # the governance tiers, and tier 1 (argocd/resources/) is owned as a temporary scaffold until

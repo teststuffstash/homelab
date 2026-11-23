@@ -506,7 +506,7 @@ after.
 | no report yet is unknown | `none` | `none` | — | `none` | `quota-unknown` |
 | a gateway restart forgets | `poll, T−10, 20 % / 64 % (on the old instance)` | `none` | — | `none` | `quota-unknown` |
 | an equal or older timestamp cannot overwrite | `poll, T−10, 20 % / 64 %` | `poll, T−10 / T−11 / T−110, 20 % / 64 %, limited` | `quota-out-of-order` | `0.2 / 0.64` | `admit` |
-| a newer report from another source replaces | `poll, T−10, 20 % / 64 %` | `jail, T−1, limited` | `accepted` | `0.2 / 0.64, limited` | `quota-limited` |
+| a newer report from another source replaces | `poll, T−10, 20 % / 64 %` | `jail, T−1, 20 % / 64 %, limited` | `accepted` | `0.2 / 0.64, limited` | `quota-limited` |
 
 #### A malformed report is refused
 

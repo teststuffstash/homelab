@@ -23,6 +23,11 @@ on:
 
 permissions: {} # Renovate authenticates as the App token minted below, not GITHUB_TOKEN
 
+# One run at a time: the image clock (below) is read before Renovate and pushed after it.
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
 jobs:
   renovate:
     runs-on: homelab-ephemeral
@@ -30,6 +35,8 @@ jobs:
       # Check out homelab just for the GLOBAL config file (the supply-chain baseline applied to every
       # autodiscovered repo — cooldown, SHA-pin actions, OSV alerts). See .github/renovate-global.json.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false # the clock push below authenticates as the App, by header
 
       # No `repositories:` → the installation token spans every repo the App is installed on, which is
       # exactly what RENOVATE_AUTODISCOVER should walk.
@@ -41,16 +48,53 @@ jobs:
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
           owner: teststuffstash
 
+      # The IMAGE CLOCK (ADR-166; scripts/image-clock.py, docs/renovate.md §The image clock): Renovate's docker datasource has no
+      # usable release time, so this step lists the tags of every docker package the last run
+      # reported, records each tag's first sighting on the `image-clock` side branch, and writes the
+      # EFFECTIVE config — the global baseline plus allowedVersions rules admitting only tags old
+      # enough (7 d; 14 d for a minor/major on homelab). Fails CLOSED: a crash stops the run
+      # (GithubWorkflowRunFailed) rather than letting Renovate propose unclocked images.
+      - name: Image clock — observe tags, write the effective config
+        id: clock
+        run: |
+          git fetch --depth 1 origin image-clock
+          git worktree add --detach /tmp/image-clock FETCH_HEAD
+          mkdir -m 1777 "$RUNNER_TEMP/renovate-out" # Renovate's container user is not the runner's (run 44948595864: EACCES)
+          devbox run image-clock -- rules --store /tmp/image-clock \
+            --base "$GITHUB_WORKSPACE/.github/renovate-global.json" --out "$RUNNER_TEMP/renovate-effective.json"
+
       - name: Renovate
-        uses: renovatebot/github-action@266fef21329c44765ad42f9dea1f01f5d2d91084 # v46.3.13
+        uses: renovatebot/github-action@acdd6bda8b035c99ce59d5675816af2aa65a1774 # v46.3.14
         with:
           token: ${{ steps.app.outputs.token }}
+          # Renovate runs in the ARC runner's docker-in-docker sidecar: a mount path names the
+          # SIDECAR's filesystem, and only the _work tree (runner.temp included) is shared — the
+          # action's default /tmp:/tmp mount is the sidecar's own /tmp (run 44948377325: "Error
+          # parsing config file" on a valid /tmp config). Hence runner.temp; the report dir is world-writable.
+          docker-volumes: ${{ runner.temp }}/renovate-out:${{ runner.temp }}/renovate-out
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_AUTODISCOVER: "true"
-          RENOVATE_CONFIG_FILE: ${{ github.workspace }}/.github/renovate-global.json # the global baseline
+          RENOVATE_CONFIG_FILE: ${{ runner.temp }}/renovate-effective.json # the global baseline + the image clock's rules
+          RENOVATE_REPORT_TYPE: file # the next run's clock universe
+          RENOVATE_REPORT_PATH: ${{ runner.temp }}/renovate-out/report.json
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
+
+      # Push the clock even when Renovate failed (the sightings are still true); a missing report
+      # leaves the universe as it was. A dry run pushes too — that is how the first universe lands.
+      - name: Image clock — record the universe, push the side branch
+        if: always() && steps.clock.outcome == 'success'
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          devbox run image-clock -- ingest --store /tmp/image-clock --report "$RUNNER_TEMP/renovate-out/report.json" || true
+          cd /tmp/image-clock
+          git add -A
+          git -c user.name=homelab-renovate -c user.email=homelab-renovate@users.noreply.github.com \
+            commit -qm "image-clock: run $GITHUB_RUN_ID" || exit 0
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" \
+            push origin HEAD:refs/heads/image-clock
 
       # No coordinator doorbell here (REMOVED 2026-09-25, operator — FU-290). The FU-085 ring
       # ({"repo":"all"} after every run) fanned out to every stack's scan; under the first live

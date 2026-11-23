@@ -33,13 +33,21 @@
 # and, since 2026-09-15, wk-04 on nx-02's `nvme-thin` (`zone: nx-02`). The membership test is "a
 # thin pool underneath", NOT the literal zone `proxmox`: a second hypervisor's VM needs reclaim for
 # exactly the same reason, and `discard=on` in tofu is as insufficient there as it is here. The
-# metal nodes are deliberately absent — real disks, no pool, so a trim there would be
-# wear-levelling housekeeping rather than this failure. ci-runner-01 shares pve's pool but is not a
+# metal nodes are absent — real disks, no pool — with ONE exception, for a different failure:
+# nx-01 (below). ci-runner-01 shares pve's pool but is not a
 # k8s node; it is a normal Linux guest covered by its own systemd fstrim.timer — verify that
 # separately, this CronJob cannot reach it.
 #
+# METAL EXCEPTION — nx-01's EPHEMERAL (SK hynix BC711, DRAM-less 256 GB) carries the fleet's
+# heaviest scratch churn (ARC runners + rides). Untrimmed it reached flash-GC steady state:
+# NodeDiskIOSaturation daily for 14 days, ~1 s mean write latency and ~80 MB/s while busy under CI
+# load, zero discards in 44 days of uptime. One manual trim → next day's comparable CI load at
+# 103 ms / 376 MB/s and the alert quiet (2.5 min in 22 h). So here the trim is a LATENCY belt, not a
+# pool reclaim; same script, same metrics, same alerts. Other metal SSDs stay out until their own
+# disk shows the same signature (aqu + zero discards) — evidence per drive, not a blanket rule.
+#
 # One CronJob per node because a Job cannot pin different pods to different nodes. They are
-# staggered so four simultaneous discards do not hit one NVMe together.
+# staggered so simultaneous discards do not hit one hypervisor's NVMe together.
 #
 # PINNING = required nodeAffinity on kubernetes.io/hostname + the `node-maintenance` PriorityClass,
 # NEVER `nodeName` (2026-10-09). `nodeName` bypasses the scheduler: the pod goes straight to the
@@ -101,7 +109,7 @@ data:
     [ -n "${bytes:-}" ] || bytes=0
 
     if [ "$rc" -ne 0 ]; then
-      echo "FSTRIM-FAIL: rc=$rc on ${NODE} — pool blocks were NOT returned"
+      echo "FSTRIM-FAIL: rc=$rc on ${NODE} — /hostvar was NOT trimmed"
     else
       echo "trimmed ${bytes} bytes on ${NODE}"
     fi
@@ -716,6 +724,55 @@ spec:
                 # nx-02's pool, url-encoded: {job="pve-node",host="nx-02",vg="nvme-thin",lv="data"}
                 - name: POOL_QUERY
                   value: "pve_lvm_thin_pool_data_percent%7Bjob%3D%22pve-node%22%2Chost%3D%22nx-02%22%2Cvg%3D%22nvme-thin%22%2Clv%3D%22data%22%7D"
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - { name: script, mountPath: /script }
+                - { name: hostvar, mountPath: /hostvar }
+              resources:
+                requests: { cpu: 50m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          volumes:
+            - name: script
+              configMap: { name: node-fstrim, defaultMode: 0755 }
+            - name: hostvar
+              hostPath: { path: /var, type: Directory }
+---
+# nx-01: the metal exception in the header (EPHEMERAL write latency, not a thin pool). No guard
+# CronJob — there is no pool level to react to; the twice-daily floor IS the belt.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fstrim-nx-01
+  namespace: node-maintenance
+spec:
+  schedule: "47 3,15 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          priorityClassName: node-maintenance
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - { key: kubernetes.io/hostname, operator: In, values: [nx-01] }
+          tolerations: [{ operator: Exists }]
+          containers:
+            - name: fstrim
+              image: docker.io/library/alpine:3.24
+              command: ["/bin/sh", "/script/trim.sh"]
+              env:
+                - name: NODE_NAME
+                  valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
               securityContext:
                 privileged: true
               volumeMounts:

@@ -335,6 +335,16 @@ K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
 $K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
 ```
 
+**One user = one key pair on every router node.** The CARP nodes share no config, and each node's
+`add_api_key` would generate its own secret — so the play mints a missing key ONCE (on the first node
+in inventory order), installs that same stored line on the other node (`auth/user/set`, the user
+model's `apikeys` setter), and proves the minted secret authenticates on both. It refuses before any
+write when the nodes hold different keys, one node holds two, or a node's key is not the wallet's
+(`--check` prints the per-node plan: `opnsense-pve: … firmware install (from opnsense-nx02)`).
+Mechanism + tests: [`opn_user_keys.py`](../ansible/roles/opnsense-users/filter_plugins/opn_user_keys.py)
+(`devbox run opnsense-users-self-test`). **Rotate** a key by deleting it on EVERY node
+(`GET auth/user/search_api_key` → `POST auth/user/del_api_key/<id>`), then re-run.
+
 The mint is itself a root-key write, so the next backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`, a privilege change). Every playbook and API script runs as `automation` since 2026-10-26, so they no longer do — a root revision outside a users run is a click (or a firmware/plugin act: those are root by design).
 Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
 by hand so the first backup does not wait for 04:23 UTC:

@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=lib/site.sh
 source scripts/lib/site.sh
+# shellcheck source=lib/site-build.sh
+source scripts/lib/site-build.sh
 
 # Evidence fragments BEFORE the build — pymdownx.snippets transcludes .site-evidence/<RULE>.md into
 # spec pages at render time (mkdocs.yml, `--8<-- "<RULE>.md"` inside each rule's `<details>`). The
@@ -27,14 +29,10 @@ rm -rf .site-src/specs/evidence   # the retired evidence_render.py fragment dir 
 # — worlds are public and discussable); stage them so those links resolve on the site too.
 mkdir -p .site-src/tests && cp -r tests/fixtures .site-src/tests/fixtures
 
-# The joined render (allure-evidence --spec-page-out; pin in scripts/lib/snippets.sh): on a build
-# that carries a run's raw results, every spec page heading rules is rewritten in the STAGED copy —
-# a rule whose decision tables join the run's evidence (≥1 description cell == a case id) keeps its
-# own columns, each description linking to its case in the single-file report this site serves
-# (REPORT_URL, scripts/lib/site.sh), a mark only on a row that is not fine (∅ unproven, ≠ cell
-# mismatch); that rule's `<details>` evidence embed is dropped (the table IS the evidence). A rule
-# whose tables join nothing keeps its authored tables and its fragment. The committed spec text is
-# never touched; a build without allure-results/ renders the pages as authored.
+# The joined render (site_join_pages, scripts/lib/site-build.sh): on a build that carries a run's
+# raw results, every spec page heading rules is rewritten in the STAGED copy, its decision tables
+# joined to the run's evidence and linking into the single-file report this site serves
+# (REPORT_URL, scripts/lib/site.sh). A build without allure-results/ renders the pages as authored.
 # The report is generated ONCE per results set (scripts/allure-report.sh reuses a fresh one): Allure
 # uids are per-generate, so the index.html the links were read from is the one shipped below.
 if ls allure-results/*-result.json >/dev/null 2>&1; then
@@ -42,40 +40,12 @@ if ls allure-results/*-result.json >/dev/null 2>&1; then
   echo "== spec pages: join spec tables to this run's evidence (allure-evidence --spec-page-out → $REPORT_URL) =="
   # shellcheck source=lib/snippets.sh
   source scripts/lib/snippets.sh
-  scratch=$(mktemp -d)
-  trap 'rm -rf "$scratch"' EXIT
-  csv() { local IFS=,; echo "$*"; }
-  while IFS= read -r page; do
-    mapfile -t rules < <(sed -nE 's/^#{2,6} (GW-[A-Z0-9-]+)\s*$/\1/p' "$page")
-    allure_evidence --results allure-results --out "$scratch/$(echo "${page#specs/}" | tr '/' '_')" \
-      --spec "$page" --rules "$(csv "${rules[@]}")" --spec-page-out ".site-src/$page" \
-      --report allure-report-single/index.html --report-url "$REPORT_URL" >/dev/null
-  done < <(grep -rlE '^#{2,6} GW-[A-Z0-9-]+\s*$' specs --include='*.md' --exclude-dir=evidence | sort)
+  site_join_pages GW "$REPORT_URL"
 fi
 
-# The pinned flowchart renderer (javascripts/mermaid-init.js loads it; the oracle-fleet
-# scripts/specs-build.sh shape, oracle-fleet#955). Fetched through npm (a pod's $NPM_CONFIG_REGISTRY
-# cache applies automatically), then sha256-checked so a republished tarball cannot change the site
-# silently. Bump version + sha together.
-MERMAID_VERSION=11.12.0
-MERMAID_SHA256=07e37dfa97b337ccc85365d57eddf99b9706f09db3b59b260d0333b23b343c4b
-mm=$(mktemp -d)
-(cd "$mm" && npm pack "mermaid@$MERMAID_VERSION" --silent >/dev/null && tar -xzf ./*.tgz package/dist/mermaid.min.js)
-echo "$MERMAID_SHA256  $mm/package/dist/mermaid.min.js" | sha256sum -c --quiet - \
-  || { echo "specs-build: mermaid@$MERMAID_VERSION sha256 mismatch" >&2; exit 1; }
-mkdir -p .site-src/javascripts
-cp "$mm/package/dist/mermaid.min.js" .site-src/javascripts/mermaid.min.js
-cp site-assets/mermaid-init.js .site-src/javascripts/mermaid-init.js
-rm -rf "$mm"
-
-# mkdocs via uv --no-project, not the island's lock and not devbox: pymdownx/material must live
-# in the same python env as mkdocs, which the nix-packaged mkdocs can't host, and the island's
-# uv.lock is the SERVICE's closure, not the docs toolchain's. EXACT pins, the same three
-# oracle-fleet builds with (its specs-build.sh): the mkdocs ecosystem forked in 2026-07 (mkdocs
-# 2.0 vs properdocs) — unpinned resolution can silently swap the engine under the site.
-rm -rf specs-site
-uv run --no-project --with mkdocs==1.6.1 --with mkdocs-material==9.7.6 \
-  --with pymdown-extensions==11.0.1 mkdocs build --quiet
+# The pinned flowchart renderer + the pinned mkdocs toolchain (both in scripts/lib/site-build.sh).
+site_stage_mermaid
+site_mkdocs_build
 
 # The run's Allure report rides beside the site at report/index.html — the one the joined rows
 # link into (REPORT_URL). One copy per site (master root, pr-<N>/), overwritten by every publish;
@@ -84,19 +54,8 @@ if [ -f allure-report-single/index.html ]; then
   mkdir -p specs-site/report && cp allure-report-single/index.html specs-site/report/index.html
 fi
 
-# Directory links in spec text (specs/worlds/, use-cases/uc-1/) must resolve on an object store
-# with no listing support: give every output directory that lacks an index.html a generated one.
-find specs-site -type d | while read -r d; do
-  [ -f "$d/index.html" ] && continue
-  {
-    echo "<!doctype html><meta charset=utf-8><title>${d#specs-site/}</title><h1>${d#specs-site/}/</h1><ul>"
-    for e in "$d"/*; do
-      n=$(basename "$e"); [ -d "$e" ] && n="$n/"
-      echo "<li><a href=\"$n\">$n</a></li>"
-    done
-    echo "</ul>"
-  } > "$d/index.html"
-done
+# Every output directory gets an index.html (object store, no listing support).
+site_dir_indexes
 stamp=$(site_build_stamp)
 [ -z "$stamp" ] || printf '%s\n' "$stamp" > .specs-site.stamp
 echo "specs-build: specs-site/ ($(find specs-site -type f | wc -l) files$([ -f specs-site/report/index.html ] && echo ', report/index.html included'))"

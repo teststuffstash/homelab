@@ -526,6 +526,25 @@ spec:
                               `<parent of root>/scripts/lib/snippets.sh` (`gateway/scripts/lib/
                               snippets.sh` for `gateway/specs`, `scripts/lib/snippets.sh` for
                               `specs`). Declare only when the repo keeps its pin elsewhere.
+                      intake:
+                        type: object
+                        required: [facts]
+                        description: >-
+                          Present = island intake holds a daily sitting for this repo (a STACK
+                          island, named `<stack>/<repo>`; homelab#3580). Absent = intake is off
+                          for the repo. Consumed by the island intake LAUNCHER, which reads the
+                          live claims (islands/intake/scripts/claims-read.sh → intake-select.sh
+                          `--claims`; scripts/sitting.sh clones the repo's default branch and
+                          reads the facts file there). Nothing is rendered by the Composition.
+                        properties:
+                          facts:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative path of the island's facts file, in THIS repo (ADR-160:
+                              a stack's facts stay in the stack). No leading/trailing slash, no
+                              dot-led segment. Its required parts: islands/intake/README.md
+                              §Stack islands.
                       extraSpecs:
                         type: array
                         maxItems: 16

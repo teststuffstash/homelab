@@ -34,6 +34,7 @@ the process is down.
 | [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the codex rail the two gauges come from an ACCEPTED headroom report, not from headers; their values are rows there |
 | [GW-CODEX-HEADROOM §Poll](openai-responses.md#poll) (owned there) | `families.gateway_codex_usage_poll_total` | — | linked — the gateway's own usage poll by outcome, every outcome from 0; its values are rows there |
 | [GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers) (owned there) | `families.gateway_codex_upstream_headroom_total` | — | linked — the relayed answers' headroom-header reads by outcome, every outcome from 0; its values are rows there |
+| [GW-WIRE-PROBE](wire.md#gw-wire-probe) (owned there) | `families.gateway_wire_probe_total` | — | linked — the declared probes by source and outcome; `source` only takes names the declarations file declares; its values are rows there |
 
 ## Flow overview
 
@@ -97,6 +98,16 @@ renders `0` even where no policy declares it — the rail ships dark ⚖. Values
 requirement (the Go and OpenRouter catalogs, the canary, the codex headroom, the rail choice) are
 rows there; this page proves the families' shape and the counters the gateway alone drives.
 
+The four request-grain families (`gateway_requests_total`, `gateway_tokens_total`,
+`gateway_requests_incomplete_total`, `gateway_upstream_seconds` — all three sample kinds) carry
+`traffic`, so one selector (`{traffic="real"}`) returns real-traffic-only numbers. It is read from
+the session the request rides on: `synthetic` when that session was admitted with role `prober` (the
+role the probe ticks and the entry canary ride as), `real` for every other role, and `none` on a
+request no live session owns — exactly the answers whose `rail` is `none`, an expired or released
+token included, whatever role its session had (an expired `prober` token is `none`, not
+`synthetic`). Three values, not `role` itself: `role` would multiply every series, the latency
+buckets included, by seven ⚖.
+
 **World: [policy-default](../worlds/README.md#policy-worlds)** with the upstream behaviour the
 `world` cell names ([worlds](../worlds/README.md#upstream-behaviours-fake-upstreams)); the provider
 rows ride the [openrouter-endpoints](../worlds/README.md#the-openrouter-endpoints-world) snapshot.
@@ -114,16 +125,17 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | family | labels | what it counts |
 |---|---|---|
 | `gateway_sessions_total` | `rail`, `role`, `stack`, `decision` | every `POST /sessions` answer; `rail` = `none` on a defer ⚖ |
-| `gateway_requests_total` | `rail`, `dialect`, `status` | every data-plane request, by the status the gateway returned |
-| `gateway_tokens_total` | `rail`, `class` | usage recorded from upstream bodies in four classes: `in` (UNCACHED input — the openai dialect's `prompt_tokens` minus `cached_tokens`), `cache_read`, `cache_write`, `out` — the split the window draw and the cost ledger price from ⚖ |
+| `gateway_requests_total` | `rail`, `dialect`, `status`, `traffic` | every data-plane request, by the status the gateway returned |
+| `gateway_tokens_total` | `rail`, `class`, `traffic` | usage recorded from upstream bodies in four classes: `in` (UNCACHED input — the openai dialect's `prompt_tokens` minus `cached_tokens`), `cache_read`, `cache_write`, `out` — the split the window draw and the cost ledger price from ⚖ |
 | `gateway_credential_resolve_total` | `rail`, `outcome` | every ref resolution verdict |
 | `gateway_upstream_auth_rejected_total` | `rail` | every upstream 401/403 the gateway reads as a CREDENTIAL verdict — the request answered 424 `upstream-auth` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary); a policy refusal, 403 `upstream-refused`, is not counted here): the event series the dead-key alert reads; `gateway_credentials_rejected` below is the state. Every rail renders from 0 ⚖ |
 | `gateway_strikes_total` | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
 | `gateway_sessions_reaped_total` | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
 | `gateway_codex_usage_poll_total` | `outcome` | the codex rail's usage polls by outcome ([GW-CODEX-HEADROOM §Poll](openai-responses.md#poll)): `accepted` = the headroom took the report; the rest name why it did not. The family exists only while the policy declares the codex rail, then every outcome renders from 0 ⚖ — the alerts read `increase()` (an undeclared rail has no series, so `CodexUsagePollSilent` cannot fire on it) |
 | `gateway_codex_upstream_headroom_total` | `outcome` | the codex rail's relayed answers read for their `x-codex-*` headroom headers ([GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers)): `accepted` = the headroom took the report, `absent` = no window header on the answer, the rest name the refusal. Declared-gated and rendered from 0 exactly like the poll family ⚖ |
-| `gateway_credential_probes_total` | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
-| `gateway_requests_incomplete_total` | `rail`, `dialect`, `reason` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
+| `gateway_wire_probe_total` | `source`, `outcome` | the declared wire probes ([GW-WIRE-PROBE](wire.md#gw-wire-probe)): `ok` = an answer recorded, `no-credential` = the rail's lifecycle gave none so nothing was fetched, `fetch-failed` = a non-200 or an unreachable upstream; `source` is a name the declarations file declares. With no declarations the family has HELP and TYPE and no series ⚖ |
+| `gateway_credential_probes_total` | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#gw-sessions-capacity)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
+| `gateway_requests_incomplete_total` | `rail`, `dialect`, `reason`, `traffic` | 2xx answers whose body stopped before its end — `no-terminal`, `timeout`, `transport-error`, `client-closed` ([GW-RAIL-ANTHROPIC](anthropic-messages.md#gw-rail-anthropic)) |
 | `gateway_go_catalog_refresh_total` | `source`, `outcome` | refresh attempts by outcome; every pair renders from 0 ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
 | `gateway_go_catalog_models_dropped_total` | `source`, `reason` | listed models a refresh dropped, by reason — a wire dialect the parser does not know (drop-and-count, #2933) |
 | `gateway_control_plane_unauthenticated_total` | `route`, `reason` | every control-plane call with no valid caller token — admitted under `control_plane_auth: observe`, refused under `enforce`; every (`route`, `reason`) pair renders from 0, so a flat series reads as "no such call" ⚖ |
@@ -132,17 +144,17 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_openrouter_catalog_refresh_total` | `outcome` | OpenRouter catalog refresh attempts by outcome; every outcome renders from 0 ([GW-CATALOG-OR](catalog.md#gw-catalog-or)) |
 | `gateway_canary_rides_total` | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged) |
 | `gateway_canary_admissions_total` | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
-| `gateway_rail_choice_total` | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
+| `gateway_rail_choice_total` | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`, `order`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
 
 #### The families — gauges and the histogram
 
 | family | type | labels | what it reads |
 |---|---|---|---|
 | `gateway_sessions_active` | gauge | `rail` | sessions neither released nor expired, per rail — the admission counter |
-| `gateway_upstream_seconds` | histogram | `rail` | upstream round-trip, first byte to last |
+| `gateway_upstream_seconds` | histogram | `rail`, `traffic` | upstream round-trip, first byte to last |
 | `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
 | `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at` |
-| `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#capacity--the-ladders-capacity-half)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
+| `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#gw-sessions-capacity)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
 | `gateway_go_catalog_models` | gauge | `source` | models in the source's last good snapshot; 0 = none yet |
@@ -184,11 +196,11 @@ its token.
 
 | description | world | event | series | value? |
 |---|---|---|---|---|
-| a served request is counted by status | `policy-default · upstream-ok` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="200"}` | `1` |
-| a refused request is counted by its status | `policy-default · upstream-ok` | `an expired token on /anthropic/v1/messages` | `gateway_requests_total{rail="none",dialect="anthropic",status="401"}` | `1` |
-| an upstream 429 keeps its status | `policy-default · upstream-429` | `one openai call on openrouter` | `gateway_requests_total{rail="openrouter",dialect="openai",status="429"}` | `1` |
-| an upstream auth rejection is answered 424 and counted at it | `policy-default · upstream-401` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="424"}` | `1` |
-| an unreachable upstream is answered 502 and counted at it | `policy-default · upstream-down` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="502"}` | `1` |
+| a served request is counted by status | `policy-default · upstream-ok` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="200",traffic="real"}` | `1` |
+| a refused request is counted by its status ⚖ | `policy-default · upstream-ok` | `an expired token on /anthropic/v1/messages` | `gateway_requests_total{rail="none",dialect="anthropic",status="401",traffic="none"}` | `1` |
+| an upstream 429 keeps its status | `policy-default · upstream-429` | `one openai call on openrouter` | `gateway_requests_total{rail="openrouter",dialect="openai",status="429",traffic="real"}` | `1` |
+| an upstream auth rejection is answered 424 and counted at it | `policy-default · upstream-401` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="424",traffic="real"}` | `1` |
+| an unreachable upstream is answered 502 and counted at it | `policy-default · upstream-down` | `one openai call on opencode` | `gateway_requests_total{rail="opencode",dialect="openai",status="502",traffic="real"}` | `1` |
 
 #### Tokens and upstream time are observed per rail
 
@@ -197,11 +209,27 @@ cache_read_input_tokens: 300, cache_creation_input_tokens: 40, output_tokens: 7}
 
 | description | world | event | series | value? |
 |---|---|---|---|---|
-| uncached input tokens are counted as in | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="in"}` | `12` |
-| cache reads are counted as cache_read | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="cache_read"}` | `300` |
-| cache writes are counted as cache_write | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="cache_write"}` | `40` |
-| output tokens are counted as out | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="out"}` | `7` |
-| upstream time is observed per rail | `policy-default · upstream-ok` | `one call on anthropic` | `gateway_upstream_seconds_count{rail="anthropic"}` | `1` |
+| uncached input tokens are counted as in | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="in",traffic="real"}` | `12` |
+| cache reads are counted as cache_read | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="cache_read",traffic="real"}` | `300` |
+| cache writes are counted as cache_write | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="cache_write",traffic="real"}` | `40` |
+| output tokens are counted as out | `policy-default · upstream-ok-cached` | `one call on anthropic` | `gateway_tokens_total{rail="anthropic",class="out",traffic="real"}` | `7` |
+| upstream time is observed per rail | `policy-default · upstream-ok` | `one call on anthropic` | `gateway_upstream_seconds_count{rail="anthropic",traffic="real"}` | `1` |
+
+#### Real and synthetic traffic are told apart
+
+Legend (above); `one call on anthropic by a prober` = a `prober` session for stack `platform`,
+harness `claude`, then one `POST /anthropic/v1/messages` (the subscription rail is the prober's only
+rail in this world); `an expired prober token on /anthropic/v1/messages` = a `prober` session on the
+subscription rail whose `session_ttl_s` has passed, then one `POST /anthropic/v1/messages` with its token.
+
+| description | world | event | series | value? |
+|---|---|---|---|---|
+| a reviewer's request is real traffic | `policy-default · upstream-ok` | `one call on anthropic` | `gateway_requests_total{rail="anthropic",dialect="anthropic",status="200",traffic="real"}` | `1` |
+| a prober's request is synthetic traffic ⚖ | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_requests_total{rail="anthropic",dialect="anthropic",status="200",traffic="synthetic"}` | `1` |
+| a prober's tokens are synthetic | `policy-default · upstream-ok-cached` | `one call on anthropic by a prober` | `gateway_tokens_total{rail="anthropic",class="in",traffic="synthetic"}` | `12` |
+| an expired prober token is none, not synthetic ⚖ | `policy-default · upstream-ok` | `an expired prober token on /anthropic/v1/messages` | `gateway_requests_total{rail="none",dialect="anthropic",status="401",traffic="none"}` | `1` |
+| a prober's upstream time is synthetic | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_upstream_seconds_count{rail="anthropic",traffic="synthetic"}` | `1` |
+| a prober's upstream buckets are synthetic | `policy-default · upstream-ok` | `one call on anthropic by a prober` | `gateway_upstream_seconds_bucket{rail="anthropic",traffic="synthetic",le="+Inf"}` | `1` |
 
 #### The subscription windows are read
 
@@ -223,7 +251,7 @@ Legend (above); `the anthropic ref is a definitive miss, a prober asks` = the st
 is the subscription — deferred `credential-unresolved`); `one openai call on opencode answered 401,
 60 s, the re-probe answered upstream-ok` = a worker ride answered `upstream-401-key-expired`, the
 fake set back to `upstream-ok`, the clock advanced 60 s, then the re-probe pass runs
-([§Capacity](sessions.md#capacity--the-ladders-capacity-half)).
+([§Capacity](sessions.md#gw-sessions-capacity)).
 
 | description | world | event | series | value? |
 |---|---|---|---|---|
@@ -232,7 +260,7 @@ fake set back to `upstream-ok`, the clock advanced 60 s, then the re-probe pass 
 | an unreachable upstream is not an auth rejection | `policy-default · upstream-down` | `one openai call on opencode` | `gateway_upstream_auth_rejected_total{rail="opencode"}` | `0` |
 | a cooled cell is counted on its rail | `policy-default · upstream-429` | `one openai call on openrouter` | `gateway_cells_cooled{rail="openrouter"}` | `1` |
 | a rejected credential is counted on its rail | `policy-default · upstream-401` | `one openai call on openrouter` | `gateway_credentials_rejected{rail="openrouter"}` | `1` |
-| an incomplete stream is counted by reason | `policy-default · upstream-stream-truncated` | `one streamed openai call on opencode` | `gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal"}` | `1` |
+| an incomplete stream is counted by reason | `policy-default · upstream-stream-truncated` | `one streamed openai call on opencode` | `gateway_requests_incomplete_total{rail="opencode",dialect="openai",reason="no-terminal",traffic="real"}` | `1` |
 | a credential re-probe is counted by outcome | `policy-default · upstream-401-key-expired` | `one openai call on opencode answered 401, 60 s, the re-probe answered upstream-ok` | `gateway_credential_probes_total{rail="opencode",outcome="cleared"}` | `1` |
 
 #### Every rail renders from 0
@@ -282,6 +310,7 @@ value is seen) — a regular expression where the set is a pattern.
 | dialect is the three paths | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_total` | `dialect` | `anthropic, openai, responses` |
 | status is a numeric HTTP status | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_total` | `status` | `^[1-5][0-9][0-9]$` |
 | class is one of the four usage classes | `policy-default · upstream-ok` | `every family driven` | `gateway_tokens_total` | `class` | `in, cache_read, cache_write, out` |
+| traffic is real, synthetic or none | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_total` | `traffic` | `real, synthetic, none` |
 | window is 5h or 7d | `policy-default · upstream-ok` | `every family driven` | `gateway_subscription_utilization` | `window` | `5h, 7d, other` |
 
 #### Labels are bounded: credentials, the control plane, the catalog
@@ -319,7 +348,7 @@ labels reads both.
 | model is a policy openrouter id ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_requests_total, gateway_provider_failovers_total` | `model` | `the openrouter rail's policy models` |
 | provider is a snapshot slug or unattributed ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_requests_total` | `provider` | `the endpoint snapshot's slugs, unattributed` |
 | a failover's from and to are snapshot slugs too ⚖ | `policy-default · openrouter-endpoints` | `deepinfra answers 500, atlas-cloud serves` | `gateway_provider_failovers_total` | `from, to` | `the endpoint snapshot's slugs, unattributed` |
-| reason is why the rail choice fell ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `reason` | `price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint` |
+| reason is why the rail choice fell ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `reason` | `price, clean-rate, headroom, not-in-catalog, no-eligible-endpoint, order` |
 | the rail choice's model is the twin's openrouter spelling ⚖ | `policy-default · openrouter-endpoints` | `a worker admitted at tier light, a twin on both rails` | `gateway_rail_choice_total` | `model` | `the openrouter rail's policy models` |
 
 #### No unbounded label, ever

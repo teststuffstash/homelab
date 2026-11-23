@@ -2,29 +2,30 @@
 
 > The §Island facts block for the **scan** island — a component to be BUILT FRESH under
 > [`islands/scan/`](../../islands/scan/README.md) beside the old code it replaces; nothing live
-> reads that directory. The rules are ONE home — [`gateway/intake.md`](../../gateway/intake.md); this
-> file replaces only its §Island facts and the island rows of its §What you read table. Island index:
+> reads that directory. The rules are ONE home — [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md); this
+> file holds only the island's facts, under `## Sources` the island's own rows of its §What you read
+> table, and under `## What a ride can do` the recipe, write tier, gates and reach. Island index:
 > [`islands/README.md`](../../islands/README.md).
+
+Body shape: spec
 
 - **Repo** `teststuffstash/homelab`; island root `islands/scan/` (provisional location — the
   operator picks the final home); specs `islands/scan/specs/` (`SCAN-` ids, contract pages +
   sibling `*.schema.json`, worlds under `specs/worlds/`, the spine use case under
-  `specs/use-cases/`). No code, tests root or deploy surface exists yet — creating them is the work.
+  `specs/use-cases/`). Code (`src/scan_island/`), a tests root (`tests/`), the recorder (`scripts/record_world.py`) and three recorded worlds (`pr-handoff`, `pr-board`, `pr-merges`) exist since Goals #3389 and #3490; no deploy surface exists.
 - **Membership** — every `Touches` entry under `islands/scan/`, or a title starting
   `scan island:`. An item on the OLD scan (`coordinator-scan.sh`) — its `Touches` under
   `agents/` — is the agent-loop island's ([agent-loop.md](agent-loop.md)), not this one.
-- **Selectable**: `gateway/scripts/intake-select.sh` has the row — `--island scan` selects on the
+- **Selectable**: `islands/intake/scripts/intake-select.sh` has the row — `--island scan` selects on the
   title and the `islands/scan/` prefix, ahead of agent-loop in precedence.
 - **Read set** = [`islands/scan/README.md`](../../islands/scan/README.md) +
   [`islands/scan/specs/README.md`](../../islands/scan/specs/README.md) + the page an item names
   (+ its schema). The old member the item replaces (`agents/coordinator-scan.sh`, `coordinator-session.sh`, `update-pr-branch.sh`, `review-reflex.sh`, `major-handoff.sh`, … — the list in the README) may be read to explain a
   difference the comparison shows — never as the source of a component, and never edited. Never `docs/agents/` as a corpus (the design-agents read is operator-typed
   only; [`agents/jail-seat-card.md`](../../agents/jail-seat-card.md) §Design questions) — a design
-  doc a page links on first use is read at that section only. A fact outside this set is a `seat`
-  finding, not a wider read.
-- **Write tier** (`classify_touches`, run 2026-11-14): `islands/**` = `machine-merge`;
-  `docs/intake/**` = `machine-merge`. Anything under `agents/**` is `codeowner-merge` and **out of
-  this island's scope** — the old members are never edited from an island item.
+  doc a page links on first use is read at that section only. A fact outside this set that the
+  decision stands on is read with the narrowest GET (intake.md §What you read); any other goes
+  under `Unverified`, never a wider read.
 - **Built from the specs, never copied** — the four rules are [islands/README.md §Built from the specs](../../islands/README.md#built-from-the-specs-never-copied):
   the page's rows are the test source, worlds are recorded whole, new components are Python, and
   replay is a comparison. A `queue`/`goal` body that asks a worker to match, port or carry over an
@@ -37,7 +38,7 @@
 - **Evidence first**: every requirement is `🚧 WIP — no evidence pipeline yet`. The first
   deliverable is a tests root under `islands/scan/` whose `rule("SCAN-…")`-labelled tests take
   their cases from the page's rows over recorded worlds; a component row is queue-ready only once the evidence it would turn green
-  can exist. Rows are COPIED from the page into the issue (`## Key rows`), never re-authored.
+  can exist. Rows are COPIED from the page into the issue (`## Spec changes`), never re-authored.
 - **Gate / deploy**: CI + the code reviewer, then the specs reviewer: homelab's claim lists
   `islands/scan/specs` under `extraSpecs` (#3379), so a PR touching it gets a rows review over
   this root. No tests root is declared and no evidence exists, so the review sees none: an
@@ -50,3 +51,39 @@
 - **Operator-only**: the island's final location; the switch-over decision; Goal admission
   (breaker #1); credential/App-permission changes; model/rail rulings; anything `.agents/**`,
   `.github/**`, `tofu/github/**` or CODEOWNERS.
+
+## Sources
+
+| question | read | note |
+|---|---|---|
+| What a requirement says, and its mark (`🚧 WIP → #<issue>`, `⚑ gap`) | [`islands/scan/specs/README.md`](../../islands/scan/specs/README.md) §Index, then the page it links at the requirement's heading (+ its sibling `*.schema.json`) | rows are copied from the page, never re-authored |
+| Which worlds are recorded | `ls islands/scan/specs/worlds/` and [`worlds/README.md`](../../islands/scan/specs/worlds/README.md) | a row names its world; a world nobody recorded is recorder work, never a hand-written one |
+| What exists of the island's code and tests | `ls islands/scan/ islands/scan/tests/` and [`islands/scan/README.md`](../../islands/scan/README.md) §Open; the suite is `islands/scan/scripts/suite.sh` | a component row is queue-ready only once the evidence it would turn green can exist |
+| What the old member does on the same case | the replay family the requirement's index row names: `bash agents/replay/run.sh agents/replay/fixtures/<family>` (families: [`agents/replay/families.tsv`](../../agents/replay/families.tsv)) | read-only; the old member is `agents/coordinator-scan.sh` and the members the README lists |
+| The island's limits, their live values, its alert rules, a capacity or grants ledger | none of its own — nothing under `islands/scan/` is deployed, read or scheduled. The old member's are the agent loop's: [agent-loop.md §Sources](agent-loop.md#sources) | an item that turns on a live value is about the old member, and is the agent-loop island's |
+
+No row here is a series an experiment may read: a body on this island carries `Experiment: none` ([intake rules](../../islands/intake/rules/intake.md) §Experiment).
+
+Never: `docs/agents/` as a corpus; an edit under `agents/**`.
+
+## What a ride can do
+
+- **Recipe**: [`.agents/fix.yaml`](../../.agents/fix.yaml) (a `task/build` item: [`.agents/build.yaml`](../../.agents/build.yaml)).
+  A `Touches` reaching `islands/scan/specs` gets the pinned spec process mounted (the claim's
+  `extraSpecs`).
+- **Write tier** (`classify_touches` in [`agents/footprint.sh`](../../agents/footprint.sh), run 2026-11-20):
+  `islands/scan/**` and `docs/intake/**` = `machine-merge`. Anything under `agents/**` is
+  `codeowner-merge` and **out of this island's scope** — the old members are never edited from
+  an island item.
+- **Gates**: `pr-open` runs `devbox run pr-gate` — the CI gates the diff selects plus `scan-secrets`; the map is
+  [`scripts/diff-ci.sh`](../../scripts/diff-ci.sh).
+  `islands/scan/**` selects the island's own suite (`islands/scan/scripts/suite.sh`, in the island's
+  devbox), `py-compile-lint`, `docs-graph-lint` and `mermaid-lint`. Then CI, the code reviewer
+  and the specs reviewer's rows review.
+- **Reach**: the repo's one claim block — the list is [agent-loop.md §What a ride can do](agent-loop.md#what-a-ride-can-do).
+  The island's `uv.lock` installs through `profile: python`; a `Touches` under `islands/scan/` is
+  not a docker ride.
+- **Not reachable, so intake reads it and writes it into the body**: anything live outside
+  namespace `homelab`. A ride on this island works from the pages, the recorded worlds and the
+  replay fixtures in its checkout; a cluster object or a wire answer the item needs is read by
+  intake, or recording it is the item's own work.

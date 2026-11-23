@@ -724,6 +724,7 @@ SELF_URL = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 GO_CATALOG_URL = "https://models.dev.test/api.json"
 GO_CONFIG_URL = "https://console.opencode.test/console/api/v2/config"
 GO_DOCS_URL = "https://raw.vendor.test/anomalyco/opencode/dev/go.mdx"
+GO_LIMITS_URL = "https://inference.opencode.test/inference/go/v1/models"
 GO_KEY = "go-key-for-tests-only"
 ANTHROPIC_TOKEN = "sk-ant-oat-test-subscription-token"
 OPENROUTER_KEY = "sk-or-v1-test-openrouter-key"
@@ -794,6 +795,7 @@ def settings(tmp_path) -> Settings:
             "GATEWAY_GO_CATALOG_URL": GO_CATALOG_URL,
             "GATEWAY_GO_CONFIG_URL": GO_CONFIG_URL,
             "GATEWAY_GO_DOCS_URL": GO_DOCS_URL,
+            "GATEWAY_GO_LIMITS_URL": GO_LIMITS_URL,
             "GATEWAY_OR_MCP_URL": "https://mcp.openrouter.test/mcp",
         }
     )
@@ -833,15 +835,18 @@ def seed_openrouter_endpoints(store: Store, upstream: FakeUpstream | None = None
 def seed_go_catalog(store: Store, fetched_at: float = 1_800_000_000.0) -> Store:
     """Every world's Go catalog (specs/worlds/README.md §The Go catalog's fakes): the last good
     snapshots a gateway starts from — the `catalog-ok` + `config-ok` fixtures merged (models.dev's
-    rows under the console's overrides) and `docs-ok`, parsed by the leg's own parsers and stored as
+    rows under the console's overrides) and `docs-ok` + `limits-ok`, parsed by the leg's own parsers and stored as
     one refresh would store them (GW-CATALOG-GO). Admission reads them."""
-    from agent_gateway.catalog import merge, parse_catalog, parse_config, parse_docs
+    from agent_gateway.catalog import build_docs, merge, parse_catalog, parse_config, parse_limits, parse_page
 
     cat, cat_dropped = parse_catalog(json.loads((GO_CATALOG_FIXTURES / "models-dev.json").read_text(encoding="utf-8")))
     store.snapshot_save("config", fetched_at, merge(
         cat, parse_config(json.loads((GO_CATALOG_FIXTURES / "config.json").read_text(encoding="utf-8")))[0],
         {d["model"] for d in cat_dropped}))
-    store.snapshot_save("docs", fetched_at, parse_docs((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8"))[0])
+    from ._catalog_world import limits_doc
+
+    store.snapshot_save("docs", fetched_at, build_docs(parse_page((GO_CATALOG_FIXTURES / "go.mdx").read_text(encoding="utf-8")),
+                                                       parse_limits(limits_doc("limits-ok"))))
     return store
 
 

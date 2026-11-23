@@ -17,20 +17,20 @@ No use case walks it yet (rule 8 — a candidate for UC-2: a major bump from Ren
 
 ## Interface — the machine half
 
-**[`major-handoff.schema.json`](major-handoff.schema.json)** holds the invocation, the four
-headings and the exit contract.
+**[`major-handoff.schema.json`](major-handoff.schema.json)** holds the invocation, the fields of
+the PR read the gate requires (`pr_read`), the four headings and the exit contract.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-HANDOFF-GATE](#scan-handoff-gate) | `exit`, `evidence` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
-| [SCAN-HANDOFF-ARM](#scan-handoff-arm) | `exit`, `evidence.upstream_line` | 🚧 WIP → #3389 — rule-labelled tests in islands/scan/tests/test_major_handoff.py; no evidence publisher for this root (fixture: `major-handoff`) |
+| [SCAN-HANDOFF-GATE](#scan-handoff-gate) | `exit`, `evidence`, `pull_commits_read` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_major_handoff.py over recorded world `pr-handoff`; no evidence publisher for this root (comparison: `major-handoff`) |
+| [SCAN-HANDOFF-ARM](#scan-handoff-arm) | `exit`, `evidence.upstream_line` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_major_handoff.py over recorded world `pr-handoff`; no evidence publisher for this root (comparison: `major-handoff`) |
 
 ### SCAN-HANDOFF-GATE
 
 `major/awaiting-human` is written only when (1) the PR is open and carries `major`; (2) the
 reviewer bot (`homelab-reviewer`, `[bot]` suffix normalized) has an APPROVED review submitted
 after the newest **non-merge** commit — the reflex's own `bot_approved_head`, replicated by name
-(a merge commit, in any of GitHub's three default message shapes, is not new content); (3) that
+(a [merge commit](glossary.md#merge-commit) is not new content); (3) that
 review's body carries the four headings `Upstream`, `Known issues`, `Platform compatibility`,
 `Evidence`, each as a line-anchored `## …` heading or `**…**` label, case-insensitive; the heading name is matched at the start of the line, and a
 suffix after a separator on the same line (e.g. `## Evidence — re-review at new head <sha>`) still
@@ -41,24 +41,65 @@ Exit 0 = handed off; **3** = refused, nothing written (dispatch the reviewer aga
 **4** = a probe failed before any write (rule #6); **5** = writes issued, end state not proven (a
 human looks).
 
-**World:** [`approved`, `recorded-738`](worlds/README.md#family-worlds-fixture-local-worldsname-named-in-rowspsv).
+⚖ Which commit is a merge commit comes from the pull-commits read (the schema's `pull_commits_read`), issued after the PR read and only when the gate reaches the approval-at-head check: the PR is open, carries `major`, and the bot has an APPROVED review. When that read fails, or its answer lacks a field the schema requires or an element for a commit of the PR read, the gate is unreadable: exit 4, nothing written. The alternative reads it on every invocation, for refusals that never use it.
+
+⚖ An answer to the PR read that lacks a field the schema's `pr_read` requires is unreadable: exit 4,
+nothing written, no default substituted (the old member reads an absent field as null). ⚖ A
+required field that is null or of another type than the schema's reads the same as an absent one:
+unreadable, exit 4. ⚖ Removing
+a claim label that is already absent (the DELETE answers 404) is success; the label re-read still
+decides the end state. ⚖ A heading line may end CRLF.
+
+**World:** [`pr-handoff`](worlds/README.md#recorded-worlds-worldsname--here). Every row starts from
+the recording with these overrides: the PR is open; its newest non-merge commit is older than the
+reviewer bot's APPROVED review; that review's body carries the four headings; after the writes the
+label re-read lists `major/awaiting-human` and not `agent/in-progress`. A row's cells override that
+state. A commit a row's cell describes has one parent unless the cell says two.
+
+The `expect?` literals of both tables on this page:
+
+| literal | writes issued, in order | exit | the printed refusal names |
+|---|---|---|---|
+| handoff | add `major/awaiting-human`; remove `agent/in-progress`; then the label re-read | 0 | — |
+| armed | arm auto-merge (squash); remove `agent/in-progress`; then the pull re-read | 0 | — |
+| refused-headings | none | 3 | `heading` |
+| refused-stale | none | 3 | `predates` |
+| refused-not-major | none | 3 | `human-merge lane` |
+| refused-no-approval | none | 3 | `no APPROVED review` |
+| unreadable | none | 4 | — |
+| not-proven | add `major/awaiting-human`; remove `agent/in-progress`; then the label re-read | 5 | — |
+
+⚖ The four `refused-*` literals differ only in the words the refusal prints, checked as
+containment; each literal's words are printed by its own refusal alone. The alternative is one `refused` literal, which loses the distinction the four rows
+are named for.
 
 #### Does the handoff write the label?
 
-| description | world | patch | env | expect? |
-|---|---|---|---|---|
-| handoff | approved | — | — | handoff |
-| merge-commit-not-content | approved | merge-commit-after-review | — | handoff |
-| merge-remote-not-content | approved | merge-remote-after-review | — | handoff |
-| merge-pr-not-content | approved | merge-pr-after-review | — | handoff |
-| bot-suffix-normalized | approved | bot-suffix | — | handoff |
-| suffixed-headings | approved | suffixed-headings | — | handoff |
-| approved-without-headings | approved | strip-headings | — | refused-headings |
-| approval-stale | approved | commit-after-review | — | refused-stale |
-| not-major-lane | approved | label-not-major | — | refused-not-major |
-| no-approval | recorded-738 | — | — | refused-no-approval |
-| reviews-unreadable | approved | — | `STUB_GH_pr_view_738=fail` | unreadable |
-| end-state-not-proven | approved | verify-still-in-progress | — | not-proven |
+| description | world | labels | newest commit | bot review | fault | expect? |
+|---|---|---|---|---|---|---|
+| handoff | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | — | handoff |
+| merge-commit-not-content | pr-handoff | `major`, `agent/in-progress` | merge (two parents), after the approval: `Merge branch 'master' into <head>` | APPROVED, four headings | — | handoff |
+| merge-remote-not-content | pr-handoff | `major`, `agent/in-progress` | merge (two parents), after the approval: `Merge remote-tracking branch '<remote>/master' into <head>` | APPROVED, four headings | — | handoff |
+| merge-pr-not-content | pr-handoff | `major`, `agent/in-progress` | merge (two parents), after the approval: `Merge pull request #<n> from <owner>/<head>` | APPROVED, four headings | — | handoff |
+| merge-hand-titled-not-content | pr-handoff | `major`, `agent/in-progress` | merge (two parents), after the approval: `Merge master into <head>` | APPROVED, four headings | — | handoff |
+| merge-title-one-parent-is-content ⚖ | pr-handoff | `major`, `agent/in-progress` | content (one parent), after the approval: `Merge branch 'master' into <head>` | APPROVED, four headings | — | refused-stale |
+| bot-suffix-normalized | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED by `homelab-reviewer[bot]`, four headings | — | handoff |
+| suffixed-headings | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings, one written `## Evidence — re-review at new head <sha>` | — | handoff |
+| approved-without-headings | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, no headings | — | refused-headings |
+| approval-stale | pr-handoff | `major`, `agent/in-progress` | content, after the approval | APPROVED, four headings | — | refused-stale |
+| not-major-lane | pr-handoff | `dependencies`, `agent/in-progress` | content, before the approval | APPROVED, four headings | — | refused-not-major |
+| no-approval | pr-handoff | `major`, `agent/in-progress` | content | none (`reviews` is empty) | — | refused-no-approval |
+| reviews-unreadable | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the PR read fails | unreadable |
+| end-state-not-proven | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the label re-read after the writes still lists `agent/in-progress` | not-proven |
+| answer-lacks-field ⚖ | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the PR read's answer has no `commits` field | unreadable |
+| parents-unreadable | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the pull-commits read fails | unreadable |
+| commit-without-parents-entry ⚖ | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the pull-commits read's answer has no element for the newest commit | unreadable |
+| parents-entry-lacks-field ⚖ | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the pull-commits read's element for the newest commit has no `parents` field | unreadable |
+| parents-read-not-reached ⚖ | pr-handoff | `dependencies`, `agent/in-progress` | content, before the approval | APPROVED, four headings | the pull-commits read fails | refused-not-major |
+| claim-already-absent ⚖ | pr-handoff | `major` | content, before the approval | APPROVED, four headings | the DELETE of `agent/in-progress` answers 404 | handoff |
+| crlf-approval-body ⚖ | pr-handoff | `major`, `agent/in-progress` | content, before the approval | APPROVED, four headings, body lines ending CRLF | — | handoff |
+
+⚖ `merge-title-one-parent-is-content`: the alternative keeps a title test beside the parent count, which is the definition [glossary.md](glossary.md#merge-commit) removes. ⚖ `parents-read-not-reached`: the gate refuses on the labels before it would issue the read, so the failing read is never made and the exit is 3, not 4 (the paragraph above, with its alternative).
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -78,14 +119,16 @@ proves the end state on the REST pull endpoint (`auto_merge` set, claim gone); e
 lane of [SCAN-HANDOFF-GATE](#scan-handoff-gate). The structured verdict line decides, never a
 label a human sets.
 
-**World:** `approved`.
+**World:** [`pr-handoff`](worlds/README.md#recorded-worlds-worldsname--here). Both rows start from
+the `handoff` row's state of [SCAN-HANDOFF-GATE](#scan-handoff-gate); the `expect?` literals are
+that section's legend.
 
 #### Does a chart major arm or park?
 
-| description | world | patch | expect? |
+| description | world | first line of the review's `## Upstream` section | expect? |
 |---|---|---|---|
-| packaging-only-arms | approved | packaging-unchanged | armed |
-| app-moves-parks | approved | app-moves | handoff |
+| packaging-only-arms | pr-handoff | `appVersion: unchanged (v4.1.4)` | armed |
+| app-moves-parks | pr-handoff | `appVersion: 4.1.0 → 4.1.4` | handoff |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

@@ -6,9 +6,19 @@
   "x-requirements": {
     "/properties/invocation": ["SCAN-UPDATER-PICK"],
     "/properties/pr": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-CONFLICT", "SCAN-UPDATER-RENOVATE"],
+    "/properties/commit_probe": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-RENOVATE"],
+    "/properties/commit_review_probe": ["SCAN-UPDATER-UNSTRAND"],
+    "/properties/pull_commits_read": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-RENOVATE"],
+    "/properties/check_runs_read": ["SCAN-UPDATER-RENOVATE"],
+    "/properties/status_read": ["SCAN-UPDATER-RENOVATE"],
     "/properties/action/oneOf/0": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND"],
     "/properties/action/oneOf/1": ["SCAN-UPDATER-CONFLICT"],
     "/properties/action/oneOf/2": ["SCAN-UPDATER-RENOVATE"]
+  },
+  "$defs": {
+    "reviewAuthor": {"type": ["object", "null"], "required": ["login"], "properties": {"login": {"type": "string"}}, "description": "null = a deleted account: no one's verdict"},
+    "reviews": {"type": "array", "items": {"type": "object", "required": ["author", "state", "submittedAt"], "properties": {"author": {"$ref": "#/$defs/reviewAuthor"}, "state": {"type": "string"}, "submittedAt": {"type": "string", "description": "a pending review (null) is visible only to its author, never to the pass's identity"}}}},
+    "commits": {"type": "array", "items": {"type": "object", "required": ["oid", "messageHeadline", "committedDate", "authors"], "properties": {"oid": {"type": "string"}, "messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}, "authors": {"type": "array", "items": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}}}}}}
   },
   "properties": {
     "invocation": {
@@ -23,23 +33,52 @@
       }
     },
     "pr": {
-      "description": "The `gh pr list --json` fields one pass reads (no `commits` — the 500k-node cap); commits come from the per-candidate probe.",
+      "description": "The `gh pr list --json` fields one pass reads (no `commits` — the 500k-node cap); commits come from the per-candidate probe. Every field the pass reads is required: an entry lacking one, or holding null where the type allows none, makes the snapshot unreadable (exit 4, nothing written).",
       "type": "object",
-      "required": ["number", "createdAt", "mergeStateStatus", "autoMergeRequest", "reviewDecision", "baseRefName"],
+      "required": ["number", "createdAt", "mergeStateStatus", "autoMergeRequest", "reviewDecision", "baseRefName", "labels", "headRefOid", "latestReviews", "reviews", "author"],
       "properties": {
         "number": {"type": "integer"},
         "createdAt": {"type": "string", "format": "date-time"},
         "mergeStateStatus": {"enum": ["BEHIND", "BLOCKED", "CLEAN", "DIRTY", "DRAFT", "HAS_HOOKS", "UNKNOWN", "UNSTABLE"]},
         "autoMergeRequest": {"type": ["object", "null"], "description": "null = un-armed = not the updater's"},
         "reviewDecision": {"enum": ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", ""]},
-        "labels": {"type": "array"},
+        "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}},
         "headRefOid": {"type": "string"},
-        "latestReviews": {"type": "array"},
-        "reviews": {"type": "array"},
-        "author": {"type": ["object", "null"]},
+        "latestReviews": {"type": "array", "items": {"type": "object", "required": ["author", "state"], "properties": {"author": {"$ref": "#/$defs/reviewAuthor"}, "state": {"type": "string"}}}},
+        "reviews": {"$ref": "#/$defs/reviews"},
+        "author": {"type": ["object", "null"], "required": ["login"], "properties": {"login": {"type": "string"}}, "description": "null = a deleted account: not Renovate"},
         "headRefName": {"type": "string"},
         "baseRefName": {"type": "string"}
       }
+    },
+    "commit_probe": {
+      "description": "The answer of `gh pr view <n> --repo <slug> --json commits` (field names as recorded in worlds/pr-board/). Lacking a field, the probe is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["commits"],
+      "properties": {"commits": {"$ref": "#/$defs/commits"}}
+    },
+    "commit_review_probe": {
+      "description": "The answer of `gh pr view <n> --repo <slug> --json commits,reviews` (leg 2). Lacking a field, the probe is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["commits", "reviews"],
+      "properties": {"commits": {"$ref": "#/$defs/commits"}, "reviews": {"$ref": "#/$defs/reviews"}}
+    },
+    "pull_commits_read": {
+      "description": "the raw answer of `gh api repos/<slug>/pulls/<n>/commits?per_page=100`: which commit of the PR view is a merge commit (two or more parents; glossary.md merge commit). Lacking a field, or an element for a commit of the view, the probe is unreadable and that PR holds.",
+      "type": "array",
+      "items": {"type": "object", "required": ["sha", "parents"], "properties": {"sha": {"type": "string"}, "parents": {"type": "array", "items": {"type": "object", "required": ["sha"], "properties": {"sha": {"type": "string"}}}}}}
+    },
+    "check_runs_read": {
+      "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/check-runs?per_page=100`. Lacking a field, the rollup is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["check_runs"],
+      "properties": {"check_runs": {"type": "array", "items": {"type": "object", "required": ["name", "status", "conclusion"], "properties": {"name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {"type": ["string", "null"], "description": "null while the run has not concluded: its status stands"}}}}}
+    },
+    "status_read": {
+      "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/status`. Lacking a field, the rollup is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["statuses"],
+      "properties": {"statuses": {"type": "array", "items": {"type": "object", "required": ["context", "state"], "properties": {"context": {"type": "string"}, "state": {"type": "string"}}}}}
     },
     "action": {
       "oneOf": [

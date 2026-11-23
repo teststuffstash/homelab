@@ -795,7 +795,7 @@ it (§Authoring an issue body above — the gate is not optional):
 
 - **Each child is `adopted` at authoring** (ADR-122 (4)) — the authoring moment IS the ruling, so
   write the row in the same act:
-  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n> adopted
+  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n | repo#n> adopted
   --by checkpoint`. One line per child; the store is one machine comment on the GOAL. Skip it and
   the children read `undispositioned`, which wakes a checkpoint to re-rule what you just decided.
 
@@ -858,7 +858,7 @@ descendants and rule each one that has no row yet — exactly one of:
   later. `deferred` is not a close and not a rejection — it is "not this goal".
 
 Write each ruling with
-`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n>
+`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n | repo#n>
 adopted|deferred --by checkpoint`. The store is ONE machine comment on the GOAL
 (`<!-- epic-dispositions v1 -->`), edited in place — never a label on the member, never a
 comment per ruling. A member carrying an `agent/*` lifecycle label already reads as adopted, so
@@ -934,7 +934,7 @@ with the commands written out:
    /tmp/m.final.md` → `python3 /work/homelab/agents/issue_body.py json < /tmp/m.final.md` (the
    gate) → `gh issue edit <member-n> --repo <slug> --body-file /tmp/m.final.md`.
 6. **Write the disposition on the GOAL's store**: the theme is `adopted --by checkpoint`
-   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n>
+   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n | repo#n>
    adopted --by checkpoint`); the members keep their existing rows — re-parenting moves nothing
    in the store, and a member that had no row was ruled in the FIRST step above.
 7. **Queue the members that are not yet queued** (`agent-fix` + `agent/queued`) under the
@@ -1398,6 +1398,18 @@ that never RAN posts no stats and pushes no commit, so nothing else stops the sa
 handed out every tick. Same rule as above: the marker is machine-written, never yours to author.
 If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
 finding is the terminal ride (pod, launcher, budget), not another fix round.
+
+**Every ci-red ride ends in a play that moves the PR or holds it.** The debounce above holds only
+once a round has completed: while no round has posted stats since the scan's marker, the gate
+re-arms on every tick (FU-199, below). So a ruling that dispatches no round and re-runs nothing
+must park — `agent/blocked`, the reason, and a `blocked-on:` marker line in the same comment
+(§Blocked-on marker below) — or the same red is handed to a new ride every tick.
+There is no wait play: a red that a date would clear is still a red the diff can fix. A
+`lock-intake-lint` red of the form `too new <package>@<version>` on a lock file the PR itself adds
+or re-resolves is **content**: re-dispatch a fix round that sets the resolver's age cutoff in the
+project file and re-locks, without pinning a version — for a uv project the `[tool.uv]` block
+`gateway/pyproject.toml` carries (`exclude-newer = "<a date at least 7 days back>"`). That is
+ADR-143 (1)'s own mechanism applied at lock time, not the override ADR-143 (3) forbids.
 
 > **FU-199 (2026-09-03): two blind spots closed.** The state-fp debounce had two silent stalls
 > that the board could not see:
@@ -1911,6 +1923,8 @@ A ci-red terminal ruling (rounds exhausted, escalated to arbitrate) that identif
 blocker should write a `blocked-on:` marker. The scan's ci-red clause checks for this marker
 before dispatching a fix round: if the marker is present and the blocker is still unresolved,
 the clause emits a report line instead of a unit.
+The same holds for any ci-red ruling that dispatches no round and re-runs nothing: it carries the
+marker in the ruling comment itself (the `ci-red` clause above says why).
 
 ### §changes-requested — when to write it
 

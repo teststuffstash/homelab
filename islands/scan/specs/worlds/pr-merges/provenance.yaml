@@ -1,0 +1,16 @@
+# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).
+world: "pr-merges"
+repo: "teststuffstash/homelab"
+visibility: "public"
+items: [3615]
+recorded_at: "2026-11-23T06:17:43Z"
+recorder: "islands/scan/scripts/record_world.py"
+recorder_commit: "6ee13da3bf20d09baf41cf10ca214292b3186e7f"
+reads:
+  - argv: ["pr", "view", "3615", "--repo", "teststuffstash/homelab", "--json", "commits"]
+    file: "pr-view-3615.commits.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3615/commits?per_page=100"]
+    file: "api.pulls.3615.commits@per_page=100.json"
+    auth: "token"
+writes:

@@ -15504,3 +15504,354 @@ updates or reverts as much as possible — mechanical revert or a responder."
   minted none in 7 d; no ruling records the drop) — the prompt for a gateway session: "should the gateway mint a
   per-session upstream credential instead of resolving the stack's standing key; was the drop ruled (ADR-096/107, FU-270,
   GW-CRED-RESOLVE); what bounds one OpenRouter session's spend today; can the OpenCode credential API mint scoped keys".
+
+## 2026-11-17 → 19 — seat: FU-297 and the router's alerts; recurring router work moved to the box
+
+- **Start:** "is the dig doing anything" with `LanCertExpiringSoon` (registry cert, 13 d) as the example. The dig's
+  zero-group exit never fired: the script's `GROUPS` is bash's own array (`deep_dig_groups` read 1000) → #3524.
+- **Certs:** carried rows have no acme.sh state on a rebuilt node, so the nightly cron skipped them ("not an issued
+  domain"). Signed all 18 on the MASTER one at a time (bulk signing races the CA), carried to the BACKUP; alert cleared.
+  The role now signs serially (#3527).
+- **Converge:** both nodes converged from master inside windows (dnsmasq/Kea 0 differences); the box's
+  `ansible-confirmed-opnsense` seeded by hand to 7126007a, which ended the 10-31 drift refusal.
+- **Operator direction:** recurring router maintenance runs on the box as `automation`; root only for one-time acts.
+  Shipped: nightly cert carry on the box (#3526); firmware currency belt read by a dedicated box-held `firmware` API user
+  (#3525 — ruling: NOT the firmware ACL on `automation`; the subagent had granted it against the in-file ruling and the
+  bot reviewer passed it, caught by the seat in a conflict resolve); one key pair per API user across the pair (#3529 —
+  the users play would have minted a different `firmware` key per node; the hand-apply subagent stopped on it).
+- **Refusals:** the exporter tracks `management-apply` refusals per subject, each ending only on its own verdict; the box
+  posts a success when a human `mgmt-tf` apply stamps the baseline and re-reads refused groups hourly (#3528; rulings
+  "a" then "a and b"). Stamp path proven live 11-17 23:22Z → all subjects 0 by 23:24Z. Seat error corrected to the
+  operator: a `group_vars/opnsense.yml` edit is NOT refused — only role/play files in `deny_paths` are.
+- **Hypervisor ssh:** the jail's empty `known_hosts` made `pve()` fail and the kill-switch guard fail OPEN; pinned
+  `machines/hypervisor_known_hosts`, guards fail closed (#3527).
+- **Found:** the BACKUP cannot fetch firmware (no WAN while BACKUP) — the documented update order cannot run; ruling owed.
+- **Test-VM verdict cost:** six ~20-min serial runs in one evening; content-keyed PASS carry built (#3539, open at
+  wind-down) — it would have saved one of the six.
+- **Wind-down 11-19:** drill started on the box, unread; root API creds file shredded; scratch clones removed.
+
+## 2026-11-19 ~18:50–19:40Z — seat: alert/dig state read (0 fixes from 25 diagnoses in 7 d); FU-315 refill restart #3
+
+- **Alert + dig read (opus subagent, read-only):** 7 d = 9 responder sessions + 16 dig findings → 0 issues, 0 PRs,
+  0 `fix-proposed`. Standing `dig` set: GoCatalog* ×3 (#3533 `agent/blocked`, ruling owed), RetroReportOverdue (#3166,
+  ruling owed since 11-04), ControlPlaneNodeMemoryLow (FU-315), RouterRunModelUnverifiable (explained by #2555 "self-clears
+  in 7 d", continuous 7 d), AgentErrorFlagged oracle-fleet#965, TierEvidenceStale (under 6 h at the run). 6 of 9 responder
+  sessions = one class: a dead gateway ride pod holds its 20Gi scratch PVC against the platform claim's 40Gi quota
+  (KubePodNotReady, new subject per pod, report-only, nothing filed). Mechanism options put to the operator, undecided:
+  (1) responder `remediation_would` findings as a gateway-intake source (FU-320); (2) the dig re-tests a stale
+  explanation (FU-249).
+- **19:30Z FU-315 refill restart #3 (operator: "run the restart window now")** — operator relayed NodeCPUHighUsage on
+  .183 (98.7 %); subagent dig: kube-apiserver 3.44/4 cores, WSS 3203 MiB at the 3200 MiB GOMEMLIMIT, live heap flat
+  ~2.05 GiB, GC 3→55 cycles/min; ramp from 11-12, step 11-18 00:40Z on a request burst coinciding with the
+  plugin-barman-cloud v0.9.0 / external-secrets v2.15.0 merges; firing since 11-18 00:57Z; wk-metal-02 was etcd leader.
+  Window `wk-metal-02-1795116640-2096` (19:30:40Z, `--node wk-metal-02 --expect ControlPlaneComponentRestarted,PodSigkilled`):
+  `etcd forfeit-leadership` 19:30:45Z → leader cp-02, term 16→17; `talosctl restart -k …kube-apiserver:135632f1e395`
+  19:30:55Z → `b193c39f2e45` RUNNING, authenticated `/readyz` ok. Both expected alerts CLAIMED. check 19:31:54Z and
+  19:38:18Z clean (224 targets, cilium 13/13, nodes 13, no new alerts); closed 19:38:56Z. apiserver CPU 3.43→0.09 cores,
+  WSS 3198→1396 MiB, node MemAvailable 2047→3927 MiB, node CPU 98.8→12 %; NodeCPUHighUsage + ControlPlaneNodeMemoryLow
+  cleared. Refill clock this time: 22 days (10-28 → 11-19). No detector covers "apiserver GC-thrashing at its limit" —
+  the only signal was the stock CPU rule (`triage: none`), 18 h after the ramp was visible.
+
+## 2026-11-19 ~19:45–22:30Z — seat: "why does #3533 need me?" → the island rules learning loop, first cut (no corpus; gateway island slice)
+
+- **Operator direction** (memory `island-rules-learning-loop`, `ruling-means-short-closed-list`): intake asking for a
+  decision it could take is the loop failing; hand-editing intake rules per stall is not the fix; review = a WEEKLY
+  summary of rule-file changes, not each edit; seat runs v1, platform-shaped from the start; no seat-vs-operator
+  distinction; "ruling" is not every two-option detail; the box does windows (some stay the operator's).
+- **#3533 read:** intake had found the answer (public `/models` carries per-model limits — re-verified, 200, 31 models,
+  27 with `go.monthly_usage`) and parked it on the letter of the #2768 ruling as carried into the spec's prose.
+- **First wait read (opus subagent, by hand, read-only), 10 waits:** 3 genuinely the operator's (#3538, #2768, #3231),
+  6 decidable from the read set (#3533, #3505, #3269, #3145, #3296, #3108), 1 not judgeable (#3166 — not the gateway's;
+  misrouted by the old text match). Two step-3 lines at the two-item bar. #3269 sat 7 d on PR #3270, merged 11-12.
+  The loop would have proposed the operator's own 11-12 hand edit (#3145 + #3296 → `e4d0220f`, 51 min after the second).
+- **Landed (all PR lane, bot-approved):** #3544 recurring report-only responder findings → one dig-source input per
+  class (replay: gateway gets `responder/KubePodNotReady/homelab` ×6 on 11-20, ×3 on 11-21); #3546 the dig re-tests a
+  stale issue/FU/meta-state explanation (7 daily reads present, no finding in 14 d; fresh groups first); #3547 step-3
+  edits A+B; #3549 step 3 as a CLOSED LIST + "ruling" = the operator's answer only + external-read rule + window entry
+  scoped to the box's capability ledger (ADR-164); #3552 `agents/island_rules.py` + `island-rules-digest` CronWorkflow
+  (Fri 06:00Z) + the first digest by hand (12 commits on 9 rule files in 6 islands, 4 widen authority, one by a worker
+  ride with no stated reason — #3509; `gateway/intake.md` +41 % in the week); #3555 the wait read wired
+  (`--source wait`, stale waits re-read at once, false-wait gauges, ledger with the two-item bar, 10 recorded wait
+  cases 7 train / 3 held out), merged 22:02Z — before the 11-20 05:00Z sitting, so that sitting runs the first scheduled wait read.
+- **Review findings fixed in-PR:** #3552 (diff-ci row did not select the rule files the digest's live pins depend on);
+  #3555 (stale merge dropped the pile row's `wait`; one malformed proposal line wiped the ledger — 3 parse sites, 3 guarded).
+- **Silence:** `IslandRulesDigestOverdue` until 2026-11-20T07:00Z (`9fbb37cc`) — the never-landed arm before the first run.
+- **Scratch-quota class, where it stops:** the gateway sitting gets it, but both fixes (the claim's `scratch`, the
+  janitor) are agent-loop paths → a `forward`, and only the gateway has a cron sitting.
+- **Anthropic guidance looked up** (skills best practices, skill-creator, writing tools for agents): evaluation-first,
+  writer/user split, held-out selection; nothing on an agent widening its own authority.
+- **Wind-down 22:05Z:** six PRs merged (#3544 #3546 #3547 #3549 #3552 #3555); nothing of the session's open; first live results are 11-20's (meta-state pickup); FU-199 gained #3553; worktrees removed.
+
+## 2026-11-19 ~21:20Z → 11-20 ~01:10Z — seat: scan island Goal #3490 built to master by subagents, unattended (island read only)
+
+- **Ask:** read #3550, plan the scan island; then (operator, evening) "start the build when #3555 merges, work unattended,
+  end state the scan first version merged to master, opus-or-lesser subagents do the work". The 11-16 gate was lifted
+  for scan by that instruction only.
+- **Done:** branch `goal/3490-scan-island-worlds` cut by the seat at `d9e4da9f` (the intake identity's 422). Children as
+  PRs to the goal branch, one Opus subagent each in a scratch clone: #3491 → #3557 (2 rounds), #3492 → #3558 (1),
+  #3493 → #3559 (3), #3494 → #3560 (2); assembly #3561 (2) merged 00:59Z as `a715541b`. Island gate on master, by hand:
+  324 passed, 3 skipped. Comparison: major-handoff 15/15 equal; updater 28 equal + 15 ruled `old` (raw strict rollup
+  reads vs the old `--jq` defaults).
+- **What the reviewers caught:** code — a double snapshot fetch, a fault hook that logged but did nothing, a legend word
+  that sat in the shared output prefix (a pin that could not go red). Specs — a missing `## Spec changes:` section twice
+  (#3559 and, the seat's own miss, #3561), one row distinguished only by its description (#3560).
+- **#3550 read:** not one ride (six deliverables in the "first cut"); split A–F and three unpinned points on the issue.
+- **#3553 (FU-199) traced read-only:** suppression reachable on three paths (the in-scan rail re-probe is the unnamed
+  third), no occurrence in the 11-15 records; comment on the issue.
+- **Left:** the ⚖ choices and open spec questions (#3561 body, #3490); #3448/#3550 await a scan sitting; #3391, #3461
+  untouched; `docs/intake/scan.md` one-line fix only.
+
+
+## 2026-11-20 ~06:10–06:20Z — seat: the island rules learning loop's first live results read (FU-320)
+
+- **03:30Z dig (`deep-dig-1795145400`):** `RetroReportOverdue` + `RouterRunModelUnverifiable` selected as a RE-TEST group
+  (← #3166, #2555), verdict `explained`, records hold. `ControlPlaneNodeMemoryLow` not re-tested — not firing at the read
+  (FU-315 refill of 11-19), which is the rule. Also `cause-found`: `TierEvidenceStale` (re-cut 8.3 d old), circles CI +
+  `RegistryMirrorColdBlobAbandoned` (cold playwright image, probably one event).
+- **05:00Z gateway sitting (`intake-gateway-2026-11-20`):** responder class `KubePodNotReady/homelab` → `forward`,
+  #3563; #3269 queued after review-repair (8 findings, 6 changed), dispatched 06:04Z; #3505 → `blocked-on: issue=3504`;
+  #3504 → `issue=3088`; #3308 requeued (PR #3564); first wait read: 6 released waits, 4 ledger records (H), no
+  proposals. #3533 / #3538 not offered — parked under 3 days.
+- **06:00Z digest:** #3565 opened un-armed 06:03Z, armed by the reflex's C9, both reviewers approved 06:17–06:18Z,
+  merged 06:18Z with no seat act.
+
+## 2026-11-20 ~06:30–10:00Z — seat: scan specs site; intake decides on evidence; intake island Goal drafted (FU-320)
+
+- **scan-specs site (operator ask; no FU/ADR/issue planned one — every island Goal excluded a publisher):** #3568
+  (bucket `scan-specs` in the gateway-specs Workspace, same writer key; HTTPRoute) + #3569
+  (`islands/scripts/specs-site.sh`, shared `gateway/scripts/lib/site-build.sh`) merged; CI publish + PR-preview purge
+  steps direct to master (`85609e09`, workflow files). Hand publish from the seat, then the step green in master CI
+  (run 44698521863). https://scan-specs.homelab.teststuff.net — `updater` / `major-handoff` joined to the suite run.
+  Three master pushes lost the race to merges/auto-bumps during the 10-minute pre-push gate before one landed.
+- **Pretend agent-loop sitting on #3563 (dry-run, Fable subagent):** pinned 100Gi without reading disk room and wrote
+  "stop and report if not" for the worker. Operator: intake decides, research first, a flash-tier worker does not reason;
+  use subagents for gathering, not research issues. → #3570 (`gateway/intake.md`: deciding facts are read before a
+  body; decide on evidence; bodies for a worker that does not reason; the ride's recipe + reach in the read set; one
+  review round fixed two older lines that still deferred). Re-run under the new rules read quota/WIP/janitor/pool
+  room itself (found `REPO_MAX_WIP` 3 vs a 2-volume cap), wrote an exact-edit body; #3563 queued from it (no lens run).
+- **Intake pod audit (RBAC asked of the cluster as the SA; CNP read live; image from the Dockerfile):** runs as
+  `agent-coordinator` (pods create/delete/exec, configmaps write, openrouterkeys full); cannot read resourcequotas,
+  PrometheusRules, CronWorkflows; no devbox; egress CNP in monitor mode; no source map. A jail pretend run has MORE
+  access than the pod.
+- **Direction:** the 11-14 trial already ruled the review model (seat asked again — corrected); intake becomes its own
+  island, the contract goes to oracle. Goal #3574 + children #3575–#3581 drafted, bound, edged, goal-lint 0 FAIL;
+  none queued; the operator admits.
+
+## 2026-11-20 (third entry) — Goal #3574 built by seat subagents and proven live; #3573 merged; Goal #3586 launched
+
+- **Condition:** operator admitted #3574 ("build it with seat subagents"), later "finish this and launch the next goal
+  while I am gone". **Done:** seven children, one subagent each, serial, PR into `goal/3574-intake-island` with the bot
+  reviewers gating: #3583 #3584 #3585 #3589 #3591 #3595 #3597; assembly #3598 merged 18:37Z.
+- **Seat acts along the way:** four cluster-scoped names onto the sentinel baseline direct (`6af828ae` — the sentinel
+  reads exceptions from master only; `iac-sentinel` status is per head, an empty commit re-evaluates it). Child C: the
+  island devbox trimmed from eight packages to two (the image pre-bakes the rest; the operator asked why 3Gi) and the
+  gateway caller narrowed to `coordinator`/no bind — both amended on #3577. Child F's design (pin 9) written into
+  #3580 before it was built. Assembly review blocked once: per-island `IslandIntakeStale` fired for ever for an island
+  that left the list (the Pushgateway serves a last push for good) — gated on a listed-islands gauge the list step
+  pushes (`listed-push.sh`, fixture cases f, f2).
+- **Live:** `kubectl auth can-i … --as=…:island-intake` as designed; dry-run `island-intake-cpsr9` Succeeded in 21 min
+  (install 14 s, 360 MiB peak → #3609 lowers 3Gi to 1Gi).
+- **#3573** (scratch 40Gi → 100Gi, the ride of #3563) merged on the operator's word; live quota read 100Gi.
+- **Outcome checks:** operator asked how a fix is checked against its reason. Three web prior-art searches (rollout
+  tools, Prometheus-side, flag/experiment platforms): Kargo holds its Stage during a verification and binds it to a
+  version — ruled out; oracle's `experiment` block read and taken unchanged; `kpi.control` proposed, dropped on
+  oracle's read. Goal #3586 filed, branch cut, children #3602–#3606; #3563 carries the first block.
+- **Two heredoc accidents** (a subagent's and the seat's): a nested heredoc ended early and the remainder ran as shell
+  with empty variables; nothing was changed either time. Briefs now say: write such fragments with a file tool.
+
+## 2026-11-20 ~22:30Z → 11-21 ~00:45Z — seat: nx-02 boot-disk incident (operator: "look at alerts")
+
+- Read the alert list, then grafana-pg "Not enough disk space", then `ContinuousArchiving=False` on 3 CNPG clusters since
+  06:50Z, then nx-02 over ssh: the SA400 had left the bus, root was `emergency_ro`, binaries failed with I/O errors, LXC 220 was dead.
+- Grew the volumes (`85b7c85c`): forgejo-pg + infisical-pg 5→15 Gi (they were ~9 h from full at ~200 MB/h WAL), grafana-pg 2→6 Gi.
+  Patched the grafana PVCs by hand (CNPG did not resize while unhealthy). Restarted grafana-pg-3 + Grafana: pg-4 promoted, `/api/health` 200.
+- The operator hot-plugged a spare 480 G SA400 (old Talos). Wiped its first and last 2 MiB with perl (wipefs/dd/sgdisk all hit I/O errors),
+  verified by reading the zeros back. The operator reseated the original SA400 and it came back as `sdc` with its partitions intact.
+- Dropped the temporary backup-Garage build: `pct create` needs the template on the dead root, and the reseated disk makes it moot.
+  The reboot is deferred to the morning, attended. The operator wants the lessons discussed first. Incident draft: docs/incidents/2026-11-20-nx-02-boot-disk.md.
+
+## 2026-11-21 — seat: nx-02 boot-disk incident, diagnosis → reboot → router disk fix → take-back (attended)
+
+- **Disk or bus:** SMART clean (static smartctl from `/dev/shm` on the zombie), extended self-test passed, interface CRC
+  1 lifetime. Prometheus: a 30 s stall at 06:47:19–06:48:19Z, gone by 06:49:19Z, no earlier stall in 16.5 d, nx-01 quiet.
+  HBA PHY 0 link errors 29/24/1. Leans toward a drive-controller hang. The previous boot's journal ends 06:47:12Z, so no
+  kernel line survived. Operator: reseat was same-bay, so the bay swap is the remaining A/B.
+- **Found:** `oracle-pg` also not archiving (2 GiB, ~2 weeks headroom); the box's apply/lease/belt loops hung on
+  nx-02's dead Proxmox API.
+- **Reboot, window `seat-1795249029-524`:** `host-maint down` failed at `qm shutdown` (task log on the read-only root).
+  The seat finished by hand: QMP powerdown, `node-maintenance down` wk-04 then cp-02, CARP enter → pve, sysrq reboot
+  08:49:50Z. Back in 137 s; `host-maint up` green; archiving True ×4.
+- **WAN outage 08:54–09:02Z on take-back.** Subagent dig: the WAN was fine (nx-02 `eno2` rx ~875 pkt/s, pve 0); the
+  nx-02 router's disk was 108 % full (filter logs ~110 MB/day × 31 d on 8 GB), so Unbound could not start. Full since
+  ≥10-31, masked by the long-running Unbound. Operator ruling: grow the disks for 30 days of logs → #3621 (32 GB + disk
+  belt + own-resolver `check`), seat-reviewed APPROVE, admin-merged, applied, `growfs` online, users play
+  (`firmware` + Dashboard ACL, operator-approved). Take-back 12:26Z: ~7 s gap.
+- **Gateway:** a `claude/fable` 429 at 05:08Z (Fable's own weekly limit) latched the whole anthropic rail until
+  21:59:59Z (account scope), blocking every reviewer. Operator: defer at 95 %, Fable-only → #3622 (5h 0.95,
+  `latch_scope: model`); seat review round 1 REQUEST_CHANGES (3 prose spots), round 2 APPROVE.
+- FU-322 minted (Prometheus ~18 d < the operator's 30 d, deferred). Corrections from the operator: both WAN NICs are
+  1 Gbit (378 Mbit/s is the ISP uplink); the tray-to-backplane connector belongs in the disk-or-bus reasoning.
+
+## 2026-11-21 (afternoon/evening) — seat: Goal #3586 built, assembled, live; scan + Crossplane belts
+
+- **Child C (#3604):** the worker built it, but its `pr-open` gate failed on chart-repo egress. The seat opened #3624 from
+  the jail. It took a seat review (sonnet) plus three bot rounds: label last, resuming a `fail`, an overdue gauge over every
+  unfinished experiment, a real-shape closing-PR repo, and the upload before any state write. Merged 14:32Z. E (#3632) was
+  merged by the worker lane 15:00Z.
+- **Goal checkpoint held by a Fable pin:** `goal_lane_clause` deferred on the old proxy's rail pick (a Fable 429 reads as
+  "Anthropic latched"). The operator chose the scan fix: #3636, on a gateway stack (platform) goal-lane units dispatch with
+  the stack's own model and the gateway answers capacity per model. Merged 16:01Z; the checkpoint opened assembly #3637
+  at 16:10Z.
+- **Assembly #3637:** a conflict in docs/intake/router-pair.md (merged master into the goal branch), then `Render-change:`
+  for xr-render. Bot round 1 found 4 defects, fixed in #3642: a newer fail verdict unrules the issue in the selector,
+  `continueOn` failed+error, one atomic PATCH for reopen+labels (not the reviewer's ordering, which strands a closed
+  unlabelled issue), and a Goal-child t0. Rounds 2 and 3 corrected that t0: the closing PR first, then the carrying PR's
+  branch walked to the default branch (themed Goals); an unshipped child goes overdue after 14 d (#3645). Round 3 left only
+  the governance block on a worker-authored `agents/coordinator/**` change; the operator said "admin merge it" → 18:30Z
+  `a330c03f`. ArgoCD synced it, and the CronWorkflow has the experiments step.
+- **Incident, minutes long:** the assembly's `experiment/open` description was 174 chars, and GitHub refuses over 100
+  (422). Every repo's IssueLabels went Synced=False (5 seen) while Ready=True, and no belt saw it. Quickfix `50634967`
+  (98 chars) went direct; all IssueLabels synced, the label exists, #3563 labelled, dry-run read = pending. The operator
+  chose detection over copying vendor limits: #3650 (provider MR state metrics PodMonitor +
+  CrossplaneManagedResourceNotSynced + absent guard; live positive control `pr-oracle-fleet-minutark`).
+- **Second-jail changelogs folded in:** #3625 (WAL archive alert, archive_timeout 1h) and #3630 (CNPG instance alerts in
+  every namespace) are recorded in the nx-02 incident draft. The reviewer-session header sonnet note is fixed (`8c841191`).
+  The Fable weekly drain is intake's `prefer: strongest` (FU-320, meta-state). The Go catalog warning is #3533.
+- Oracle asked about `.agents/intake.md` failing the claim's facts path grammar (no dot-led segment): advised to move it to
+  `docs/intake.md`. The grammar stays shared, with no platform change for one caller.
+
+## 2026-11-21 (night) — seat: ADR-166 time offset + the Docker image clock; openrouter-operator #110/#111
+
+- Oracle asked when prod moves to Postgres 19. Found: CNPG's default image applies to new clusters only and every live
+  Cluster pins `imageName` 18.3 (only forgejo-pg from git) → no chart bump moves even a minor (FU-323). Postgres 19.0 GA on
+  Docker Hub 2026-11-20 (I first misread it as RC from an older announcement title; corrected).
+- Operator steered the window question: prod can jump two versions; version numbers don't line up across CNPG / raw image /
+  nix; "fixture = prod artifact" rejected; a 7-day stack cooldown kept (Trivy's Docker Hub images were overwritten ~3.5 d).
+  Ruling: platform minor/major 14 d, stacks 7 d → ADR-166 (#3652). "Otherwise the ADR is toothless" → the Docker clock built
+  in-session instead of an FU: Docker Hub tag dates are last-push (`18-alpine` re-pushed today), ghcr has none.
+  Branch dry runs found the dind mount (/tmp is the sidecar's) and the report EACCES; fixed; the final run applied 52 rules.
+- Renovate image: operator ruled it floats ("latest security"); I had claimed a delay would have caught 44.221's behaviour
+  change — wrong, corrected (a delay catches compromise only).
+- Second jail's openrouter-operator #110/#111: lock-intake-lint over the heads — #110's virtualenv 21.14.9 is vulnerable,
+  #111 brings virtualenv 0.9 d / python-discovery 3.8 d old. ADR-154 already routes structural dep edits to the operator's
+  admin merge. Closed #113 (operator). Rest → meta-state.
+
+## 2026-11-22 (morning) — seat: who filed #3656, the #1941 un-latch, the island ladder spike
+
+- #3656 (scan checkpoint (b) Goal) was filed by the 05:00 UTC `island-intake` cron (run `island-intake-1795323600`, the
+  scan sitting 05:27–05:43), from #3550 once its wait on #3491 went stale. Parked: its goal branch does not exist (422).
+- #1941's `agent/error` came off by the un-latch rule (#1539) after intake closed the fleet-strike cause #3095; the
+  coordinator dispatched it 07:05, PR #3670 opened, reviewer requested changes, r3 riding. #2589 released the same way.
+- Operator direction: each island has its own roadmap, mostly one shared maturity ladder; sort items into common /
+  platform-common / stack-common. Seven opus subagents wrote one page per island (+ the replay-to-specs map) in a
+  clone; the seat wrote the README. PR #3672, unarmed. Glossary row for the two spike terms.
+- Seat corrections on the way: the gateway DOES have a wire recorder (#3300's assembly #3615 merged) — unused, not
+  absent; oracle-fleet's feedback loop is built but no release carries a claim yet. Rest → meta-state.
+
+## 2026-11-22 (afternoon) — seat: typed second-jail wind-down handoff; the goal/3300 handoff filed
+
+- Operator asked for a handoff type system for second jails; ruled the handoff one-way and one-time at wind-down
+  (nothing goes back to the second jail). Shipped **#3673** (`handoff/seat-records.md`: one file per session in
+  `/workspace/.handoff/seat/`, sections `log` / `fu-new` / `fu-update` / `pickup` / `gap` / `memory` / `act`, each
+  with its destination and the primary's check). claude-jail#11 (outbound notices + second-jail records) merged by the
+  operator → GAPS handoff-G4 closed.
+- First handoff, written by the seat from an older second-jail session's final message
+  (`20261121-1943-goal-3300-wire-record.md`, deleted after filing). Second jail's arc: Goal #3300 assembly **#3615**
+  merged 2026-11-21 19:43Z (7190d761) — three master merges, one empty commit to re-trigger the reviewers, the
+  GW-MODEL-TIERS "tiers block optional" sentence, the wire-quarry fix (404 on GET /wire exits 3 naming the URL, spec
+  row + test). The code reviewer missed that 404 bug in two approvals and caught it on the third (one sighting).
+- Records filed, no FU (operator: avoid FUs where possible):
+  - merge detection by title (hand-titled merges stalled #3615: specs reviewer = content, code reviewer = merge) →
+    scan-island issue **#3674** (the pages define a merge by message shape and `src/scan_island/` copies it; parent
+    count from a REST-recorded world). The old `agents/` copies stay until switch-over; stopgap card line
+    claude-jail#15 (merges keep git's default message).
+  - seat-side Loki read path → `docs/loki-tenancy.md` quickfix (port-forward svc/loki + `X-Scope-OrgID`; proven
+    against oracle-fleet, 3 streams).
+
+## 2026-11-22 (afternoon) — seat: filed second-jail handoff `20261121-1700-responder-prod-step-back.md` (ADR-165, Ask 4)
+
+- Second jail's arc (2026-11-21): oracle's Ask 4 → **ADR-165** (the responder may start a stack's fixed
+  WorkflowTemplate the alert names; the admission guard is the boundary). Merged **#3628** + **#3629** (responder's
+  own identity + the workflow start guard; direct policy/iac baseline push 36ac7d5b) and **#3639** (f9ae287b, first
+  grant oracle-fleet/prod-step-back). Live dry-run creates in oracle-fleet: responder — plain `prod-step-back` ref
+  admitted; `prod-diagnose`, `prod-step-back` with an argument / another SA / inline steps denied. Sensor —
+  `prod-diagnose` admitted, `prod-step-back` denied. Oracle notified (`oracle/done/20261121-1655-ask4-…`): oracle
+  must name `prod-step-back` as the remedy (alert description or prod-diagnose report); the template takes no params.
+- Records filed: identity residuals (agent-coordinator cluster-wide pod create/exec; `coordinator-git` mounted by
+  ~12 lanes, deep dig + intake split next — #3624 now merged; responder kube-system exec until the image ships
+  hubble) → one issue **#3675**. #2798 ↔ #3629 Kargo RBAC overlap → FU-318 line. ADR numbering: next free is 166
+  (none on master yet).
+- Dropped: "flaky test_codex_sqlite crash test" — no run id given, and the second jail's two red CI runs
+  (44912746004, 44912737472) were the ADR-103 replay ratchet, not that test. Refile on a resight with a run.
+- Noted only: the #818 dial binds `agentstack-loop` with no reader; ADR-165 §Considered already records it.
+
+## 2026-11-22 (afternoon) — seat: checked a second jail's Renovate/OSV transcript (openrouter-operator #110/#111)
+
+- Verified live: #113 CLOSED 11-21; #110 open (`agent/blocked`, `agent/arbitrate`); #111 armed + APPROVED, red on
+  deps-pin-guard. OSV: virtualenv 21.14.9 → GHSA-4f8h-vr72-p32c (fixed 21.14.10), GHSA-cx6f-vjhg-g3cc (fixed 21.14.13),
+  PYSEC-2026-4372; 21.15.11/21.15.12 clean. The transcript's "floor clears 11-28 00:03Z" was already stale: #111 was
+  re-locked 22:44Z (4802ab68) to virtualenv 21.15.12 (PyPI 22:12Z); virtualenv released 8 times since 11-17 → the wait
+  never converges while Renovate re-locks. Correction: docs/renovate.md:73 prescribes `exclude-newer`, not waiting.
+- Already homed, nothing new filed: the renovate.md transitive-OSV correction and the "renovate:44 floats" ruling
+  (pin rejected, operator 11-21) are in #3652; lock-intake-lint-into-stacks is an open operator call in meta-state.
+  Updated that meta-state pickup (hold #110, the non-converging floor, the worker-intake + reviewer-line notes).
+
+## 2026-11-22 (evening) — seat: codeowner reads; #3676's tofu/github applied
+
+- Codeowner reads (no corpus, operator's ask): #3669 (bare cross-repo dispositions member refused) and #3670 (stale
+  context-ConfigMap recovery, owner-gated) admin-merged by the seat on the operator's word → dbb13594e, 09d976549.
+  #3671 (ci-red park rule in the coordinator brief): history stripped (briefs carry rules + ADR ids only), pushed
+  11a206f6f, back to the bots then the codeowner. #3627 (operator admin merge, behind, unreviewed) + #3652: master CI
+  green on both (45048463020, 45048719148).
+- #3676 (intake access spec): its `tofu/github` change (`do_not_enforce_on_create = true` on `required-checks`) applied
+  by the operator from the host on the PR branch, checked out in the shared tree on request and switched back to
+  master. Live ruleset read: `do_not_enforce_on_create: true`. The PR still has to land.
+
+## 2026-11-22 (night) — seat: filed two second-jail wind-down handoffs (seat/20261122-1000-pr3627-ci-red, seat/20261122-2028-hardware-r630-note)
+
+- pr3627-ci-red (second jail, session f48815ba), as written, trimmed: #3627's red was `pin-only-lint` only (guarded
+  ci.yaml); the three island suite steps run by hand on 77f633c5+master (scan 324, launch 16, retro 26 passed);
+  `/seat-review 3627` APPROVE on the operator's word. Island ladder → order discussion: intake first (specs, access
+  page, deployment tier). Shipped: #3672 (ladder spike), #3676 (intake access spec + `do_not_enforce_on_create` on
+  `required-checks`, applied by the operator; probe goal ref 201/204), #3677 (`homelab-intake` App, app 5877266,
+  installed homelab + oracle-fleet, later oracle-iac), #3682 (token cutover → `intake-git` + read-only `intake-read-git`;
+  oracle told via oracle/done/20261122-2153-intake-read-token.md), all MERGED; #3683 (ladder order, armed); #3678
+  (jail-cluster rig, ADR-167, unarmed, security-reviewed, head d13426b9).
+- Filing checks: #3627 merged, master ci 45048719148 ran all three island suites green → meta-state #3391 lines
+  corrected. Pickups "file #3676 WIP-row issues" and "intake token cutover" dropped — done by #3677/#3682. FU-320
+  updated (identity line; not-started list → the ladder README). fu-new "jail-cluster pods cannot run `uv sync
+  --frozen`" folded into FU-220 (same hosts-vs-cache choice). Memory intake-own-island-contract-to-oracle: the
+  dedicated-App preference. `act: direct push for #3678` (d4c71f09a, three exception names) held for the operator's
+  read of #3678 — not pushed.
+- hardware-r630-note (session e33e46b8): hardware repo only — a Dell R630 256 GB auction note (cleared €700, operator
+  did not bid; hardware main b723b7a + fix). No homelab record.
+
+## 2026-11-22 (late) — seat: #3590 stall fixed by class; oracle handoffs answered; jail-cluster rig LIVE
+
+- #3590 / #3309 root cause (Loki): a duplicate launch under `timeout 590`, then pod 2's deliberate AGENT_INFEASIBLE
+  (worker-stop-report, strike=False) was sent to the gateway as `unknown` → strike → attempt=2 on another model; the
+  claim itself ("gateway/devbox.json is never-touch") was a misread of prose. Unblocked #3309; operator picked all four
+  fixes. MERGED: #3679 (deliberate stop → `clean`, no re-admission), #3680 (ground rules defer to `classify_touches`;
+  one operator-author list read from governance-lint's GOVERNANCE= line; `policy/**` + CODEOWNERS now codeowner-author;
+  iac-lane + ADR-128 consequence; responder prose list dropped), #3681 (scan classifies an AGENT_INFEASIBLE path before
+  parking; canonicalises `./`, `/./`, backticks; one refutation per issue). Each had one bot BLOCKING round, fixed in-PR.
+  Open: `.agents/fix.yaml` still lists `policy/**` as MAY AUTHOR (operator-direct); `timeout 590` double-launch untracked.
+- Oracle handoffs (inbox → done with Results): nameable-split size test → #3685 MERGED (intake step 4; oversized unit
+  queues, the estimator picks the tier; bot round fixed an `agent-budget/*` ambiguity). Public-path reachability →
+  #3686 MERGED (`CloudflaredTunnelDown`, replay silent on 11-21) + #3687 MERGED (Tunnel Health notification as code;
+  operator applied tofu/cloudflare-token from the PR branch in the shared tree — stored token values unchanged, both
+  verified active with Notifications read; seat applied tofu/cloudflare: 1 create, policy live, email). minutark.ee is
+  on the free plan: no standalone Health Checks. Incident draft 2026-11-20: 08:54–09:02 relabelled LAN DNS.
+- #3678 (jail-cluster rig) admin-merged on the operator's word after its policy baseline went direct (8fd37cebb).
+  First smoke: step 0 (kata guest devices) PASSED; k3d hung — ghcr blob redirect host denied (Hubble). #3688 MERGED
+  (pkg-containers.githubusercontent.com + `jail-cluster list` fix). Second smoke PASSED (k3d Ready in 24 s);
+  SERVICES row → LIVE. Operator: k3d is not a goal; kind is proven — abandon + document if it breaks again.
+- Renovate post-#3652 check still pending (no scheduled run since 17:16Z) — meta-state pickup stands.
+
+## 2026-11-23 — seat: the three open items from the 11-22 wind-down
+
+- `.agents/fix.yaml` + `.agents/build.yaml`: `policy/**` + `CODEOWNERS` moved from MAY AUTHOR to NEVER TOUCH, matching
+  governance-lint's GOVERNANCE= set and #3680's classify_touches. Operator-direct (governance dotdir), pushed `59053e1c8`.
+- Renovate after ADR-166: the image clock works on all three scheduled runs since the merge (36 packages, 52 rules,
+  oracle-fleet postgres rule in the effective config). The meta-state pickup is narrowed to the operator calls it carried.
+- `timeout 590` double launch → FU-324 (launcher idempotency per issue+round; the gateway's supersede is the only guard).

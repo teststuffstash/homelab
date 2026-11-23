@@ -1,0 +1,66 @@
+# Behaviour fixture for the router cert carry's belt (FU-297).
+#
+#   devbox run -- promtool test rules argocd/resources/mgmt-metrics/cert-carry.promtool-test
+#
+# promtool's clock starts at 0; time() is the test clock. Series values are what
+# mgmt/scripts/mgmt-cert-carry.sh writes: first-run is stamped once; last-success is the run's end
+# time on an ok run and is carried unchanged by every other outcome. Sampled every minute (the
+# textfile is scraped continuously; a sparser input would go stale between samples).
+rule_files:
+  - cert-carry.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    name: "a success every night (stamp moves every 24h): nothing fires"
+    input_series:
+      # first run 0; last-success = the start of each 24 h block (0, 86400, 172800, 259200) → age < 24h < 50h
+      - series: 'mgmt_cert_carry_first_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x5760"
+      - series: 'mgmt_cert_carry_last_success_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x1439 86400x1439 172800x1439 259200x1439"
+    alert_rule_test:
+      - { eval_time: 50h, alertname: MgmtCertCarryStale, exp_alerts: [] }
+      - { eval_time: 95h, alertname: MgmtCertCarryStale, exp_alerts: [] }
+
+  - interval: 1m
+    name: "the stamp stops (failed / warn / held / timer gone): fires after 50h + 30m, not before"
+    input_series:
+      - series: 'mgmt_cert_carry_first_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x3200"
+      - series: 'mgmt_cert_carry_last_success_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x3200"
+    alert_rule_test:
+      # age > 50h from 50h01m; pending 30m → firing from 50h31m
+      - { eval_time: 50h, alertname: MgmtCertCarryStale, exp_alerts: [] }
+      - { eval_time: 50h25m, alertname: MgmtCertCarryStale, exp_alerts: [] }
+      - eval_time: 50h35m
+        alertname: MgmtCertCarryStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  - interval: 1m
+    name: "runs but never a success: fires 50h + 30m after the first run, not before"
+    input_series:
+      # first run at t=0; no last-success series at all
+      - series: 'mgmt_cert_carry_first_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x3200"
+    alert_rule_test:
+      - { eval_time: 50h25m, alertname: MgmtCertCarryStale, exp_alerts: [] }
+      - eval_time: 50h35m
+        alertname: MgmtCertCarryStale
+        exp_alerts:
+          - exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" }
+
+  - interval: 1m
+    name: "first run long ago, a recent success: the first-run arm is suppressed"
+    input_series:
+      # first run 0; the first success at 72h (259200) — at 80h its age is 8h; `unless` drops arm 2
+      - series: 'mgmt_cert_carry_first_run_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "0x4900"
+      - series: 'mgmt_cert_carry_last_success_timestamp_seconds{job="mgmt-node",instance="192.168.2.53:9100"}'
+        values: "_x4320 259200x580"
+    alert_rule_test:
+      - { eval_time: 60h, alertname: MgmtCertCarryStale, exp_alerts: [{ exp_labels: { severity: warning, triage: none, job: mgmt-node, instance: "192.168.2.53:9100" } }] }
+      - { eval_time: 80h, alertname: MgmtCertCarryStale, exp_alerts: [] }

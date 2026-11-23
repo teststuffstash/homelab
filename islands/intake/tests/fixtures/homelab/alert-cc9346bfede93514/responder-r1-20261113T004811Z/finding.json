@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-13T00:48:20Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "cc9346bfede93514",
+  "subject": "workload:homelab/agent-homelab-issue-3307-r3",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": false,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-jfftg-respond-2407645743",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "homelab/pod/agent-homelab-issue-3307-r2",
+      "reason": "Completed pod still holds a 20Gi scratch PVC against the 40Gi quota and blocks r3 and 3302-r2. Deleting the Error pod `agent-homelab-issue-3303-r1` would free the other 20Gi.",
+      "raw": "delete homelab/pod/agent-homelab-issue-3307-r2 — Completed pod still holds a 20Gi scratch PVC against the 40Gi quota and blocks r3 and 3302-r2. Deleting the Error pod `agent-homelab-issue-3303-r1` would free the other 20Gi."
+    }
+  ]
+}

@@ -28,6 +28,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."   # repo root
+HV_KH="$PWD/machines/hypervisor_known_hosts"   # the hypervisors' pinned host keys (nx() below)
 
 VMID="${OPN_TEST_VMID:-9110}"                       # = tofu var.opnsense_test_vm_id
 VMNAME="${OPN_TEST_VM_NAME:-opnsense-test}"         # what `qm config` must say (create/destroy guard)
@@ -64,7 +65,11 @@ SEED_ISO="opnsense-seed-$VMID.iso"                 # on nx-02 local:iso, only du
 
 log() { printf '[opnsense-test] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
-nx() { ssh "${SSH_OPTS[@]}" "$NX02" "$@"; }
+# The hypervisor's host key is PINNED (machines/hypervisor_known_hosts; the jail's ~/.ssh/known_hosts
+# dies with the container). On nx() only, never in SSH_OPTS: ssh takes the FIRST value of an option,
+# so vm_ssh's /dev/null (the fresh VM) would lose to it.
+nx() { ssh "${SSH_OPTS[@]}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HV_KH" \
+         "$NX02" "$@"; }
 vm_ssh() { ssh "${SSH_OPTS[@]}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
              -o LogLevel=ERROR "root@$WAN_IP" "$@"; }
 

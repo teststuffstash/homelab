@@ -62,20 +62,66 @@ declared in [`github-apps.yaml`](github-apps.yaml); bootstrap is
 
 The Trivy compromise (March 2026): attackers hijacked the repo to publish **backdoored binaries**
 (v0.69.4+) and **re-pointed 76/77 action tags** (`aquasecurity/trivy-action` `0.0.1…0.34.2`) to a
-credential-stealing payload. A naive "always take the latest tag" pipeline would have ingested it
+credential-stealing payload; a separately stolen Docker Hub push token **overwrote the
+`aquasec/trivy` image tags** (`0.69.4` + `latest` 2026-03-19, `0.69.5`/`0.69.6` 03-22 — exposed
+until 03-23, CVE-2026-33634). A naive "always take the latest tag" pipeline would have ingested it
 immediately. Our baseline blunts both vectors:
 
 | Mitigation (`renovate-global.json`) | What it stops | Idea from |
 |---|---|---|
-| **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. Timestamp-optional for pins, digests and the Docker datasource (their releases carry no timestamp), and off for the crossplane chart (its index re-stamps every entry) — CI and the revert are the gate there. | pnpm `minimumReleaseAge` |
+| **Cooldown** — `minimumReleaseAge: "7 days"` | Adopting a freshly-compromised version inside the detection window (Trivy was caught in days). Non-security only. Timestamp-optional for pins, digests and the Docker datasource (a Docker Hub tag's date is its LAST PUSH, not its release; other registries carry none), and off for the crossplane chart (its index re-stamps every entry) — CI and the revert are the gate there. Docker's 7 days (14 for a homelab minor/major) come instead from **the image clock** below — the Trivy image vector. On homelab a minor/major waits **14 days** — the ADR-166 lead offset for the stacks. | pnpm `minimumReleaseAge` |
 | **SHA-pin Actions** — `helpers:pinGitHubActionDigests` | **Tag re-pointing** — a hijacked `@v4` can't inject if we're on the immutable commit SHA. Renovate keeps the SHA current (+ the tag in a comment). | SLSA / pinning |
-| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable **direct** deps already on the base branch; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). It never sees a TRANSITIVE dependency, nor what a PR brings in — that is the next row. | SLSA S2C2F |
-| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock`, `package-lock.json` and `uv.lock`; any other lockfile type fails closed until it has an extractor. | the #2032 lodash-es miss |
+| **OSV alerts** — `osvVulnerabilityAlerts` | Known-vulnerable **direct** deps already on the base branch; raises fix PRs from OSV (no GitHub Dependabot dependency — self-host ethos). **Security fixes bypass the cooldown** (get them in fast, CI still gates). Since Renovate 44.221.0 (pep621, renovatebot/renovate#47482) it DOES raise fix PRs for transitive `uv.lock` dependencies — the 2026-11-05 wave of 15 — so the fast-track now moves transitives too, and a fix PR's re-lock can pull other fresh versions along (openrouter-operator#111: virtualenv published 0.9 d before). It never judges what a PR brings in — that is the next row, which a repo without `lock-intake-lint` in its `ci` does not have. | SLSA S2C2F |
+| **Lockfile intake** — `lock-intake-lint` in `ci` ([ADR-143](adr.md)) | What a PR's lockfile change brings in, transitive included: fails an OSV-flagged (incl. `MAL-`), <7-day-old or install-script-bearing version. Static — reads lockfiles + registry metadata, runs nothing — so it decides before any step executes dependency code. Covers `deno.lock`, `package-lock.json` and `uv.lock`; any other lockfile type fails closed until it has an extractor. A too-new version in a `uv.lock` is fixed in the PR, never waited for: set `[tool.uv] exclude-newer` (a cutoff at least 7 days old) in the project's `pyproject.toml` and run `uv lock` — a resolver age cutoff is ADR-143 (1)'s own mechanism applied at lock time, not the override (3) forbids (operator ruling on PR #3400, 2026-11-15). Nothing moves that date on its own: the PR that relocks moves it (the comment above each project's `exclude-newer`). `python3 scripts/lock-intake-lint.py --uv-floor` checks the cutoff offline on every `uv.lock` a change touches, and a ride's `pr-gate` runs it on any `uv.lock` change (the row in `scripts/diff-ci.sh`). | the #2032 lodash-es miss |
+
+**Renovate's own image floats** (`ghcr.io/renovatebot/renovate:44`, the action's default) — operator
+2026-11-21: take its security fixes at once. Known cost: a behaviour change arrives unannounced
+(44.221.0 began raising transitive `uv.lock` security PRs, 2026-11-05) and the run's version is read
+from its log, not git. Pinning was weighed and rejected; the downstream gates (`lock-intake-lint`) are
+what catch a changed proposal.
 
 Not built: **verifying SLSA provenance / signatures** on consumed artifacts
 (`cosign verify-attestation`), which would reject a backdoored artifact even *inside* the cooldown.
 It needs the upstream to publish verifiable provenance plus a verify step in CI; the plan is
 [`slsa.md`](slsa.md)'s, as a later phase.
+
+## The image clock
+
+Renovate's docker datasource has no usable release time: on Docker Hub it reads `tag_last_pushed`,
+which every rebuild resets (`postgres:18-alpine` is re-pushed weekly), and ghcr/quay/… give none.
+Requiring a timestamp would hold a current tag back forever; making it optional (above) admits a
+Docker version the day it is published. So the platform keeps its own clock —
+[`scripts/image-clock.py`](../scripts/image-clock.py), run by `.github/workflows/renovate.yaml`
+around every Renovate run (ADR-166):
+
+1. **Before Renovate**, `image-clock rules` lists the tags of every docker package the previous
+   run reported (`universe.json`) and records each tag's FIRST sighting in `clock.json` — both on
+   the `image-clock` side branch, never master. First sighting = Docker Hub's `tag_last_pushed`
+   at that moment (an upper bound on the tag's age), elsewhere the sighting time; a package's very
+   first sighting dates its candidate tags by the image config's `created`. A rebuild after that
+   never moves the date.
+2. It writes the **effective config**: `renovate-global.json` plus one `allowedVersions` rule per
+   (repo, package, tag family — the tag minus its version, `-alpine`) admitting only tags whose
+   first sighting is ≥ the cooldown old (7 days), or ≥ the platform offset (the rule with
+   `matchRepositories` + a longer `minimumReleaseAge`: 14 days on homelab) when the tag is a
+   minor/major step from what the repo runs. Both numbers are read from `renovate-global.json` —
+   change them there.
+3. **After Renovate**, `image-clock ingest` turns the run's `reportType: file` report into the
+   next universe, and the side branch is pushed.
+
+**Fails closed.** The list is positive: a tag the clock has not seen (a failed listing, a push
+between the clock and Renovate's lookup) is not admitted, and a crashed clock stops the run.
+Docker Hub answers only the 1000 most recently updated tags; anything older stays unseen, i.e. out
+— a supported tag is rebuilt often enough to be in that window. `devbox run image-clock -- show
+--store <dir> <package>` reads the clock (`git worktree add /tmp/ic origin/image-clock`).
+
+**Limits.** A package is clocked from the run after it first appears in a report — a brand-new
+docker dependency gets one unclocked run (it arrived by a human/agent commit, not an update). A
+per-repo `renovate.json` rule setting `allowedVersions` on the same package overrides the clock's
+(repo config merges after global). Digest moves of a tag already pinned are not clocked: the pin
+cannot be overwritten under us, and a digest PR rides CI + the revert. The clock dates a tag NAME
+once: a tag re-pushed after its first sighting (a mutable tag, or an overwrite of an admitted one)
+is not re-dated — the clock holds back new tags, not new content under an old name.
 
 ## The automerge vs review split — "is there anything a human can actually review?"
 

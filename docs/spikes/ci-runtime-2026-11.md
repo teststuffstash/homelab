@@ -68,6 +68,20 @@ update-pr-branch re-triggers. PR job pickup by position in the burst (homelab `C
 itself. So the push run's cost in waiting is one warm slot per burst. `minRunners: 3` (from 1,
 2026-11-13) addresses it for every job in such a burst.
 
+**Readout 2026-11-21: `minRunners: 3` flattened pickup.** It went live with #3348 (merged 2026-11-14
+09:34Z). Same method: Prometheus `github_ci_job_queue_seconds` (`ci` job) joined to `gh run list`.
+The "before" window is 11-02 → 11-14, because retention no longer reaches the table above.
+
+| jobs just ahead | before: n / median / p90 | after (11-14 → 11-21): n / median / p90 |
+|---|---|---|
+| 0 | 224 / 3 s / 26 s | 253 / 3 s / 3 s |
+| 1 | 134 / 12 s / 63 s | 116 / 2 s / 15 s |
+| 2 | 39 / 21 s / 70 s | 33 / 3 s / 44 s |
+| 3+ | 19 / 45 s / 80 s | 9 / 3 s / 32 s |
+
+All PR runs: p90 56 s → 3 s (416 → 411 runs). Push-run pickup stayed at a 3 s median. No further
+change is needed; the remaining tail is a few 2-ahead bursts.
+
 ## What could be dropped from a run (runner-min / 30 d)
 
 1. **The full master-push run on a squash merge whose tree a green PR run already tested: up to

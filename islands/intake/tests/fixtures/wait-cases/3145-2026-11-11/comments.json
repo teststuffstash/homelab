@@ -1,0 +1,49 @@
+[
+ {
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6805528558",
+  "html_url": "https://github.com/teststuffstash/homelab/issues/3145#issuecomment-6805528558",
+  "issue_url": "https://api.github.com/repos/teststuffstash/homelab/issues/3145",
+  "id": 6805528558,
+  "node_id": "IC_kwDODboMws8AAAABlaQf7g",
+  "user": {
+   "login": "RasmusSoot",
+   "id": 1532090,
+   "node_id": "MDQ6VXNlcjE1MzIwOTA=",
+   "avatar_url": "https://avatars.githubusercontent.com/u/1532090?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/RasmusSoot",
+   "html_url": "https://github.com/RasmusSoot",
+   "followers_url": "https://api.github.com/users/RasmusSoot/followers",
+   "following_url": "https://api.github.com/users/RasmusSoot/following{/other_user}",
+   "gists_url": "https://api.github.com/users/RasmusSoot/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/RasmusSoot/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/RasmusSoot/subscriptions",
+   "organizations_url": "https://api.github.com/users/RasmusSoot/orgs",
+   "repos_url": "https://api.github.com/users/RasmusSoot/repos",
+   "events_url": "https://api.github.com/users/RasmusSoot/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/RasmusSoot/received_events",
+   "type": "User",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "created_at": "2026-11-11T19:40:23Z",
+  "updated_at": "2026-11-11T19:40:23Z",
+  "body": "intake: seat — a machine-read leg needs the ruling that replaces GW-MODEL-TIERS §The rulings' codex candidate rule (\"the account's catalog plus one completed turn per id\", in practice the newest of each family): the account's `/models` lists eight visible ids at `client_version` ≥ 0.155.0 against the four candidates, and the ask's \"∩ the ids the policy can name\" does not say which four — plus a recorded `/models` answer to write rows from (none under `gateway/tests/fixtures/`; a worker pod cannot read the account).\nblocked-on: human\n",
+  "author_association": "MEMBER",
+  "pin": null,
+  "reactions": {
+   "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6805528558/reactions",
+   "total_count": 0,
+   "+1": 0,
+   "-1": 0,
+   "laugh": 0,
+   "hooray": 0,
+   "confused": 0,
+   "heart": 0,
+   "rocket": 0,
+   "eyes": 0
+  },
+  "performed_via_github_app": null,
+  "minimized": null
+ }
+]

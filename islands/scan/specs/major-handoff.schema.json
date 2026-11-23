@@ -5,6 +5,8 @@
   "type": "object",
   "x-requirements": {
     "/properties/invocation": ["SCAN-HANDOFF-GATE"],
+    "/properties/pr_read": ["SCAN-HANDOFF-GATE"],
+    "/properties/pull_commits_read": ["SCAN-HANDOFF-GATE"],
     "/properties/evidence": ["SCAN-HANDOFF-GATE"],
     "/properties/evidence/properties/upstream_line": ["SCAN-HANDOFF-ARM"],
     "/properties/exit": ["SCAN-HANDOFF-GATE", "SCAN-HANDOFF-ARM"]
@@ -17,6 +19,41 @@
         "slug": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
         "pr": {"type": "integer"}
       }
+    },
+    "pr_read": {
+      "description": "the answer of `gh pr view <pr> --repo <slug> --json state,labels,reviews,commits` (field names as recorded in worlds/pr-handoff/): every field the gate reads; an answer lacking one is unreadable (exit 4, nothing written)",
+      "type": "object",
+      "required": ["state", "labels", "reviews", "commits"],
+      "properties": {
+        "state": {"type": "string"},
+        "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}},
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["author", "state", "submittedAt", "body"],
+            "properties": {
+              "author": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}},
+              "state": {"type": "string"},
+              "submittedAt": {"type": "string"},
+              "body": {"type": "string"}
+            }
+          }
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["oid", "messageHeadline", "committedDate"],
+            "properties": {"oid": {"type": "string"}, "messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "pull_commits_read": {
+      "description": "the raw answer of `gh api repos/<slug>/pulls/<pr>/commits?per_page=100`: which commit of the PR read is a merge commit (two or more parents; glossary.md merge commit). Issued only when the gate reaches the approval-at-head check; an answer lacking a field, or an element for a commit of the PR read, is unreadable (exit 4, nothing written)",
+      "type": "array",
+      "items": {"type": "object", "required": ["sha", "parents"], "properties": {"sha": {"type": "string"}, "parents": {"type": "array", "items": {"type": "object", "required": ["sha"], "properties": {"sha": {"type": "string"}}}}}}
     },
     "evidence": {
       "type": "object",

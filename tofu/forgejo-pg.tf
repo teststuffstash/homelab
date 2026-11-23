@@ -65,7 +65,7 @@ resource "kubernetes_manifest" "forgejo_pg" {
       # Promote the updated replica instead of restarting the primary in place on a spec change.
       primaryUpdateMethod = "switchover"
       storage = {
-        size         = "5Gi"
+        size         = "15Gi" # was 5Gi — 2026-11-20 WAL pile-up while the backup target was down (incident 2026-11-20-nx-02-boot-disk)
         storageClass = kubernetes_storage_class.longhorn_local_std.metadata[0].name
       }
       bootstrap = {

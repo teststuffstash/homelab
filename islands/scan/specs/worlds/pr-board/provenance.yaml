@@ -1,0 +1,79 @@
+# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).
+world: "pr-board"
+repo: "teststuffstash/homelab"
+visibility: "public"
+items: [3557, 3147]
+recorded_at: "2026-11-19T22:27:55Z"
+recorder: "islands/scan/scripts/record_world.py"
+recorder_commit: "eb4d43486bdebe094622afbfbe9a472556ab4bfe"
+rest_description: {"repo": "github/rest-api-description", "commit": "c9c95fe34ced05fe076001f5c55704742bc8e7f8", "file": "descriptions-next/api.github.com/api.github.com.2022-11-28.json"}
+reads:
+  - argv: ["pr", "list", "--repo", "teststuffstash/homelab", "--state", "open", "--limit", "100", "--json", "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName"]
+    file: "pr-list.json"
+    auth: "token"
+  - argv: ["pr", "view", "3557", "--repo", "teststuffstash/homelab", "--json", "commits"]
+    file: "pr-view-3557.commits.json"
+    auth: "token"
+  - argv: ["pr", "view", "3557", "--repo", "teststuffstash/homelab", "--json", "commits,reviews"]
+    file: "pr-view-3557.commits,reviews.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4/check-runs?per_page=100"]
+    file: "api.commits.3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4.check-runs@per_page=100.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4/status"]
+    file: "api.commits.3ea0cd4ca2aa08d666f3af3d230b5ec423497cc4.status.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3557"]
+    file: "api.pulls.3557.json"
+    auth: "token"
+  - argv: ["pr", "view", "3147", "--repo", "teststuffstash/homelab", "--json", "commits"]
+    file: "pr-view-3147.commits.json"
+    auth: "token"
+  - argv: ["pr", "view", "3147", "--repo", "teststuffstash/homelab", "--json", "commits,reviews"]
+    file: "pr-view-3147.commits,reviews.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/dd452d85dc02f12d0fbfd5c794eeec51bbe96770/check-runs?per_page=100"]
+    file: "api.commits.dd452d85dc02f12d0fbfd5c794eeec51bbe96770.check-runs@per_page=100.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/dd452d85dc02f12d0fbfd5c794eeec51bbe96770/status"]
+    file: "api.commits.dd452d85dc02f12d0fbfd5c794eeec51bbe96770.status.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3147"]
+    file: "api.pulls.3147.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3557/commits?per_page=100"]
+    file: "api.pulls.3557.commits@per_page=100.json"
+    auth: "token"
+    recorded_at: "2026-11-23T06:17:40Z"
+    recorder_commit: "6ee13da3bf20d09baf41cf10ca214292b3186e7f"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3147/commits?per_page=100"]
+    file: "api.pulls.3147.commits@per_page=100.json"
+    auth: "token"
+    recorded_at: "2026-11-23T06:17:41Z"
+    recorder_commit: "6ee13da3bf20d09baf41cf10ca214292b3186e7f"
+writes:
+  - op: "update-branch"
+    method: "PUT"
+    path: "repos/teststuffstash/homelab/pulls/{pull_number}/update-branch"
+    operation_id: "pulls/update-branch"
+    statuses: ["202", "422"]
+  - op: "create-label"
+    method: "POST"
+    path: "repos/teststuffstash/homelab/labels"
+    operation_id: "issues/create-label"
+    statuses: ["201", "422"]
+  - op: "add-labels"
+    method: "POST"
+    path: "repos/teststuffstash/homelab/issues/{issue_number}/labels"
+    operation_id: "issues/add-labels"
+    statuses: ["200"]
+  - op: "remove-label"
+    method: "DELETE"
+    path: "repos/teststuffstash/homelab/issues/{issue_number}/labels/{name}"
+    operation_id: "issues/remove-label"
+    statuses: ["200", "404"]
+  - op: "update-pull"
+    method: "PATCH"
+    path: "repos/teststuffstash/homelab/pulls/{pull_number}"
+    operation_id: "pulls/update"
+    statuses: ["200"]

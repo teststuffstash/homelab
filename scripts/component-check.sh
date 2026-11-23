@@ -68,7 +68,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 
 # The chart pin — Renovate's helm customManager reads these two lines (class 18, docs/dependency-classes.yaml):
 # renovate: datasource=helm depName=kyverno-policies registryUrl=https://kyverno.github.io/kyverno
-KYVERNO_POLICIES_CHART_VERSION=3.9.2
+KYVERNO_POLICIES_CHART_VERSION=3.10.0
 KYVERNO_POLICIES_CHART_REPO=https://kyverno.github.io/kyverno
 VENDOR="$HERE/vendor-kyverno-policies.sh"
 # the library pin, for the report line only — the vendor script owns it

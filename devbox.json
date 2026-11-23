@@ -360,6 +360,12 @@
       "runner-maint-self-test": [
         "bash scripts/runner-maintenance-self-test.sh"
       ],
+      "jail-cluster": [
+        "bash scripts/jail-cluster.sh \"$@\""
+      ],
+      "jail-cluster-self-test": [
+        "bash scripts/jail-cluster-test.sh"
+      ],
       "cp-upgrade": [
         "bash scripts/controlplane-upgrade.sh \"$@\""
       ],
@@ -438,6 +444,12 @@
       "lock-intake-lint": [
         "python3 scripts/lock-intake-lint.py \"$@\""
       ],
+      "image-clock": [
+        "python3 scripts/image-clock.py \"$@\""
+      ],
+      "image-clock-test": [
+        "python3 scripts/image-clock.py --self-test"
+      ],
       "lock-intake-lint-test": [
         "python3 scripts/lock-intake-lint.py --self-test"
       ],
@@ -510,6 +522,10 @@
       ],
       "gateway-specs-pr-purge": [
         "sh -c 'cd gateway && exec devbox run specs-pr-purge -- \"$@\"' -- \"$@\""
+      ],
+      "opnsense-users-self-test": [
+        "python3 ansible/roles/opnsense-users/filter_plugins/opn_user_keys.py --self-test",
+        "bash scripts/opnsense-api-users-test.sh"
       ],
       "router-self-test": [
         "python3 argocd/resources/openrouter-proxy/router.py --self-test"

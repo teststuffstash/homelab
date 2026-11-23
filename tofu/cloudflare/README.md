@@ -38,6 +38,7 @@ most resources — everything here was validated against the v5 schema.
 | `removed.tf` | the `ha` CNAME + mTLS ruleset FORGOTTEN (not destroyed) at the retrofit — the claim adopted them |
 | `outputs.tf` | `ha_url`, client cert/key (sensitive), `make_p12_command` |
 | `minutark.tf` | minutark.ee product-zone bootstrap — hygiene records, TLS 1.2 floor, always-HTTPS, DNSSEC (oracle-iac#351) |
+| `notifications.tf` | the account's Tunnel Health Alert policy (every tunnel, email to the destination the existing Passive Origin Monitoring policy uses — read, never written here) — the outside-vantage public-path check (docs/cloudflare.md §Observability) |
 
 The `kubernetes` provider is still configured (`providers.tf`): the retrofit's apply needed it to
 destroy the old connector, and after that it manages nothing (dropping it is a `providers.tf` /

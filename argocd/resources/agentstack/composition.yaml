@@ -107,6 +107,7 @@ spec:
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
                   (dict "name" "task/goal" "color" "5319e7" "description" "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)")
+                  (dict "name" "experiment/open" "color" "c2e0c6" "description" "Closed fix with an undecided ## Experiment; the intake experiment read decides it and removes this")
                   (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. MIDPOINT: goal stays OPEN, shipping to production (ADR-102)")
                   (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
                   (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes it — closed successfully-refuted, descendants close with it (ADR-102)")
@@ -575,7 +576,7 @@ spec:
                         - name: crashnet
                           # The coordinator image (bash + jq + s5cmd), same pin as the loop
                           # CronWorkflows above — the deploy-pin sweep bumps them together.
-                          image: registry.teststuff.net/agent-coordinator:2026.11.16-g703b436ee38d.45
+                          image: registry.teststuff.net/agent-coordinator:2026.11.23-g703b436ee38d
                           command: ["bash", "-lc"]
                           args:
                             - |
@@ -788,7 +789,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: registry.teststuff.net/agent-coordinator:2026.11.16-g703b436ee38d.45
+                      image: registry.teststuff.net/agent-coordinator:2026.11.23-g703b436ee38d
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -871,7 +872,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: registry.teststuff.net/agent-coordinator:2026.11.16-g703b436ee38d.45
+                      image: registry.teststuff.net/agent-coordinator:2026.11.23-g703b436ee38d
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -947,7 +948,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: registry.teststuff.net/agent-coordinator:2026.11.16-g703b436ee38d.45
+                      image: registry.teststuff.net/agent-coordinator:2026.11.23-g703b436ee38d
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -1191,7 +1192,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: registry.teststuff.net/agent-base:2026.11.16-g7296793e6ee9.135
+                      image: registry.teststuff.net/agent-base:2026.11.23-g64c93276451b.137
                       command: ["bash", "-lc"]
                       args:
                         - |
