@@ -213,9 +213,6 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 - **Gateway specs residue (the next gateway PR's; TICK-LOG 11-07).** `metrics.schema.json` `rail_choice_reason` lacks `order`;
   GW-SESSIONS-ADMIT citations in `agents/gateway-admit.sh` + `agents/agent-session.sh` comments.
 - **Intake owed: #3139, #3141** (unruled since 11-01, no labels).
-- **⚑ PICKUP (2026-11-01 — gateway rollout residue; TICK-LOG 11-01).** Strip `agent/error` from #1941 #2589 #3087 + correct #3095's
-  attribution (#1941 = OOMKill, #2589 never pushed, #3087 pushed); file the agent-runtime half (finalize + launcher classify
-  `Go usage limit exceeded`, today `unknown`); FU-270 pointer += #3105 #3108.
 - **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29).** Retire the restated process text now that the card + mount
   carry it: homelab `.agents/fix.yaml` "Specs are the pinned process"; oracle-fleet `.agents/fix.yaml` step 0 (the oracle seat's).
   Read the first specs ride's `→ spec process:` log line.

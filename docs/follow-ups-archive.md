@@ -10,6 +10,15 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-251** *(archived 2026-11-23)* — **opencode.ai session headers.** Proved on the wire (PR#1760); the gateway's
+      GW-RAIL-OPENCODE covers all three seams (fixed UA, both headers passed through, own session id when absent).
+      No more old-proxy work; it retires with the old proxy.
+- **FU-095** *(archived 2026-11-23)* — **Task-class routing on the old router.** The flip child was never built (#778
+      released 09-02); ladder promotion is the gateway's ADR-096-ladder ⚑ gap (GW-MODEL-RESOLVE), tiers from
+      GW-MODEL-TIERS. History: model-routing.md.
+- **FU-058** *(archived 2026-11-23)* — **Retro P3.** Weekly platform series r1–r13 live; the goose cell's findings
+      block compliant since r10. The ADR-146 per-stack series moved to the retro island: homelab#3715. Design:
+      observability-and-retro.md §B2.
 - **FU-290** *(archived 2026-11-23)* — **homelab-agents pool drains.** Detectors live (#1979 graphql, #2442 core);
       label writes → REST (#2483/#2484), loop storms fixed (#2204/#2366). No drain in the 18 d Prometheus held on
       11-23 (coordinator-git min graphql 1215 / core 2157). Build the per-consumer meter on the next
