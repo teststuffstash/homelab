@@ -215,14 +215,15 @@ then moved past itself):
 its `coordinate-<stack>` / `review-<stack>` CronWorkflows in its own namespace with zero
 cross-boundary secrets (AgentStack claim, ADR-085); dispatch is **item-scoped** — a deterministic
 scan emits work units and the LLM judges one item (ADR-094); Argo Workflows + Events is the
-orchestration engine (ADR-093); model and budget decisions are moving into the egress proxy as a
-router (ADR-096). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
+orchestration engine (ADR-093); model and budget decisions moved into the egress path — the ADR-096
+router in the old proxy, now being replaced by the agent-gateway island (ADR-139, `gateway/`). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
 responder, researcher, infra-fixer, prober
 ([`docs/agents/roles.md`](docs/agents/roles.md)).
 
 **Identity/secrets** reuse existing primitives (Infisical+ESO, Cilium FQDN policy, the
-`homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **CI runners are
-Tofu-defined Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC (ADR-082).
+`homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **System-test gates
+run on Tofu-defined Proxmox VM runners** (ephemeral k3d), not privileged in-cluster ARC (ADR-082);
+ARC carries the unprivileged jobs.
 
 ## Programs in flight
 
