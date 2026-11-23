@@ -96,7 +96,7 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-11-23 (fu-sweep after /board-sweep 10-31→11-23: machine lane reconciled since 10-24, ALL sections classified by 4 slice subagents — island-first, no corpus load. **Archived (7):** FU-186, FU-286, FU-290, FU-170, FU-181, FU-251, FU-095. **Moved to island issues (5):** FU-307→#3711, FU-310→#3712, FU-324→#3713, FU-174→#3714, FU-058→#3715. **Soaks:** FU-013 router leg ACCEPTED, FU-319 soak clean, FU-249(g) proven. FU-314 in a PR. 24 archive entries expired. 130 → 118 open.)_
+_Last updated: 2026-11-23 (fu-sweep after /board-sweep 10-31→11-23: machine lane reconciled since 10-24, ALL sections classified by 4 slice subagents — island-first, no corpus load. **Archived (8):** FU-314, FU-186, FU-286, FU-290, FU-170, FU-181, FU-251, FU-095. **Moved to island issues (5):** FU-307→#3711, FU-310→#3712, FU-324→#3713, FU-174→#3714, FU-058→#3715. **Soaks:** FU-013 router leg ACCEPTED, FU-319 soak clean, FU-249(g) proven. FU-314 done (#3718). 24 archive entries expired. 130 → 117 open.)_
 slice subagents, machine lane reconciled since 09-24, Agents classified WITHOUT the corpus load
 (operator-typed only), so design-shaped agents items were left untouched. **Archived (10):** FU-246,
 FU-212, FU-129, FU-219, FU-154, FU-148, FU-150, FU-224, FU-097, FU-151 (+FU-173/149/184 expired). **Soaks FAILED:**
@@ -453,11 +453,6 @@ six OVERSIZE items pointer-ized into
       Relates FU-318, #3088.
 
 ## Agents
-- [ ] **FU-314** — **The specs reviewer still reads the legacy `gateway-evidence` Actions artifact as a fallback.**
-      Packs moved to the `gateway-specs` bucket 2026-10-21/22 (#2796 + 421f51aa; Actions storage quota);
-      `evidence_download`/`evidence_baseline_download` in `agents/specs-reviewer-session.sh` keep the
-      `gh run download` path until pre-move runs expire (14 d). **Next (≥2026-11-05):** delete the fallback
-      + `EVIDENCE_ARTIFACT` + the `run download` shadow allow-list row, keep the bucket path only.
 - [ ] **FU-293** — **`scripts/` is one flat directory and path-based ownership cannot cut it.**
       Inventory by executor 2026-09-28 (~26 CI gates, 16 box, 1 cluster pod, ~45 seat-only; 143/146
       commits in a month seat-authored). First cuts the same day: the box's closure → `mgmt/`

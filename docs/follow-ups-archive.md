@@ -10,6 +10,9 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-314** *(archived 2026-11-23)* — **Specs-reviewer legacy artifact fallback removed.** Packs come only from the
+      `gateway-specs` bucket since #2796; #3718 (`bbf65572`) dropped `EVIDENCE_ARTIFACT`, the `gh run download|list`
+      paths and `run download` from the shadow allow-list (now a refused write in the self-test, 187 ok).
 - **FU-251** *(archived 2026-11-23)* — **opencode.ai session headers.** Proved on the wire (PR#1760); the gateway's
       GW-RAIL-OPENCODE covers all three seams (fixed UA, both headers passed through, own session id when absent).
       No more old-proxy work; it retires with the old proxy.
