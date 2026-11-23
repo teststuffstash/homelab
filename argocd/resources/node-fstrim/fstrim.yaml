@@ -47,7 +47,7 @@
 # disk shows the same signature (aqu + zero discards) — evidence per drive, not a blanket rule.
 #
 # One CronJob per node because a Job cannot pin different pods to different nodes. They are
-# staggered so four simultaneous discards do not hit one NVMe together.
+# staggered so simultaneous discards do not hit one hypervisor's NVMe together.
 #
 # PINNING = required nodeAffinity on kubernetes.io/hostname + the `node-maintenance` PriorityClass,
 # NEVER `nodeName` (2026-10-09). `nodeName` bypasses the scheduler: the pod goes straight to the
@@ -109,7 +109,7 @@ data:
     [ -n "${bytes:-}" ] || bytes=0
 
     if [ "$rc" -ne 0 ]; then
-      echo "FSTRIM-FAIL: rc=$rc on ${NODE} — pool blocks were NOT returned"
+      echo "FSTRIM-FAIL: rc=$rc on ${NODE} — /hostvar was NOT trimmed"
     else
       echo "trimmed ${bytes} bytes on ${NODE}"
     fi
