@@ -358,6 +358,7 @@ spec:
                     format as workerModel without the "openrouter/" prefix requirement.
                 repos:
                   type: array
+                  maxItems: 32   # bounds the per-item CEL rule's cost estimate (the API server rejects an unbounded one)
                   description: >-
                     Every repo the stack's coordinator watches (issues/PRs), in scan order.
                     A repo WITH a `fixer` block also gets worker infrastructure rendered into
@@ -368,9 +369,15 @@ spec:
                   items:
                     type: object
                     required: [name]
+                    # repos[].intake renders per-repo names with a `.` suffix (`.src`, `.reader`) whose
+                    # collision-freedom rests on the repo name being a DNS label (no `.`).
+                    x-kubernetes-validations:
+                      - rule: "!has(self.intake) || self.name.matches('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')"
+                        message: "a repo with `intake` must have a DNS-label name (lowercase, digits, `-`; no `.`): it names a namespace and the intake-transcripts resources"
                     properties:
                       name:
                         type: string
+                        maxLength: 100   # GitHub's own repo-name limit; bounds the CEL rule above
                         description: >-
                           GitHub repo name in the teststuffstash org; doubles as the worker
                           namespace name for fixer-enabled repos.
@@ -535,7 +542,10 @@ spec:
                           for the repo. Consumed by the island intake LAUNCHER, which reads the
                           live claims (islands/intake/scripts/claims-read.sh → intake-select.sh
                           `--claims`; scripts/sitting.sh clones the repo's default branch and
-                          reads the facts file there). Nothing is rendered by the Composition.
+                          reads the facts file there). The Composition renders the stack's read
+                          path to the sittings: bucket `intake-transcripts-<repo>`, its write-only
+                          key in agent-coordinator, and a read-only key mirrored into ns <repo> as
+                          Secret `intake-transcripts-s3`.
                         properties:
                           facts:
                             type: string

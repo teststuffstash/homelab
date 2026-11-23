@@ -58,6 +58,52 @@ _ts_put() { # <local> <remote-basename>
   AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" \
     s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
     || { echo "transcripts: upload FAILED for $2"; return 1; }
+  _ts_put_stack "$1" "$2" || true
+}
+# A stack island's own copy, same file under the same run path minus the homelab/ prefix (the bucket is
+# already the island's): the Composition's intake-transcripts-<repo> bucket, readable from the stack's
+# namespace. Copied only when the key's Secret names THIS island's stack (two claims listing one repo must
+# not land one stack's sittings in the other's bucket); platform islands get no key at all. The copy is
+# REDACTED first: every value of this pod's credential env (and the ServiceAccount token) is replaced by
+# its name, so a session that printed its environment — the 2026-10-29 incident shape — does not carry a
+# platform token into a stack-readable place. A literal scrub: it catches the accidental dump, not a
+# deliberately encoded one. Beyond the env values: the git auth header form (base64 of
+# `x-access-token:<token>`, which the island clone's .git/config carries), every gateway admission's
+# session values (/tmp/redact-values, appended by _admit), and anything JWT-shaped (the projected tokens
+# rotate during a sitting, so a file read at upload time would miss an earlier one). A failure is said
+# and never fails the canonical upload above.
+STACK_TS_PREFIX="s3://${STACK_TS_BUCKET:-}/intake-${DAY}/intake-r1-${TS_RUN}"
+_ts_put_stack() { # <local> <remote-basename>
+  case "$ISLAND" in */*) ;; *) return 0;; esac
+  [ -n "${STACK_TS_BUCKET:-}" ] && [ -n "${STACK_TS_ACCESS_KEY_ID:-}" ] || return 0
+  [ "${STACK_TS_STACK:-}" = "${ISLAND%%/*}" ] \
+    || { echo "transcripts: stack copy SKIPPED for $2 — the bucket's stack '${STACK_TS_STACK:-}' is not the island's"; return 1; }
+  local red; red="$(mktemp)" || return 1
+  python3 -I - "$1" "$red" <<'PY' || { rm -f "$red"; echo "transcripts: stack copy SKIPPED for $2 — redaction failed"; return 1; }
+import base64, os, re, sys
+names = ("GH_TOKEN", "INTAKE_READ_GH_TOKEN", "AGENT_TS_ACCESS_KEY_ID", "AGENT_TS_SECRET_ACCESS_KEY",
+         "AGENT_TS_READER_ID", "AGENT_TS_READER_SECRET", "STACK_TS_ACCESS_KEY_ID", "STACK_TS_SECRET_ACCESS_KEY",
+         "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY")
+vals = [(os.environ.get(n, ""), n) for n in names]
+for f in ("/var/run/secrets/kubernetes.io/serviceaccount/token", "/var/run/secrets/agent-gateway/token"):
+    try: vals.append((open(f).read().strip(), "SA_TOKEN:" + f.rsplit("/", 2)[-2]))
+    except OSError: pass
+for n in ("GH_TOKEN", "INTAKE_READ_GH_TOKEN"):
+    v = os.environ.get(n, "")
+    if v: vals.append((base64.b64encode(("x-access-token:" + v).encode()).decode(), n + ":basic"))
+try:
+    vals += [(l.strip(), "GATEWAY_SESSION") for l in open("/tmp/redact-values") if l.strip()]
+except OSError: pass
+data = open(sys.argv[1], "rb").read()
+for v, n in sorted(vals, key=lambda x: -len(x[0])):
+    if len(v) >= 8: data = data.replace(v.encode(), ("[redacted:" + n + "]").encode())
+data = re.sub(rb"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", b"[redacted:JWT]", data)
+open(sys.argv[2], "wb").write(data)
+PY
+  AWS_ACCESS_KEY_ID="$STACK_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$STACK_TS_SECRET_ACCESS_KEY" \
+    s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$red" "$STACK_TS_PREFIX/$2" >/dev/null 2>&1 \
+    || { rm -f "$red"; echo "transcripts: stack copy FAILED for $2 (s3://$STACK_TS_BUCKET)"; return 1; }
+  rm -f "$red"
 }
 
 # the clone is the bootstrap's (the manifest): this file is read from it, so it cannot make it
@@ -170,6 +216,10 @@ _admit() { # <task suffix> → rc 0 (rail + TS_MODEL + GW_LLM_ENV set) | 1 (not 
        case "$GW_RAIL $GW_MODEL" in
          opencode\ *|*opencode-go/*) ADMIT_WHY="the gateway answered on the Go rail ($GW_RAIL $GW_MODEL) — released unused"; gw_release; GW_LLM_ENV=(); return 1;;
        esac
+       # every admission's session values, kept for the stack copy's redaction (_ts_put_stack)
+       local _kv; for _kv in "${GW_LLM_ENV[@]}"; do
+         case "${_kv%%=*}" in *TOKEN*|*KEY*|*SECRET*) printf '%s\n' "${_kv#*=}" >> /tmp/redact-values;; esac
+       done
        rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL"; return 0;;
     1) ADMIT_WHY="the gateway deferred [$GW_DEFER_REASON]"; return 1;;
   esac
