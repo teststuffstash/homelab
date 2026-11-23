@@ -1120,14 +1120,14 @@ install-impact line do what the issue asked, given what the fleet and the box al
 intent and plan disagreeing is BLOCKING even when every check is green
 ([`.agents/review.md`](../.agents/review.md)). The cross-class view — every dependency class, what
 is still manual and what it waits on — is [`dependency-upgrades.md`](dependency-upgrades.md); this
-table is the box's half. Live reads below are as of 2026-11-12.
+table is the box's half. Live reads below are as of 2026-11-12 (router rows, the runner row and the box closure re-read 2026-11-23).
 
 | Surface | Mode today (toggle) | Last proven | Evidence | Waiting on, to become unattended |
 |---|---|---|---|---|
 | Plan-on-PR sentinel: `main`, `provisioning`, `github`, `cloudflare` (`management-sentinel`, a verdict, never an apply) | unattended (required context) | every PR head since 2026-09-13 | §MB3; cloudflare plans with the read-only `cloudflare-mgmt-read` token | — (hardening open: FU-237 (c)/(d), FU-305) |
-| Router config: test-VM verdict on every PR head (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | unattended (required context since 2026-10-27; a verdict, never an apply) | 2026-10-31 (last router-path head judged, `mgmt_router_verdict_last_verdict_timestamp_seconds`) | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test` | — |
+| Router config: test-VM verdict on every PR head (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | unattended (required context since 2026-10-27; a verdict, never an apply) | 2026-11-21 (last router-path head judged, `mgmt_router_verdict_last_verdict_timestamp_seconds`) | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test` | — |
 | Main root, raw-k8s residue (the apply allowlist) | unattended (always on) | since 2026-09-13; loop ticking clean 2026-11-12 | every `management-apply` tick; §The test surface | — |
-| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the two verbs below (the runner's row exists, disabled) |
+| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the host verb below (the runner's row is `on` since 2026-11-14) |
 | Talos config apply, workers (`no_reboot`, health-gated) | unattended | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean | — |
 | Talos config apply, control planes | unattended (`apply_controlplane_config: true`) | 2026-09-22 | the same apply, CP rows included | — |
 | Talos install rollout, workers + CPs (`mgmt-reconcile`) | unattended once the bump is merged (`reconcile_rollout.enabled: true`) | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last | the mechanism: nothing. The bump PR is human-proposed and operator-attended as class 6 (FU-319; a Renovate proposer is #1988's substrate row). No rollout has run since: declared = live = v1.14.1 on 13/13 |
@@ -1140,16 +1140,16 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | unattended (policy row); majors stay a human merge by ruling | 2026-10-11 | longhorn 1.13.0 (#2487): chart bracket CONFIRMED 07:17:46Z, `mgmt-helm-engines` 42/42 moves, 9 holds, CONFIRMED 09:00:14Z. Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; the two breakage records are in §Helm release applies | — |
 | The box verdict as a gate (apply, reconcile, helm) | unattended (always on) | 2026-10-10 (the read) | §The box verdict; the gates have met no real DOWN — harness only | the first real DOWN |
 | Matchbox (`ansible/matchbox*.yml`; `apply_ansible.matchbox`, §Ansible applies) | unattended (`mode: on`) | 2026-10-26 | #2950: proxydhcp=2 + ipxe-tftp=1 applied 23:14:12Z, confirm clean, health ok, lease + window closed | — |
-| Router config converge, CARP BACKUP (`apply_ansible.opnsense`, §Router config converge — BACKUP-only) | unattended by policy (`mode: backup-only`), **refusing since 2026-10-31** | 2026-10-27 | #2955 CONFIRMED on opnsense-pve; the 2026-10-31 and 2026-11-08 spans REFUSED `ansible-live-drift` (kea-dhcp.py on the BACKUP). The node-local restore FIRING is proven on test VM 9110 only | a human converge of the BACKUP to clear the drift (no tracking item found 2026-11-12) |
-| Router config converge, CARP MASTER (`scripts/opnsense-router-node.sh converge <node>`) | manual: seat-run per node in a window | — (not a box capability) | the test VM + the weekly rebuild drill are its test surfaces (FU-297) | ADR-152 program step 3's rolling part (through `carp-maintenance` with the dead-man) — ROADMAP §Deploy paths; not ruled, not built |
+| Router config converge, CARP BACKUP (`apply_ansible.opnsense`, §Router config converge — BACKUP-only) | unattended by policy (`mode: backup-only`); the 2026-10-31 drift refusal ended 2026-11-17 | 2026-10-27 | #2955 CONFIRMED on opnsense-pve; the 2026-10-31 and 2026-11-08 spans REFUSED `ansible-live-drift` (kea-dhcp.py on the BACKUP), cleared 2026-11-17 by the seat's converge of both nodes + `ansible-confirmed-opnsense` seeded to 7126007a (refusal subjects 0 since 23:24Z; `mgmt_apply_ansible_would_change{group="opnsense"}` 0, read 2026-11-23). The node-local restore FIRING is proven on test VM 9110 only | the next router-play change on master — the first confirmed span since 2026-10-27 |
+| Router config converge, CARP MASTER (`scripts/opnsense-router-node.sh converge <node>`) | manual: seat-run per node in a window | 2026-11-17 (seat, both nodes — not a box capability) | the test VM + the weekly rebuild drill are its test surfaces (FU-297) | ADR-152 program step 3's rolling part (through `carp-maintenance` with the dead-man) — ROADMAP §Deploy paths; not ruled, not built |
 | Router security-boundary plays (WAN firewall + port forwards, WireGuard, ACME, ddclient, API users, CARP) | manual, by design | — | the `deny_paths` of the `opnsense` row refuse them (ADR-152 (4)) | nothing — stays human |
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | manual: seat API calls, test VM 9110 first (ruling 2026-09-29, [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (prod by hand 2026-09-29/30) | class 14 in `dependency-upgrades.md` | ADR-152 program step 4 (test VM → BACKUP → MASTER under one lease) — ROADMAP §Deploy paths; not built |
-| Router BACKUP certificate carry (`mgmt-cert-carry`, nightly, as `automation` — §Router certificate carry) | unattended once deployed: the timer is built, not yet run | — (the last carry was the seat's, by hand with root's key, 2026-10-26) | FU-297; fixture `mgmt-cert-carry-test.sh` | the seat applies `page-system-certmanager` (`scripts/opnsense-api-users.sh`), the box rebuilds, the first nightly `ok` |
-| OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-08 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
-| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **on** since 2026-11-14 (`mode: "on"`; shadow homelab#3366 → on after a clean shadow tick on be5f7fcf) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below; the box's live plan yields both as `seed` candidates (2026-11-14) | the first unattended success (both runners, then the argocd release alone) |
+| Router BACKUP certificate carry (`mgmt-cert-carry`, nightly, as `automation` — §Router certificate carry) | unattended | 2026-11-23 (`mgmt_cert_carry_last_success_timestamp_seconds` 03:19Z; first run 2026-11-17 23:17Z) | #3526; fixture `mgmt-cert-carry-test.sh` | — |
+| OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-22 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
+| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **on** since 2026-11-14 (`mode: "on"`; shadow homelab#3366 → on after a clean shadow tick on be5f7fcf) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below. 2026-11-14: the box recreated both runners unattended twice — each VM replaced cleanly, each gate failed on signals not about the VM, closed by the seat (→ #3370, #3372) | the first unattended run that closes clean (no runner template change since #3372) |
 | Proxmox host maintenance (`host-maintenance`, nx-02 / pve) | attended: `devbox run host-maint -- preflight\|down\|up <host>` | 2026-10-09 (attended, nx-02) | §Hypervisor below | box wiring not built, no tracking item (2026-11-12); FU-288 for the BMC power path |
 | Upgrade-lease revert for an ArgoCD chart whose cone holds its own detector (`mgmt-lease`, §MB5) | unattended | 2026-10-10 (drill) | revert #2441 opened by the box, merged with zero hand acts — [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end | — |
-| The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-10 (`mgmt-confirm` gate 5/5, `mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
+| The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-17 (`mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
 | Reinstall of the box itself | manual, by design (the stick + `nixos-anywhere`) | 2026-09-13 | §OS and install | nothing — a recovery root's own recovery is manual |
 | Applies of the plan-only roots (`provisioning`, `github`, `cloudflare`) and the foreign roots (`infisical`, `cloudflare-token`) | manual: from the jail / the host | — | `apply: false` / `foreign_roots` in the policy | no ruling to move them; the credential prerequisite is FU-012 |
 | Talos PKI (rotate-ca) | manual (seat-run FROM the box, 2026-09-22; FU-264) | — | not a box capability | nothing planned |
@@ -1254,7 +1254,7 @@ and classified by name, then the runner verb, `node-maintenance` (control planes
 `controlplane-upgrade.sh`), `pct shutdown`, and the router node's `carp-maintenance` last, in the
 order [runbook §Proxmox host maintenance](runbook.md#proxmox-host-maintenance-window-updates--reboot)
 gives. It opens its own host window (an `instance` silence + a declared window). **Attended**;
-box wiring is not built (the runner verb's is, disabled).
+box wiring is not built (the runner verb's is, `on` since 2026-11-14).
 
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
@@ -1805,7 +1805,7 @@ this section.
 
 ## Open, and deliberately not built yet
 
-Every open item on this box with its tracker (read 2026-11-12). The per-surface answer to "what is
+Every open item on this box with its tracker (read 2026-11-12; the router cert carry and BACKUP-converge rows closed and the runner row updated 2026-11-23). The per-surface answer to "what is
 still a human" is §The capability ledger.
 
 | Open | State | Tracked by |
@@ -1817,9 +1817,7 @@ still a human" is §The capability ledger.
 | PXE flags set and cleared inside one reconciler sync (the reinstall class) | the interim shape is live (`flags.local.tf`); the reconciler half is not built | FU-244 |
 | BMC credentials rotated into the wallet; a BMC path in `node-maintenance` | half landed | FU-288 |
 | Router MASTER converge and router firmware as box runs | not built — ADR-152 program step 3 (the rolling part) and step 4 | ROADMAP §Deploy paths |
-| The router BACKUP's certificate carry as a box timer | built (`mgmt-cert-carry`, §Router certificate carry) — waits on the seat applying `page-system-certmanager` and the first nightly `ok` | FU-297 |
-| The router BACKUP converge is refusing on live drift (Kea, since 2026-10-31) | needs a human converge | no tracking item found 2026-11-12 |
-| ci-runner VM replace as a box-run verb | built, disabled — operator trial pending (§Non-Talos VMs) | no tracking item 2026-11-12 |
+| ci-runner VM replace as a box-run verb | `on` since 2026-11-14; no unattended run has closed clean yet (§The capability ledger) | no tracking item 2026-11-23 |
 | Proxmox host maintenance as a box-run verb | attended today (§Hypervisor), box wiring not designed | no tracking item 2026-11-12 |
 | The pilot's replacement (a Tiny; UEFI + vPro) — and with it a PXE install path and an automatic boot-failure rollback | waits on hardware | the private hardware register's R12 row |
 | A CI gate on `mgmt/nixos/` (`nix flake check`) | deliberately not built: the repo's CI is a list of `devbox run` steps, and the step wants the nix cache warm on the runner first | — |

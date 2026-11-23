@@ -158,7 +158,7 @@ caches; read one ad-hoc with `keepassxc-cli show -q --no-password -k …/homelab
 missing cache means "re-run wallet-files.sh", never "host-side only". Current cache dirs: `homelab-pve-ssh/` (Proxmox+VM SSH), `homelab-matchbox/`
 (gRPC certs), `homelab-forgejo/` (SSH + GPG keypairs; API token is a wallet STRING),
 `cloudflare/` (read/write/acme/ingress tokens + the phone `.p12`), `tuya/` (device keys),
-`homelab-garage/`, `homelab-github-{merge,reviewer}/`, `homelab-runner-app/`,
+`homelab-garage/`, `homelab-github-<app>/` (one per GitHub App), `homelab-runner-app/`,
 `homelab-wireguard/`, `homelab-tofu-state-backups/`, `homelab-cv-deploy/` (rasmus-soot-cv
 write deploy key — tofu/github/deploy_keys.tf). (OPNsense/HA/droplet/AWS creds are
 wallet strings now — the old per-service dirs are gone, FU-001.) Tofu state, `*.tfvars`,
