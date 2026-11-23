@@ -13,11 +13,12 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
-(No marker standing. 2026-10-24: the `RouterRunModelUnverifiable` marker was REMOVED by the fu-sweep — the alert now
-fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) its reason did not cover, so the dig re-reads it.)
+dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-runtime-tiers`, not master; rule, metric and `benchmarks.json` stay stale until Goal #3305 assembles (board-sweep 2026-11-23).
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-23 — cleanup trio).** #3722 (islands+intake docs comb) waits the OPERATOR's codeowner merge
+  (touches `.claude/skills/intake/SKILL.md`); #3721 (gateway docs comb) waits the specs reviewer. Operator list: TICK-LOG 11-23.
 - **⚑ PICKUP (2026-11-22 — intake on its own App; island suites gated by required `ci`; FU-320).**
   #3627 merged: master `ci` runs the scan/launch/retro suites (run 45048719148, all three green). #3672/#3676/#3677/#3682
   merged: intake sits as `homelab-intake` (Secret `intake-git`; read-only `intake-read-git` for oracle-iac), and
@@ -214,9 +215,6 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
 - **Gateway specs residue (the next gateway PR's; TICK-LOG 11-07).** `metrics.schema.json` `rail_choice_reason` lacks `order`;
   GW-SESSIONS-ADMIT citations in `agents/gateway-admit.sh` + `agents/agent-session.sh` comments.
 - **Intake owed: #3139, #3141** (unruled since 11-01, no labels).
-- **⚑ PICKUP (2026-11-01 — gateway rollout residue; TICK-LOG 11-01).** Strip `agent/error` from #1941 #2589 #3087 + correct #3095's
-  attribution (#1941 = OOMKill, #2589 never pushed, #3087 pushed); file the agent-runtime half (finalize + launcher classify
-  `Go usage limit exceeded`, today `unknown`); FU-270 pointer += #3105 #3108.
 - **⚑ PICKUP (2026-10-29 — specs process delivery; TICK-LOG 10-29).** Retire the restated process text now that the card + mount
   carry it: homelab `.agents/fix.yaml` "Specs are the pinned process"; oracle-fleet `.agents/fix.yaml` step 0 (the oracle seat's).
   Read the first specs ride's `→ spec process:` log line.

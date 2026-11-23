@@ -100,8 +100,8 @@ its anchor and its evidence:
   - evidence: `/router-status` → `ladder_cells`, `shadow_24h`; `router_shadow_decisions_total{agrees="0"}`
     (the divergence the soak reviews), `router_shadow_start_tier`.
   - **`unenforced`** for the *served* pick — the P4 flip discipline owns it, and the owning
-    concern is NAMED: FU-095, whose recorded next step is the flip child — "the ladder promotion
-    into the served path" ([`../follow-ups.md`](../follow-ups.md)). No child minted yet.
+    concern moved to the gateway with FU-095's archive (2026-11-23): ladder promotion is the gateway's
+    ADR-096-ladder ⚑ gap (GW-MODEL-RESOLVE); nothing is built on the old router.
 
 ### Class rules
 
@@ -471,7 +471,7 @@ PR#1934. The rows below are the residue:
 
 | rule | owner |
 |---|---|
-| across-rails cost ladder decides the SERVED pick (shadow today) | FU-095 — its recorded next step IS the flip child ("the ladder promotion into the served path", [`../follow-ups.md`](../follow-ups.md)); no child minted yet |
+| across-rails cost ladder decides the SERVED pick (shadow today) | the gateway's ADR-096-ladder ⚑ gap (GW-MODEL-RESOLVE) — FU-095 archived 2026-11-23; not built on the old router |
 | `pin-v2` for the priced classes (quality tie-break, benchmark floor, live tool-error floor) | Goal #1640 acceptance 8 (evidence base) |
 | latency tie-break on measured decode tokens/sec | proposed, no owner — homelab#22's harvest half LANDED (`generations.generation_ms`, `router_observed_decode_tps`); the ordering lever (nothing reads the series) is what is unbuilt |
 | `goose-32602-truncation` as a per-cell signal | proposed, no owner (operator direction 2026-09-14) |

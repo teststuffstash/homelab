@@ -10,6 +10,42 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-314** *(archived 2026-11-23)* — **Specs-reviewer legacy artifact fallback removed.** Packs come only from the
+      `gateway-specs` bucket since #2796; #3718 (`bbf65572`) dropped `EVIDENCE_ARTIFACT`, the `gh run download|list`
+      paths and `run download` from the shadow allow-list (now a refused write in the self-test, 187 ok).
+- **FU-251** *(archived 2026-11-23)* — **opencode.ai session headers.** Proved on the wire (PR#1760); the gateway's
+      GW-RAIL-OPENCODE covers all three seams (fixed UA, both headers passed through, own session id when absent).
+      No more old-proxy work; it retires with the old proxy.
+- **FU-095** *(archived 2026-11-23)* — **Task-class routing on the old router.** The flip child was never built (#778
+      released 09-02); ladder promotion is the gateway's ADR-096-ladder ⚑ gap (GW-MODEL-RESOLVE), tiers from
+      GW-MODEL-TIERS. History: model-routing.md.
+- **FU-058** *(archived 2026-11-23)* — **Retro P3.** Weekly platform series r1–r13 live; the goose cell's findings
+      block compliant since r10. The ADR-146 per-stack series moved to the retro island: homelab#3715. Design:
+      observability-and-retro.md §B2.
+- **FU-290** *(archived 2026-11-23)* — **homelab-agents pool drains.** Detectors live (#1979 graphql, #2442 core);
+      label writes → REST (#2483/#2484), loop storms fixed (#2204/#2366). No drain in the 18 d Prometheus held on
+      11-23 (coordinator-git min graphql 1215 / core 2157). Build the per-consumer meter on the next
+      `GithubRateLimitLow{token=~".*-git"}`.
+- **FU-324** *(archived 2026-11-23)* — **Coordinator double launch under `timeout 590`.** Not built — moved to the
+      launch island (LAUNCH-POD-IDENTITY beyond pod create): homelab#3713.
+- **FU-174** *(archived 2026-11-23)* — **Reasoning effort unmodeled.** Not built — moved to the gateway (policy, not
+      the old `model-classes.json`): homelab#3714.
+- **FU-170** *(archived 2026-11-23)* — **Go-rail spend/limit residual belts.** Window-draw admission (0.80, gateway
+      `policy.json`) covers the near-limit leg; the account-headroom read that makes the jail-ingest gauge moot is
+      the gateway's: Goal #3118 (post-launch) + #3538 (console read 403s — `GoCatalogStale`).
+- **FU-181** *(archived 2026-11-23)* — **Go-rail meter-vs-console parity.** Moot once the gateway reads the account's
+      own headroom — same home as FU-170: Goal #3118 + #3538.
+- **FU-307** *(archived 2026-11-23)* — **No belt for "the pair's MASTER has no WAN".** Not built — moved to
+      its island: homelab#3711 (router-pair intake; `RouterMasterWanDark` from the gate's carrier export).
+- **FU-310** *(archived 2026-11-23)* — **dind tries HTTPS first against the HTTP-only mirrors.** Not built — moved
+      to the launch island (rebuilding the launcher): homelab#3712, means decided by its intake.
+- **FU-286** *(archived 2026-11-23)* — **Box talosctl flake-ref pin reverted to `latest`.** PR#1963's nixpkgs-rev
+      pin (devbox index stuck at 1.13.8) switched back by #2899 (10-24, `latest` = 1.14.2; lock resolves nixpkgs
+      e126e9e7, 11-13). `mgmt_probe_check{check="talos"}` = 1, 30-day minimum 1.
+- **FU-186** *(archived 2026-11-23)* — **Provider selection priced per successful job (ADR-115).** Step 1
+      (Exacto suffix on paid OpenRouter picks, PR#1639) stood on the old router; #1238 closed superseded
+      2026-11-01 and per-job provider pricing is now the gateway's tier evidence (GW-MODEL-TIERS). Design
+      record: [`spikes/model-routing-history.md`](spikes/model-routing-history.md) §M14.
 - **FU-313** *(archived 2026-11-16)* — **OpenCode Go key: 30-day key → service-account key.** The operator minted a 1-year
       service-account key (permission `models: request` only) and rolled it 2026-11-16 (ExternalSecret synced 18:43:59Z,
       `agent-gateway` + `openrouter-proxy` restarted 18:44Z). Probed with the deployed key: `GET /console/api/v2/config` 200,
@@ -49,113 +85,5 @@ coordinate in a never-reused namespace — and stays untouched, forever.
   2026-10-13: Renovate #90 (python:3.15-slim) → deploy build failed (`uv sync`, aiohttp has no cp315 wheel) → fix #93 →
   homelab#2529 deploy PR bot-reviewed + bot-merged in 6 min. Gotcha: a base-image major can need a human dep
   fix-forward; the pipe itself held.
-- **FU-198** *(archived 2026-10-15)* — **Argo lock-plane wedge: the retry backoff no longer holds a subscription slot.**
-  Belt `ArgoLockPlaneWedged` (PR#1722) + upstream leak fixes (v4.1.4, 10-05) stood; the 10-09 five-slot
-  wedge was retry backoff holding the semaphore. Ruled 10-14 (retry on a wrapper, lock on the leaf) →
-  #2573 (`respond`) + #2581 (`deep-dig`), merged 10-15. Proof: a semaphore-1 toy + control on #2563 —
-  the sibling ran inside the backoff on the new shape, queued ~2 min behind it on the old.
-  Postmortem: `incidents/2026-08-31-argo-semaphore-leak.md`.
 
-- **FU-279** *(archived 2026-10-14)* — **Garage-side incomplete multipart uploads in the `registry` bucket, uncollected.**
-  Operator ruling 10-14 (the 08-24 ☠ was about a bucket under recovery): 6 MPUs aborted by upload id (S3
-  AbortMultipartUpload; one held 410 parts / 4.3 GB), then the 16 objects (21 GB) deleted and the bucket destroyed
-  with FU-280. Order matters: Garage's DeleteBucket ignores MPUs. 0 block resync errors on all 3 nodes after.
-- **FU-032** *(archived 2026-10-14)* — **wk-metal-02's flaky wired link: closed — the 10-12 "recurrence" was deliberate.**
-  2026-08-07 (homelab#117): a 4.5 h flap storm (`carrier_changes` 2→3778), bad-cable class. The 2026-10-12
-  16:30–16:52Z flaps (carrier 2→6, kube-controller-manager restart 16:56Z) were the operator moving every laptop to a
-  new switch, power + network pulled with NO declared window, to watch the behaviour: the CP came back at once.
-- **FU-260** *(archived 2026-10-14)* — **Argo controller configmap-watcher hot-loop on an apiserver restart**
-  (v4.0.7, 96 % of Loki). Live v4.1.4 (chart 2.0.11). Apiserver restarts 10-07/10-09/10-12 → 0 "invalid config
-  map" lines, controller ≤0.03 core over 10 d. The fast-strap question went with the cause.
-- **FU-296** *(archived 2026-10-14)* — **governance-lint's worker match had no self-test (drill D3 #2092).**
-  Test + task + diff-ci row PR#2201; ci.yaml step ce3fcfb3 (10-10); gate-drift reads BASE ci.yaml + MAP, so
-  legs A/B select `governance-lint-test` for any `scripts/governance-lint*` change. No PR has exercised it yet.
-- **FU-312** *(archived 2026-10-14)* — **Bulk pulls through HAProxy stalled on pf `BAD state` (pfsync echo, FreeBSD 15.1).**
-  Both legs off pfsync: client #2532, router→backend #2535 (applied both nodes 2026-10-13 ~16:50Z). Proof: 0 `BAD state`,
-  stale/state-mismatch flat; oracle's 8.5 GB ert-corpus pull finished on one connection (17:22Z). No cause-level belt
-  (pf counters not exported). Residual slowness = the registry volume (FU-280). Evidence: router-move.md, the **pfsync** paragraph (`nopfsync`).
-- **FU-304** *(archived 2026-10-14)* — **wk-metal-02 holds the apiserver under GOMEMLIMIT; the CP role stays.**
-  2026-10-05 OOM-kill (argo-workflows CRD re-apply) → GOMEMLIMIT=3200MiB on all CPs (PR#2268) + helm
-  `max_history = 3` (PR#2267). Week soak 10-05→10-14: `ControlPlaneNodeMemoryLow` never fired (pending 3×, min
-  MemAvailable 33.7 % vs 35 %), apiserver peak 3.07 GiB. Thin margin — a CRD-heavy chart sync is the trigger.
-- **FU-046** *(archived 2026-10-12)* — **The reviewable-dep-bump path, end to end: PROVEN on both lanes.**
-  Majors rode the `unarmed-major` unit since 09-28 (~30 PRs through `major/awaiting-human`; #2033 adapted on its
-  Renovate branch). The non-major lane flew 2026-10-12 after the operator's ruling ("it should just work until it
-  cannot — worker fixes like a major, five rounds then a human"): #2521 widened the unit to an armed `deps-review` PR
-  that is red or changes-requested (the reflex is green-only, the ci-red dispatcher loop-author-only), five
-  `state-fp:unarmed-major:` markers → `agent/arbitrate` (the budget re-opens on a ruling). sleep-tracking#191 (lock
-  refresh carrying ruff 0.17, red for days): ridden at the 19:00Z tick, the worker pushed the fix to
-  `renovate/lock-file-maintenance` in 155 s, reflex APPROVED 19:13Z, updater current 19:14Z, MERGED 20:01Z (the one
-  red in between was the #184 render-gate flake, fixed in sleep-tracking#193). Both open clauses held: Renovate let
-  the edited branch go, the worker pushed to `renovate/*`. Relates ADR-141, ADR-153, FU-058's retro lane.
-- **FU-301** *(archived 2026-10-11)* — **`helm_release` applies on the box: evidence first → the box applies them on its own.**
-  Ruled 2026-10-10 (forward only, evidence-bracketed, stop + alert, never revert); the 1-replica refusal became the
-  HOLD (#2490 → #2491, operator 2026-10-11: "box + Argo do it on their own"). **Closed by the first CONFIRMED Longhorn
-  bracket, unattended end to end, 2026-10-11:** chart 1.12.1 → 1.13.0 applied 07:04:57→07:17:46Z (15/15 rolled, BGP
-  26/26, robustness unchanged, verdict `ok`), then `mgmt-helm-engines` 07:22:33→09:00:14Z: 42/42 engine moves, 9 holds
-  (garage ×3, CNPG ×5 incl. primaries failing over — 187–195 s detaches, forgejo/infisical/grafana), 33 consumer checks
-  whole, 42 lease renewals, CONFIRMED, lease deleted, window closed, no STOP marker. Records
-  `s3://helm-evidence/20261011T070302Z-box-longhorn-1.13.0/` + `…T072216Z-box-longhorn-engines-1.13.0/`. Defect found
-  by the run: the apply loop misread the running oneshot (#2495). Ruling the run produced (operator 2026-10-11, recorded
-  in management-box.md §Helm release applies): progress/outcome alerts read CLUSTER truth, the box emits lifecycle only —
-  built as the EngineImage/Volume KSM belt + the cluster-side lease reader (S9). Ledger row: management-box.md §The
-  capability ledger.
-- **FU-302** *(archived 2026-10-10)* — **The box's own Prometheus-free view of the cluster: built.** PR #2452:
-  `mgmt/scripts/mgmt-verdict.sh` (`devbox run mgmt-verdict`, JSON, exit 0/2/3) — Talos API, kube API via
-  the CP VIP, cilium BGP + probe 3 by exec, LAN HTTP to the BGP VIPs, node Ready, ArgoCD health,
-  Prometheus/Alertmanager `/-/ready`; ANDed into `mgmt-apply` (DOWN defers, Talos post-check) and
-  `mgmt-reconcile` (DOWN refuses a sync), not into the lease loop. Live on the box: `ok` agreeing with
-  Prometheus; `--prom` dead → `degraded`, direct reads intact. FU-301's helm swap point calls `mgmt_verdict` + `mgmt_verdict_poll` (the swap is that lane's).
-  [`management-box.md`](management-box.md) §The box verdict.
-- **FU-308** *(archived 2026-10-09)* — **An unattended router proof can sever the seat's own path and nobody
-  reverts.** PR#2399: `carp-maintenance <node> enter` arms a sleeper ON the node (pidfile + `kill -0`) that
-  runs the maintenance toggle after `DEADMAN` s (default 900) iff demotion ≥ 240; `leave` disarms, `status`
-  shows it. Drilled live 2026-10-09 in the window-2 WAN leg: fired at 360 s, nx-02 MASTER + WAN back in ~2 s.
-  Gotcha: never `pgrep -f` the sleeper's path (matches the ssh `sh -c`). GAPS maintenance-window-G6 keeps
-  the skill-side half (the "does your session ride what you move?" question).
-- **FU-295** *(archived 2026-10-06)* — **The box sentinel never reported on goal/** PRs.** PR#2299: goal/**
-  heads get an immediate base-pass `success` ("box surface judged at the assembly PR to master"); assembly PRs
-  to master are still fully planned. Verified live on Goal #2273's children (7/7 success, merges resumed).
-- **FU-151** *(archived 2026-10-04)* — **First-party `-iac` deploy bumps skipped LLM review by TIMING, not
-  design.** Every deploy-pin now labels its -iac PR `automerge`+`dependencies` on every run: sleep-tracking
-  (`5b8c384`), snore-recorder#43, circles#97 (+ its `specs-pr-route.sh` route PRs, the reviewer's catch).
-- **FU-097** *(archived 2026-10-03)* — **The box's capability ledger.** Ledger (#1893, [`management-box.md`](management-box.md)
-  §The capability ledger), first toggle (Talos config, `no_reboot`), the intent-review instruction in
-  `.agents/review.md` (c8e38675) and the generated dependency-class table (#1992/PR#2028) all live.
-- **FU-224** *(archived 2026-10-03)* — **transcripts-viewer bucket-sync CFS throttling.** PR#1519 fixed
-  longhorn-manager + cilium-agent; bucket-sync stays ~51 % throttled at any limit, but its measured cycle is
-  344–374 s against the loop's 300 s sleep (~45–75 s of work) — the lag is the sleep, not CPU; no raise.
-- **FU-150** *(archived 2026-10-03)* — **"CI cannot dispatch" alerting:** `GithubVendorOutage` + `CiDispatchStalled`
-  live; CiDispatchStalled fired on a real stall (the 2026-09-13 zombie run 34748702282 in the GitHub outage) and
-  resolved. Analysis: [`incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
-- **FU-148** *(archived 2026-10-03)* — **The environmental CI-red retry terminal** (App `actions:write`, retry
-  once with a stated diagnosis) passed its first organic case: homelab PR#1538 (2026-09-10) diagnosis → rerun
-  → green, auto-merge intact; a dozen `class=environment|infra` rulings since.
-- **FU-154** *(archived 2026-10-03)* — **Close-and-re-PR reset `RED_ROUNDS_MAX`.** The round count is
-  issue-keyed, summed across every PR referencing the issue (homelab#156), in both the scan's ci-red clause
-  and review-reflex's verdict ceiling — live on master since August.
-- **FU-219** *(archived 2026-10-03)* — **`coordinate-perstack` exit 141 (SIGPIPE)** = the `coordinator-scan.sh`
-  parity-assertion `| head -1` under pipefail (responder #1547). Fixed PR#1576 (09-14); 10-03 Loki read: 0
-  Failed/Error/141 against 4025 Succeeded perstack runs in 7d.
-- **FU-129** *(archived 2026-10-03)* — **`gh issue view --comments` printed nothing for zero-comment issues** —
-  a comments-only view (gh semantics, not image/token). Every stack recipe now reads `--json title,body,comments`;
-  sleep-tracking was the last (sleep-tracking#168), so the next `new-stack --from` donor is clean.
-- **FU-212** *(archived 2026-10-03)* — **respond-* runs Errored on `configmaps is forbidden`.** The write
-  was Argo v4.0 offloading an oversized pod template into a ConfigMap; granted cluster-wide by
-  `controller.rbac.writeConfigMaps` (PR#1678, 2026-09-14). Verified `auth can-i` across 5 namespaces;
-  0 forbidden Workflows among 155 live.
-- **FU-246** *(archived 2026-10-03)* — **Talos ≥ v1.13.10 on the workers (`page_table_check`, siderolabs/talos#13496).**
-  Fleet on v1.14.1 since the 2026-09-22 rollout; PXE/USB pins lint-held (2026-09-23). Soak clean:
-  no `NodeRebootingRepeatedly` after 09-23 14:05Z (nx-01's pre-rollout boots aging out), zero
-  `page_table_check|Oops:` lines in Loki 09-26→10-03. Incident: [`2026-09-16-page-table-check-reboots.md`](incidents/2026-09-16-page-table-check-reboots.md).
-- **FU-300** *(archived 2026-10-02)* — **The box's apply loop is window-blind: fixed.** PR#2183 (built by a
-  background subagent the same day): `mgmt-apply.sh` defers (no plan/apply/stamp/refusal) while a live
-  declared window holds it; `--admit-apply` lets the box through; an unreadable registry defers as a
-  PROBE-FAIL; gauges `mgmt_apply_deferred_window*` + `MgmtApplyDeferredByWindow` (6 h). Gotcha: the
-  reconciler's node windows hold the apply loop by design. [`management-box.md`](management-box.md) §MB3.
-- **FU-294** *(archived 2026-09-29)* — **A vulnerable transitive via Renovate, caught only by an LLM
-  reviewer (#2032, lodash-es@4.17.23 under mermaid 12): fixed structurally.** [ADR-143](adr.md): PR#2098
-  (mermaid-lint on Deno, zero permissions) + `lock-intake-lint` in `ci`; PROVEN live on Renovate's
-  #2100 (red on the lodash-es intake, no reviewer). Ride drill PR#2101: Deno cannot use an IP registry
-  → `npm-cache.teststuff.net`; kill-switch dropped. #2100 waits for mermaid-js/mermaid#8278 — no pin.
 

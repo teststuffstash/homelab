@@ -2,7 +2,7 @@
 
 **Tracked by:** FU-258. **Status:** reproduced twice, not root-caused; was PARKED behind the upgrade
 debt (§Why this is parked) — that prerequisite is MET: Cilium 1.20.4 live since 2026-10-31 (#3054,
-FU-319), and the settling experiment rides its 24 h soak (FU-258 holds the next action). **Environment:** Cilium 1.19.1, `kubeProxyReplacement=true`,
+FU-319). Not reproduced at agent level on 1.20.4 with 3 CPs (2026-11-19, 11-21 restarts), but that probe cannot see one of three backends dropped — step 1's per-node read at the next deliberate apiserver restart is owed (FU-258 holds the next action). **Environment:** Cilium 1.19.1, `kubeProxyReplacement=true`,
 `bpf-lb-sock=false`, `k8sServiceHost=localhost` / `k8sServicePort=7445` (Talos KubePrism),
 Kubernetes v1.36.1, **one** control plane. First seen 2026-09-20.
 

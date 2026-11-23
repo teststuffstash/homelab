@@ -34,7 +34,7 @@
     {
       "complete": false,
       "gap_cells": [],
-      "gap_rows": 2,
+      "gap_rows": 3,
       "human_cells": [
         "canary"
       ],
@@ -1296,11 +1296,13 @@
     },
     {
       "class": 3,
-      "gap_columns": [],
+      "gap_columns": [
+        "deploy_edge"
+      ],
       "key": "3:agent-base",
       "last_proven": "2026-11-16T15:53:17Z",
       "name": "agent-base",
-      "version": "`AGENT_BASE_IMAGE`=2026.11.16-g7296793e6ee9.135; 5 manifest ref(s)",
+      "version": "`AGENT_BASE_IMAGE`=2026.11.23-g64c93276451b.137; 5 manifest ref(s)",
       "where": [
         "agents/coordinator/island-intake-argo.yaml",
         "agents/coordinator/kustomization.yaml",
@@ -1316,7 +1318,7 @@
       "key": "3:agent-coordinator",
       "last_proven": "2026-11-16T14:26:46Z",
       "name": "agent-coordinator",
-      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.16-g703b436ee38d.45; 34 manifest ref(s)",
+      "version": "`AGENT_COORDINATOR_IMAGE`=2026.11.23-g703b436ee38d; 34 manifest ref(s)",
       "where": [
         "agents/coordinator/coordinate-argo.yaml",
         "agents/coordinator/corpus-dispatch-argo.yaml",
@@ -1352,7 +1354,7 @@
       "key": "3:agent-gateway",
       "last_proven": "2026-11-21T19:49:53Z",
       "name": "agent-gateway",
-      "version": "2026.11.21-g7190d7619066 (×1)",
+      "version": "2026.11.23-g61544afd387a (×1)",
       "where": [
         "argocd/resources/agent-gateway/deployment.yaml",
         "argocd/resources/agent-gateway/kustomization.yaml"
@@ -1377,7 +1379,7 @@
       "key": "3:homelab/arc-runner",
       "last_proven": "2026-11-21T00:11:39Z",
       "name": "homelab/arc-runner",
-      "version": "2026.11.20-g17c2d811ef4d (×3)",
+      "version": "2026.11.23-g67b88f16a4c3 (×3)",
       "where": [
         "agents/coordinator/sentinel-argo.yaml",
         "argocd/resources/runner-image-prepull/daemonset.yaml"
@@ -2174,7 +2176,7 @@
       "key": "8:renovatebot/github-action",
       "last_proven": "2026-11-16T04:27:20Z",
       "name": "renovatebot/github-action",
-      "version": "266fef21329c44765ad42f9dea1f01f5d2d91084 (v46.3.13)",
+      "version": "acdd6bda8b035c99ce59d5675816af2aa65a1774 (v46.3.14)",
       "where": [
         ".github/workflows/renovate.yaml"
       ]
