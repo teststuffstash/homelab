@@ -50,7 +50,7 @@ async def healthz(request: Request) -> JSONResponse:
     store: Store = request.app.state.store
     if not store.ping():
         return JSONResponse({"error": {"code": "db-unavailable", "message": "the store does not answer"}}, status_code=503)
-    return JSONResponse({"ok": True, "db": store.mode})
+    return JSONResponse({"ok": True, "db": store.mode, "release": request.app.state.release})
 
 
 async def catalog_opencode(request: Request) -> JSONResponse:
@@ -118,6 +118,7 @@ def create_app(
     m = Metrics(policy.stacks)
     m.bind_active_sessions(lambda: store.active_counts(clock()))
     m.bind_db_mode(lambda: store.mode)
+    m.bind_release(settings.release)
     client = client or httpx.AsyncClient(
         timeout=httpx.Timeout(connect=settings.connect_timeout_s, read=settings.read_timeout_s, write=60, pool=10),
         follow_redirects=False,
@@ -260,6 +261,7 @@ def create_app(
     app.state.settings = settings
     app.state.policy = policy
     app.state.store = store
+    app.state.release = settings.release
     app.state.resolver = resolver
     app.state.metrics = m
     app.state.sessions = sessions

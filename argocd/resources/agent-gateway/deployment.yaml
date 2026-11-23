@@ -39,6 +39,11 @@ spec:
         - name: gateway
           image: ghcr.io/teststuffstash/agent-gateway # tag: kustomization.yaml images.newTag
           env:
+            # GW-HEALTH: the running release. NOT a literal — kustomization.yaml's `replacements` derive it
+            # at render from images.newTag. The placeholder is deliberately NOT tag-shaped (a space), so a
+            # manifest served without the replacement answers `unknown`, never a made-up release.
+            - name: GATEWAY_RELEASE
+              value: set at render from images.newTag
             - name: GATEWAY_POLICY
               value: /etc/agent-gateway/policy.json
             - name: GATEWAY_BENCHMARKS
