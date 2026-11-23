@@ -71,7 +71,7 @@ transaction: a crash or error midway leaves the file at the schema it had, never
 restart, so a pod's session token is `session-unknown` to its successor.
 
 **World: [policy-default](../worlds/README.md#policy-worlds)** — `GATEWAY_DB=<tmp>/data/gateway.db`
-unless a row says `memory`; a worker session is admitted on the Go rail (`opencode`) and its
+unless a row says `memory`; `GATEWAY_RELEASE` unset unless a row's `GATEWAY_RELEASE` cell says otherwise; a worker session is admitted on the Go rail (`opencode`) and its
 ride goes to the fake Go upstream, `upstream-ok`.
 
 #### Which store the gateway runs on
