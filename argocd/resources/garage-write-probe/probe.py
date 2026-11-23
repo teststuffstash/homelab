@@ -29,12 +29,11 @@ PUSHGATEWAY_URL = os.environ.get(
 PROBE_DATA = b"x" * (64 * 1024)  # 64 KiB of data
 
 
-def sign_request(method, bucket, key, timestamp_str):
+def _sigv4_components(method, bucket, timestamp_str, access_key, secret_key, region="garage", service="s3"):
     """
-    S3 signature v4 for path-style requests to Garage.
+    The three SigV4 steps for a path-style request to Garage, returned individually so that
+    --self-test can pin each one. sign_request() is a thin wrapper over this.
     """
-    region = "garage"
-    service = "s3"
     amz_date = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc).strftime(
         "%Y%m%dT%H%M%SZ"
     )
@@ -52,18 +51,128 @@ def sign_request(method, bucket, key, timestamp_str):
     canonical_request = f"{method}\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
 
     canonical_request_hash = hashlib.sha256(canonical_request.encode()).hexdigest()
-    string_to_sign = f"AWS4-HMAC-SHA256\n{amz_date}\n{datestamp}/{region}/{service}/aws4_request\n{canonical_request_hash}"
+    credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
+    string_to_sign = f"AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{canonical_request_hash}"
 
-    k_date = hmac.new(f"AWS4{SECRET_KEY}".encode(), datestamp.encode(), hashlib.sha256).digest()
+    k_date = hmac.new(f"AWS4{secret_key}".encode(), datestamp.encode(), hashlib.sha256).digest()
     k_region = hmac.new(k_date, region.encode(), hashlib.sha256).digest()
     k_service = hmac.new(k_region, service.encode(), hashlib.sha256).digest()
     k_signing = hmac.new(k_service, b"aws4_request", hashlib.sha256).digest()
     signature = hmac.new(k_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
 
-    credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
-    authorization = f"AWS4-HMAC-SHA256 Credential={ACCESS_KEY}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+    authorization = f"AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
 
-    return {"Authorization": authorization, "x-amz-date": amz_date, "x-amz-content-sha256": payload_hash}
+    return {
+        "amz_date": amz_date,
+        "payload_hash": payload_hash,
+        "canonical_request_hash": canonical_request_hash,
+        "string_to_sign": string_to_sign,
+        "signing_key": k_signing.hex(),
+        "signature": signature,
+        "authorization": authorization,
+    }
+
+
+def sign_request(method, bucket, key, timestamp_str):
+    """
+    S3 signature v4 for path-style requests to Garage.
+    """
+    c = _sigv4_components(method, bucket, timestamp_str, ACCESS_KEY, SECRET_KEY)
+    return {
+        "Authorization": c["authorization"],
+        "x-amz-date": c["amz_date"],
+        "x-amz-content-sha256": c["payload_hash"],
+    }
+
+
+# Known-answer vector for --self-test. Provenance: computed INDEPENDENTLY of this file, by
+# hand with the openssl/sha256sum CLIs following the AWS SigV4 spec (docs.aws.amazon.com
+# "Signature Version 4 signing process"): sha256 of the canonical request, then the
+# HMAC-SHA256 chain AWS4+secret -> date -> region -> service -> "aws4_request" -> string-to-sign.
+# AWS's published example signature does not apply verbatim (region "garage", fixed Host,
+# UNSIGNED-PAYLOAD), so this is the same procedure on this probe's inputs. The key/secret
+# are the AWS documentation example pair, not credentials.
+# Timestamp 1767225600 = 2026-01-01T00:00:00Z.
+_VEC = {
+    "ak": "AKIDEXAMPLE",
+    "sk": "wJalrXUtnFEMI/K7MDENG" + "+bPxRfiCYEXAMPLEKEY",
+    "bucket": "platform-probe",
+    "ts": "1767225600",
+    "amz_date": "20260101T000000Z",
+    "PUT": {
+        "crh": "e9133574716da61cf8b96f1a752b76f096359ff4365029d7e7dc03aa49507fc6",
+        "sts": "AWS4-HMAC-SHA256\n20260101T000000Z\n20260101/garage/s3/aws4_request\n"
+        "e9133574716da61cf8b96f1a752b76f096359ff4365029d7e7dc03aa49507fc6",
+        "sig": "6cbc620bcba3764b37d7d657bdd0488c835bc6249c557145fa51f67e15ae2b86",
+    },
+    "DELETE": {
+        "crh": "40562084061f8f7396ee1016e14ba6255ddfe55a74bead7f52f14fbd523a219e",
+        "sig": "7b2a6a18219b7d9bf33efa9d068c95fa1ec91792525c0412c69448f126cb917f",
+    },
+    "kdf": "a908db7ea3c833d3474e1a336dab06c1aba690006a9c7712641567bbf07647bd",
+}
+
+
+def self_test():
+    """Offline known-answer test of the SigV4 chain. Silent on success; names failing steps."""
+    v = _VEC
+    fails = []
+
+    def check(name, got, want):
+        if got != want:
+            fails.append(f"FAIL {name}: got {got!r}, want {want!r}")
+
+    def comp(method="PUT", ts=v["ts"], **kw):
+        return _sigv4_components(method, v["bucket"], ts, v["ak"], v["sk"], **kw)
+
+    put = comp()
+    check("x-amz-date", put["amz_date"], v["amz_date"])
+    check("canonical request hash", put["canonical_request_hash"], v["PUT"]["crh"])
+    check("string-to-sign", put["string_to_sign"], v["PUT"]["sts"])
+    check("signing key derivation", put["signing_key"], v["kdf"])
+    check("signature", put["signature"], v["PUT"]["sig"])
+    scope = "20260101/garage/s3/aws4_request"
+    want_auth = (
+        f"AWS4-HMAC-SHA256 Credential={v['ak']}/{scope}, "
+        f"SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature={v['PUT']['sig']}"
+    )
+    check("Authorization header", put["authorization"], want_auth)
+
+    dele = comp("DELETE")
+    check("DELETE canonical request hash", dele["canonical_request_hash"], v["DELETE"]["crh"])
+    check("DELETE signature", dele["signature"], v["DELETE"]["sig"])
+    if dele["signature"] == put["signature"]:
+        fails.append("FAIL method is signed: DELETE signature equals PUT signature")
+
+    # Every other input must move the signature (a step that stops being signed is caught).
+    for name, other in (
+        ("x-amz-date", comp(ts="1767225601")),
+        ("canonical URI", _sigv4_components("PUT", "other-bucket", v["ts"], v["ak"], v["sk"])),
+        ("region scope", comp(region="us-east-1")),
+        ("service scope", comp(service="s4")),
+        ("secret", _sigv4_components("PUT", v["bucket"], v["ts"], v["ak"], v["sk"] + "x")),
+    ):
+        if other["signature"] == put["signature"]:
+            fails.append(f"FAIL {name} is not signed: signature unchanged")
+
+    # The public wrapper must carry the vector through (module creds swapped for the fixture).
+    global ACCESS_KEY, SECRET_KEY
+    saved = (ACCESS_KEY, SECRET_KEY)
+    ACCESS_KEY, SECRET_KEY = v["ak"], v["sk"]
+    try:
+        h = sign_request("PUT", v["bucket"], f"probe-{v['ts']}", v["ts"])
+    finally:
+        ACCESS_KEY, SECRET_KEY = saved
+    check("sign_request Authorization", h["Authorization"], want_auth)
+    check("sign_request x-amz-date", h["x-amz-date"], v["amz_date"])
+    check("sign_request x-amz-content-sha256", h["x-amz-content-sha256"], "UNSIGNED-PAYLOAD")
+
+    for f in fails:
+        print(f)
+    if fails:
+        print(f"garage-write-probe self-test: FAILED ({len(fails)} checks)")
+        return 1
+    return 0
 
 
 def http_request(method, path, data=None, headers=None):
@@ -176,4 +285,8 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+
+    if "--self-test" in sys.argv[1:]:
+        exit(self_test())
     exit(main())
