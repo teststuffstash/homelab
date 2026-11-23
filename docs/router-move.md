@@ -569,7 +569,7 @@ the hypervisor's flooding, not the node's config.
   Realtek 378/378 Mbit/s (operator speedtest, wired) — the ISP is the ceiling. nx-02's WAN gate restarted
   while BACKUP (flood-off script, kill switch stays retired) — no blip, which is the shape for any future
   gate change. The dead-man fired at 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, pve dark at :46, ~9 s
-  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307) is now
+  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307 → homelab#3711) is now
   unblocked — the gate's carrier export can ride the same BACKUP-side restart.
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
