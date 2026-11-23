@@ -211,3 +211,34 @@ def test_the_recorded_pr_merges_world_holds_hand_titled_two_parent_merges():
     assert all(c["oid"] in listed for c in view)  # (a) every view commit has an element
     shapes = ("Merge branch ", "Merge remote-tracking branch ", "Merge pull request ")
     assert [c for c in view if len(listed[c["oid"]]["parents"]) >= 2 and not c["messageHeadline"].startswith(shapes)]  # (b)
+
+
+def test_add_pull_commits_failing_second_read_leaves_the_world_byte_identical(tmp_path, monkeypatch):
+    import argparse
+
+    rw = _recorder_module()
+    out = tmp_path / "out"
+    recorded = out / "pr-merges"
+    recorded.mkdir(parents=True)
+    (recorded / "pr-view-7.commits.json").write_text("{}")
+    (recorded / "provenance.yaml").write_text(
+        'world: "pr-merges"\nitems: [7, 8, 9]\nreads:\n'
+        f'  - argv: ["pr", "view", "7", "--repo", "{REPO}", "--json", "commits"]\n    file: "pr-view-7.commits.json"\n    auth: "token"\nwrites:\n'
+    )
+    before = {p.name: p.read_bytes() for p in recorded.iterdir()}
+    monkeypatch.setattr(rw, "refuse_private", lambda repo: "public")
+    monkeypatch.setattr(rw, "recorder_commit", lambda: "d" * 40)
+    calls = []
+
+    def perform(read):
+        calls.append(read.argv)
+        if len(calls) == 2:
+            raise SystemExit("record_world: read failed")
+        return b"[]"
+
+    monkeypatch.setattr(rw, "perform", perform)
+    args = argparse.Namespace(prs=[], world="pr-merges", out=str(out), add="pull-commits")
+    with pytest.raises(SystemExit, match="read failed"):
+        rw.add_pull_commits(args)
+    assert len(calls) == 2
+    assert {p.name: p.read_bytes() for p in recorded.iterdir()} == before

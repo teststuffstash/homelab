@@ -354,10 +354,12 @@ def add_pull_commits(args: argparse.Namespace) -> int:
         r.file = file_for(r.argv)
         if (world / r.file).exists() or f"file: {_y(r.file)}" in text:
             raise SystemExit(f"record_world: {args.world} already holds {r.file}")
+    answers: list[bytes] = []  # every read first: a failing read leaves the world untouched
     for r in reads:
-        body = perform(r)
+        answers.append(perform(r))
         r.recorded_at = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         r.recorder_commit = commit
+    for r, body in zip(reads, answers, strict=True):
         (world / r.file).write_bytes(body)
     lines = text.split("\n")
     at = lines.index("writes:")  # the reads list ends where the writes list begins
