@@ -16,6 +16,7 @@ the order the row names them. Every printed or written number is the entry's rec
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 import sys
@@ -72,6 +73,11 @@ def pull(n: int) -> str:
     return _READS[("api", f"repos/{REPO}/pulls/{n}")]
 
 
+def parents_read(n: int) -> str:
+    """The pull-commits read for a recorded item: which commit is a merge commit (glossary.md merge commit)."""
+    return _READS[("api", f"repos/{REPO}/pulls/{n}/commits?per_page=100")]
+
+
 # Recorded elements every decoder copies from (pin 4: a list element is a copy of a recorded element of its list).
 BOT = "homelab-reviewer"  # the reviewer bot the page's prose names (REVIEWER_LOGIN's default)
 ARMED = next(e["autoMergeRequest"] for e in SNAP if e["autoMergeRequest"])
@@ -79,6 +85,7 @@ REVIEW = next(r for e in SNAP for r in e["reviews"] if r["author"]["login"] == B
 LATEST = next(r for e in SNAP for r in e["latestReviews"] if r["author"]["login"] == BOT)
 LABEL = next(lb for e in SNAP for lb in e["labels"])
 COMMIT = _recorded(commit_probe(ITEMS[0]))["commits"][0]
+PARENT = _recorded(parents_read(ITEMS[0]))[0]["parents"][0]  # a recorded element of a `parents` list
 PROBE_REVIEW = next(r for r in _recorded(review_probe(ITEMS[0]))["reviews"] if r["author"]["login"] == BOT)
 CHECK_RUN = _recorded(check_runs(ITEMS[0]))["check_runs"][0]
 T = dt.datetime.fromisoformat(COMMIT["committedDate"])  # "the newest non-merge commit": one recorded content commit
@@ -107,6 +114,7 @@ class Board:
     alias: dict[str, int] = field(default_factory=dict)  # the page's `#n` → the recorded number
     added: list[str] = field(default_factory=list)  # the pull requests the row adds, in the order it names them
     free: list[int] = field(default_factory=lambda: list(ITEMS))
+    listed: set[int] = field(default_factory=set)  # the items whose pull-commits answer a cell has laid out
     dirty: str | None = None  # the PR a cell made armed ∧ DIRTY
     labelled: str | None = None  # the PR a cell gave `merge-conflict`
     faulted: list[tuple[str, str]] = field(default_factory=list)  # (fault target, the `#n` it must address)
@@ -143,18 +151,44 @@ class Board:
     def armed_behind(self, page_n: str) -> Board:
         return self.set(page_n, "autoMergeRequest", ARMED).set(page_n, "mergeStateStatus", "BEHIND")
 
-    def commits(self, page_n: str, commits: list[dict], file: Callable[[int], str] = commit_probe) -> Board:
-        self.w.set(file(self.n(page_n)), ("commits",), commits)
+    def commits(self, page_n: str, commits: list[C], file: Callable[[int], str] = commit_probe) -> Board:
+        """The PR view's commits, and the pull-commits read's element for each: every commit has its own `oid` (the PR's
+        recorded first commit's, the first time a recorded element is used; a derived 40-hex value after that), and the
+        element for each later commit is a copy of a recorded one with `sha` = that `oid` and its `parents` copies of a
+        recorded parent. The first commit keeps its recorded element (one parent)."""
+        n = self.n(page_n)
+        assert n not in self.listed, f"{page_n}: the pull-commits answer is already laid out"
+        self.listed.add(n)
+        first = _recorded(file(n))["commits"][0]["oid"]
+        assert first in {e["sha"] for e in _recorded(parents_read(n))}, "the recorded first commit has no recorded element"
+        assert commits[0].parents == 1
+        view = [{**c.view, "oid": first if i == 0 else _oid(f"{n}:{i}")} for i, c in enumerate(commits)]
+        self.w.set(file(n), ("commits",), view)
+        for v, c in list(zip(view, commits, strict=True))[1:]:
+            self.w.add(parents_read(n), (), copy_of=0, changes={("sha",): v["oid"], ("parents",): [PARENT] * c.parents})
         return self
 
 
-def content_commit(at: dt.datetime) -> dict:
+@dataclass
+class C:
+    """One commit a cell describes: its element of the PR view, and how many parents the pull-commits read lists for it."""
+
+    view: dict
+    parents: int = 1
+
+
+def _oid(seed: str) -> str:
+    return hashlib.sha1(seed.encode()).hexdigest()  # noqa: S324 — a derived 40-hex value, not a security digest
+
+
+def content_commit(at: dt.datetime) -> C:
     assert not COMMIT["messageHeadline"].startswith("Merge "), "the recorded commit the rows copy is a merge"
-    return {**COMMIT, "committedDate": _iso(at)}
+    return C({**COMMIT, "committedDate": _iso(at)})
 
 
-def merge_commit(at: dt.datetime, head: str) -> dict:
-    return {**COMMIT, "messageHeadline": MERGE_HEADLINE.replace("<head>", head), "committedDate": _iso(at)}
+def merge_commit(at: dt.datetime, head: str, headline: str = MERGE_HEADLINE, parents: int = 2) -> C:
+    """A commit headed `headline` (`<head>` filled) with `parents` parents: two is a merge commit, one is content."""
+    return C({**COMMIT, "messageHeadline": headline.replace("<head>", head), "committedDate": _iso(at)}, parents)
 
 
 def review(state: str, at: dt.datetime, source: dict = REVIEW) -> dict:
@@ -178,6 +212,14 @@ def base(b: Board, cell: str) -> None:
 
 
 APPROVED_AT_HEAD = "`reviewDecision \"\"`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit"
+HAND_TITLED_AFTER = (
+    "`reviewDecision \"\"`, the bot's `reviews[]` APPROVED post-dates the newest content commit; "
+    "a later commit has two parents and the headline `Merge master into <head>`"
+)
+MERGE_TITLED_CONTENT = (
+    "`reviewDecision \"\"`, the bot's APPROVED is older than a later commit with one parent and the headline "
+    "`Merge branch 'master' into <head>` (content: stale)"
+)
 NO_REVIEW = "`reviewDecision \"\"`, no review, no `automerge` label"
 
 
@@ -194,6 +236,14 @@ def pick_review(b: Board, cell: str) -> None:
     for pr in prs:
         if cell == APPROVED_AT_HEAD:
             b.set(pr, "reviewDecision", "").set(pr, "reviews", [review("APPROVED", T + HOUR)]).commits(pr, [content_commit(T)])
+        elif cell == HAND_TITLED_AFTER:  # two parents, so a merge commit whatever its headline: not content
+            head = SNAP[b.idx(pr)]["headRefName"]
+            b.set(pr, "reviewDecision", "").set(pr, "reviews", [review("APPROVED", T + HOUR)])
+            b.commits(pr, [content_commit(T), merge_commit(T + 2 * HOUR, head, "Merge master into <head>")])
+        elif cell == MERGE_TITLED_CONTENT:  # one parent, so content whatever its headline: the approval is stale
+            head = SNAP[b.idx(pr)]["headRefName"]
+            b.set(pr, "reviewDecision", "").set(pr, "reviews", [review("APPROVED", T + HOUR)])
+            b.commits(pr, [content_commit(T), merge_commit(T + 2 * HOUR, head, MERGE_HEADLINE, parents=1)])
         elif cell == "`reviewDecision \"\"`, the bot's APPROVED is older than a later content commit (stale)":
             b.set(pr, "reviewDecision", "").set(pr, "reviews", [review("APPROVED", T - HOUR)]).commits(pr, [content_commit(T)])
         elif cell in (NO_REVIEW, NO_REVIEW + " (not merge-ready)"):
@@ -215,6 +265,11 @@ def fault(b: Board, cell: str, the_pr: str | None = None) -> None:
         b.faulted.append(("update-branch", m[1]))
     elif m := re.fullmatch(r"the commit probe for `(#\d+)` answers a non-JSON body", cell):
         b.w.fault(commit_probe(b.n(m[1])), "non-json")
+    elif m := re.fullmatch(r"the pull-commits read for `(#\d+)` fails", cell):
+        b.w.fault(parents_read(b.n(m[1])), "fail")
+    elif cell == "the pull-commits read for the PR fails":
+        assert the_pr is not None, cell
+        b.w.fault(parents_read(b.n(the_pr)), "fail")
     elif m := re.fullmatch(r"the snapshot's entry for `(#\d+)` has no `(\w+)` field", cell):
         b.w.fault(SNAPSHOT, "absent", field=(b.idx(m[1]), m[2]))
     elif cell == "the check-runs read for the PR's head answers an error":
@@ -244,18 +299,26 @@ def unstrand_probe(b: Board, cell: str) -> None:
     if cell == "unreadable (non-JSON body)":
         b.w.fault(review_probe(b.n(pr)), "non-json")
         return
-    m = re.fullmatch(r"newest non-merge commit (\d\d):00 (after|before) the bot's CHANGES_REQUESTED (\d\d):00"
-                     r"(?: \(the (\d\d):00 merge commit is not content\))?", cell)
+    if cell == "commits and reviews readable; the pull-commits read fails":
+        b.commits(pr, [content_commit(T)], review_probe)
+        b.w.set(review_probe(b.n(pr)), ("reviews",), [review("CHANGES_REQUESTED", T + HOUR, PROBE_REVIEW)])
+        b.w.fault(parents_read(b.n(pr)), "fail")
+        return
+    m = re.fullmatch(
+        r"(newest non-merge commit|a content commit) (\d\d):00 (after|before) the bot's CHANGES_REQUESTED (\d\d):00"
+        r"(?:; the (\d\d):00 commit has (two|one) parents? and the headline `([^`]+)`(?: \(a merge commit, not content\))?)?",
+        cell,
+    )
     if not m:
         raise ValueError(f"probe cell {cell!r}: no decoder")
     day = T.replace(minute=0, second=0, microsecond=0)
-    content, verdict = day.replace(hour=int(m[1])), day.replace(hour=int(m[3]))
-    assert (content > verdict) == (m[2] == "after"), cell
+    content, verdict = day.replace(hour=int(m[2])), day.replace(hour=int(m[4]))
+    assert (content > verdict) == (m[3] == "after"), cell
     commits = [content_commit(content)]
-    if m[4]:
-        merge = day.replace(hour=int(m[4]))
-        assert merge > verdict, cell
-        commits.append(merge_commit(merge, SNAP[b.idx(pr)]["headRefName"]))
+    if m[5]:
+        later = day.replace(hour=int(m[5]))
+        assert later > verdict, cell
+        commits.append(merge_commit(later, SNAP[b.idx(pr)]["headRefName"], m[7], parents=2 if m[6] == "two" else 1))
     b.commits(pr, commits, review_probe)
     b.w.set(review_probe(b.n(pr)), ("reviews",), [review("CHANGES_REQUESTED", verdict, PROBE_REVIEW)])
 
@@ -303,8 +366,8 @@ def renovate_review(b: Board, pr: str, cell: str) -> None:
         raise ValueError(f"review cell {cell!r}: no decoder")
 
 
-def _authored(commit: dict, login: str) -> dict:
-    return {**commit, "authors": [{**COMMIT["authors"][0], "login": login}]}
+def _authored(commit: C, login: str) -> C:
+    return C({**commit.view, "authors": [{**COMMIT["authors"][0], "login": login}]}, commit.parents)
 
 
 def renovate_commits(b: Board, pr: str, cell: str) -> None:
@@ -313,12 +376,15 @@ def renovate_commits(b: Board, pr: str, cell: str) -> None:
     parts = cell.split(" + ")
     if parts[0] not in ("Renovate", "Renovate only") or (parts[0] == "Renovate only") != (len(parts) == 1):
         raise ValueError(f"commits cell {cell!r}: want `Renovate only` or `Renovate + …`")
+    head = SNAP[b.idx(pr)]["headRefName"]
     commits = [_authored(content_commit(T), RENOVATE_COMMIT)]
     for i, part in enumerate(parts[1:], 1):
         if part == "a worker commit":
             commits.append(_authored(content_commit(T + i * HOUR), other))
-        elif part == "an updater merge commit":
-            commits.append(_authored(merge_commit(T + i * HOUR, SNAP[b.idx(pr)]["headRefName"]), other))
+        elif part == "an updater merge commit":  # the World line: two parents, `Merge branch 'master' into <head>`
+            commits.append(_authored(merge_commit(T + i * HOUR, head), other))
+        elif m := re.fullmatch(r"a (two|one)-parent commit by another login, headline `([^`]+)`", part):
+            commits.append(_authored(merge_commit(T + i * HOUR, head, m[2], parents=2 if m[1] == "two" else 1), other))
         else:
             raise ValueError(f"commits cell {cell!r}: no decoder for {part!r}")
     b.commits(pr, commits)
@@ -337,6 +403,9 @@ def _run(name: str, state: str, at: dt.datetime) -> dict:
 
 def checks(b: Board, pr: str, cell: str, fault_cell: str) -> None:
     file = check_runs(b.n(pr))
+    if cell == "not read":  # the commit probe is unreadable before the rollup: no read is issued
+        assert fault_cell == "the pull-commits read for the PR fails", f"checks `not read` with fault {fault_cell!r}"
+        return
     if cell == "unreadable":
         assert fault_cell == "the check-runs read for the PR's head answers an error", f"checks `unreadable` with fault {fault_cell!r}"
         return
@@ -474,6 +543,7 @@ def line_matches(phrase: str, out: str) -> bool:
 
 _FILES: dict[str, tuple] = {SNAPSHOT: ("snapshot",)}
 for _n in ITEMS:
+    _FILES[parents_read(_n)] = ("parents", _n)
     _FILES[commit_probe(_n)] = ("probe", _n, "commits")
     _FILES[review_probe(_n)] = ("probe", _n, "commits,reviews")
     _FILES[check_runs(_n)] = ("check-runs", _n)
@@ -521,12 +591,19 @@ def check(b: Board, literal: str, note: str = "") -> Run:
         assert not [c for c in calls if c[0] == "other"], trace
         probes = [c for c in calls if c[0] == "probe"]
         assert len(probes) == e.probes and {c[2] for c in probes} <= {e.fields}, f"probes {probes}, want {e.probes} × {e.fields}{trace}"
+        # the pull-commits read follows each probe whose view was readable, for the same pull request, right after it
+        unreadable_views = {i for i, (c, raw) in enumerate(zip(calls, r.calls, strict=True)) if c[0] == "probe" and raw.get("fault")}
+        for i, c in enumerate(calls):
+            if c[0] == "probe" and i not in unreadable_views:
+                assert calls[i + 1 : i + 2] == [("parents", c[1])], f"no pull-commits read right after the probe of #{c[1]}{trace}"
+        assert [c for c in calls if c[0] == "parents"] == [("parents", c[1]) for i, c in enumerate(calls) if c[0] == "probe" and i not in unreadable_views], trace
         runs_, stats = [c for c in calls if c[0] == "check-runs"], [c for c in calls if c[0] == "status"]
         if e.rollup is None:
             assert not runs_ and not stats, trace
         else:
             [pr] = b.added
             assert runs_ == [("check-runs", b.n(pr))], trace
+            assert calls.index(("parents", b.n(pr))) < calls.index(("check-runs", b.n(pr))), trace  # the rollup follows the parents read
             assert stats == ([("status", b.n(pr))] if e.rollup == "both" else []), trace
         puts = [(c[1], c[2]) for c in calls if c[0] == "put"]
         want = [(b.n(p), ok) for p, ok in targets]
@@ -675,7 +752,7 @@ def every_row() -> list[tuple[str, Board, str]]:
 
 def test_the_tables_hold_the_rows_the_issue_counts():
     counts = {q: len(table(TABLES, q)[1]) for q in BUILDERS}
-    assert counts == {PICK_Q: 13, UNSTRAND_Q: 3, CONFLICT_Q: 3, RENOVATE_Q: 9}, counts
+    assert counts == {PICK_Q: 16, UNSTRAND_Q: 6, CONFLICT_Q: 3, RENOVATE_Q: 12}, counts
 
 
 def test_rows_differ_by_input_cells():
@@ -763,6 +840,9 @@ def schema_paths(node: dict, where: tuple = ()) -> list[tuple[tuple, str, bool]]
 def shape_paths(shape: object, where: tuple = ()) -> list[tuple[tuple, str, bool]]:
     from scan_island.strict import Nullable
 
+    if isinstance(shape, list):  # a list read: each element stands at index 0
+        return shape_paths(shape[0], (*where, 0))
+
     names = {str: "string", int: "integer", dict: "object", list: "array"}
     out = []
     for key, sub in shape.items():  # type: ignore[union-attr]
@@ -778,14 +858,15 @@ def shape_paths(shape: object, where: tuple = ()) -> list[tuple[tuple, str, bool
 
 
 def _shapes() -> dict[str, object]:
+    from scan_island.merges import PULL_COMMITS_READ
     from scan_island.renovate import CHECK_RUNS_READ, COMMIT_PROBE, COMMIT_REVIEW_PROBE, STATUS_READ
     from scan_island.updater import PR
 
     return {"pr": PR, "commit_probe": COMMIT_PROBE, "commit_review_probe": COMMIT_REVIEW_PROBE,
-            "check_runs_read": CHECK_RUNS_READ, "status_read": STATUS_READ}
+            "check_runs_read": CHECK_RUNS_READ, "status_read": STATUS_READ, "pull_commits_read": PULL_COMMITS_READ}
 
 
-@pytest.mark.parametrize("part", ["pr", "commit_probe", "commit_review_probe", "check_runs_read", "status_read"])
+@pytest.mark.parametrize("part", ["pr", "commit_probe", "commit_review_probe", "check_runs_read", "status_read", "pull_commits_read"])
 def test_component_requires_exactly_the_schema_list(part):
     """Each read's required fields in the component are the schema part's: same paths, leaf types and nulls."""
     assert sorted(map(str, shape_paths(_shapes()[part]))) == sorted(map(str, schema_paths(SCHEMA["properties"][part])))
@@ -806,6 +887,7 @@ def test_the_recording_satisfies_the_schema():
         _validate(_recorded(review_probe(n)), "commit_review_probe")
         _validate(_recorded(check_runs(n)), "check_runs_read")
         _validate(_recorded(status(n)), "status_read")
+        _validate(_recorded(parents_read(n)), "pull_commits_read")
 
 
 def _row(q: str, rid: str) -> Board:
@@ -870,6 +952,7 @@ COMMIT_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["commit_pro
 REVIEW_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["commit_review_probe"])]
 RUNS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["check_runs_read"])]
 STATUS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["status_read"])]
+PARENTS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["pull_commits_read"])]
 
 
 @pytest.mark.parametrize("path", COMMIT_PATHS, ids=[".".join(map(str, p)) for p in COMMIT_PATHS])
@@ -901,7 +984,7 @@ def test_a_status_read_lacking_a_required_field_holds(path):
     b.w.set(status(n), ("statuses",), [{**_recorded(status(n))["statuses"][0], "state": "success"}])
     b.w.fault(status(n), "absent", field=path)
     r = run(b)
-    assert [classify(c)[0] for c in r.calls] == ["snapshot", "probe", "check-runs", "status"], r.calls
+    assert [classify(c)[0] for c in r.calls] == ["snapshot", "probe", "parents", "check-runs", "status"], r.calls
     assert r.rc == 0 and line_matches("commit probe unreadable — HOLDING", r.stdout), r.stdout
 
 
@@ -917,3 +1000,26 @@ def test_a_failing_snapshot_read_passes_gh_status_through():
     b.w.fault(SNAPSHOT, "fail")
     r = run(b)
     assert (r.rc, r.stdout) == (1, "") and "(HTTP 502)" in r.stderr, (r.rc, r.stdout, r.stderr)
+
+
+@pytest.mark.parametrize("path", PARENTS_PATHS, ids=[".".join(map(str, p)) for p in PARENTS_PATHS])
+def test_a_pull_commits_read_lacking_a_required_field_holds(path):
+    b = _row(PICK_Q, "bot-approved-head-update")
+    b.w.fault(parents_read(b.n("#141")), "absent", field=path)
+    check(b, "noop-probe-hold")
+
+
+def test_a_view_commit_with_no_element_in_the_pull_commits_read_holds():
+    """The join is by `sha` = `oid`: the PR view's newest commit has no element, so the commits are unreadable."""
+    b = _row(PICK_Q, "hand-titled-merge-after-approval-update")
+    n = b.n("#141")
+    view = b.w.get(commit_probe(n), ("commits",))
+    index = next(i for i, e in enumerate(b.w.get(parents_read(n), ())) if e["sha"] == view[-1]["oid"])
+    b.w.fault(parents_read(n), "absent", field=(index,))
+    check(b, "noop-probe-hold")
+
+
+def test_a_non_json_pull_commits_read_holds():
+    b = _row(PICK_Q, "bot-approved-head-update")
+    b.w.fault(parents_read(b.n("#141")), "non-json")
+    check(b, "noop-probe-hold")
