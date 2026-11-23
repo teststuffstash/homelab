@@ -846,7 +846,7 @@ T0 + 2518200.
 
 Legend: `refresh` = the world's Go catalog refreshed against the fake vendor before the ask
 (`catalog-retired` = the catalog, models.dev, without `deepseek-v4.1-flash` — §F3 replayed;
-`docs-retired` = the Go page without `claude-haiku-5-5`'s plan rows; `none (a fresh store)` = no
+`docs-retired` = the limits answer without `claude-haiku-5-5`'s row; `none (a fresh store)` = no
 snapshot exists and no refresh has run); `retry_after_s?` = the next scheduled refresh, 21600 s
 after the one just run, or `defer_retry_s` (60) when none is scheduled yet.
 
