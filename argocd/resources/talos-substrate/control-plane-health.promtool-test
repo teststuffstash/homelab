@@ -169,3 +169,48 @@ tests:
       - eval_time: 70m
         alertname: ControlPlaneComponentRestarted
         exp_alerts: []
+
+  # ── the 2026-11-18 thrash on wk-metal-02, one sample per 5 minutes: an hour of the creep
+  #    (0.2 GC/s = +60 per sample), the jump to 0.92/s (+276 per sample) for two hours, then the
+  #    restart (counter reset, 0.02/s). cp-01 beside it at 0.04/s never fires. Fires 45 m after
+  #    the jump; clears within 30 m of the restart.
+  - interval: 5m
+    input_series:
+      - series: 'go_gc_duration_seconds_count{job="apiserver",instance="192.168.2.183:6443"}'
+        values: '0+60x12 996+276x24 0+6x12'
+      - series: 'go_gc_duration_seconds_count{job="apiserver",instance="192.168.2.51:6443"}'
+        values: '0+12x49'
+    alert_rule_test:
+      # the creep alone: quiet
+      - eval_time: 60m
+        alertname: ControlPlaneApiserverGCThrash
+        exp_alerts: []
+      # 35 m after the jump: over the line, `for: 30m` not yet served
+      - eval_time: 100m
+        alertname: ControlPlaneApiserverGCThrash
+        exp_alerts: []
+      - eval_time: 110m
+        alertname: ControlPlaneApiserverGCThrash
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+              instance: "192.168.2.183:6443"
+              job: apiserver
+            exp_annotations:
+              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
+      # still exactly that one member two hours in
+      - eval_time: 185m
+        alertname: ControlPlaneApiserverGCThrash
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+              instance: "192.168.2.183:6443"
+              job: apiserver
+            exp_annotations:
+              summary: "kube-apiserver 192.168.2.183:6443 runs 0.92 GC cycles/s (30 m over 0.5; fleet baseline under 0.1/s)"
+      # 30 m after the restart: cleared
+      - eval_time: 215m
+        alertname: ControlPlaneApiserverGCThrash
+        exp_alerts: []
