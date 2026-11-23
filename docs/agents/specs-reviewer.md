@@ -93,7 +93,7 @@ root this pass reviews, since the pass cannot see the other roots' packs); the h
 `evidence.json` + commit) — both read anonymously from the `gateway-specs` bucket's web endpoint,
 `evidence/<pr-N|base>/<sha>.tar.gz`, written by ci (`gateway/scripts/evidence-publish.sh`; until
 2026-10-21 a `gateway-evidence` Actions artifact, which held ~2.1 GB of the org's 2 GB included
-storage — that artifact stays the read fallback until the old runs expire). **The diff base** is what the PR itself changes: the pack diffs three-dot from
+storage; the artifact read fallback was removed once the old runs expired, FU-314). **The diff base** is what the PR itself changes: the pack diffs three-dot from
 `merge-base(base, head)`, and when a PR on a non-default base (a `goal/**` branch) has merged the
 default branch in, every path the base side left alone since its merge-base with the newest
 default-branch commit the head holds, and whose content at head is byte-identical to that commit,
@@ -203,7 +203,7 @@ and the anomaly comment, and that a run installs the wrapper. It pushes no metri
 **Replay fidelity.** The judged head is fetched by sha. The base is `merge-base(origin/<base>,
 head)`. The PR body is the edit that was current at the live review (`as_of` = the first own
 review at that head). The prior review is the newest own LLM review before `as_of`. The baseline is
-the newest base push run that is an ancestor of that base. #2635 needs this: its first review
+the newest first-parent commit of that base with a pack in the bucket. #2635 needs this: its first review
 judged a body without `Spec changes:`, and the same head was approved after the body edit. Issue
 intent, the lens and the wheel are today's, and each record says so.
 

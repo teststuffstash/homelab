@@ -91,7 +91,7 @@
 # fidelity: a judged head is fetched by sha; the base is merge-base(origin/<base>, head); the PR
 # body is the edit current at the live review's time (`as_of` = the first own review AT that head,
 # else now); the prior review is the newest own LLM review before `as_of`; the baseline is the
-# newest base push run whose commit is an ancestor of the pack's base. Issue intent, the lens and
+# newest first-parent commit of the pack's base with a bucket pack. Issue intent, the lens and
 # the pinned wheel are TODAY's (stated in each record).
 #
 #   bash agents/specs-reviewer-session.sh              # one tick (the CronWorkflow's call)
@@ -160,14 +160,13 @@ SPECS_PATH_RE='(^|/)specs/'
 SNIPPETS_VERSION="0.6.9"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
 SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
 SNIPPETS_SHA256="4ca24515835b0969a6b225eef6e48a2d6337ec984367e74b0b4a1dc9def6ef16"
-EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run artifact (fallback only, see evidence_fetch)
 # The evidence packs live in OUR storage since 2026-10-21 (the Actions artifact held ~2.1 GB of the
 # org's 2 GB included storage — GithubStorageHeldHigh): CI writes evidence/<pr-N|branch>/<sha>.tar.gz
 # into the repo's specs bucket (gateway/scripts/evidence-publish.sh), read here ANONYMOUSLY through
 # Garage's web endpoint (Host = <bucket>.teststuff.net; the bucket is website-enabled, egress-cnp.yaml
 # already admits ns garage). No reader key, no GitHub API call.
 EVIDENCE_WEB="${EVIDENCE_WEB:-http://garage-s3.garage.svc.cluster.local:3902}"
-# evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: artifact only)
+# evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: no evidence)
 evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; oracle-fleet) printf 'oracle-specs';; esac; }
 # pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live.
 # The CLAIM's `repos[].specs` {root, tests} when the AgentStack read serves one — the same field
@@ -612,12 +611,12 @@ read|pr view 7 --repo o/r --json title,body,url -q .title
 read|pr list --repo o/r --state open
 read|issue view 3 --repo o/r --json title,body
 read|run list --repo o/r --commit abc --workflow ci.yaml
-read|run download 5 --repo o/r -n gateway-evidence -D /tmp/x
 read|api --paginate repos/o/r/pulls/7/files --jq '.[].filename'
 read|api repos/o/r/commits/abc --jq .sha
 read|api -X GET repos/o/r/pulls -f state=closed
 read|api graphql -f 'query=query($o:String!){repository(owner:$o,name:"r"){id}}' -f o=x -F p=7
 write|pr review 7 --approve
+write|run download 5 --repo o/r -n gateway-evidence -D /tmp/x
 write|pr comment 7 --body-file f.md
 write|pr edit 7 --add-label agent/error
 write|pr merge 7 --squash
@@ -654,7 +653,7 @@ ROWS
   gh_real() { command gh "$@"; }
   # Static: nothing on the shadow path bypasses the wrapper (`command gh` / an absolute gh path
   # skips the `gh` function) — gh_real is the one sanctioned call site.
-  check "shadow: no gh bypass outside gh_real" 0 "$(declare -f build_pack shadow_main shadow_one shadow_release pr_body_as_of issue_intent ci_success_run evidence_fetch evidence_download evidence_baseline_download prior_review_pick llm_env_args harness_claude harness_opencode harness_goose | grep -cE 'command gh|/bin/gh|\\gh ')"
+  check "shadow: no gh bypass outside gh_real" 0 "$(declare -f build_pack shadow_main shadow_one shadow_release pr_body_as_of issue_intent evidence_fetch evidence_download evidence_baseline_download prior_review_pick llm_env_args harness_claude harness_opencode harness_goose | grep -cE 'command gh|/bin/gh|\\gh ')"
   # As-of reads (replay fidelity): the PR body is the edit current at the live review's time —
   # GitHub's userContentEdits `diff` is the full body at that edit, the oldest is the original;
   # #2635's shape (opened 16:59:02 without `Spec changes:`, edited 17:06:24, first review 17:06:02).
@@ -910,11 +909,6 @@ issue_intent() {
     fi
   done <<< "$refs"
 }
-# ci_success_run <slug> <commit> → the newest completed, successful `ci` run id at <commit> ("" = none)
-ci_success_run() {
-  gh run list --repo "$1" --commit "$2" --workflow ci.yaml --status completed --json databaseId,conclusion --limit 3 \
-    --jq '[ .[] | select(.conclusion == "success") ] | .[0].databaseId // empty' 2>/dev/null || true
-}
 # evidence_fetch <repo> <prefix> <sha> <dir> → evidence/<prefix>/<sha>.tar.gz unpacked into <dir>
 # (rc 1 = absent, or the repo has no evidence bucket)
 evidence_fetch() {
@@ -924,46 +918,29 @@ evidence_fetch() {
   curl -fsS --max-time 60 -H "Host: ${b}.teststuff.net" "${EVIDENCE_WEB}/evidence/$2/$3.tar.gz" 2>/dev/null | tar -xz -C "$4" 2>/dev/null \
     && [ -s "$4/evidence.json" ] || return 1
 }
-# evidence_download <slug> <head> <dir> <pr-number> → the head's evidence pack unpacked into <dir>:
-# the bucket's evidence/pr-<N>/<head>, else the head run's LEGACY artifact (runs from before the
-# move; drop the fallback once those have expired — 14-day retention).
-# (rc 1 = none: no successful run, or the run uploaded no artifact — the pack states the absence)
+# evidence_download <slug> <head> <dir> <pr-number> → the head's evidence pack unpacked into <dir>
+# from the bucket's evidence/pr-<N>/<head> (rc 1 = none: ci published no pack at that head, or the
+# repo has no evidence bucket — the pack states the absence)
 evidence_download() {
   if evidence_fetch "${1#*/}" "pr-$4" "$2" "$3"; then
     log "evidence: bucket evidence/pr-$4/${2:0:8} → $(find "$3" -type f | wc -l) file(s)"; return 0
   fi
-  local run_id; run_id="$(ci_success_run "$1" "$2")"
-  [ -n "$run_id" ] || { log "evidence: no successful ci run at ${2:0:8}"; return 1; }
-  gh run download "$run_id" --repo "$1" -n "$EVIDENCE_ARTIFACT" -D "$3" >/dev/null 2>&1 \
-    || { log "evidence: ci run ${run_id} has no ${EVIDENCE_ARTIFACT} artifact"; return 1; }
-  log "evidence: ci run ${run_id} artifact ${EVIDENCE_ARTIFACT} → $(find "$3" -type f | wc -l) file(s)"
+  log "evidence: no pack at bucket evidence/pr-$4/${2:0:8}"; return 1
 }
 # evidence_baseline_download <slug> <base> <dir> [<ancestor-of>] → "<evidence.json path> <commit sha>"
 # from the bucket: the newest of the first 100 first-parent commits of <ancestor-of> (default
-# origin/<base>) with a pack under evidence/<base>/ — ancestry by construction. Else (LEGACY, the
-# artifact fallback) the newest successful ci PUSH run on <base> (of the newest 5) that uploaded the artifact;
-# "" = none. The gateway step runs only on gateway changes, so a run without the artifact is
-# skipped. <ancestor-of> (the shadow run's replay): only runs whose commit is an ancestor of it
-# count — the baseline the live reviewer could have seen — and the window widens to 30 runs.
+# origin/<base>) with a pack under evidence/<base>/ — ancestry by construction; "" = none. The
+# gateway step runs only on gateway changes, so a commit without a pack is skipped. <ancestor-of>
+# (the shadow run's replay) walks back from that rev instead — the baseline the live reviewer
+# could have seen.
 evidence_baseline_download() {
-  local slug="$1" base="$2" dir="$3" anc="${4:-}" runs id sha lim=5
+  local slug="$1" base="$2" dir="$3" anc="${4:-}" sha
   if [ -n "$(evidence_bucket "${slug#*/}")" ]; then
     while read -r sha; do
       [ -n "$sha" ] || continue
       if evidence_fetch "${slug#*/}" "$base" "$sha" "$dir"; then printf '%s %s\n' "$dir/evidence.json" "$sha"; return 0; fi
     done <<< "$(git -C "$WORK/repo" rev-list --first-parent -n 100 "${anc:-origin/${base}}" 2>/dev/null || true)"
   fi
-  [ -n "$anc" ] && lim=30
-  runs="$(gh run list --repo "$slug" --branch "$base" --event push --workflow ci.yaml --status success --limit "$lim" \
-            --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)"
-  while read -r id sha; do
-    [ -n "$id" ] || continue
-    if [ -n "$anc" ] && ! git -C "$WORK/repo" merge-base --is-ancestor "$sha" "$anc" 2>/dev/null; then continue; fi
-    rm -rf "$dir"; mkdir -p "$dir"
-    gh run download "$id" --repo "$slug" -n "$EVIDENCE_ARTIFACT" -D "$dir" >/dev/null 2>&1 || continue
-    [ -s "$dir/evidence.json" ] || continue
-    printf '%s %s\n' "$dir/evidence.json" "$sha"; return 0
-  done <<< "$runs"
   printf '\n'
 }
 
@@ -1098,9 +1075,9 @@ build_pack() {
     printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$ctx/prior-review.md"
   fi
   # 3b) evidence: the head's raw Allure results + the base branch's evidence.json (the baseline),
-  #     both from the bucket (evidence_fetch; legacy ci artifacts as the fallback). Absent evidence is NOT a refusal: an empty results dir makes
+  #     both from the bucket (evidence_fetch). Absent evidence is NOT a refusal: an empty results dir makes
   #     the pack say so, and the evidence brief turns that into E-STALE / NO_EVIDENCE findings.
-  #     The repo's bucket and legacy artifact are its PRIMARY root's (evidence_bucket: homelab →
+  #     The repo's bucket is its PRIMARY root's (evidence_bucket: homelab →
   #     gateway-specs): an extra root has no evidence publisher, so its pack carries none and says
   #     why (PACK_NOTE → the prompt) instead of borrowing another root's records.
   local results="$WORK/head-ev/allure-results" bl_json="" bl_commit=""
@@ -1111,7 +1088,7 @@ build_pack() {
     if read -r bl_json bl_commit <<< "$(evidence_baseline_download "$slug" "$base" "$WORK/base-ev" ${SHADOW:+"$base_rev"})" && [ -n "$bl_json" ]; then
       log "[$repo#$num] baseline: ${base}@${bl_commit:0:8}"
     else
-      bl_json=""; log "[$repo#$num] baseline: none (no pack under evidence/${base}/ on the last 100 first-parent commits, no legacy ${EVIDENCE_ARTIFACT} artifact)"
+      bl_json=""; log "[$repo#$num] baseline: none (no pack under evidence/${base}/ on the last 100 first-parent commits)"
     fi
   else
     mkdir -p "$results"
@@ -1279,7 +1256,7 @@ review_run() {
 # `@file` field (a hidden body).
 gh_shadow_allows() {
   case "${1:-} ${2:-}" in
-    "pr view"|"pr list"|"pr diff"|"issue view"|"issue list"|"run list"|"run view"|"run download") return 0;;
+    "pr view"|"pr list"|"pr diff"|"issue view"|"issue list"|"run list"|"run view") return 0;;
   esac
   [ "${1:-}" = api ] || return 1
   shift
