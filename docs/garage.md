@@ -597,7 +597,7 @@ reconciler: [management-box.md](management-box.md) §MB4).
   statistics and the metrics considered and rejected are in the rule's header. Its home is there,
   not here.
 - **Why the backlog clause.** `cluster_healthy` is connectivity: every partition's replicas are
-  up. Garage v2.3.0 has no "caught up" notion (`/health` and `GetClusterHealth` are connectivity +
+  up. Garage (v2.3.0 when read) has no "caught up" notion (`/health` and `GetClusterHealth` are connectivity +
   quorum, src/api/admin/special.rs and api.rs). In the first box-run Talos rollout (2026-09-22),
   wk-metal-04 (garage-0's zone) went down at ~10:33Z on a 4.5–6.2k-block resync backlog left by
   wk-metal-01's reboot. Blocks written during the first absence then lived on one zone. The rule
