@@ -8,17 +8,16 @@ against updater.schema.json (`check_runs_read`, `status_read`); an unreadable le
 
 import json
 
-from . import gh
+from . import gh, merges
 from .strict import Nullable, lacking
 
-MERGE_PREFIX = "Merge branch "
 OK = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 IN_FLIGHT = {"QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "PENDING", ""}
 BOX_OFF = "- [ ] <!-- rebase-check -->"
 BOX_ON = "- [x] <!-- rebase-check -->"
 
 # The fields updater.schema.json requires of each read (SCAN-UPDATER-PICK, -UNSTRAND, -RENOVATE): `/properties/<name>`.
-COMMIT_PROBE = {"commits": [{"messageHeadline": str, "committedDate": str, "authors": [{"login": str}]}]}
+COMMIT_PROBE = {"commits": [{"oid": str, "messageHeadline": str, "committedDate": str, "authors": [{"login": str}]}]}
 COMMIT_REVIEW_PROBE = {
     **COMMIT_PROBE,
     "reviews": [{"author": Nullable({"login": str}), "state": str, "submittedAt": str}],
@@ -38,10 +37,6 @@ def author(pr: dict) -> bool:
     return pr["author"] is not None and is_renovate_login(pr["author"]["login"])
 
 
-def _is_merge(commit: dict) -> bool:
-    return commit["messageHeadline"].startswith(MERGE_PREFIX)
-
-
 def read(*args: str, shape: object) -> dict | None:
     """One `gh` read, raw: the parsed answer, or None when the call failed, the body is not JSON, or the answer
     lacks a field `shape` requires (pin 5 — never a default)."""
@@ -55,11 +50,23 @@ def read(*args: str, shape: object) -> dict | None:
     return None if lacking(data, shape) else data
 
 
+def commit_probe(slug: str, n: int, fields: str, shape: object) -> dict | None:
+    """The PR view of `fields`, then the pull-commits read for the same pull request; the view's commits come back
+    each with `merge` set from its parents (merges.py). None when either call is unreadable — the second is not
+    issued when the first is."""
+    view = read("pr", "view", str(n), "--repo", slug, "--json", fields, shape=shape)
+    if view is None:
+        return None
+    listed = read("api", merges.pull_commits_path(slug, n), shape=merges.PULL_COMMITS_READ)
+    commits = None if listed is None else merges.flag(view["commits"], listed)
+    return None if commits is None else {**view, "commits": commits}
+
+
 def probe(slug: str, n: int, oid: str) -> dict | None:
     """`{commits, rollup}`; None when ANY leg is unreadable (the caller holds — a half-read is never "not green").
     `rollup` is one (check name, conclusion) per check run (its conclusion, or its status while it has none)
     and per commit status (its state), upper-cased."""
-    commits = read("pr", "view", str(n), "--repo", slug, "--json", "commits", shape=COMMIT_PROBE)
+    commits = commit_probe(slug, n, "commits", COMMIT_PROBE)
     if commits is None:
         return None
     runs = read("api", f"repos/{slug}/commits/{oid}/check-runs?per_page=100", shape=CHECK_RUNS_READ)
@@ -92,12 +99,12 @@ def red(p: dict) -> bool:
 
 def untouched(p: dict) -> bool:
     """No non-merge commit authored by anyone but Renovate."""
-    return all(is_renovate_login(a["login"]) for c in p["commits"] if not _is_merge(c) for a in c["authors"])
+    return all(is_renovate_login(a["login"]) for c in p["commits"] if not c["merge"] for a in c["authors"])
 
 
 def merged_into(p: dict) -> bool:
     """A non-Renovate MERGE commit is on the branch (only an update-branch call writes those)."""
-    return any(not is_renovate_login(a["login"]) for c in p["commits"] if _is_merge(c) for a in c["authors"])
+    return any(not is_renovate_login(a["login"]) for c in p["commits"] if c["merge"] for a in c["authors"])
 
 
 def handback(slug: str, n: int, prefix: str) -> None:

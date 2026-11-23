@@ -75,9 +75,15 @@ The scan's per-pass classification of each open item for the board — a low-car
 `footprint-held`, `cap-held`, `guarded-path`, `deferred-capacity`, …) with `who ∈ operator |
 machine | none` ([SCAN-SIGNAL-CLASS](signals.md#scan-signal-class)).
 
+## merge commit
+
+A commit with two or more parents. Its message decides nothing: a two-parent commit titled by hand (`Merge master into goal/x`) is a merge commit, and a one-parent commit whose headline reads `Merge branch 'master' into <head>` is content. A merge commit is not new content — it never moves a pull request's newest non-merge commit. The parents are read from the pull-commits read, `gh api repos/<slug>/pulls/<n>/commits?per_page=100` (each element's `parents`), joined to the commits of the PR view by `sha` = `oid`. ⚖ A view commit with no element in that answer leaves the commits unreadable (the updater holds the PR; the handoff exits 4). The read is one page of at most 100 elements and is never followed, so a view commit listed past that page has no element and holds. The alternative, following the pages, changes the answer's shape for a case no recorded pull request shows.
+
+> **External:** MUST — [GitHub REST · Pulls § List commits on a pull request](https://docs.github.com/en/rest/pulls/pulls#list-commits-on-a-pull-request) (operation `pulls/list-commits`) — each element carries `sha` and `parents[]`; `per_page` is at most 100, and the list holds at most 250 commits of a pull request. Read off the wire, 2026-11-23: of the 14 commits of `teststuffstash/homelab` PR #3615, six carry two `parents`, three of them titled by hand (`cd6c61d0` `Merge master into goal/3300-wire-record (#3615)`, `cbd233de`, `fc9f8a9a`); recorded as world `pr-merges`.
+
 ## merge-ready
 
 An armed PR with nothing but currency and CI between it and auto-merge: `reviewDecision`
-APPROVED, or `""` with the reviewer bot's APPROVED newer than the newest non-merge commit (or the
+APPROVED, or `""` with the reviewer bot's APPROVED newer than the [newest non-merge commit](#merge-commit) (or the
 `automerge` label). The updater's leg-1 predicate ([SCAN-UPDATER-PICK](updater.md#scan-updater-pick)).
 For a Renovate PR that is untouched or updater-merged ([SCAN-UPDATER-RENOVATE](updater.md#scan-updater-renovate)) the rollup must also be green, and a CANCELLED check outlived by a same-named sibling is not red.

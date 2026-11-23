@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import copy
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -61,6 +62,9 @@ RULINGS_DIR = Path(__file__).resolve().parent / "comparison"
 RULINGS = ("spec", "old", "new")
 COMMON = STUBS / "_common.sh"
 ITEM, SHA = "qqitemqq", "qqshaqq"  # placeholders that survive the stubs' slug unchanged
+# The family commits whose headline says "merge" by title only: the family's world has no parents, so the lift gives
+# such a commit two (the pull-commits read, glossary.md merge commit) and any other commit one.
+MERGE_SHAPES = ("Merge branch ", "Merge remote-tracking branch ", "Merge pull request ")
 
 
 class NotLiftable(Exception):
@@ -334,6 +338,7 @@ def lift_row(spec: Spec, fam: Family, row: Row, tmp: Path) -> Lifted:
     lifted_reads: list[dict] = []
     reads_of: dict[str, list[str]] = {}
     after_written: dict[str, str] = {}
+    viewed: dict[str, list[dict]] = {}  # the pull request → the lifted view commits (the first read of it)
     for path in sorted(p for p in (synth / "world").rglob("*") if p.is_file()):
         rel = path.relative_to(synth / "world").as_posix()
         if not rel.startswith("gh/"):
@@ -362,8 +367,11 @@ def lift_row(spec: Spec, fam: Family, row: Row, tmp: Path) -> Lifted:
                 faults.append((name, "non-json", {}))
             else:
                 body = lift_answer(answers, answers[0], fam_body, _json_fields(argv), what)
+                _distinct_oids(body, f"{rel}")
             (out / name).write_text(json.dumps(body, ensure_ascii=False) + "\n", "utf-8")
             lifted_reads.append({"argv": list(argv), "file": name})
+            if isinstance(body, dict) and isinstance(body.get("commits"), list):
+                viewed.setdefault(argv[2], body["commits"])
             reads_of.setdefault(rel, []).append(name)
             for k, after in enumerate(g.after):
                 if after in after_written:
@@ -374,6 +382,9 @@ def lift_row(spec: Spec, fam: Family, row: Row, tmp: Path) -> Lifted:
                 reads_of[rel].append(after)
         if not matched:
             raise NotLiftable(f"{rel}: the family answers a read the recorded world {spec.world} does not hold")
+
+    for n, commits in viewed.items():
+        _serve_parents(groups, rec_dir, repo, n, commits, out, lifted_reads)
 
     env: dict[str, str] = {}
     for entry in env_entries(fam, row):
@@ -402,6 +413,39 @@ def lift_row(spec: Spec, fam: Family, row: Row, tmp: Path) -> Lifted:
     for target, kind, kw in faults:
         world.fault(target, kind, occurrence=None, **kw)
     return Lifted(world, out, env, reads_of, synth / "world")
+
+
+def _distinct_oids(body: object, seed: str) -> None:
+    """Every lifted view commit has its own `oid`: the recorded one the first time a recorded element is used (the lay
+    copies recorded elements in order), a derived 40-hex value after that."""
+    if not isinstance(body, dict) or not isinstance(body.get("commits"), list):
+        return
+    seen: set[str] = set()
+    for i, c in enumerate(body["commits"]):
+        if not isinstance(c, dict) or "oid" not in c:
+            continue
+        if c["oid"] in seen:
+            c["oid"] = hashlib.sha1(f"{seed}:{i}".encode()).hexdigest()  # noqa: S324 — a derived 40-hex value
+        seen.add(c["oid"])
+
+
+def _serve_parents(groups: dict, rec_dir: Path, repo: str, n: str, commits: list[dict], out: Path, lifted_reads: list[dict]) -> None:
+    """The lifted world's pull-commits answer for pull request `n`: one element per lifted view commit, in order — a copy
+    of a recorded element, its `sha` that commit's `oid`, its `parents` two copies of a recorded parent element when the
+    family commit's headline has one of the three default merge-message shapes, and one otherwise."""
+    group = groups.get(("api", f"repos/{repo}/pulls/{ITEM}/commits?per_page=100"))
+    if group is None:
+        raise NotLiftable(f"the recorded world holds no pull-commits read (pulls/<n>/commits?per_page=100) to lift #{n}'s parents over")
+    recorded = [e for a in group.answers(rec_dir) for e in a]  # type: ignore[union-attr]
+    element = next(e for e in recorded if len(e["parents"]) == 1)
+    parent = element["parents"][0]
+    listed = [
+        {**copy.deepcopy(element), "sha": c["oid"], "parents": [copy.deepcopy(parent) for _ in range(2 if c["messageHeadline"].startswith(MERGE_SHAPES) else 1)]}
+        for c in commits
+    ]
+    name = f"lifted.parents.{n}.json"
+    (out / name).write_text(json.dumps(listed, ensure_ascii=False) + "\n", "utf-8")
+    lifted_reads.append({"argv": ["api", f"repos/{repo}/pulls/{n}/commits?per_page=100"], "file": name})
 
 
 def _failure(argv: Sequence[str], env: dict[str, str], entry: str) -> dict:

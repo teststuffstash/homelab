@@ -17,6 +17,7 @@ three; only `state` (recorded MERGED) is overridden for every row, and the row's
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 import sys
@@ -64,11 +65,14 @@ REPO = _PROBE.provenance["repo"]
 [PR] = _PROBE.provenance["items"]
 _READS = {tuple(r["argv"]): r["file"] for r in _PROBE.provenance["reads"]}
 PR_READ = _READS[("pr", "view", str(PR), "--repo", REPO, "--json", "state,labels,reviews,commits")]
+PULLS_READ = _READS[("api", f"repos/{REPO}/pulls/{PR}/commits?per_page=100")]  # which commit is a merge commit
 LABEL_READ = _READS[("api", f"repos/{REPO}/issues/{PR}/labels")]
 PULL_READ = _READS[("api", f"repos/{REPO}/pulls/{PR}")]
 [PULL_AFTER_ARM] = [f"writes/{w['op']}.{w['statuses'][0]}.json" for w in _PROBE.provenance["writes"] if w.get("after") == "pr-merge-auto"]
 RECORDED = json.loads((_PROBE.dir / PR_READ).read_text("utf-8"))
 PULL = json.loads((_PROBE.dir / PULL_READ).read_text("utf-8"))
+RECORDED_PULLS = json.loads((_PROBE.dir / PULLS_READ).read_text("utf-8"))
+PARENT = RECORDED_PULLS[0]["parents"][0]  # a recorded element of a `parents` list
 BOT = "homelab-reviewer"  # the page's prose: the reviewer bot `homelab-reviewer`, `[bot]` suffix normalized
 HEADINGS = json.loads(SCHEMA.read_text("utf-8"))["properties"]["evidence"]["properties"]["headings"]["const"]
 
@@ -120,19 +124,35 @@ def _base_commits() -> list[dict]:
     return kept
 
 
+def _oid(seed: str) -> str:
+    return hashlib.sha1(seed.encode()).hexdigest()  # noqa: S324 — a derived 40-hex value, not a security digest
+
+
 def newest_commit(cell: str) -> Override:
+    """The view's commits, and the pull-commits read's element for each commit the cell adds: the view element and
+    the pull-commits element are copies of recorded ones with `oid`/`sha` (a derived 40-hex value), the headline and the
+    date set, and one parent (content) or two (a merge commit), each a copy of a recorded parent."""
     base = _base_commits()
+    added: list[tuple[str, int]] = []  # (oid, parent count) of the one commit the cell adds
     if cell == "content":  # no approval to date it against: the recorded content commits
         commits = base
     elif cell == "content, before the approval":
         commits = base[:-1] + [{**base[-1], "committedDate": BEFORE}]
     elif cell == "content, after the approval":
-        commits = base + [{**base[-1], "committedDate": AFTER}]
-    elif m := re.fullmatch(r"merge, after the approval: `([^`]+)`", cell):
-        commits = base + [{**base[-1], "messageHeadline": _fill(m[1]), "committedDate": AFTER}]
+        commits = base + [{**base[-1], "oid": _oid(cell), "committedDate": AFTER}]
+        added = [(_oid(cell), 1)]
+    elif m := re.fullmatch(r"(merge \(two parents\)|content \(one parent\)), after the approval: `([^`]+)`", cell):
+        commits = base + [{**base[-1], "oid": _oid(cell), "messageHeadline": _fill(m[2]), "committedDate": AFTER}]
+        added = [(_oid(cell), 2 if m[1].startswith("merge") else 1)]
     else:
         raise ValueError(f"newest commit cell {cell!r}: no decoder")
-    return lambda w: w.set(PR_READ, ("commits",), commits)
+
+    def apply(w: World) -> None:
+        w.set(PR_READ, ("commits",), commits)
+        for oid, parents in added:
+            w.add(PULLS_READ, (), copy_of=0, changes={("sha",): oid, ("parents",): [PARENT] * parents})
+
+    return apply
 
 
 def _set_body(transform: Callable[[str], str]) -> Override:
@@ -204,6 +224,16 @@ def fault(cell: str) -> Override:
         return lambda w: None
     if cell == "the PR read fails":
         return lambda w: w.fault(PR_READ, "fail")
+    if cell == "the pull-commits read fails":
+        return lambda w: w.fault(PULLS_READ, "fail")
+    if m := re.fullmatch(r"the pull-commits read's (answer has no element|element) for the newest commit( has no `(\w+)` field)?", cell):
+        def newest_element(w: World) -> int:  # the newest commit's element in the answer as the case has it so far
+            view = w.get(PR_READ, ("commits",))
+            newest = max(view, key=lambda c: c["committedDate"])["oid"]
+            return next(i for i, e in enumerate(w.get(PULLS_READ, ())) if e["sha"] == newest)
+
+        field = (m[3],) if m[3] else ()
+        return lambda w: w.fault(PULLS_READ, "absent", field=(newest_element(w), *field))
     if m := re.fullmatch(r"the PR read's answer has no `(\w+)` field", cell):
         return lambda w: w.fault(PR_READ, "absent", field=(m[1],))
     if m := re.fullmatch(r"the label re-read after the writes still lists `([^`]+)`", cell):
@@ -268,15 +298,18 @@ def _matches(call: dict, want: tuple) -> bool:
     return True
 
 
-def check(world: World, literal: str) -> None:
+def check(world: World, literal: str, parents_read: bool = True) -> None:
+    """`parents_read`: the gate reaches the approval-at-head check, so the pull-commits read follows the PR read."""
     calls_cell, exit_cell, words_cell = LEGEND[literal]
     with allure.step(f"When the handoff gate runs on {REPO}#{PR}"):
         run = world.run([*COMPONENT, REPO, str(PR)])
         allure.attach(run.stdout + run.stderr, "output", allure.attachment_type.TEXT)
-    after = [c for c in run.calls if c.get("file") != PR_READ]  # every call after the PR read
+    after = [c for c in run.calls if c.get("file") not in (PR_READ, PULLS_READ)]  # every write and re-read after the reads
+    parents = [i for i, c in enumerate(run.calls) if c.get("file") == PULLS_READ]
     want = expected_calls(literal)
     with allure.step(f"Then it issues: {calls_cell}; exit {exit_cell}"):
         assert run.calls and run.calls[0].get("file") == PR_READ, run.calls
+        assert parents == ([1] if parents_read else []), f"the pull-commits read: calls {[c.get('file') for c in run.calls]}"
         assert len(after) == len(want) and all(_matches(c, w) for c, w in zip(after, want, strict=True)), (
             f"calls after the PR read:\n{json.dumps(after, indent=1)}\nwant {want}"
         )
@@ -317,7 +350,10 @@ ARM_ARGS, ARM_ROWS = params("Does a chart major arm or park?")
 def test_gate(world, labels, newest_commit, bot_review, fault, expected_expect):
     with allure.step(f"Given {world}: labels {labels}; newest commit {newest_commit}; bot review {bot_review}; fault {fault}"):
         w = gate_world(world, labels, newest_commit, bot_review, fault)
-    check(w, expected_expect)
+    # the read is issued only when the gate reaches the approval-at-head check: not for a refusal on the labels or the
+    # missing approval, nor when the PR read itself is unreadable
+    reaches = expected_expect not in ("refused-not-major", "refused-no-approval") and not fault.startswith("the PR read")
+    check(w, expected_expect, parents_read=reaches)
 
 
 @rule("SCAN-HANDOFF-ARM")
@@ -347,6 +383,40 @@ PR_READ_SCHEMA = json.loads(SCHEMA.read_text("utf-8"))["properties"]["pr_read"]
 REQUIRED = _schema_required(PR_READ_SCHEMA)
 
 
+PULLS_SCHEMA = json.loads(SCHEMA.read_text("utf-8"))["properties"]["pull_commits_read"]
+PULLS_REQUIRED = _schema_required(PULLS_SCHEMA)
+
+
+def test_the_recorded_pull_commits_read_satisfies_its_schema():
+    import jsonschema
+
+    jsonschema.validate(RECORDED_PULLS, PULLS_SCHEMA)
+
+
+@pytest.mark.parametrize("path", PULLS_REQUIRED, ids=[".".join(map(str, p)) for p in PULLS_REQUIRED])
+def test_each_required_pull_commits_field_absent_is_unreadable(path):
+    """The pull-commits read answering without any one field its schema requires is exit 4 with nothing written."""
+    w = _handoff_world().fault(PULLS_READ, "absent", field=path)
+    check(w, "unreadable")
+
+
+def test_a_non_json_pull_commits_answer_is_unreadable():
+    check(_handoff_world().fault(PULLS_READ, "non-json"), "unreadable")
+
+
+def test_component_requires_exactly_the_pull_commits_schema_list():
+    from scan_island.merges import PULL_COMMITS_READ
+
+    def paths(shape, where=()):
+        if isinstance(shape, list):
+            return paths(shape[0], (*where, 0))
+        if isinstance(shape, dict):
+            return [p for k, v in shape.items() for p in [(*where, k), *paths(v, (*where, k))]]
+        return []
+
+    assert sorted(map(str, paths(PULL_COMMITS_READ))) == sorted(map(str, PULLS_REQUIRED))
+
+
 def test_the_recording_satisfies_the_pr_read_schema():
     import jsonschema
 
@@ -358,12 +428,12 @@ def test_each_required_field_absent_is_unreadable(path):
     """Pin 5 over the WHOLE `pr_read` list: from the `handoff` state, the PR read answering without any one
     required field is exit 4 with nothing written."""
     w = _handoff_world().fault(PR_READ, "absent", field=path)
-    check(w, "unreadable")
+    check(w, "unreadable", parents_read=False)
 
 
 def test_a_null_required_field_is_unreadable_and_named_as_mistyped():
     w = _handoff_world().set(PR_READ, ("reviews", APPROVAL, "body"), None)
-    check(w, "unreadable")
+    check(w, "unreadable", parents_read=False)
     run = w.run([*COMPONENT, REPO, str(PR)])
     assert f"with `reviews[{APPROVAL}].body` not a str" in run.stdout, run.stdout
 

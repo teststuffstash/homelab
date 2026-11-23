@@ -10,7 +10,7 @@ import pytest
 from .world import ISLAND, WORLDS, UnrecordedCall, World, parse_provenance
 
 RECORDER = ISLAND / "scripts" / "record_world.py"
-RECORDED = ["pr-handoff", "pr-board"]
+RECORDED = ["pr-handoff", "pr-board", "pr-merges"]
 REPO = "teststuffstash/homelab"
 
 # GitHub's token formats (classic/OAuth/user-to-server/server-to-server/refresh `gh[opsur]_`, fine-grained
@@ -75,16 +75,23 @@ def test_provenance_names_every_answer_file(world):
     d = WORLDS / world
     prov = parse_provenance((d / "provenance.yaml").read_text("utf-8"))
     assert prov["repo"] == REPO and prov["visibility"] == "public" and prov["world"] == world
-    assert re.fullmatch(r"[0-9a-f]{40}", prov["recorder_commit"]) and re.fullmatch(r"[0-9a-f]{40}", prov["rest_description"]["commit"])
+    assert re.fullmatch(r"[0-9a-f]{40}", prov["recorder_commit"])
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", prov["recorded_at"]) and prov["items"]
     listed = {r["file"] for r in prov["reads"]}
     on_disk = {p.name for p in d.iterdir() if p.is_file() and p.name != "provenance.yaml"}
     assert listed == on_disk
     for read in prov["reads"]:
         json.loads((d / read["file"]).read_bytes())  # every recorded answer is the JSON gh printed
+    for read in prov["reads"]:  # a read added after the whole recording carries its own time and recorder commit
+        if "recorded_at" in read:
+            assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", read["recorded_at"]) and re.fullmatch(r"[0-9a-f]{40}", read["recorder_commit"])
     declared = {f"{w['op']}.{s}.json" for w in prov["writes"] for s in w.get("statuses", [])}
-    assert {p.name for p in (d / "schemas").iterdir()} == declared
-    assert {p.name for p in (d / "writes").iterdir()} == declared
+    if prov["writes"]:
+        assert re.fullmatch(r"[0-9a-f]{40}", prov["rest_description"]["commit"])
+        assert {p.name for p in (d / "schemas").iterdir()} == declared
+        assert {p.name for p in (d / "writes").iterdir()} == declared
+    else:  # a world that declares no write has no description, no schemas/ and no writes/
+        assert "rest_description" not in prov and not (d / "schemas").exists() and not (d / "writes").exists()
 
 
 def _answer(world: str, file: str):
@@ -151,3 +158,87 @@ def test_recorder_fetches_the_board_snapshot_once_and_records_that_fetch(tmp_pat
     assert (out / "pr-board" / "pr-list.json").read_bytes() == (w / "r1.json").read_bytes()
     assert (out / "pr-board" / f"api.commits.{oid}.status.json").is_file()  # per-PR reads follow that snapshot's head
     assert len(run.argvs) == len(reads)  # every read once, nothing else
+
+
+def test_add_pull_commits_issues_the_visibility_read_then_one_read_per_item(tmp_path):
+    rw = _recorder_module()
+    src = tmp_path / "add-src"
+    src.mkdir()
+    reads = [(["api", f"repos/{REPO}"], {"private": False, "visibility": "public"}),
+             (rw.pull_commits_read("7"), [{"sha": "a" * 40, "parents": [{"sha": "b" * 40}]}]),
+             (rw.pull_commits_read("8"), [{"sha": "c" * 40, "parents": []}])]
+    lines = ["reads:"]
+    for i, (argv, body) in enumerate(reads):
+        (src / f"r{i}.json").write_text(json.dumps(body))
+        lines += [f"  - argv: {json.dumps(argv)}", f'    file: "r{i}.json"']
+    (src / "provenance.yaml").write_text("\n".join([*lines, "writes:"]) + "\n")
+    out = tmp_path / "out"
+    recorded = out / "pr-merges"
+    recorded.mkdir(parents=True)
+    (recorded / "pr-view-7.commits.json").write_text("{}")
+    head = (
+        '# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).\n'
+        'world: "pr-merges"\nitems: [7, 8]\nrecorded_at: "2026-11-19T22:18:15Z"\nrecorder_commit: "' + "d" * 40 + '"\nreads:\n'
+        f'  - argv: ["pr", "view", "7", "--repo", "{REPO}", "--json", "commits"]\n    file: "pr-view-7.commits.json"\n    auth: "token"\nwrites:\n'
+    )
+    (recorded / "provenance.yaml").write_text(head)
+    run = World("add-src", root=tmp_path).run([sys.executable, str(RECORDER), "pr-merges", "--add", "pull-commits", "--out", str(out)])
+    assert run.rc == 0, run.stderr
+    assert run.argvs == [["api", f"repos/{REPO}"], rw.pull_commits_read("7"), rw.pull_commits_read("8")]
+    text = (recorded / "provenance.yaml").read_text()
+    assert text.startswith(head.split("writes:")[0])  # no existing line changes or moves
+    assert text.endswith("writes:\n")
+    prov = parse_provenance(text)
+    added = prov["reads"][1:]
+    assert [r["file"] for r in added] == ["api.pulls.7.commits@per_page=100.json", "api.pulls.8.commits@per_page=100.json"]
+    assert all(re.fullmatch(r"[0-9a-f]{40}(-dirty)?", r["recorder_commit"]) and "recorded_at" in r and r["auth"] == "token" for r in added)
+    assert (recorded / added[0]["file"]).read_bytes() == (src / "r1.json").read_bytes()
+    assert prov["recorded_at"] == "2026-11-19T22:18:15Z" and prov["recorder_commit"] == "d" * 40
+
+
+def test_add_pull_commits_refuses_a_private_repo_after_the_visibility_read_alone(tmp_path):
+    out = tmp_path / "out"
+    (out / "pr-merges").mkdir(parents=True)
+    (out / "pr-merges" / "provenance.yaml").write_text('world: "pr-merges"\nitems: [7]\nreads:\nwrites:\n')
+    run = _private_world(tmp_path, private=True).run([sys.executable, str(RECORDER), "pr-merges", "--add", "pull-commits", "--out", str(out)])
+    assert run.rc != 0 and "is private" in run.stderr
+    assert run.argvs == [["api", f"repos/{REPO}"]]
+
+
+def test_the_recorded_pr_merges_world_holds_hand_titled_two_parent_merges():
+    view = _answer("pr-merges", "pr-view-3615.commits.json")["commits"]
+    listed = {e["sha"]: e for e in _answer("pr-merges", "api.pulls.3615.commits@per_page=100.json")}
+    assert all(c["oid"] in listed for c in view)  # (a) every view commit has an element
+    shapes = ("Merge branch ", "Merge remote-tracking branch ", "Merge pull request ")
+    assert [c for c in view if len(listed[c["oid"]]["parents"]) >= 2 and not c["messageHeadline"].startswith(shapes)]  # (b)
+
+
+def test_add_pull_commits_failing_second_read_leaves_the_world_byte_identical(tmp_path, monkeypatch):
+    import argparse
+
+    rw = _recorder_module()
+    out = tmp_path / "out"
+    recorded = out / "pr-merges"
+    recorded.mkdir(parents=True)
+    (recorded / "pr-view-7.commits.json").write_text("{}")
+    (recorded / "provenance.yaml").write_text(
+        'world: "pr-merges"\nitems: [7, 8, 9]\nreads:\n'
+        f'  - argv: ["pr", "view", "7", "--repo", "{REPO}", "--json", "commits"]\n    file: "pr-view-7.commits.json"\n    auth: "token"\nwrites:\n'
+    )
+    before = {p.name: p.read_bytes() for p in recorded.iterdir()}
+    monkeypatch.setattr(rw, "refuse_private", lambda repo: "public")
+    monkeypatch.setattr(rw, "recorder_commit", lambda: "d" * 40)
+    calls = []
+
+    def perform(read):
+        calls.append(read.argv)
+        if len(calls) == 2:
+            raise SystemExit("record_world: read failed")
+        return b"[]"
+
+    monkeypatch.setattr(rw, "perform", perform)
+    args = argparse.Namespace(prs=[], world="pr-merges", out=str(out), add="pull-commits")
+    with pytest.raises(SystemExit, match="read failed"):
+        rw.add_pull_commits(args)
+    assert len(calls) == 2
+    assert {p.name: p.read_bytes() for p in recorded.iterdir()} == before

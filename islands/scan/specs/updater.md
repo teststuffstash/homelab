@@ -29,10 +29,10 @@ it requires of each per-PR read, and the actions it can emit.
 
 | Requirement | Governs (schema) | Status |
 |---|---|---|
-| [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `commit_probe`, `action.update` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
-| [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `commit_review_probe`, `action.update` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
+| [SCAN-UPDATER-PICK](#scan-updater-pick) | `pr`, `commit_probe`, `pull_commits_read`, `action.update` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
+| [SCAN-UPDATER-UNSTRAND](#scan-updater-unstrand) | `commit_review_probe`, `pull_commits_read`, `action.update` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
 | [SCAN-UPDATER-CONFLICT](#scan-updater-conflict) | `action.label` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; no evidence publisher for this root (comparison: `updater`) |
-| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `commit_probe`, `check_runs_read`, `status_read`, `action.handback` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; the `fu124-nudge` half is the scan clause's, not built (comparison: `updater`, `fu124-nudge`) |
+| [SCAN-UPDATER-RENOVATE](#scan-updater-renovate) | `commit_probe`, `pull_commits_read`, `check_runs_read`, `status_read`, `action.handback` | 🚧 WIP → #3490 — rule-labelled tests in islands/scan/tests/test_updater.py over recorded world `pr-board`; the `fu124-nudge` half is the scan clause's, not built (comparison: `updater`, `fu124-nudge`) |
 
 **World for every table below:** [`pr-board`](worlds/README.md#recorded-worlds-worldsname--here) —
 one repo, `#90` armed ∧ CLEAN, `#91` un-armed ∧ BEHIND, as overrides on the recorded snapshot;
@@ -47,8 +47,7 @@ number is that entry's recorded number. The alternative re-addresses the recorde
 page's numbers, which serves reads the world does not hold.
 
 **Legend — the `expect?` literals.** Each literal names what one pass issues and prints. Every pass
-starts with the one `gh pr list` snapshot; "probe" is a per-candidate `gh pr view --json commits`
-call. Every literal but `unreadable-snapshot` exits 0. A quoted line is matched within one printed
+starts with the one `gh pr list` snapshot; "probe" is the per-candidate commit probe: the `gh pr view --json commits` call, then the pull-commits read `gh api repos/<slug>/pulls/<n>/commits?per_page=100` for the same pull request. Leg 2's probe is the `--json commits,reviews` call followed by the same read, so a literal's "1 (`commits,reviews`), unreadable" covers a failure of either call. A probe is unreadable when either call is; when the first is, the second is not issued (unverified — expected to hold: no row fails the first call and counts the second). Every literal but `unreadable-snapshot` exits 0. A quoted line is matched within one printed
 line: `…` stands for any text, and `#n` for the pull request of the literal's update (the first
 update's, then the next).
 
@@ -87,11 +86,10 @@ by no other such literal's pass. That is why `renovate-handback-probe1` quotes l
 
 Leg 1 updates the oldest PR per lane that is **armed ∧ BEHIND ∧ [merge-ready](glossary.md#merge-ready)**
 (`update-pr-branch.sh:142`, homelab#1452): `reviewDecision` APPROVED, or `""` (a ruleset that
-requires no approval) with the reviewer bot's APPROVED newer than the newest non-merge commit, or
+requires no approval) with the reviewer bot's APPROVED newer than the newest [non-merge commit](glossary.md#merge-commit), or
 the `automerge` label. There is **no green requirement** (except for untouched or updater-merged Renovate PRs, see [merge-ready](glossary.md#merge-ready)) — a base-side CI fix can only reach a PR
 through an update (2026-07-10). `REVIEW_REQUIRED` is a park: never merge-ready, never probed
-(#1649). The commit half of "approved at head" is a per-candidate `gh pr view --json commits`
-probe; an unreadable probe holds. The lane is walked oldest-first and stops at the first
+(#1649). The commit half of "approved at head" is the per-candidate commit probe (Legend), whose second read tells which commits are [merge commits](glossary.md#merge-commit); an unreadable probe holds. The lane is walked oldest-first and stops at the first
 successful update, so a member whose update 422s every pass cannot hold its lane hostage
 (#2203). `UPDATER_MERGE_READY_ONLY=0` restores the pre-#1452 pick (armed ∧ BEHIND).
 
@@ -103,10 +101,10 @@ the pass reads. A required field that is null where the schema allows no null, o
 reads as absent. A review's `author` may be null (a deleted account); it is then no one's verdict.
 A review's `submittedAt` may not: a pending review, the only kind without one, is visible only to
 its author, never to the pass's identity. ⚖ A commit probe answer that lacks a field the schema's
-`commit_probe` requires is unreadable, as a non-JSON body is, and that PR holds.
+`commit_probe` requires is unreadable, as a non-JSON body is, and that PR holds. ⚖ A pull-commits answer that lacks a field the schema's `pull_commits_read` requires, or an element for a commit of the first read, is unreadable, and that PR holds (unverified — expected to hold as the failed read does: the updater's rows fail the read, none removes a field or an element; `SCAN-HANDOFF-GATE` has both rows).
 
 **World:** the one above. A pull request a `base` cell names is armed ∧ BEHIND, and the pull
-requests were created in the order the cell names them.
+requests were created in the order the cell names them. A commit a cell describes has one parent unless the cell says two.
 
 #### Which PR does the main leg update?
 
@@ -121,10 +119,15 @@ requests were created in the order the cell names them.
 | bot-approved-head-update | pr-board | `#141` → master | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit | — | — | picks-probe1 |
 | stale-approval-no-update | pr-board | `#142` → master | `reviewDecision ""`, the bot's APPROVED is older than a later content commit (stale) | — | — | noop-probe1 |
 | probe-unreadable | pr-board | `#141` → master | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit | the commit probe for `#141` answers a non-JSON body | — | noop-probe-hold |
+| parents-unreadable | pr-board | `#141` → master | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit | the pull-commits read for `#141` fails | — | noop-probe-hold |
+| hand-titled-merge-after-approval-update | pr-board | `#141` → master | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest content commit; a later commit has two parents and the headline `Merge master into <head>` | — | — | picks-probe1 |
+| merge-titled-content-after-approval-no-update ⚖ | pr-board | `#142` → master | `reviewDecision ""`, the bot's APPROVED is older than a later commit with one parent and the headline `Merge branch 'master' into <head>` (content: stale) | — | — | noop-probe1 |
 | parked-approved-head-no-update | pr-board | `#150` → master | `REVIEW_REQUIRED` (park); `latestReviews` bot COMMENTED, `reviews[]` bot APPROVED at head | — | — | noop |
 | park-skip | pr-board | `#130` → master | `REVIEW_REQUIRED` (park); `latestReviews` bot APPROVED | — | — | noop |
 | merge-ready-only-off-legacy-pick | pr-board | `#101`, `#102` → master | `reviewDecision ""`, no review, no `automerge` label (not merge-ready) | — | `UPDATER_MERGE_READY_ONLY=0` | picks |
 | snapshot-lacks-field ⚖ | pr-board | `#141` → master | `reviewDecision ""`, the bot's `reviews[]` APPROVED post-dates the newest non-merge commit | the snapshot's entry for `#141` has no `baseRefName` field | — | unreadable-snapshot |
+
+⚖ `merge-titled-content-after-approval-no-update`: the alternative is the title test, as for the handoff's row.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -135,22 +138,25 @@ requests were created in the order the cell names them.
 ### SCAN-UPDATER-UNSTRAND
 
 Leg 2 closes the CHANGES_REQUESTED ∧ BEHIND crack: an armed PR in that state is updated only when
-its newest non-merge commit post-dates the newest reviewer-bot verdict — the fix round has
+its newest [non-merge commit](glossary.md#merge-commit) post-dates the newest reviewer-bot verdict — the fix round has
 landed and needs currency to be reviewed again; breaker labels exclude it; unreadable commit or
 review data holds (`update-pr-branch.sh:362`, rule #6). ⚖ A commit-and-review probe answer that
 lacks a field the schema's `commit_review_probe` requires is unreadable, and that PR holds.
 
 **World:** the one above, plus `#120` → master, armed ∧ BEHIND, `reviewDecision`
 CHANGES_REQUESTED, not Renovate-authored. The `probe` cell is its commit-and-review probe, its
-times on one day.
+times on one day. A commit the cell describes has one parent unless the cell says two; the probe is the commit-and-review call followed by the pull-commits read.
 
 #### Is a changes-requested, behind PR brought current?
 
 | description | world | probe | expect? |
 |---|---|---|---|
 | unstrand-yes | pr-board | newest non-merge commit 12:00 after the bot's CHANGES_REQUESTED 11:00 | unstrand-yes |
-| unstrand-no | pr-board | newest non-merge commit 10:00 before the bot's CHANGES_REQUESTED 11:00 (the 12:00 merge commit is not content) | unstrand-no |
+| unstrand-no | pr-board | newest non-merge commit 10:00 before the bot's CHANGES_REQUESTED 11:00; the 12:00 commit has two parents and the headline `Merge branch 'master' into <head>` (a merge commit, not content) | unstrand-no |
+| unstrand-no-hand-titled-merge | pr-board | a content commit 10:00 before the bot's CHANGES_REQUESTED 11:00; the 12:00 commit has two parents and the headline `Merge master into <head>` | unstrand-no |
+| unstrand-yes-merge-titled-content ⚖ | pr-board | a content commit 10:00 before the bot's CHANGES_REQUESTED 11:00; the 12:00 commit has one parent and the headline `Merge branch 'master' into <head>` | unstrand-yes |
 | unstrand-unreadable | pr-board | unreadable (non-JSON body) | unstrand-hold |
+| unstrand-parents-unreadable | pr-board | commits and reviews readable; the pull-commits read fails | unstrand-hold |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
@@ -200,7 +206,7 @@ Renovate's is worker-pushed even when it also carries updater merge commits: it 
 untouched nor updater-merged, so it has no green requirement and is never handed back. Leg 1 and
 the sweep read a Renovate-authored PR's commits and its rollup (check-runs, status) in one probe,
 before its class is known; for a worker-pushed PR the rollup is read but not required green. A CANCELLED check that a same-named sibling outlives is not red (#2754);
-an unreadable rollup holds. A rollup that reports no check runs is not green
+an unreadable rollup holds. The probe's order is the view call, the pull-commits read, then the rollup reads (check-runs, status). When the view call or the pull-commits read is unreadable the rollup reads are not issued, and the pass prints what any unreadable commit probe prints (`noop-probe-hold`). A rollup that reports no check runs is not green
 (`renovate_green` requires at least one concluded check, `agents/renovate-currency.sh:54`). The island's predicate functions live in `islands/scan/src/scan_island/renovate.py` (the shell
 original, `agents/renovate-currency.sh`, remains for the scan's FU-124 nudge until retired).
 ⚖ The check-runs and status reads are taken raw and read against the schema's `check_runs_read`
@@ -210,8 +216,8 @@ both through `--jq` with defaults, so an absent `check_runs` reads there as none
 **World:** the one above, plus `#150` → master, armed, authored by Renovate (the list prints
 `app/homelab-renovate-1234`; a Renovate commit's author is `homelab-renovate-1234[bot]`), its body
 carrying Renovate's unticked rebase checkbox `- [ ] <!-- rebase-check -->`. A worker commit and
-an updater merge commit (`Merge branch 'master' into <head>`) are authored by a login other than
-Renovate's. The `checks` cell is the whole rollup, each check a check run; the status read reports
+an updater merge commit (two parents; headline `Merge branch 'master' into <head>`) are authored by a login other than
+Renovate's. Any other commit a cell describes has one parent unless the cell says two. The `checks` cell is the whole rollup, each check a check run; the status read reports
 none.
 
 #### Whose currency is this Renovate PR?
@@ -224,9 +230,14 @@ none.
 | renovate-worker-pushed-update | pr-board | `APPROVED`, BEHIND | Renovate + a worker commit + an updater merge commit | none reported | — | picks-probe1-renovate |
 | renovate-updater-merged-red-handback | pr-board | `APPROVED`, BEHIND | Renovate + an updater merge commit | `ci` success, `system-test` failure | — | renovate-handback-probe1 |
 | renovate-superseded-cancel-green-update | pr-board | `APPROVED`, BEHIND | Renovate + an updater merge commit | `ci` cancelled, outlived by `ci` success | — | picks-probe1-renovate |
+| renovate-hand-titled-merge-red-handback | pr-board | `APPROVED`, BEHIND | Renovate + a two-parent commit by another login, headline `Merge master into <head>` | `ci` success, `system-test` failure | — | renovate-handback-probe1 |
+| renovate-merge-titled-worker-commit-update ⚖ | pr-board | `APPROVED`, BEHIND | Renovate + a one-parent commit by another login, headline `Merge branch 'master' into <head>` | `ci` failure | — | picks-probe1-renovate |
+| renovate-parents-unreadable-hold | pr-board | `APPROVED`, BEHIND | Renovate only | not read | the pull-commits read for the PR fails | noop-probe-hold |
 | renovate-checks-unreadable-hold | pr-board | `APPROVED`, BEHIND | Renovate only | unreadable | the check-runs read for the PR's head answers an error | renovate-probe-hold |
 | renovate-merged-current-red-handback | pr-board | `REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND) | Renovate + an updater merge commit | `ci` success, `system-test` failure | — | sweep-handback-probe1 |
 | renovate-merged-current-pending-noop ⚖ | pr-board | `REVIEW_REQUIRED`, no review, PR CURRENT (BLOCKED, not BEHIND) | Renovate + an updater merge commit | `ci` success, `system-test` in progress | — | sweep-silent-probe1 |
+
+The first new row is the page's `renovate-updater-merged-red-handback` with the merge titled by hand: a two-parent commit is a merge commit, so the PR is untouched and updater-merged, and its red is handed back. ⚖ `renovate-merge-titled-worker-commit-update`: a one-parent commit by another login is content, so the PR is worker-pushed and has no green requirement; the alternative, the title test, hands it back.
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

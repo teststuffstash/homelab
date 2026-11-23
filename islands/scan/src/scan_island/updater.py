@@ -19,7 +19,6 @@ from .renovate import COMMIT_PROBE, COMMIT_REVIEW_PROBE
 from .strict import Nullable, lacking
 
 LIST_FIELDS = "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,latestReviews,baseRefName,reviews,author,headRefName"
-MERGE_PREFIX = "Merge branch "
 UNREADABLE = 4  # the snapshot answered without a field the schema requires: nothing written
 
 # The fields of one snapshot entry updater.schema.json requires (`/properties/pr`): every field the pass reads.
@@ -79,14 +78,15 @@ def breakered(pr: dict) -> bool:
 
 
 def _probe(slug: str, n: int, fields: str) -> dict | None:
-    """The per-candidate `gh pr view` probe; None when the call failed, the body is not JSON, or the answer lacks
-    a field the schema requires of it (`commit_probe` / `commit_review_probe`)."""
+    """The per-candidate commit probe: the `gh pr view` call, then the pull-commits read; None when either call failed,
+    its body is not JSON, or the answer lacks a field the schema requires of it (`commit_probe` / `commit_review_probe` /
+    `pull_commits_read`)."""
     shape = COMMIT_REVIEW_PROBE if fields == "commits,reviews" else COMMIT_PROBE
-    return renovate.read("pr", "view", str(n), "--repo", slug, "--json", fields, shape=shape)
+    return renovate.commit_probe(slug, n, fields, shape)
 
 
 def _newest_content(commits: list) -> str:
-    return max((c["committedDate"] for c in commits if not c["messageHeadline"].startswith(MERGE_PREFIX)), default="")
+    return max((c["committedDate"] for c in commits if not c["merge"]), default="")
 
 
 def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
@@ -176,7 +176,7 @@ def _verdict_ok(probe: dict | None) -> str:
     """"yes" when the newest non-merge commit post-dates the newest reviewer verdict, "no" when not, "" when unreadable."""
     if probe is None:
         return ""
-    commits = [c["committedDate"] for c in probe["commits"] if not c["messageHeadline"].startswith(MERGE_PREFIX)]
+    commits = [c["committedDate"] for c in probe["commits"] if not c["merge"]]
     verdicts = [r["submittedAt"] for r in probe["reviews"] if _reviewer(r) and r["state"] in ("APPROVED", "CHANGES_REQUESTED")]
     return "yes" if commits and verdicts and max(commits) > max(verdicts) else "no"
 

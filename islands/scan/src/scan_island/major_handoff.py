@@ -6,7 +6,7 @@ import re
 import sys
 from urllib.parse import quote
 
-from . import gh
+from . import gh, merges
 from .strict import lacking
 
 # The fields of the PR read (`gh pr view --json state,labels,reviews,commits`) that
@@ -16,7 +16,7 @@ PR_READ = {
     "state": str,
     "labels": [{"name": str}],
     "reviews": [{"author": {"login": str}, "state": str, "submittedAt": str, "body": str}],
-    "commits": [{"messageHeadline": str, "committedDate": str}],
+    "commits": [{"oid": str, "messageHeadline": str, "committedDate": str}],
 }
 
 
@@ -53,7 +53,19 @@ def main(slug: str, pr: str) -> int:
         return refuse(f"no APPROVED review by {bot} on {item} — dispatch the reviewer (brief step 2)")
     approval = max(approvals, key=lambda r: r["submittedAt"])
     approved_at = approval["submittedAt"]
-    newest = max((c["committedDate"] for c in data["commits"] if not c["messageHeadline"].startswith(("Merge branch ", "Merge remote-tracking branch ", "Merge pull request "))), default="")
+    # the approval-at-head check: the pull-commits read tells which commits are merge commits (issued only here)
+    listed = gh.run("api", merges.pull_commits_path(slug, pr))
+    commits = None
+    if not listed.returncode:
+        try:
+            answer = json.loads(listed.stdout)
+        except ValueError:
+            answer = None
+        if answer is not None and not lacking(answer, merges.PULL_COMMITS_READ):
+            commits = merges.flag(data["commits"], answer)
+    if commits is None:
+        return report("UNREADABLE — ", f"the pull-commits read of {item} failed or answered without a field or an element for a commit of the PR read — nothing written", 4)
+    newest = max((c["committedDate"] for c in commits if not c["merge"]), default="")
     if approved_at <= newest:
         return refuse(f"the newest {bot} approval ({approved_at}) predates the newest content commit ({newest}) on {item} — the verdict is not at head; re-dispatch the reviewer (brief step 2)")
     body = approval["body"].replace("\r\n", "\n").replace("\r", "\n")
