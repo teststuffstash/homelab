@@ -132,7 +132,7 @@
    "18-alpine"
   ],
   "prom/prometheus": [
-   "v3.15.1"
+   "v3.16.0"
   ],
   "python": [
    "3.15-slim-trixie",
