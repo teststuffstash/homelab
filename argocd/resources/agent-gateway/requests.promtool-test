@@ -1,0 +1,95 @@
+# Behaviour fixture for the `agent-gateway-requests` alerts (prometheusrule.yaml beside this file) —
+# GW-METRICS, gateway/specs/endpoints/metrics.md.
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service), plus rail, dialect, status and traffic on gateway_requests_total itself.
+rule_files:
+  - requests.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ S1 — ABSENT: no `up` series at all; for: 5m holds, then fires ═══════════════════════════════
+  - interval: 1m
+    name: S1 absent — no scrape series fires after 5 m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GatewayAbsent
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: GatewayAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: 'No agent-gateway pod has answered a scrape for 5 minutes — every ride''s admission and every rail call goes through it'
+              description: 'up{job="agent-gateway"} has had no series at 1 for 5 m: the Deployment has no ready pod, or Prometheus cannot scrape it. Check: (1) kubectl -n agent-egress get deploy,pods -l app=agent-gateway; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=50; (3) the agent-gateway ServiceMonitor still selects the Service. A pod roll leaves a gap of about one minute and does not fire this.'
+
+  # ══ S2 — ROLL: one sample at 0 (minute 11), a one-minute gap as every gap of the 14-day read — silent ═
+  - interval: 1m
+    name: S2 roll — a one-minute gap in up stays silent
+    input_series:
+      - series: 'up{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway"}'
+        values: "1x10 0 1x20"
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: GatewayAbsent
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: GatewayAbsent
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GatewayAbsent
+        exp_alerts: []
+
+  # ══ S3 — ERRORS: half the real requests fail (30 of each per 30 m); holds 10 m, then fires ═════
+  - interval: 1m
+    name: S3 errors — half the real requests 5xx fires
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="200",traffic="real"}'
+        values: "0+1x60"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: GatewayErrorShare
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: GatewayErrorShare
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: 'More than 20 % of the gateway''s real requests were answered 5xx over the last 30 minutes'
+              description: '50% of the real-traffic requests (traffic="real", at least 10 in the window) got a 5xx from the gateway. Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=100; (3) GET /healthz on the gateway. A 4xx is not counted: 429 and 424 are the upstream''s answers passed through (a 424 on the opencode rail has its own alert, GoRailCredentialRejected). The contract is gateway/specs/endpoints/metrics.md (GW-METRICS).'
+
+  # ══ S4 — THIN OR HEALTHY: silent ═══════════════════════════════════════════════════════════════
+  # (a) healthy: only 200s.
+  - interval: 1m
+    name: S4a healthy — real traffic with no 5xx stays silent
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="200",traffic="real"}'
+        values: "0+2x60"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+0x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: GatewayErrorShare
+        exp_alerts: []
+
+  # (b) thin: 5 failed requests, under the floor of 10. Read at 20m, while the failures are inside
+  # the 30 m window — with `>= 10` taken out the same series fires here; at 45m they have left it.
+  - interval: 1m
+    name: S4b thin — 5 failed requests under the floor stay silent
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+1x5 5x55"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GatewayErrorShare
+        exp_alerts: []
