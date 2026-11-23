@@ -17,6 +17,8 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-23 — cleanup trio).** #3722 (islands+intake docs comb) waits the OPERATOR's codeowner merge
+  (touches `.claude/skills/intake/SKILL.md`); #3721 (gateway docs comb) waits the specs reviewer. Operator list: TICK-LOG 11-23.
 - **⚑ PICKUP (2026-11-22 — intake on its own App; island suites gated by required `ci`; FU-320).**
   #3627 merged: master `ci` runs the scan/launch/retro suites (run 45048719148, all three green). #3672/#3676/#3677/#3682
   merged: intake sits as `homelab-intake` (Secret `intake-git`; read-only `intake-read-git` for oracle-iac), and
