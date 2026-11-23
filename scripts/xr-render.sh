@@ -12,8 +12,11 @@
 #   devbox run xr-render                         render all, print a per-input summary
 #   devbox run xr-render -- --out DIR            … and keep the normalized renders in DIR
 #   devbox run xr-render -- --diff BASE          render at git ref BASE and at the worktree, print
-#                                                the diff; exit 1 if they differ
+#                                                the diff; exit 1 if they differ (0 when the
+#                                                diff is pin-only, see the CI rule below)
 #   devbox run xr-render -- --diff BASE --allow-change   … print it, exit 0 (a declared change)
+#   bash scripts/xr-render.sh --pin-only-check BASE_DIR HEAD_DIR   only classify two render trees:
+#                                                exit 0 pin-only, 1 not (needs no crossplane)
 #   … --claim FILE[@NAMESPACE]                   also render an out-of-repo claim/XR (repeatable),
 #                                                e.g. a stack -iac repo's PublicRoute; NAMESPACE is
 #                                                the claim's namespace (its ArgoCD destination)
@@ -27,24 +30,49 @@
 # The CI rule (the `ci` step, PR events only): a PR touching a Composition/XRD/claim renders base vs
 # head; a non-empty diff fails unless the PR body carries a line `Render-change: <reason>` — the
 # author declares the behavior change, the diff is printed either way for the reviewer.
+# A PIN-ONLY diff passes undeclared (homelab#2605): every changed line is an `image:` line whose
+# repository is the same at base and head and only the tag and/or `@sha256:` digest moved — a
+# version bump (Renovate cannot write a body line), never a template change. A tag or digest that
+# is added or dropped is not pin-only.
 #
-# Exit: 0 ok / identical (or --allow-change) · 1 the renders differ · 2 tool or render-setup error.
+# Exit: 0 ok / identical / pin-only (or --allow-change) · 1 the renders differ · 2 tool or render-setup error.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 # shellcheck source=scripts/xr-render-lib.sh
 . scripts/xr-render-lib.sh
 
-OUT="" BASE="" ALLOW=false CLAIMS=()
+OUT="" BASE="" ALLOW=false CLAIMS=() PIN_CHECK=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT=$2; shift 2 ;;
     --diff) BASE=$2; shift 2 ;;
     --allow-change) ALLOW=true; shift ;;
     --claim) CLAIMS+=("$2"); shift 2 ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    --pin-only-check) PIN_CHECK=("$2" "$3"); shift 3 ;;
+    -h|--help) sed -n '2,39p' "$0"; exit 0 ;;
     *) echo "xr-render: unknown argument '$1' (see --help)" >&2; exit 2 ;;
   esac
 done
+# pin_only <base-dir> <head-dir> → 0 when the two render trees differ only in the tag/digest of
+# `image:` lines (the repository unchanged): both trees are copied, on every image line the tag and
+# the digest are each replaced by the word PIN (one that is absent stays absent, so adding or
+# dropping a tag or digest is NOT pin-only), and the copies must then be identical.
+pin_only() {
+  local t
+  t=$(mktemp -d)
+  cp -r "$1" "$t/base"
+  cp -r "$2" "$t/head"
+  find "$t" -type f -exec sed -E -i \
+    -e 's|^([[:space:]]*(- )?image: [^[:space:]@]+)@sha256:[0-9a-f]{64}$|\1@sha256:PIN|' \
+    -e 's|^([[:space:]]*(- )?image: [^[:space:]@]+):[^[:space:]:/@]+(@sha256:PIN)?$|\1:PIN\3|' {} +
+  if (cd "$t" && diff -rqN base head >/dev/null); then rm -rf "$t"; return 0; fi
+  rm -rf "$t"; return 1
+}
+if [ "${#PIN_CHECK[@]}" -eq 2 ]; then
+  if pin_only "${PIN_CHECK[0]}" "${PIN_CHECK[1]}"; then echo "xr-render: pin-only"; exit 0; fi
+  echo "xr-render: not pin-only"; exit 1
+fi
+
 for t in crossplane yq jq curl tar sha256sum git; do
   command -v "$t" >/dev/null || { echo "xr-render: FAIL — '$t' not on PATH (run via devbox)" >&2; exit 2; }
 done
@@ -152,6 +180,10 @@ if d=$(cd "$o" && diff -ruN base head); then
 fi
 echo "xr-render: the renders DIFFER (base $BASE → worktree):"
 printf '%s\n' "$d"
+if pin_only "$o/base" "$o/head"; then
+  echo "xr-render: PIN-ONLY — every changed line is an image tag/digest on an unchanged repository; no declaration needed"
+  exit 0
+fi
 if $ALLOW; then
   echo "xr-render: render change declared (--allow-change / the PR's 'Render-change:' line) — not failing"
   exit 0
