@@ -27,6 +27,7 @@
 # `>-` expr as a literal `|-` block (re-fold it by hand, or the drift pin's line comparison trips
 # on formatting rather than meaning), and it regenerates the `agent-goals` group ONLY — the two
 # witness groups at the bottom are not in the CR and must survive the re-copy.
+# witness-only: goal_budget_ratio_pre348, goal_budget_remaining_usd_pre348
 groups:
   - name: agent-goals
     rules:
