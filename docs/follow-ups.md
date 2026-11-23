@@ -996,7 +996,7 @@ the block needs pruning, not more headings.
       the weekly mirror GC frees blocks no trim returns. Alert text fixed (#2895, 10-24). (a) DONE 2026-10-30
       (#3045): weekly `filesystem-trim` RecurringJob + `removeSnapshotsDuringFilesystemTrim` — first run
       took Longhorn actual 859→403 GB (mirror-ghcr 199→31 G), every disk ≥57 % free, all Longhorn alerts
-      clear. **Next:** (b) metal fstrim for the image store. Relates ADR-089, ADR-114, FU-211, homelab#934.
+      clear. **Next:** (b) metal fstrim for the image store; read nx-01 `nvme1n1` `NodeDiskIOSaturation` on the first write burst after the 11-22 trim. Relates ADR-089, ADR-114, FU-211, homelab#934.
 - [ ] **FU-211** — **The storage ledger's numbers are hand-typed — generate them.** PR#1368 took three bot rounds on
       transposed figures in the buy-a-disk cell; "Current shape" is a 08-25 snapshot. Truth is LIVE (Longhorn
       disk status, `pve_lvm_thin_lv_size_bytes`, ResourceQuotas, Garage Workspaces — `scripts/storage-ledger-check.sh`
@@ -1065,7 +1065,8 @@ the block needs pruning, not more headings.
       05:57Z, so it refills on the same ~weeks clock. FU-304 closed 10-14 "the CP role
       stays" on a soak predating the refill (10-24: heap 2.80 GiB, CPU ≤0.23). Refill restart #2: 2026-10-28 20:09Z
       (`talosctl restart -k`, window `wk-metal-02-1793218117-1848`; WSS 3064→1467 MiB, cilium 13/13). #3: 2026-11-19 19:30Z
-      (22 d later; thrashed 43 h at 3.4 cores as etcd leader before anyone looked — TICK-LOG 11-19). **Next (operator):**
+      (22 d later; thrashed 43 h at 3.4 cores as etcd leader before anyone looked — TICK-LOG 11-19). Dig 11-23: refilled
+      ~40 h after #3 (MemAvailable 0.29, WSS 3.0 GiB) — the clock is days, not weeks (#3695). **Next (operator):**
       a windowed apiserver restart per refill, or the CP role → a 16 GB box; no detector reads GC-at-the-limit. Relates FU-304.
 
 - [ ] **FU-289** — **nx-02 swaps CI memory despite free host RAM; NUMA/VFIO placement. POINTER.**
@@ -1127,7 +1128,8 @@ the block needs pruning, not more headings.
       always red detects nothing. **Next (operator):** drop `cloudflare_web_analytics_site`/`_rule`
       from the composition (it has never once applied), or gate it on a claim field that defaults off.
       Either way the Workspace must be able to go green. Link: [`docs/cloudflare.md`](cloudflare.md)
-      §PublicRoute completion table (RUM row, #1311).
+      §PublicRoute completion table (RUM row, #1311). Fires as `CrossplaneManagedResourceNotSynced`
+      (gvk Workspace; subject `pr-oracle-fleet-minutark`) since the #3650 belt — this item explains it.
 
 - [ ] **FU-249** — **The ADR-148 lanes (`now` responder + grouped deep dig) are LIVE since 2026-10-04 (PR#2212); the
       old per-blip lane is gone: POINTER.** Steps (1)–(4) done (labels PR#2193; subject residuals, `now` routing,

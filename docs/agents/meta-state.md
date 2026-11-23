@@ -13,8 +13,7 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
-(No marker standing. 2026-10-24: the `RouterRunModelUnverifiable` marker was REMOVED by the fu-sweep — the alert now
-fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) its reason did not cover, so the dig re-reads it.)
+dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-runtime-tiers`, not master; rule, metric and `benchmarks.json` stay stale until Goal #3305 assembles (board-sweep 2026-11-23).
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
