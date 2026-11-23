@@ -81,7 +81,7 @@ entry canary's rides and the `probe-platform` tick's outer session (the AgentSta
 `reviewer` (bind namespace `platform-agents`) for the loop's coordinator and
 reviewer pods — the coordinator session admits unbound from its own pod (operator ruling 2026-11-01: the platform lanes move onto the
 gateway; granted ahead of the launchers, which adopt the shared admission helper
-`agents/gateway-admit.sh` one PR at a time — every platform launcher in the inventory above has),
+`agents/gateway-admit.sh` one PR at a time — every platform launcher in the inventory above has, except the specs reviewer, which predates the helper and keeps its own `/sessions` calls in `agents/specs-reviewer-session.sh`),
 plus `researcher` for the jail's research fan-out, which impersonates it;
 the coordinator namespace's shared SA (`agent-coordinator:agent-coordinator`) `coordinator` +
 `responder`, no bind — the deep dig and fix-debounce lanes, each one
