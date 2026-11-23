@@ -727,8 +727,8 @@ unexplained key is a STOP before the window.
 A replace is now always **deliberate**. Since FU-306 (2026-10-14) an edit to
 `tofu/templates/ci-runner-cloud-init.yaml.tftpl` re-renders the snippet and replaces **no** VM —
 both VMs ignore `initialization[0].user_data_file_id` (`tofu/ci-runner.tf`) — so the new snippet
-lands at the next attended recreate and a replace must be planned with `-replace`. The box refuses
-a replace to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
+lands at the next recreate (the box's own since 2026-11-14, below) and a hand replace must be planned
+with `-replace`. The box refuses a replace to a human apply. By hand, do one VM per plan, through `scripts/runner-maintenance.sh`
 ([`management-box.md`](management-box.md) §Non-Talos VMs: the runner verb):
 
 1. Plan the one VM with `-replace` — for ci-runner-02:
@@ -748,8 +748,8 @@ a replace to a human apply. Do one VM per plan, through `scripts/runner-maintena
 3. The other VM the same way, then a full `mgmt-tf -- plan` of master applied by its id, which
    stamps the apply loop's baseline (a scoped apply does not).
 
-The box can run steps 1–3 itself, one VM per tick, once `apply_vm_recreate.main`
-is `on` (the current mode: the capability ledger row) ([`management-box.md`](management-box.md) §Non-Talos VMs: the
+The box runs steps 1–3 itself, one VM per tick, while `apply_vm_recreate.main`
+is `on` (since 2026-11-14 — the capability ledger row) ([`management-box.md`](management-box.md) §Non-Talos VMs: the
 runner verb). It scopes with `-target` so the other VM's snippet stays pending; the unscoped
 `-replace` plan above re-creates both snippets, so after it the box no longer sees the other VM's
 pending seed — finish both by hand.
@@ -886,6 +886,11 @@ per-class verbs; the steps below are what it does, for reading — not for typin
    `nx-02-bmc-password` once it exists), then runs each verb's `up`/`undrain`/`check`+`leave`.
 5. **Post:** `devbox run nodes` all Ready · Longhorn degraded count returns to 0 (replica
    re-sync is normal for ~minutes) · new kernel active (`uname -r`).
+
+⚠ **A host whose root went read-only defeats the verb**: `qm shutdown` writes a task log under
+`/var/log/pve/tasks` first and fails, so `down` stops at its first guest. The hand path used on
+2026-11-21 (QMP `system_powerdown` per VM, the per-class verbs, `carp-maintenance enter`, sysrq reboot)
+is in [`incidents/2026-11-20-nx-02-boot-disk.md`](incidents/2026-11-20-nx-02-boot-disk.md) §Recovery.
 
 ## Power-loss / ghost-node recovery
 
