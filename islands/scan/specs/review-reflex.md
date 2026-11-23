@@ -28,7 +28,7 @@ argv and the breaker actions.
 | Requirement | Governs (schema) | Status |
 |---|---|---|
 | [SCAN-REFLEX-GATE](#scan-reflex-gate) | `tick` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-tick`, `slo-teeth`, `reviewer-optout`) · ⚑ gap: rail probe is self-routing |
-| [SCAN-REFLEX-PICK](#scan-reflex-pick) | `pick`, `dispatch` | 🚧 WIP — no evidence pipeline yet (fixture: `review-pick`, `assembly-review-dispatch`) |
+| [SCAN-REFLEX-PICK](#scan-reflex-pick) | `pick`, `dispatch` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `review-pick`, `assembly-review-dispatch`) ⚑ gap (2026-11-23, PR #3698 → work #3448): the reflex and its review-pick fixtures tell a merge commit by its headline, not its parents |
 | [SCAN-REFLEX-BREAKER](#scan-reflex-breaker) | `breaker` | 🚧 WIP — no evidence pipeline yet (fixture: `reflex-breaker`) |
 | [SCAN-REFLEX-REARM](#scan-reflex-rearm) | `rearm` | 🚧 WIP — no evidence pipeline yet (fixture: `c9-rearm`) |
 | [SCAN-REFLEX-DECORRELATE](#scan-reflex-decorrelate) | `dispatch.decorrelate_from` | 🚧 WIP (fixture: `decorrelate-resolution`) · ⚑ gap: reads the old proxy's `/report/latest` |
