@@ -714,6 +714,9 @@ rather than for buying more drives.
   because the historical failure was not a trim that broke, it was a reclaim path with no owner.
   ⚠ What this does NOT do: watch the pool — that is the pool meter below (built 2026-09-04, after
   the fourth fill); these alerts prove the mechanism runs, the meter says whether it suffices.
+  ⚠ **One metal member since 2026-11-23: nx-01's EPHEMERAL** (BC711) — not pool reclaim but write
+  latency: untrimmed for 44 days under ARC churn it hit flash-GC steady state (`NodeDiskIOSaturation`
+  daily, ~1 s writes); one trim restored it. Evidence + scope rule: the `fstrim.yaml` header.
   ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
   and its own `fstrim.timer` is the cover. Unverified, and worth a look.
 - **Second layer — in-volume reclaim, BUILT 2026-10-30** (FU-093 (a)): the weekly Longhorn
