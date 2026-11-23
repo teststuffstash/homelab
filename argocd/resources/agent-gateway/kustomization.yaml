@@ -142,6 +142,14 @@ configMapGenerator:
       # gateway can say how old the prices it compares on are (gateway_tier_evidence_age_seconds →
       # TierEvidenceStale); a re-cut rolls the pod like a policy edit.
       - benchmarks.json
+  # The gateway's own Grafana dashboard (shipped as code; the Grafana sidecar picks up the label).
+  - name: grafana-dashboard-agent-gateway
+    namespace: agent-egress
+    files:
+      - agent-gateway.json=dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
 
 # The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
 # edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the
