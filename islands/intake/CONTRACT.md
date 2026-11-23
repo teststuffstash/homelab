@@ -17,8 +17,9 @@ Three terms, used throughout:
   [`rules/intake.md`](rules/intake.md).
 
 Everything here is built and tested by the harness
-([`tests/island-intake-test.sh`](tests/island-intake-test.sh)). No stack has turned it on yet, so
-nothing on this page has been observed running against a stack repo.
+([`tests/island-intake-test.sh`](tests/island-intake-test.sh)). One stack has turned it on: the
+`oracle` claim declares `oracle-fleet`'s facts file (`repos[].intake.facts: docs/intake.md`), and
+its `oracle/oracle-fleet` sitting first ran on 2026-11-22 ([`docs/spikes/island-ladder/README.md`](../../docs/spikes/island-ladder/README.md) §Not verified).
 
 ## To turn it on
 
