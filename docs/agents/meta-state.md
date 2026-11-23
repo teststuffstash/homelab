@@ -71,8 +71,9 @@ fires on 8 series incl. openrouter-rail models (kimi-k3, glm-5.3-flash, mimo) it
   422'd every repo's IssueLabels — alert for that class is #3650); #3563 labelled, dry-run read = `pending`.
   NEXT: the Production-leg read — #3563 decided at its bound (2026-11-27T13:14Z with the 5-min settle): exactly ONE
   verdict comment, a second run writes nothing. Goal stays open post-launch; the verdict is the operator's.
-- **⚑ PICKUP (2026-11-21 night — #3652 ADR-166 + the Docker image clock, operator) — MERGED 2026-11-22 17:15Z `812b016f3`** (seat review + full CI by dispatch, run 45045460749). Supersedes ADR-158: stack pins lead by TIME (homelab minor/major 14 d, stacks 7 d); `scripts/image-clock.py` gives docker a release clock (first sighting on the `image-clock` side branch). After merge: the first scheduled run should log `image-clock: … rules`; oracle-fleet#1098
-  (postgres 19-alpine) should be autoclosed until 11-27. The PR also files the prod-Postgres-frozen-at-18.3 item (its new FU id lands with it).
+- **ADR-166 Renovate follow-through (#3652, merged 2026-11-22 17:15Z).** The image clock is VERIFIED: every scheduled run
+  since (23:04Z, 05:09Z, 17:03Z 11-23) logs `image-clock: 36 package(s) observed … 52 allowedVersions rule(s)`, and the
+  postgres N-alpine rule for oracle-fleet is in the effective config. oracle-fleet#1098 stays open as "abandoned", not autoclosed (FU-323).
   Open operator calls: `lock-intake-lint` into the stack/platform repos' `ci` (Renovate 44.221 raises transitive uv.lock
   security PRs that skip the cooldown; worker `uv lock` additions are the other un-aged intake — 2 versions <7 d in ~4
   months; an optional reviewer line "a new direct dep names its importer" rides the same call). openrouter-operator:

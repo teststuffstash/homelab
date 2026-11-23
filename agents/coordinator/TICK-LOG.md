@@ -15847,3 +15847,11 @@ updates or reverts as much as possible — mechanical revert or a responder."
   (pkg-containers.githubusercontent.com + `jail-cluster list` fix). Second smoke PASSED (k3d Ready in 24 s);
   SERVICES row → LIVE. Operator: k3d is not a goal; kind is proven — abandon + document if it breaks again.
 - Renovate post-#3652 check still pending (no scheduled run since 17:16Z) — meta-state pickup stands.
+
+## 2026-11-23 — seat: the three open items from the 11-22 wind-down
+
+- `.agents/fix.yaml` + `.agents/build.yaml`: `policy/**` + `CODEOWNERS` moved from MAY AUTHOR to NEVER TOUCH, matching
+  governance-lint's GOVERNANCE= set and #3680's classify_touches. Operator-direct (governance dotdir), pushed `59053e1c8`.
+- Renovate after ADR-166: the image clock works on all three scheduled runs since the merge (36 packages, 52 rules,
+  oracle-fleet postgres rule in the effective config). The meta-state pickup is narrowed to the operator calls it carried.
+- `timeout 590` double launch → FU-324 (launcher idempotency per issue+round; the gateway's supersede is the only guard).
