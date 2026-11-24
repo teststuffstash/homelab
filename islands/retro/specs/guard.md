@@ -21,7 +21,7 @@ Prometheus answer it parses, its outputs and its exit codes.
 |---|---|---|---|
 | [RETRO-GUARD-BUSY](#retro-guard-busy) | `params.stack`, `exit` | `1` refused (busy or unverifiable) | 🚧 WIP → #3384 — no evidence pipeline yet (no fixture: the busy probe sits above the `retro-quiet-guard` markers) |
 | [RETRO-GUARD-LEDGER](#retro-guard-ledger) | `params.minWindowTasks`, `outputs.quiet`, `exit` | `0` fire · `3`→quiet · `1` fail | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `prepare-*`; `local-store` for the floor itself) |
-| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | verdict `0` fire · `3` quiet · `1` fail → step `0` continue · `1` fail | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `expr-*`) |
+| [RETRO-GUARD-EXPR](#retro-guard-expr) | `params.guardExpr`, `$defs.prometheus_response`, `exit` | verdict `0` fire · `3` quiet · `1` fail → step `0` continue · `1` fail | 🚧 WIP → #3384 — no evidence pipeline yet (world: `prom-instant`; comparison: `retro-quiet-guard` rows `expr-*`) |
 | [RETRO-GUARD-QUIET](#retro-guard-quiet) | `outputs.quiet`, `outputs.evidence`, `$defs.quiet_push` | `0` quiet · `1` push failed | 🚧 WIP → #3384 — no evidence pipeline yet (fixture: `retro-quiet-guard` rows `quiet-push-*`, `expr-quiet`) |
 
 ## Flow overview
@@ -107,15 +107,15 @@ sample, a non-`success` status, unparsable JSON, a malformed or NaN sample, or a
 Prometheus fails the run. ⚖ An absent gauge is a broken exporter, never a quiet week — the same
 reasoning as the ledger guard's zero-task rule, so `RetroReportOverdue` still pages.
 
-**World: [guard-bridge](worlds/README.md)** — `SERIES=feedback-triage`, `GUARD_EXPR=max(g)>bool(604800)`.
+**World: [prom-instant](worlds/README.md)** — `PROM_VALUE` names the recorded answer (`1`, `0`, `absent`, `error`: a Prometheus answer; `down`: no answer); `PREP_RC` and `CURL_RC_1` are the exit codes of the two steps that follow a verdict, the freeze and the first attempt of the quiet push; `prepare_called?` is the argument `prepare` was called with, or `no`; `—` is a step not reached (an input cell) or an output not written (`QUIET?`).
 
 | description | world | PROM_VALUE | PREP_RC | CURL_RC_1 | QUIET? | prepare_called? | rc? |
 |---|---|---|---|---|---|---|---|
-| expr-fires | guard-bridge | 1 | 0 | — | false | `--no-ledger` | 0 |
-| expr-quiet | guard-bridge | 0 | — | 0 | true | no | 0 |
-| ⚖ expr-absent | guard-bridge | absent | — | — | — | no | 1 |
-| expr-error | guard-bridge | error | — | — | — | no | 1 |
-| expr-prom-down | guard-bridge | down | — | — | — | no | 1 |
+| expr-fires | prom-instant | 1 | 0 | — | false | `--no-ledger` | 0 |
+| expr-quiet | prom-instant | 0 | — | 0 | true | no | 0 |
+| ⚖ expr-absent | prom-instant | absent | — | — | — | no | 1 |
+| expr-error | prom-instant | error | — | — | — | no | 1 |
+| expr-prom-down | prom-instant | down | — | — | — | no | 1 |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 
