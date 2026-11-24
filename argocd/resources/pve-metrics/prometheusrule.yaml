@@ -269,3 +269,23 @@ spec:
               `systemctl status router-wangate@<vmid>` and the gate log in /var/log/router-killswitch/;
               node_exporter's textfile dir /var/lib/prometheus/node-exporter/router-wangate-*.prom.
               Re-run ansible/pve-router-killswitch.yml to reassert the units.
+        - alert: RouterMasterWanDark
+          expr: >-
+            router_node_carp_master{job="pve-node"} == 1
+            unless on(host) (node_network_carrier{job="pve-node", host="nx-02", device="eno2"} == 1
+            or node_network_carrier{job="pve-node", host="pve", device="enp6s0"} == 1)
+          for: 2m
+          # triage none: a cable, the ISP box or a stuck CARP maintenance; each is a hands-on or seat act
+          labels: { severity: critical, triage: none }
+          annotations:
+            summary: "Router MASTER on {{ $labels.host }} (vmid {{ $labels.vmid }}) has no WAN carrier — the LAN has no internet"
+            description: >-
+              The CARP MASTER's hypervisor sees no carrier on its WAN port (nx-02: eno2, pve:
+              enp6s0 — the only port of vmbr3), or node_exporter exports no carrier for it (the
+              port is administratively down). RouterPairMasterCount and RouterWanGateSilent stay
+              green in this state: one master, both gates alive (2026-10-08 19:40Z to 04:46Z,
+              docs/incidents/2026-10-08-carp-maintenance-not-left.md). Check the cable and the
+              ISP box on {{ $labels.host }}; if the other node's WAN port has carrier
+              (`node_network_carrier{job="pve-node", device=~"eno2|enp6s0"}`), it should be the
+              MASTER: `bash scripts/opnsense-router-node.sh carp-maintenance <node> status`, then
+              `leave` on the node stuck in maintenance.
