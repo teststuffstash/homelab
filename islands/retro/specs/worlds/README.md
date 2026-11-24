@@ -10,6 +10,7 @@ The fixture worlds' names are fixture names, not production ones: there the buck
 | world | fixture | what it fixes for every row |
 |---|---|---|
 | `prom-instant` | [`prom-instant/`](prom-instant/) — recorded | the answers of Prometheus `GET /api/v1/query`, one entry per `PROM_VALUE` cell: `1`, `0`, `absent`, `error` recorded, `down` declared (no answer) |
+| `reports` | [`reports/manifest.json`](reports/manifest.json) — recorded, read in place | the harvested reports the manifest names by repo path and sha256 (one: `docs/agents/retros/2026-11-16-platform-r12-opus.md`). The manifest is not the recorded-answer entry shape: a report is a file of this repo, never copied. A row runs on the report as it is, or with the ONE change its cells name |
 | `guard-bridge` | [`retro-quiet-guard`](../../../../agents/replay/fixtures/retro-quiet-guard/) (`bridge.sh`, `rows.psv`) | the guard step's clause between its REPLAY markers, extracted from `retro-argo.yaml`; `prepare` replaced by an exit code (`PREP_RC`), each pushgateway attempt by an exit code (`CURL_RC_1`, `CURL_RC_2`), the Prometheus answer by `PROM_VALUE` (`1`, `0`, `absent`, `error`, `down`) fed through the real `retro_guard_expr.py` |
 | `cell-bridge` | [`retro-gateway-cell`](../../../../agents/replay/fixtures/retro-gateway-cell/) | `retro-session.sh`'s `retro-cell-path` + `retro-gateway-cell` clauses; `agent-session.sh` replaced by a recorder whose exit code is `HANDOFF_RC`; run id `r10` |
 | `cell-report-logs` | [`retro-cell-report/<case>`](../../../../agents/replay/fixtures/retro-cell-report/) | one committed `ride.log` per case (`present`, `missing`, `skeleton`, `multi-block`, `longlog`) run through the cell's self-check clause and the real `retro-report-floor.sh` |
@@ -21,7 +22,7 @@ The fixture worlds' names are fixture names, not production ones: there the buck
 | `fake-github` | `agents/retro-activity-test.py`, `agents/retro-findings-test.py` (same suite) | the collector's `api()` / the reconciler's `fetch` replaced by in-memory answers; no network |
 | `rank-ledger` | [`retro-rank-snapshot-exclusion`](../../../../agents/replay/fixtures/retro-rank-snapshot-exclusion/) | a small `_ledger.jsonl` (one `snapshot: true` row that would rank first, int and array `rounds`), `gh` served from a PATH stub — the legacy ranker only |
 
-The rows after `prom-instant` are the old members' fixture states: the comparison runs in them, and a
+The rows other than `prom-instant` and `reports` are the old members' fixture states: the comparison runs in them, and a
 requirement page that still names one is not yet tested from a recorded world.
 
 Production state these worlds stand in for: the bucket `agent-transcripts` on Garage (`_retro/`,
