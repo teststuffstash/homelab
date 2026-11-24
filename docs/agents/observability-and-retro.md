@@ -862,6 +862,9 @@ What the series do not see:
 - The rounds share has no sample for an hourly evaluation that lands on a Pushgateway roll
   (one scrape without `agent_run_total`), and `AgentLoopRoundsBelowTarget` then starts its
   6 hours again. The unrecorded count is bridged over that scrape; the share is not.
+- An issue still queued and under 4 hours counts as within target: the numerator checks how long
+  it has carried `agent/queued` so far (`<= 48` five-minute steps), not whether the label has
+  gone, so `agent_loop:queued_within_4h:ratio_7d` reads optimistic for the trailing 4 hours.
 - A ride is matched to its record by project, issue and round. A round that is dispatched
   twice (a strike, then a re-dispatch) shares one pod name and one record key, so a second
   death behind a first record is not counted.

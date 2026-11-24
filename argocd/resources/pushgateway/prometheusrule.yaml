@@ -855,7 +855,9 @@ spec:
     # Pushgateway roll (one scrape without agent_run_total) and its for: restarts, the unrecorded count is bridged
     # by last_over_time(...[1h]) and the share is not; a ride is matched by project, issue and round, so a round
     # dispatched twice shares one pod name and one record key; queue time is every 5 minutes an issue carries
-    # agent/queued whatever holds it, and a failed exporter poll leaves those minutes uncounted; the exporter lists
+    # agent/queued whatever holds it, and an issue still queued and under 4 h counts as within target (the numerator
+    # checks how long it has carried agent/queued so far, <= 48 steps, not whether the label has gone) so the queue
+    # share reads optimistic for the trailing 4 h; and a failed exporter poll leaves those minutes uncounted; the exporter lists
     # the first 50 open agent/* issues per repo, so a queued issue past that page is not counted.
     - name: agent-loop-kpi
       interval: 1h
