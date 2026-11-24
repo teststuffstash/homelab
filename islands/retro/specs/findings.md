@@ -23,11 +23,11 @@ decision, the plan actions.
 
 | Requirement | Governs (schema) | Errors | Status |
 |---|---|---|---|
-| [RETRO-FINDINGS-BLOCK](#retro-findings-block) | `$defs.envelope`, `$defs.candidate` | `report requires exactly one retro-findings-json block`, `candidate contains unsupported fields`, `finding requires occurrence evidence`, `related_work requires canonical GitHub issue/PR URLs` | 🚧 WIP — no evidence pipeline yet (suite: `retro-activity-window`, world `fake-github`) |
-| [RETRO-FINDINGS-IDENTITY](#retro-findings-identity) | `$defs.finding.id`, `$defs.occurrence` | — | 🚧 WIP — no evidence pipeline yet (suite: `retro-activity-window`) |
-| [RETRO-FINDINGS-RECONCILE](#retro-findings-reconcile) | `$defs.reconciliation` | `decision evidence must be URLs`, `matched_work must contain canonical GitHub references`, `canonical_issue must be a GitHub issue URL` | 🚧 WIP — no evidence pipeline yet (suite: `retro-activity-window`) |
-| [RETRO-ACCEPT-QUEUE](#retro-accept-queue) | `$defs.decision`, `$defs.action` | `new findings require a --batch or origin_issue before filing`, `batch must be an open retro-batch container`, `new ordinary work requires machine-block Touches and Base: master`, `acceptance cannot manufacture Goal or lifecycle labels`, `duplicate finding issues require disposition` | 🚧 WIP — no evidence pipeline yet (suite: `retro-activity-window`); `⚑ gap (2026-11-07, spike PR #3147)`: queueing writes the labels `agent-fix` + `agent/queued` and reads `agent/*`, `task/*`, `retro-batch:` titles and its own body marker — 7 grammar sites outside the shared parser ([§Grammar sites](#grammar-sites-outside-the-shared-parser)) |
-| [RETRO-KPI-BUCKET-A](#retro-kpi-bucket-a) | `$defs.kpi` | — | `⚑ gap (2026-11-07, spike PR #3147)`: no code computes, stores or exports the count — each cell estimates it in prose |
+| [RETRO-FINDINGS-BLOCK](#retro-findings-block) | `$defs.envelope`, `$defs.candidate` | `report requires exactly one retro-findings-json block`, `candidate contains unsupported fields (acceptance belongs in decisions)`, `finding requires occurrence evidence`, `related_work requires canonical GitHub issue/PR URLs` | 🚧 WIP → #3482 — no evidence pipeline yet (world: `reports`; comparison: suite `retro-activity-window`) |
+| [RETRO-FINDINGS-IDENTITY](#retro-findings-identity) | `$defs.finding.id`, `$defs.occurrence` | — | 🚧 WIP → #3482 — no evidence pipeline yet (suite: `retro-activity-window`) |
+| [RETRO-FINDINGS-RECONCILE](#retro-findings-reconcile) | `$defs.reconciliation` | `decision evidence must be URLs`, `matched_work must contain canonical GitHub references`, `canonical_issue must be a GitHub issue URL` | 🚧 WIP → #3482 — no evidence pipeline yet (suite: `retro-activity-window`) |
+| [RETRO-ACCEPT-QUEUE](#retro-accept-queue) | `$defs.decision`, `$defs.action` | `new findings require a --batch or origin_issue before filing`, `batch must be an open retro-batch container`, `new ordinary work requires machine-block Touches and Base: master`, `acceptance cannot manufacture Goal or lifecycle labels`, `duplicate finding issues require disposition` | 🚧 WIP → #3482 — no evidence pipeline yet (suite: `retro-activity-window`); `⚑ gap (2026-11-07, spike PR #3147 → work #3730)`: queueing writes the labels `agent-fix` + `agent/queued` and reads `agent/*`, `task/*`, `retro-batch:` titles and its own body marker — 7 grammar sites outside the shared parser ([§Grammar sites](#grammar-sites-outside-the-shared-parser)) |
+| [RETRO-KPI-BUCKET-A](#retro-kpi-bucket-a) | `$defs.kpi` | — | `⚑ gap (2026-11-07, spike PR #3147 → work #3730)`: no code computes, stores or exports the count — each cell estimates it in prose |
 
 ## Flow overview
 
@@ -58,15 +58,15 @@ only `mechanism`, `surface`, `summary` (non-empty strings), `evidence` (≥ 1 `h
 or queue fields — report text never authorizes itself. A report that breaks the envelope is excluded
 from the findings and recorded as a report defect ([RETRO-PUBLISH-CHECKPOINT](pipeline.md#retro-publish-checkpoint)).
 
-**World: [fake-github](worlds/README.md)**.
+**World: [reports](worlds/README.md)** — every row runs on the world's recorded report: `a valid candidate` on the report as it is, each other row with the ONE change its `block` and `candidate_fields` cells name (`0`: the block removed; `+ x`: the field `x` added to one candidate; `x v`: the field `x` of one candidate set to `v`). `error?` is the returned error string; `—` is none.
 
-| description | world | block | candidate_fields | accepted? |
-|---|---|---|---|---|
-| a valid candidate | fake-github | 1 | mechanism, surface, summary, evidence, related_work | yes |
-| no block | fake-github | 0 | — | no (`exactly one … block`) |
-| ⚖ a candidate claiming acceptance | fake-github | 1 | + `accepted_by` | no (`unsupported fields`) |
-| no evidence | fake-github | 1 | evidence `[]` | no (`requires occurrence evidence`) |
-| a non-canonical related ref | fake-github | 1 | related_work `https://example.com/x` | no (`canonical GitHub issue/PR URLs`) |
+| description | world | block | candidate_fields | accepted? | error? |
+|---|---|---|---|---|---|
+| a valid candidate | reports | 1 | mechanism, surface, summary, evidence, related_work | yes | — |
+| no block | reports | 0 | — | no | `report requires exactly one retro-findings-json block` |
+| ⚖ a candidate claiming acceptance | reports | 1 | + `accepted_by` | no | `candidate contains unsupported fields (acceptance belongs in decisions)` |
+| no evidence | reports | 1 | evidence `[]` | no | `finding requires occurrence evidence` |
+| a non-canonical related ref | reports | 1 | related_work `https://example.com/x` | no | `related_work requires canonical GitHub issue/PR URLs` |
 
 ## RETRO-FINDINGS-IDENTITY
 

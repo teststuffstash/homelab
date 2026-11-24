@@ -17,7 +17,7 @@ OUT="${2:-allure-evidence}"
 source ../../gateway/scripts/lib/snippets.sh
 
 # page → rules, in page order: the rules this island labels.
-PAGES=("specs/guard.md:RETRO-GUARD-EXPR" "specs/cell.md:RETRO-REPORT-FLOOR")
+PAGES=("specs/guard.md:RETRO-GUARD-EXPR" "specs/cell.md:RETRO-REPORT-FLOOR" "specs/findings.md:RETRO-FINDINGS-BLOCK")
 
 if ! ls "$RESULTS"/*-result.json >/dev/null 2>&1; then
   echo "evidence: no Allure results under $RESULTS/ — run the suite first" >&2
@@ -47,7 +47,7 @@ for entry in "${PAGES[@]}"; do
 done
 
 echo "== evidence: per-rule summary (evidence.json; unproven = ROW_UNPROVEN in digest.md)"
-for r in RETRO-GUARD-EXPR RETRO-REPORT-FLOOR; do
+for r in RETRO-GUARD-EXPR RETRO-REPORT-FLOOR RETRO-FINDINGS-BLOCK; do
   printf '  %-20s passed %s · failed %s · unproven %s\n' "$r" \
     "$(jq --arg r "$r" '[.rules[$r][] | select(.status == "passed")] | length' "$OUT/evidence.json")" \
     "$(jq --arg r "$r" '[.rules[$r][] | select(.status != "passed")] | length' "$OUT/evidence.json")" \
