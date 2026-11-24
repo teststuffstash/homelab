@@ -1,0 +1,468 @@
+# Behaviour fixture for the agent-loop-kpi group (homelab#3728) — the loop's own KPI series and their alerts.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/agent-loop-kpi.promtool-test
+#   (in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# The W cases run at a 5-minute input interval because the rule's `[7d:5m]` subquery counts 5-minute steps.
+rule_files:
+  - agent-loop-kpi.promtool-rules
+
+evaluation_interval: 1h
+
+tests:
+  - interval: 1h
+    name: U1 recorded — three ended rides, each with its run record, read 0 and stay silent
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-101-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-102-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-103-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="101",role="worker",round="1",exit_status="clean"}'
+        values: "_x2 1x30"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="102",role="worker",round="1",exit_status="clean"}'
+        values: "_x2 1x30"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="103",role="worker",round="1",exit_status="clean"}'
+        values: "_x2 1x30"
+    promql_expr_test:
+      - expr: agent_loop:rides_ended:count_7d
+        eval_time: 10h
+        exp_samples:
+          - labels: 'agent_loop:rides_ended:count_7d{project="homelab"}'
+            value: 3
+      - expr: agent_loop:rides_unrecorded:count_7d
+        eval_time: 10h
+        exp_samples:
+          - labels: 'agent_loop:rides_unrecorded:count_7d{project="homelab"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 10h
+        alertname: AgentRidesUnrecorded
+        exp_alerts: []
+  - interval: 1h
+    name: U2 unrecorded — three of four ended rides have no record (one a Failed pod deleted since, one recorded on another round only) and the alert fires
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-101-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-102-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-103-r2",phase="Failed",job="kube-state-metrics"}'
+        values: "0x2 1x3 _x26"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-104-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="101",role="worker",round="1",exit_status="clean"}'
+        values: "_x2 1x30"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="103",role="worker",round="1",exit_status="clean"}'
+        values: "1x32"
+    promql_expr_test:
+      - expr: agent_loop:rides_unrecorded:count_7d
+        eval_time: 10h
+        exp_samples:
+          - labels: 'agent_loop:rides_unrecorded:count_7d{project="homelab"}'
+            value: 3
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: AgentRidesUnrecorded
+        exp_alerts: []
+      - eval_time: 10h
+        alertname: AgentRidesUnrecorded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              project: homelab
+            exp_annotations:
+              summary: '3 worker rides on homelab ended in the last 7 days without a run record — above the KPI target (at most 1)'
+              description: 'agent_loop:rides_unrecorded:count_7d{project="homelab"} is 3 (target: at most 1). A ride counts when its pod agent-<project>-issue-<n>-r<round> reached Succeeded or Failed in the 7 d and no agent_run_total series carries the same project, issue and round — the cost boards, the ledger and the retro never saw it. Check: (1) the expression of the record rule without its outer count names each issue and round; (2) the issue''s timeline comment for that round (a strike, a re-dispatch); (3) s3://agent-transcripts/<project>/issue-<n>/ for a worker-r<round>-* prefix — none means the pod died before its finalize step. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+  - interval: 30m
+    name: U3 at target — one unrecorded ride stays silent, a running pod is not an ended ride, and a record absent for under an hour is still a record
+    input_series:
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-101-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-102-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x2 1x30"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-105-r1",phase="Running",job="kube-state-metrics"}'
+        values: "1x32"
+      - series: 'kube_pod_status_phase{namespace="homelab",pod="agent-homelab-issue-105-r1",phase="Succeeded",job="kube-state-metrics"}'
+        values: "0x32"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="101",role="worker",round="1",exit_status="clean"}'
+        values: "_x2 1x7 stale 1x20"
+    promql_expr_test:
+      - expr: agent_loop:rides_ended:count_7d
+        eval_time: 5h
+        exp_samples:
+          - labels: 'agent_loop:rides_ended:count_7d{project="homelab"}'
+            value: 2
+      - expr: agent_loop:rides_unrecorded:count_7d
+        eval_time: 5h
+        exp_samples:
+          - labels: 'agent_loop:rides_unrecorded:count_7d{project="homelab"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 12h
+        alertname: AgentRidesUnrecorded
+        exp_alerts: []
+  - interval: 1h
+    name: N1 healthy — ten of twelve issues done within two rounds reads 0.8333 and stays silent
+    input_series:
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="200",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="200",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="201",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="201",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="202",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="202",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="203",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="203",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="204",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="204",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="209",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="209",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="210",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="210",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="210",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="210",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="210",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="210",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="211",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="211",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="211",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="211",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="211",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="211",role="worker",round="3"}'
+        values: "3600x200"
+    promql_expr_test:
+      - expr: agent_loop:issues_within_two_rounds:ratio_7d
+        eval_time: 12h
+        exp_samples:
+          - labels: 'agent_loop:issues_within_two_rounds:ratio_7d{project="homelab"}'
+            value: 0.8333333333333334
+    alert_rule_test:
+      - eval_time: 12h
+        alertname: AgentLoopRoundsBelowTarget
+        exp_alerts: []
+  - interval: 1h
+    name: N2 below target, then old — five of ten issues took a third round and the alert fires after its six hours; once every run was pushed more than 7 days ago nothing is counted
+    input_series:
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="200",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="200",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="201",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="201",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="202",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="202",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="203",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="203",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="204",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="204",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="209",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="209",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="209",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="209",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="209",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="209",role="worker",round="3"}'
+        values: "3600x200"
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: AgentLoopRoundsBelowTarget
+        exp_alerts: []
+      - eval_time: 12h
+        alertname: AgentLoopRoundsBelowTarget
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              project: homelab
+            exp_annotations:
+              summary: 'Less than 60 % of the issues homelab worked in the last 7 days were done within two worker rounds — below the KPI target'
+              description: 'agent_loop:issues_within_two_rounds:ratio_7d{project="homelab"} is 50% (target: at least 60 %; at least 10 issues with a worker run in the 7 d). A round after the first is a PR that came back: changes requested, or a red check. Check: (1) count by (issue) (agent_run_total{project="homelab",role="worker"}) > 2 names the issues; (2) the reviews on their PRs name what came back; (3) the escape records of the island intake receipts for the same PRs. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+      - eval_time: 180h
+        alertname: AgentLoopRoundsBelowTarget
+        exp_alerts: []
+    promql_expr_test:
+      - expr: agent_loop:issues_within_two_rounds:ratio_7d
+        eval_time: 180h
+        exp_samples: []
+  - interval: 1h
+    name: N3 thin — nine issues are under the floor and stay silent
+    input_series:
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="200",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="200",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="201",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="201",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="202",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="202",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="203",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="203",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="204",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="204",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="205",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="205",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="206",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="206",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="207",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="207",role="worker",round="3"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="1",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="1"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="2",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="2"}'
+        values: "3600x200"
+      - series: 'agent_run_total{job="agent_run",project="homelab",issue="208",role="worker",round="3",exit_status="clean"}'
+        values: "1x200"
+      - series: 'push_time_seconds{job="agent_run",project="homelab",issue="208",role="worker",round="3"}'
+        values: "3600x200"
+    promql_expr_test:
+      - expr: agent_loop:issues_within_two_rounds:ratio_7d
+        eval_time: 12h
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 12h
+        alertname: AgentLoopRoundsBelowTarget
+        exp_alerts: []
+  - interval: 5m
+    name: W1 healthy — ten of twelve queued issues left the queue within 4 hours reads 0.8333 and stays silent
+    input_series:
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="400",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="401",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="402",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="403",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="404",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="405",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="406",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="407",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="408",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="409",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="410",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="411",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+    promql_expr_test:
+      - expr: agent_loop:queued_within_4h:ratio_7d
+        eval_time: 24h
+        exp_samples:
+          - labels: 'agent_loop:queued_within_4h:ratio_7d{project="homelab"}'
+            value: 0.8333333333333334
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: AgentLoopQueueWaitBelowTarget
+        exp_alerts: []
+  - interval: 5m
+    name: W2 below target — five of ten queued issues waited six hours and the alert fires after its six hours
+    input_series:
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="400",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="401",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="402",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="403",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="404",label="agent/queued"}'
+        values: "_x12 1x11 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="405",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="406",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="407",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="408",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="409",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: AgentLoopQueueWaitBelowTarget
+        exp_alerts: []
+      - eval_time: 24h
+        alertname: AgentLoopQueueWaitBelowTarget
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              project: homelab
+            exp_annotations:
+              summary: 'Less than 60 % of the issues queued on homelab in the last 7 days left the queue within 4 hours — below the KPI target'
+              description: 'agent_loop:queued_within_4h:ratio_7d{project="homelab"} is 50% (target: at least 60 %; at least 10 issues carried agent/queued in the 7 d). An issue counts as waiting for every 5 minutes it carries agent/queued, whatever holds it (the WIP cap, a footprint hold, a blockedBy edge). Check: (1) sum by (number) (count_over_time(github_agent_issue{repo="homelab",label="agent/queued"}[7d:5m])) / 12 > 4 names the issues and their hours; (2) the scan report''s hold line for each; (3) AgentQueueStalled for a wedged dispatcher. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+  - interval: 5m
+    name: W3 thin — nine queued issues are under the floor and stay silent
+    input_series:
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="400",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="401",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="402",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="403",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="404",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="405",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="406",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="407",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+      - series: 'github_agent_issue{job="github-exporter",owner="teststuffstash",repo="homelab",number="408",label="agent/queued"}'
+        values: "_x12 1x71 stale"
+    promql_expr_test:
+      - expr: agent_loop:queued_within_4h:ratio_7d
+        eval_time: 24h
+        exp_samples: []
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: AgentLoopQueueWaitBelowTarget
+        exp_alerts: []
