@@ -125,3 +125,75 @@ tests:
                 node_exporter's textfile dir /var/lib/prometheus/node-exporter/router-wangate-*.prom.
                 Re-run ansible/pve-router-killswitch.yml to reassert the units.
       - { eval_time: 14m, alertname: RouterPairMasterCount, exp_alerts: [] }
+
+  # RouterMasterWanDark — the 2026-10-08 event replayed (docs/incidents/2026-10-08-carp-maintenance-
+  # not-left.md). Minute 0 = 19:35Z. 19:40Z (minute 5): pve takes MASTER, its WAN port enp6s0 has no
+  # cable (carrier 0). 04:46Z (minute 551): nx-02 is MASTER again. Pending at 19:40Z, firing from
+  # 19:42Z to 04:45Z, quiet at 04:47Z; RouterPairMasterCount stays quiet throughout (one master).
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '0x4 1x545 0x19'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '1x4 0x545 1x19'
+      - series: 'node_network_carrier{job="pve-node",host="pve",device="enp6s0"}'
+        values: '0x570'
+      - series: 'node_network_carrier{job="pve-node",host="nx-02",device="eno2"}'
+        values: '1x570'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="pve",vmid="9171"}'
+        values: '0+60x570'
+      - series: 'router_node_wangate_heartbeat_seconds{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '0+60x570'
+    alert_rule_test:
+      - { eval_time: 4m, alertname: RouterMasterWanDark, exp_alerts: [] }
+      - { eval_time: 6m, alertname: RouterMasterWanDark, exp_alerts: [] }
+      - eval_time: 7m
+        alertname: RouterMasterWanDark
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: none, job: pve-node, host: pve, vmid: "9171" }
+            exp_annotations:
+              summary: "Router MASTER on pve (vmid 9171) has no WAN carrier — the LAN has no internet"
+      - eval_time: 550m
+        alertname: RouterMasterWanDark
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: none, job: pve-node, host: pve, vmid: "9171" }
+            exp_annotations:
+              summary: "Router MASTER on pve (vmid 9171) has no WAN carrier — the LAN has no internet"
+      - { eval_time: 552m, alertname: RouterMasterWanDark, exp_alerts: [] }
+      - { eval_time: 300m, alertname: RouterPairMasterCount, exp_alerts: [] }
+
+  # RouterMasterWanDark stays quiet when the BACKUP's WAN port is the dark one (pve before its WAN
+  # cable went in, 2026-10-09 11:13Z) and when both ports have carrier.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '0x15'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '1x15'
+      - series: 'node_network_carrier{job="pve-node",host="pve",device="enp6s0"}'
+        values: '0x7 1x7'
+      - series: 'node_network_carrier{job="pve-node",host="nx-02",device="eno2"}'
+        values: '1x15'
+    alert_rule_test:
+      - { eval_time: 5m, alertname: RouterMasterWanDark, exp_alerts: [] }
+      - { eval_time: 12m, alertname: RouterMasterWanDark, exp_alerts: [] }
+
+  # RouterMasterWanDark fires when the MASTER's WAN port exports NO carrier series at all
+  # (node_exporter omits the series for an administratively-down port): firing at 2m.
+  - interval: 1m
+    input_series:
+      - series: 'router_node_carp_master{job="pve-node",host="pve",vmid="9171"}'
+        values: '0x15'
+      - series: 'router_node_carp_master{job="pve-node",host="nx-02",vmid="9170"}'
+        values: '1x15'
+      - series: 'node_network_carrier{job="pve-node",host="pve",device="enp6s0"}'
+        values: '1x15'
+      - series: 'node_network_carrier{job="pve-node",host="nx-02",device="eno1"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RouterMasterWanDark
+        exp_alerts:
+          - exp_labels: { severity: critical, triage: none, job: pve-node, host: nx-02, vmid: "9170" }
+            exp_annotations:
+              summary: "Router MASTER on nx-02 (vmid 9170) has no WAN carrier — the LAN has no internet"
