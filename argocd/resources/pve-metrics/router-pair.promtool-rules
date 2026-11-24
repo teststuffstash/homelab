@@ -32,3 +32,12 @@ groups:
           summary: "Router WAN gate silent{{ with $labels.host }} on {{ . }}{{ end }} — the pair's master count is unreadable"
           description: >-
             A router node's WAN gate has not written its heartbeat for 2+ minutes, or fewer than the pair's two gates report at all. The gate is what holds a non-master's WAN down and what RouterPairMasterCount reads, so both are blind. On the hypervisor: `systemctl status router-wangate@<vmid>` and the gate log in /var/log/router-killswitch/; node_exporter's textfile dir /var/lib/prometheus/node-exporter/router-wangate-*.prom. Re-run ansible/pve-router-killswitch.yml to reassert the units.
+      - alert: RouterMasterWanDark
+        expr: >-
+          router_node_carp_master{job="pve-node"} == 1
+          unless on(host) (node_network_carrier{job="pve-node", host="nx-02", device="eno2"} == 1
+          or node_network_carrier{job="pve-node", host="pve", device="enp6s0"} == 1)
+        for: 2m
+        labels: {severity: critical, triage: none}
+        annotations:
+          summary: "Router MASTER on {{ $labels.host }} (vmid {{ $labels.vmid }}) has no WAN carrier — the LAN has no internet"

@@ -442,7 +442,8 @@ with its expected output. The body carries no rows table.
 ### Both shapes
 
 The bullets that name rows (`Touches` naming the `rule(…)` test file, "you state the rows",
-"quote before you author", the `⚑ gap` flag) bind a `spec` body; every other bullet binds both.
+"quote before you author", "read every row the body touches", the `⚑ gap` flag) bind a `spec`
+body; every other bullet binds both.
 
 - The machine block goes through `python3 agents/issue_body.py set … < body > final` and the
   gate `python3 agents/issue_body.py json < final` (exit 2 ⇒ fix, never post) — README §Authoring
@@ -475,6 +476,17 @@ The bullets that name rows (`Touches` naming the `rule(…)` test file, "you sta
   patch names ignored, its input cells and the requirement prose must decide every expected cell.
   Where they do not, `## Spec changes` carries the missing input column or prose clause, and the
   body does not call that row unchanged.
+- **Read every row the body touches, without its description.** Before a `spec` body is written,
+  give the reading of "Quote before you author" (description covered, fixture and patch names
+  ignored, the row's input cells and the requirement prose must decide every expected cell) to:
+  (a) each row the body authors; (b) each existing row whose expected cell the body changes;
+  (c) every other row already on a requirement the body adds rows or prose to, at the base. The
+  requirement prose is the text of the requirement's own section on the page, nothing the
+  section points at: a value only another file holds (a world file, a fixture) decides nothing
+  until the body writes it. For (a) and (b), a deciding input that is in neither is written
+  into the body: the missing input column or prose clause. For (c), a row the new rows or prose
+  leave undecided is named in the body with the same edit, and that row's file is in
+  `Touches`.
 - **An exception names the universal it breaks.** When a row adds an exception to a universal
   sentence elsewhere (a sibling's Deliverable, requirement prose, a glossary row), the body names
   that sentence's edit and its file is in `Touches`.
