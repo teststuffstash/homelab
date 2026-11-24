@@ -106,7 +106,7 @@ issue, evidence), the canonical issue reads `open` and no read errored.
 | open matched work covers it | fake-github | matched issue + evidence | issue open | covered_by_existing_work | no |
 | verified needs its own evidence | fake-github | `verified`, evidence `[]` | — | insufficient_evidence | no |
 | accepted new work is prepared | fake-github | `new_work_needed`, accepted, canonical issue, evidence | canonical open | new_work_needed | yes |
-| ⚖ a fix landing after acceptance holds the queue | fake-github | `new_work_needed`, accepted at T | related PR merged after T | insufficient_evidence | no |
+| ⚖ a fix landing after acceptance holds the queue | fake-github | `new_work_needed`, accepted at T, canonical issue, evidence | canonical open, related PR merged after T | insufficient_evidence | no |
 
 ## RETRO-ACCEPT-QUEUE
 
@@ -126,14 +126,14 @@ separately: publication is not disposition, disposition is not dispatch.
 
 **World: [local-store](worlds/README.md)** with GitHub stubbed.
 
-| description | world | decision | issue_state | apply | action? | labels_written? |
-|---|---|---|---|---|---|---|
-| ⚖ an unaccepted report cannot queue | local-store | none | open | yes | skip | none |
-| plan only | local-store | accepted canonical | open | no | queue | none |
-| accepted canonical issue queues | local-store | accepted canonical | open, no `agent/*` | yes | queue | `agent-fix`, `agent/queued` |
-| ⚖ an existing hold is preserved | local-store | accepted canonical | open, `agent/blocked` | yes | queue | none |
-| an invalid batch refuses before creation | local-store | accepted new work, `--batch` closed | — | yes | create-and-queue | none (refused) |
-| ⚖ new work cannot be a Goal | local-store | accepted new work labelled `task/goal` | — | no | refused | none |
+| description | world | decision | issue_state | touches | apply | action? | labels_written? | error? |
+|---|---|---|---|---|---|---|---|---|
+| ⚖ an unaccepted report cannot queue | local-store | none | open | — | yes | skip | none | — |
+| plan only | local-store | accepted canonical | open | yes | no | queue | none | — |
+| accepted canonical issue queues | local-store | accepted canonical | open, no `agent/*` | yes | yes | queue | `agent-fix`, `agent/queued` | — |
+| ⚖ an existing hold is preserved | local-store | accepted canonical | open, `agent/blocked` | yes | yes | queue | none | — |
+| an invalid batch refuses before creation | local-store | accepted new work, `--batch` closed, origin_issue: none | — | — | yes | create-and-queue | none | `batch must be an open retro-batch container` |
+| ⚖ new work cannot be a Goal | local-store | accepted new work labelled `task/goal` | — | — | no | — | none | `acceptance cannot manufacture Goal or lifecycle labels` |
 
 ### Grammar sites outside the shared parser
 

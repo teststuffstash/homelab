@@ -22,7 +22,7 @@ The fixture worlds' names are fixture names, not production ones: there the buck
 | `fake-github` | `agents/retro-activity-test.py`, `agents/retro-findings-test.py` (same suite) | the collector's `api()` / the reconciler's `fetch` replaced by in-memory answers; no network |
 | `rank-ledger` | [`retro-rank-snapshot-exclusion`](../../../../agents/replay/fixtures/retro-rank-snapshot-exclusion/) | a small `_ledger.jsonl` (one `snapshot: true` row that would rank first, int and array `rounds`), `gh` served from a PATH stub — the legacy ranker only |
 
-The rows after `prom-instant` are the old members' fixture states: the comparison runs in them, and a
+The rows other than `prom-instant` and `reports` are the old members' fixture states: the comparison runs in them, and a
 requirement page that still names one is not yet tested from a recorded world.
 
 Production state these worlds stand in for: the bucket `agent-transcripts` on Garage (`_retro/`,
