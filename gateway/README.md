@@ -112,6 +112,26 @@ beside its parser and the old image crash-looped the single Recreate replica for
 from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
 policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
 
+## KPIs
+
+The gateway's own numbers, each with a target. Each is a recorded series in the
+`agent-gateway-kpi` group of `argocd/resources/agent-gateway/prometheusrule.yaml`. An alert
+(`triage: dig`) fires when a series has been under its target for an hour; the deep dig reads
+it, and its finding is an input of the island's intake sitting.
+
+| KPI | series | target | when named (7 d to 2026-11-24T05:13Z) | alert |
+|---|---|---|---|---|
+| real requests answered without a 5xx | `gateway:real_requests_success:ratio_7d` | at least 0.99 | 1 (0 of 7 020) | `GatewayRequestSuccessBelowTarget` |
+| session requests dispatched, the prober's left out | `gateway:sessions_dispatched:ratio_7d` | at least 0.90 | 0.963 (534 of 554) | `GatewayDispatchShareBelowTarget` |
+
+A series has no sample while its floor is not met (200 real requests, 50 session requests, in
+the 7 d). A target moves in the rule and in this table in one PR.
+
+Both shares read slightly high after pod rolls: a counter series is born at its first sample,
+and `increase()` does not count that sample. When named, the 7 d held 23 gateway pods; 4
+deferred and 58 dispatched session requests were uncounted, so the dispatched share was about
+0.961 with them, and no 5xx series existed at all.
+
 ## Implementation notes the specs do not state
 
 - The OpenAI dialect is served under `/openai/v1/*` (the contract) **and** `/api/v1/*` (the
