@@ -294,6 +294,8 @@ sees to its hypervisor's node_exporter textfile — `router_node_carp_master`, `
 a heartbeat — so the pair is watched from OUTSIDE the guests. `RouterPairMasterCount` (critical,
 1 m): masters ≠ 1 — 2 is split-brain, 0 is nobody routing (a failover's ~4 s dip rides under the
 `for:`). `RouterWanGateSilent`: a stale heartbeat or fewer than two gates — the count unreadable.
+`RouterMasterWanDark` (critical, 2 m): the MASTER's hypervisor has no carrier on its WAN port —
+node_exporter's own `node_network_carrier` for `eno2` (nx-02) / `enp6s0` (pve), no gate export.
 
 **The split-brain drill** (2026-09-30, detector first): an ebtables rule on nx-02
 (`ebtables -I FORWARD -o tap9170i0 -p IPv4 --ip-proto 112 -j DROP`) cut the adverts into nx-02's
@@ -570,7 +572,8 @@ the hypervisor's flooding, not the node's config.
   while BACKUP (flood-off script, kill switch stays retired) — no blip, which is the shape for any future
   gate change. The dead-man fired at 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, pve dark at :46, ~9 s
   gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307 → homelab#3711) is now
-  unblocked — the gate's carrier export can ride the same BACKUP-side restart.
+  unblocked — the gate's carrier export can ride the same BACKUP-side restart. (2026-11-24, homelab#3711:
+  built on node_exporter's `node_network_carrier` instead — no gate change and no restart is coming.)
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
   database). The inert drills proved the machinery, not the service layer — the next evidence is
