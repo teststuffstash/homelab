@@ -838,3 +838,103 @@ spec:
           annotations:
             summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
             description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last. If that marker is MISSING, check `time() - process_start_time_seconds{job=\"prometheus-pushgateway\"}` before concluding anything: a gateway younger than the pod means its emptyDir store was destroyed with its last pod, so the markers for pods older than it are gone and this alert is deliberately degraded for them until they end (homelab#353)."
+    # ── agent-loop-kpi (homelab#3728): the loop's own numbers, each a 7-day series per project with a target ──
+    # rides_ended counts worker pods (agent-<project>-issue-<n>-r<round>) that reached Succeeded or Failed in the 7 d
+    # (the denominator of the first KPI). rides_unrecorded counts those with no agent_run_total series of the same
+    # project, issue and round; target at most 1 (the bar of AgentRunBudgetCapHits). issues_within_two_rounds is the
+    # share of issues with a worker run pushed in the 7 d that have at most two worker rounds; target at least 0.60.
+    # queued_within_4h is the share of issues that carried agent/queued in the 7 d for at most 48 five-minute steps
+    # (4 h); target at least 0.60. Sizing (read 2026-11-24T06:39Z): unrecorded homelab 0 of 57, oracle-fleet 0 of 23
+    # (the 14-day replay peaked at 4 on homelab); rounds share homelab 0.838, oracle-fleet 0.833 (replay: homelab
+    # under 0.60 in 139 of 276 steps); queue share homelab 0.907, oracle-fleet under the floor (replay: homelab under
+    # 0.60 in 84 of 277 steps). Floor: a share has no sample under 10 issues in the 7 d. Hold times: for 2h on the
+    # count (hourly group), 6h on the shares. triage: dig, not now — a 7-day number is slow by construction; acute
+    # cases are AgentRunInfraDeathBurst and AgentQueueStalled.
+    # What the series do not see: a round is a worker round (reviewer runs push no agent_run_total); the rounds share
+    # does not ask whether an issue is done; the rounds share has no sample at an hourly evaluation that lands on a
+    # Pushgateway roll (one scrape without agent_run_total) and its for: restarts, the unrecorded count is bridged
+    # by last_over_time(...[1h]) and the share is not; a ride is matched by project, issue and round, so a round
+    # dispatched twice shares one pod name and one record key; queue time is every 5 minutes an issue carries
+    # agent/queued whatever holds it, and a failed exporter poll leaves those minutes uncounted; the exporter lists
+    # the first 50 open agent/* issues per repo, so a queued issue past that page is not counted.
+    - name: agent-loop-kpi
+      interval: 1h
+      rules:
+        - record: agent_loop:rides_ended:count_7d
+          expr: |
+            count by (project) (
+              count by (project, issue, round) (
+                label_replace(label_replace(label_replace(
+                  max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                  "project", "$1", "namespace", "(.+)"),
+                  "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                  "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+              )
+            )
+        - record: agent_loop:rides_unrecorded:count_7d
+          expr: |
+            count by (project) (
+                count by (project, issue, round) (
+                  label_replace(label_replace(label_replace(
+                    max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                    "project", "$1", "namespace", "(.+)"),
+                    "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                    "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+                )
+              unless on (project, issue, round)
+                last_over_time(agent_run_total[1h])
+            )
+            or
+            agent_loop:rides_ended:count_7d * 0
+        - record: agent_loop:issues_within_two_rounds:ratio_7d
+          expr: |
+            (
+                count by (project) (
+                    (count by (project, issue) (count by (project, issue, round) (last_over_time(agent_run_total{role="worker"}[1h]))) <= 2)
+                  and on (project, issue)
+                    (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)
+                )
+              or
+                count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) * 0
+            )
+            /
+            (count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) >= 10)
+        - record: agent_loop:queued_within_4h:ratio_7d
+          expr: |
+            (
+                count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)")) <= 48)
+              or
+                count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) * 0
+            )
+            /
+            (count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) >= 10)
+        - alert: AgentRidesUnrecorded
+          expr: |
+            agent_loop:rides_unrecorded:count_7d > 1
+          for: 2h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: '{{ $value }} worker rides on {{ $labels.project }} ended in the last 7 days without a run record — above the KPI target (at most 1)'
+            description: 'agent_loop:rides_unrecorded:count_7d{project="{{ $labels.project }}"} is {{ $value }} (target: at most 1). A ride counts when its pod agent-<project>-issue-<n>-r<round> reached Succeeded or Failed in the 7 d and no agent_run_total series carries the same project, issue and round — the cost boards, the ledger and the retro never saw it. Check: (1) the expression of the record rule without its outer count names each issue and round; (2) the issue''s timeline comment for that round (a strike, a re-dispatch); (3) s3://agent-transcripts/<project>/issue-<n>/ for a worker-r<round>-* prefix — none means the pod died before its finalize step. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+        - alert: AgentLoopRoundsBelowTarget
+          expr: |
+            agent_loop:issues_within_two_rounds:ratio_7d < 0.6
+          for: 6h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'Less than 60 % of the issues {{ $labels.project }} worked in the last 7 days were done within two worker rounds — below the KPI target'
+            description: 'agent_loop:issues_within_two_rounds:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues with a worker run in the 7 d). A round after the first is a PR that came back: changes requested, or a red check. Check: (1) count by (issue) (agent_run_total{project="{{ $labels.project }}",role="worker"}) > 2 names the issues; (2) the reviews on their PRs name what came back; (3) the escape records of the island intake receipts for the same PRs. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+        - alert: AgentLoopQueueWaitBelowTarget
+          expr: |
+            agent_loop:queued_within_4h:ratio_7d < 0.6
+          for: 6h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'Less than 60 % of the issues queued on {{ $labels.project }} in the last 7 days left the queue within 4 hours — below the KPI target'
+            description: 'agent_loop:queued_within_4h:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues carried agent/queued in the 7 d). An issue counts as waiting for every 5 minutes it carries agent/queued, whatever holds it (the WIP cap, a footprint hold, a blockedBy edge). Check: (1) sum by (number) (count_over_time(github_agent_issue{repo="{{ $labels.project }}",label="agent/queued"}[7d:5m])) / 12 > 4 names the issues and their hours; (2) the scan report''s hold line for each; (3) AgentQueueStalled for a wedged dispatcher. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
