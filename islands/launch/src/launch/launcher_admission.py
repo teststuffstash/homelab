@@ -165,9 +165,9 @@ class LauncherAdmission:
         admission = gateway.admit(argv)
         if admission.rc == 0:
             code = 0
-        elif admission.rc == 3:
+        elif admission.rc in (2, 3):  # a refusal before the request / a fail-closed: the fallback exit applies
             fallback = knobs.get("AGENT_GATEWAY_FALLBACK_EXIT") or ""
-            code = int(fallback) if _INT.fullmatch(fallback) else 1
+            code = int(fallback) if _INT.fullmatch(fallback) else (2 if admission.rc == 2 else 1)
         else:
             code = admission.rc if admission.rc == 1 else 2
         if code != 0:

@@ -189,3 +189,18 @@ def test_launcher_unusable_dispatch(case_id: str) -> None:
         assert [d.path for d in gw.deletes()] == [f"/sessions/{world.get('body', 'session', 'id')}"] * n
     if whole:
         assert "placeholder" not in result.admission.outputs["GW_DEFER_REASON"]  # the body is never printed
+
+
+@pytest.mark.parametrize("fallback,expected", [("75", 75), (None, 2)])
+def test_helper_refusal_takes_the_fallback_exit(fallback, expected) -> None:
+    """Unlabelled: a refusal by the helper (rc 2: a canary with no `@`) is turned into the fallback exit
+    when one is set, and stays 2 when not."""
+    knobs = {"AGENT_GATEWAY_CANARY": "foo"}
+    if fallback:
+        knobs["AGENT_GATEWAY_FALLBACK_EXIT"] = fallback
+    stack = load_stack_world("stack-platform").get("row")
+    gw = Gateway(None, None)
+    adm = LauncherAdmission(gw, lambda _p: OK_TOKEN, lambda _sa: MINTED)
+    result = adm.ask(knobs, stack, "platform-repo", "issue-1", round="1", run="r")
+    assert result.admission.rc == 2 and gw.posts() == []
+    assert result.exit == expected
