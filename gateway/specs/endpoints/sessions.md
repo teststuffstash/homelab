@@ -811,7 +811,8 @@ $80, thresholds $12.80 / $32 / $64. A reviewer ride (or a worker's `tier: heavy`
 0.50 / 2.50 / 0.05 / 0.625, no peak row, $15 a month → 5h threshold $2.40. Legend: `ride` = the
 arranged ride's role and the usage its answer carried (`in` / `out` / `cache_read` / `cache_write`,
 `M` = 10⁶, `K` = 10³); `at` = when it rode (`T0` = a peak hour, `T0 + 2 h` = off-peak); `then` =
-seconds that pass before the ask; `rail` / `tier` = the body's. The draws: 30M in + 3.2M out at
+seconds that pass before the ask; `rail` / `tier` = the body's, a worker's (the asking role in every
+row, whichever role the arranged ride had). The draws: 30M in + 3.2M out at
 peak = $12.84 (≥ $12.80), 3.1M out = $12.72, off-peak = $6.42; 1000M cache_read = $6.00 (not the
 input rate's $300); 1000M cache_write = $0; haiku 4M in + 0.2M out = $2.50 at the tier row (≥ $2.40;
 the base row would be $0.50); 90K in + 1M out = $0.509 at the base row (the tier row would be $2.545).
@@ -844,7 +845,7 @@ T0 + 2518200.
 
 #### Not in the catalog
 
-Legend: `refresh` = the world's Go catalog refreshed against the fake vendor before the ask
+The worker's body. Legend: `refresh` = the world's Go catalog refreshed against the fake vendor before the ask
 (`catalog-retired` = the catalog, models.dev, without `deepseek-v4.1-flash` — §F3 replayed;
 `docs-retired` = the limits answer without `claude-haiku-5-5`'s row; `none (a fresh store)` = no
 snapshot exists and no refresh has run); `retry_after_s?` = the next scheduled refresh, 21600 s
@@ -1801,7 +1802,9 @@ deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, 
 
 #### What the log says
 
-Legend: `holds?` = a fragment some log line of the call holds; `never_holds?` = a value no line holds.
+Legend: `holds?` = a fragment some log line of the call holds — a cell reading `exactly one line: <line>`
+claims more: the call wrote exactly one control-plane line, and that line is `<line>`, whole;
+`never_holds?` = a value no line holds.
 
 | description | world | sequence | holds? | never_holds? |
 |---|---|---|---|---|
