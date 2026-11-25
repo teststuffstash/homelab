@@ -680,8 +680,9 @@ line at DEBUG carries an identity value.
 #### A failed poll leaves the last report standing
 
 Legend: `last_report` = the snapshot before the poll (`accepted` = one accepted poll, 5 s earlier;
-`none`); `answer` as above (`(the store)` = the endpoint is never contacted); `outcome?` = the
-counted outcome per variant; `verdict?` after.
+`none`); `answer` as above (`(the store) …` = the endpoint is never contacted: the poll stops at
+the credential store, in the state the variant names); `outcome?` = the counted outcome per
+variant; `verdict?` after.
 
 | description | last_report | answer | outcome? | verdict? |
 |---|---|---|---|---|
@@ -689,7 +690,7 @@ counted outcome per variant; `verdict?` after.
 | a 429 or 500 is an http error, nothing accepted | `none` | `429 / 500` | `upstream-http-error` | `quota-unknown` |
 | an unreachable endpoint and a timeout are told apart | `none` | `connect error / read timeout` | `upstream-unreachable / upstream-timeout` | `quota-unknown` |
 | a non-JSON, wrong-type or oversize body is refused ⚖ | `none` | `text/html / application/json that is not JSON / 70 KiB (bound 64 KiB)` | `upstream-content-type` | `quota-unknown` |
-| a store that does not answer is transient; a recovery marker is unresolved | `none` | `(the store)` | `credential-transient / credential-unresolved` | `quota-unknown` |
+| a store that does not answer is transient; a recovery marker is unresolved | `none` | `(the store) the lock raises / a persisted refreshing marker` | `credential-transient / credential-unresolved` | `quota-unknown` |
 
 A usage 401 alone is no revocation evidence (the spike §Refresh and headroom implications): it is
 counted, never a credential verdict.
@@ -869,7 +870,7 @@ Legend: `sequence` = what happens to the store, in order; `result?` = the durabl
 | seed once | `an empty database, a mounted seed` | `ready` | `seed` | 1 |
 | seed unchanged is not imported again | `rotate, restart on the same seed bytes` | `ready` | `rotation` | 0 |
 | changed seed replaces ⚖ | `rotate and leave a refreshing marker, reseed, restart` | `ready` | `reseed` | 1 |
-| restart recovers state | `revoke, restart` | `revoked` | `rotation` | 0 |
+| restart recovers state | `rotate, revoke, restart` | `revoked` | `rotation` | 0 |
 | crash between exchange and save ⚖ | `the child exits in the exchange; the parent acquires; reseed; acquire` | `refreshing, then credential-recovery-required, then ready after the reseed` | `reseed` | 1 |
 | memory fallback is refused | `a :memory: store path` | `credential-store-unavailable` | — | — |
 
@@ -895,7 +896,7 @@ Legend: `store` = the fault injected (`save #1` = the marker write, `save #2` = 
 
 | description | store | exchange | result? | exchanges? | state? |
 |---|---|---|---|---|---|
-| a failed marker write prevents the exchange | `save #1 raises` | — | `credential-store-unavailable, then the rotation` | `0, then 1` | `ready, rotated` |
+| a failed marker write prevents the exchange | `save #1 raises` | `the rotation` | `credential-store-unavailable, then the rotation` | `0, then 1` | `ready, rotated` |
 | a failed rotation write blocks restart | `save #2 raises` | `the rotation` | `credential-store-unavailable, then credential-recovery-required` | 1 | `refreshing` |
 | an ambiguous save reloads the committed rotation | `save #2 commits, then raises` | `the rotation` | `credential-store-unavailable, then the rotation` | 1 | `ready, rotated` |
 | a lock failure is the store class | `the lock raises` | — | `credential-store-unavailable` | 0 | `ready, unchanged` |
