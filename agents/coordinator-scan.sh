@@ -2132,7 +2132,7 @@ EOF_BUSYFPS
     # non-default base": the mirror hazard is agent-runtime#32 (an ordinary stacked PR closing
     # too EARLY), and the goal/ prefix is the same key arming already trusts to carry the
     # ruleset. Design: issue-authoring.md FU-143 section. Probe failures skip LOUDLY (rule #6).
-    c6g=""; c6g_nums=""
+    c6g=""; c6g_nums=""; goalheld_nums=""
     # ⚠ Candidate set is DELIBERATELY wider than $inprog: a goal child that lands cleanly in ONE
     # round ends in `agent/review`, not `agent/in-progress` (the scan's review-flip belt moves it
     # at PR-open — MP-T14; historically the launcher performed no such flip). Keying the
@@ -2281,6 +2281,7 @@ EOF_GOALBASED
             # branch merged into the base without citing it, or the base's page was full.
             gown="$(jq -r --arg b "$gbase" --arg p "fix/issue-${gn}-" '[.[] | select(.baseRefName == $b) | select((.headRefName // "") | startswith($p)) | "#\(.number)"] | join(", ")' <<<"$gmerged")" || gown=""
             if [ -n "$gown" ]; then
+              goalheld_nums="${goalheld_nums}${gn} "
               orphans="${orphans}[$repo] ⛔ goal child #${gn} — its OWN branch merged into ${gbase} (${gown}) but the PR does not cite it: finished work, not closed. HELD — close it by hand.\n"
             elif case "$gfull" in *" ${gbase} "*) true;; *) false;; esac; then
               orphans="${orphans}[$repo] ⚠ goal child #${gn} — no merged PR into ${gbase} links it, but that base has ≥100 merged PRs (one page): the closeout window is INCOMPLETE, so a merge older than the page is not seen. Verify by hand.\n"
@@ -5318,8 +5319,10 @@ EOF_GTHEMES_OPEN
             # with a closeout unit, never a phantom: this belt's merged probe below is the repo-wide
             # 40 newest-created, which a days-old merge is outside (homelab#3309 — held only while
             # a sibling PR's mention stayed in range, then exposed to a re-queue of merged work).
+            # Same for `goalheld_nums`: a child whose OWN branch merged into its goal base uncited —
+            # the goal-child leg reports it HELD, so the belt must not re-queue it.
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-} ${c6g_nums:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-} ${c6g_nums:-} ${goalheld_nums:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n

@@ -7,7 +7,8 @@
 # to hold on, and the next tick with an in-progress issue would have re-queued finished work.
 #
 # THE CONTRACT. #90 (in `c6g_nums`, no open PR, no merged mention in the window) is left alone —
-# no label write, no report: the closeout unit owns it. #80, the same shape WITHOUT a goal-base
+# no label write, no report: the closeout unit owns it. #91 (in `goalheld_nums`: its own branch
+# merged into the base uncited, reported HELD by the goal-child leg) is left alone the same way. #80, the same shape WITHOUT a goal-base
 # merge, is still reconciled exactly as in `review-phantom-belt` (the positive control).
 name: review-phantom-belt-goal-child
 mode: actions
