@@ -8,6 +8,7 @@ parameter list (`class` is `source_class` here — a column cannot be a Python k
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -25,7 +26,7 @@ from agent_gateway.wire import WireDeclarationError, parse_declarations
 from ._catalog_rows import T0, at_offset
 from ._catalog_world import catalog_doc, limits_doc
 from ._codex_rows import row, verdicts
-from ._codex_world import CODEX_BASE, CODEX_POLICY
+from ._codex_world import CODEX_BASE, CODEX_POLICY, creds
 from .conftest import GO_KEY, attach_json, given, quiet, rule, when, world
 from .test_codex_usage_poll import usage_doc
 
@@ -260,7 +261,7 @@ ALLOW_ROWS = [
     pytest.param("`[slug]`", '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}`',
                  '`{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}`', "loads", id="an allowlisted key is kept at any depth and in a list"),
     pytest.param(UNSET, "the observed usage shape", "every string as its length", "—", id="no declarations file keeps no string ⚖"),
-    pytest.param("`[slug]`", '`{"slug": "sk-ant-oat-FAKE…"}`', "the value as its length", "loads",
+    pytest.param("`[slug]`", '`{"slug": "sk-ant-oat-FAKE0123456789"}` (credential-shaped, held by no rail)', "the value as its length", "loads",
                  id="an allowlisted value that matches a credential pattern is still withheld ⚖"),
     pytest.param("`[slug]`", '`{"slug": "dummy-account"}`', "the account id as its length", "loads",
                  id="an allowlisted value equal to the account id is kept as its length ⚖"),
@@ -285,7 +286,12 @@ async def test_the_account_classs_allowlist(tmp_path, settings, secrets, store, 
         verdicts(stored=("every string as its length" if stored else "a string kept", expected_stored), load=("—", expected_load))
         return
     keys = [k.strip() for k in keep_keys.strip("`[]").split(",") if k.strip()]
-    text = answer.strip("`").replace("…", "0123456789")
+    text, _, note = answer.removeprefix("`").partition("`")  # the cell: the JSON, then what the row says about a value
+    if "held by no rail" in note:
+        held = {base64.b64decode(v).decode() for sec in secrets.secrets.values() for v in sec["data"].values()}
+        held |= {v for c in creds(clock) for v in (c.access_token, c.refresh_token)} | {GO_KEY}
+        with given(f"the answer's value is {note.strip(' ()')}: no credential of the world equals it"):
+            assert held and not any(v in text for v in held), "the row's value is a credential the world holds"
     with when(f"the codex-models probe reads an answer with keep_keys {keys}"):
         app = await _probe_answer(tmp_path, settings, secrets, store, clock, codex_store, exchange, keys, text)
     stored = json.loads(app.state.store.wire_get("codex-models")["body"])
