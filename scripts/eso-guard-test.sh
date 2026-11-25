@@ -19,6 +19,15 @@ fails=0; n=0
 ok()  { n=$((n + 1)); echo "  ok $*"; }
 bad() { n=$((n + 1)); echo "  FAIL $*"; fails=$((fails + 1)); }
 
+# Name-only stubs of the three ESO CRDs: kyverno CLI needs them to map kind → resource. Written here, not
+# committed — a CRD-shaped file in the tree is a cluster-scoped power object to the iac-sentinel.
+for spec in ExternalSecret:externalsecrets:Namespaced:v1 PushSecret:pushsecrets:Namespaced:v1alpha1 \
+            ClusterSecretStore:clustersecretstores:Cluster:v1; do
+  IFS=: read -r kind plural scope ver <<<"$spec"
+  printf -- '---\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata: {name: %s.external-secrets.io}\nspec:\n  group: external-secrets.io\n  scope: %s\n  names: {kind: %s, plural: %s}\n  versions:\n    - name: %s\n      served: true\n      storage: true\n      schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}\n' \
+    "$plural" "$scope" "$kind" "$plural" "$ver"
+done > "$TMP/crds.yaml"
+
 yq 'select(.metadata.name == "eso-infisical-guard")' "$POLICY" > "$TMP/infisical.yaml"
 yq 'select(.metadata.name == "eso-clusterstore-scoped")' "$POLICY" > "$TMP/scoped.yaml"
 for p in infisical scoped; do
@@ -26,7 +35,7 @@ for p in infisical scoped; do
 done
 
 verdict() {  # verdict <policy-file> <resource-file> → $GOT = pass|fail|skip|error, kyverno output in $KOUT
-  KOUT="$(kyverno apply "$1" --crd-paths "$FIX/crds.yaml" --cluster-wide-resources --resource "$2" 2>&1)"
+  KOUT="$(kyverno apply "$1" --crd-paths "$TMP/crds.yaml" --cluster-wide-resources --resource "$2" 2>&1)"
   local sum p f e
   sum="$(grep -oE 'pass: [0-9]+, fail: [0-9]+, warn: [0-9]+, error: [0-9]+' <<<"$KOUT" | head -1)"
   [ -n "$sum" ] || { GOT=error; return; }
