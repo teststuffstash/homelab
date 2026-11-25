@@ -35,7 +35,7 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
   OPERATOR, recommendation first:
   1–4 DONE or moved 2026-11-25 (TICK-LOG 11-25): #3721 merged; `goal/3656-scan-checkpoint-b` cut and its five children queued;
      #3482 was already cut by intake and assembled 11-24 (#3739) — it was never held; #2588 → #3776 and FU-168/201/147/199/221
-     → #3771–#3775, all inputs of the scan island's intake. STILL OWED: #3722's state was not re-read; **#3480 (launch second
+     → #3771–#3775, all inputs of the scan island's intake. #3722 merged. STILL OWED: **#3480 (launch second
      leg) stays UNCUT on the 11-16 hold — the operator was asked 11-25 whether it is lifted** (seat's read: lift it).
   5. FU-315: wk-metal-02 apiserver refills in ~40 h. Rec: CP role → a 16 GB box (#3695).
   6. FU-297: BACKUP router firmware route. Rec: low-priority gateway via the peer's LAN address.
