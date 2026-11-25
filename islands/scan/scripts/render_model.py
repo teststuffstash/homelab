@@ -12,10 +12,9 @@ in this root).
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-
-import yaml
 
 ISLAND = Path(__file__).resolve().parent.parent
 MODEL = ISLAND / "specs" / "models" / "scan-clause-goal-b.yaml"
@@ -50,7 +49,7 @@ MARKERS = {
 
 
 def load(path: Path = MODEL) -> dict:
-    return yaml.safe_load(path.read_text("utf-8"))
+    return json.loads(path.read_text("utf-8"))
 
 
 def esc(cell: str) -> str:

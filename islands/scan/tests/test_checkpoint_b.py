@@ -425,7 +425,7 @@ def test_a_changed_expectation_changes_the_table_and_fails_against_the_unchanged
     [case] = [c for c in model["cases"] if c["id"] == "goal-checkpoint-b-held"]
     assert case["expect"]["b_this_wake"] == "held"
     case["expect"]["b_this_wake"] = "fires-unmarked"
-    copy.write_text(RENDER.yaml.safe_dump(model, allow_unicode=True, sort_keys=False), "utf-8")
+    copy.write_text(json.dumps(model, ensure_ascii=False, indent=2), "utf-8")
     assert RENDER.table(RENDER.load(copy)) != RENDER.table(RENDER.load())
     page = tmp_path / "page.md"
     page.write_text(f"#### {QUESTION}\n\n{RENDER.table(RENDER.load(copy))}\n", "utf-8")
