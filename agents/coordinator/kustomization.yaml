@@ -68,7 +68,7 @@ configurations:
 
 images:
   - name: registry.teststuff.net/agent-coordinator
-    newTag: 2026.11.23-g703b436ee38d
+    newTag: 2026.11.25-gcac2dc85aa38
   # The WORKER BASE image (agent-base) — the island intake sitting's (island-intake-argo.yaml,
   # homelab#3577): the tag the AgentStack Composition pins (argocd/resources/agentstack/
   # composition.yaml, its `agent-base:` literal). ⚠ ONE LINE, flow style, ON PURPOSE: the

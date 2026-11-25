@@ -547,7 +547,8 @@ An ACCEPTED report from either producer — and only one — sets the two subscr
 `5h`, 10080 → `7d`) — the policy profile decides which series exist, and a profile minute the
 vocabulary lacks renders `other` like any out-of-set label value ⚖. A refused report reaches no
 gauge; a fresh gateway renders no codex series until a report is accepted. The Grafana panels on
-UID `claude-subscription` (the "Codex subscription (gateway headroom)" row) read these series.
+UID `agent-gateway` (the "Subscription headroom" row of the gateway's own dashboard) read these
+series.
 
 Legend: the clock is `now` = 1800000000; `reports` = the reports offered, in order;
 `utilization?` / `reset_seconds?` = the `5h` / `7d` series of each gauge (`absent` = no series).
