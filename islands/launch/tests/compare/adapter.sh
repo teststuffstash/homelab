@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Test-side adapter: stands where `agents/gateway-admit.sh` stands in the comparison's throwaway
 # copy of the replay harness, and defines the three names the `gateway-admit` family's bridge calls.
 # It only translates to and from the Python component (adapter.py): it builds no request and checks
@@ -15,6 +16,7 @@ gw_admit() {
   _out="$(mktemp)"
   _gw_py admit "$_out" -- "$@" || _rc=$?
   # shellcheck disable=SC1090
+  # shellcheck disable=SC1090  # the adapter's own mktemp output
   . "$_out"; rm -f "$_out"
   _GW_SID="$GW_SESSION_ID"; _GW_RELEASED=0
   return "$_rc"
@@ -23,6 +25,7 @@ gw_release() {
   [ -n "$_GW_SID" ] || return 0
   local _out _rel; _out="$(mktemp)"
   _gw_py release "$_out" "$_GW_SID" "$_GW_RELEASED" || true
+  # shellcheck disable=SC1090  # the adapter's own mktemp output
   . "$_out"; rm -f "$_out"
   _GW_RELEASED=1
   return 0
