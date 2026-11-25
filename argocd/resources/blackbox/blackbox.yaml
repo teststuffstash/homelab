@@ -39,6 +39,10 @@ data:
       # PROCESS answered (auth-gate before the stdio child); the outage signature was 5xx/503
       # from HAProxy over dead children. The child-exercising tools/call check is the PROBER
       # (FU-102), which carries credentials; this belt deliberately carries none.
+      # `X-Oracle-Origin: homelab` marks it as OURS: the target is the LAN route, which never
+      # crosses the Cloudflare edge that stamps our traffic (docs/cloudflare.md §origin mark), and
+      # the oracle gateway counts an unstamped request as a stranger's (oracle-fleet#1133). The
+      # module's one consumer is the oracle AgentStack's `slo:` — a second consumer needs its own.
       mcp_post:
         prober: http
         timeout: 10s
@@ -48,6 +52,7 @@ data:
           headers:
             Content-Type: application/json
             Origin: https://mcp.oracle.teststuff.net
+            X-Oracle-Origin: homelab
           body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"blackbox-fu099","version":"1.0"}}}'
           valid_status_codes: [200, 400, 401, 403, 406]
       # Cert expiry of every LAN HTTPS name the router's ACME client owns (the 18 names of
