@@ -33,7 +33,7 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 | Requirement | section | Status |
 |---|---|---|
 | [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3390 (fixture: `gateway-admit` — its 9 rows pass locally in `islands/launch/tests` against `islands/launch/lib/gateway-admit.sh`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island helper does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) |
 | [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
@@ -81,9 +81,9 @@ all empty).
 
 | description | world | args | reply | rc? | outputs? |
 |---|---|---|---|---|---|
-| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
+| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier heavy --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
 | unbound-dispatch | gw-dispatch-unbound | `--role responder --task 'respond homelab#7' --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
-| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
+| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer rail-capacity 120` | 1 | `GW_DEFER_REASON=rail-capacity`, `GW_RETRY_AFTER=120` |
 | http-503 | gw-error | `--role responder --task t --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
 | no-mode | launcher-vars | `--role responder --task t` | — | 2 | — |
 | both-modes | launcher-vars | `--role responder --task t --env-file F --bind a/b/c` | — | 2 | — |
