@@ -453,6 +453,14 @@ body; every other bullet binds both.
   serialises two issues on the same requirement instead of letting their PRs collide.
 - You state the rows, never the process: the worker's recipe (`.agents/fix.yaml`) carries the
   `Spec changes:` heading (rule 1) and the ratchets.
+- **Never fence the touched requirement.** The specs reviewer reads the whole requirement a PR
+  touches, and a finding on a row the item never named still blocks (ADR-155). So no acceptance
+  line and no `## Out of scope` line forbids a row, legend or test change inside the requirement
+  section the item edits — not "no row changes", not a `git diff --name-only` that must print one
+  file. `## Out of scope` names OTHER requirements, other pages and what step 3 left to the
+  operator. An `edit` body whose file is a spec page still lists, in `Touches`, the test file that
+  carries the requirement's `rule("<RULE-ID>")` label, so the round that fixes such a finding is
+  inside the footprint.
 - **The body is for a worker that does what it is told and does not reason** — the cheapest
   model on the rail may ride it. Every acceptance line is an edit, or a command with its expected
   result. No line asks the worker to choose, to measure before it can choose, or to "stop and
