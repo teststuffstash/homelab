@@ -10,7 +10,7 @@ import pytest
 from .world import ISLAND, WORLDS, UnrecordedCall, World, parse_provenance
 
 RECORDER = ISLAND / "scripts" / "record_world.py"
-RECORDED = ["pr-handoff", "pr-board", "pr-merges"]
+RECORDED = ["pr-handoff", "pr-board", "pr-merges", "goal-checkpoint"]
 REPO = "teststuffstash/homelab"
 
 # GitHub's token formats (classic/OAuth/user-to-server/server-to-server/refresh `gh[opsur]_`, fine-grained

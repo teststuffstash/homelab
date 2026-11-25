@@ -37,6 +37,7 @@ the recorder's commit. The recorder is
 | `pr-handoff` | one pull request of `teststuffstash/homelab` as the major handoff reads it, recorded whole | SCAN-HANDOFF-GATE, SCAN-HANDOFF-ARM (from child 3 of the Goal) |
 | `pr-board` | the open pull requests of `teststuffstash/homelab` as the updater reads them, with the per-PR reads, recorded whole | SCAN-UPDATER-PICK, -UNSTRAND, -CONFLICT, -RENOVATE (from child 4 of the Goal) |
 | `pr-merges` | the commits of one pull request of `teststuffstash/homelab` (#3615) as the PR view and the pull-commits read list them, recorded whole: hand-titled two-parent merges beside GitHub-titled ones | the [merge commit](../glossary.md#merge-commit) definition's wire fact; no row |
+| `goal-checkpoint` | Goal #3118 of `teststuffstash/homelab` and its assembly pull request #3270 as the checkpoint decision reads them, recorded whole after the pull request merged; a row's open assembly pull request is a derived element of the recorded open list | SCAN-CLAUSE-GOAL, the trigger (b) hold (from child 2 of the Goal) |
 
 ## Registry worlds (shared by name — `agents/replay/worlds/`)
 
