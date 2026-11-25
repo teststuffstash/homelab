@@ -4,6 +4,7 @@ CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json nu
 CALL gh pr view 200 --repo teststuffstash/homelab --json comments,reviews
 OUT C6G []
 OUT C6G_NUMS []
+OUT GOALHELD []
 OUT ORPHAN [homelab] ⏳ issue #100 — goal child parked `agent/blocked` with NO `blocked-on:` marker on its merged PR #200 (a closeout/human ruling, not a predicate that can resolve): held — a human unparks it (FU-290).
 OUT REACHED: end
 RC 0

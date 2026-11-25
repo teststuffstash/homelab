@@ -19,6 +19,9 @@
 #                      REPORTED (finished work, close by hand), never silent
 # full-page          = the base has a full page (100) of merged PRs and none links the child →
 #                      REPORTED as an incomplete window, never silent
+# mention-beyond-window = a goal-base merged PR only MENTIONS the child (a sibling seam) and is
+#                      older than the repo's newest 40 → reported HELD and recorded in GOALHELD,
+#                      so the agent/review phantom belt cannot re-queue it (#3770 review)
 in-progress        |  |  |  | in-progress
 strong-goal        |  |  |  | strong-goal
 bare-goal          |  |  |  | bare-goal
@@ -31,3 +34,4 @@ review-no-fix      |  |  |  | review-no-fix
 beyond-window      |  |  |  | beyond-window
 own-branch-unlinked|  |  |  | own-branch-unlinked
 full-page          |  |  |  | full-page
+mention-beyond-window|  |  |  | mention-beyond-window

@@ -4,5 +4,6 @@ CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json nu
 CALL gh pr view 200 --repo teststuffstash/homelab --json comments,reviews
 OUT C6G [100|goal/x]
 OUT C6G_NUMS [100]
+OUT GOALHELD []
 OUT REACHED: end
 RC 0

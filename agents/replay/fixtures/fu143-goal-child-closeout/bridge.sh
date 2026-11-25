@@ -8,6 +8,7 @@ repo="homelab"
 orphans=""
 c6g=""
 c6g_nums=""
+goalheld_nums=""
 # GitHub's own LIST semantics for `gh pr list --state merged` (homelab#3309). The stub serves one
 # recorded file whatever the flags; GitHub filters server-side by `--base` and returns the first
 # `--limit` PRs in CREATION order, newest first (the recorded file's order). Modelled here so a

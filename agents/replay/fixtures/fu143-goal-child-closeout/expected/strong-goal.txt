@@ -3,5 +3,6 @@ CALL gh pr list --repo teststuffstash/homelab --state merged --base goal/x --lim
 CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,body,baseRefName
 OUT C6G []
 OUT C6G_NUMS []
+OUT GOALHELD []
 OUT REACHED: end
 RC 0

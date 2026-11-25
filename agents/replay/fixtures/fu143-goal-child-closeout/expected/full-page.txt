@@ -3,6 +3,7 @@ CALL gh pr list --repo teststuffstash/homelab --state merged --base goal/x --lim
 CALL gh pr list --repo teststuffstash/homelab --state open --limit 200 --json number,body,baseRefName
 OUT C6G []
 OUT C6G_NUMS []
+OUT GOALHELD [100]
 OUT ORPHAN [homelab] ⚠ goal child #100 — no merged PR into goal/x links it, but that base has ≥100 merged PRs (one page): the closeout window is INCOMPLETE, so a merge older than the page is not seen. Verify by hand.
 OUT REACHED: end
 RC 0

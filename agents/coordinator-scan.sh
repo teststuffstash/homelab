@@ -2275,6 +2275,9 @@ EOF_GOALBASED
             fi
             c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
           elif [ "${gmention:-0}" -gt 0 ] && [ "${ghit:-0}" -eq 0 ]; then
+            # Every HELD report below records the child in `goalheld_nums`, which the agent/review
+            # phantom belt excludes: "held" in the report must be held in fact (#3770 review).
+            goalheld_nums="${goalheld_nums}${gn} "
             orphans="${orphans}[$repo] ⛔ issue #${gn} — a merged PR into ${gbase} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close. Auto-closeout resumes once agent-runtime#34's finalize ships the \`Implements #${gn}\` line.\n"
           elif [ "${ghit:-0}" -eq 0 ] && [ "${gref:-0}" -eq 0 ]; then
             # Not found — say so whenever the evidence is not conclusive (homelab#3309): its OWN
@@ -2284,6 +2287,7 @@ EOF_GOALBASED
               goalheld_nums="${goalheld_nums}${gn} "
               orphans="${orphans}[$repo] ⛔ goal child #${gn} — its OWN branch merged into ${gbase} (${gown}) but the PR does not cite it: finished work, not closed. HELD — close it by hand.\n"
             elif case "$gfull" in *" ${gbase} "*) true;; *) false;; esac; then
+              goalheld_nums="${goalheld_nums}${gn} "
               orphans="${orphans}[$repo] ⚠ goal child #${gn} — no merged PR into ${gbase} links it, but that base has ≥100 merged PRs (one page): the closeout window is INCOMPLETE, so a merge older than the page is not seen. Verify by hand.\n"
             fi
           fi
