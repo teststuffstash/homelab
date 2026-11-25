@@ -230,6 +230,13 @@ _admit() { # <task suffix> → rc 0 (rail + TS_MODEL + GW_LLM_ENV set) | 1 (not 
   _rm="$(bash agents/resolve-model.sh --role coordinator --class goal-decompose --fallback opus)"
   eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}"; return 0
 }
+# The author and the repair sessions run with the pod's environment minus the transcripts WRITER keys only
+# this shell uses (_ts_put, _ts_put_stack). Scope: hygiene, not a boundary — the keys leave the session's own
+# environ (an env dump in a transcript, a stray s5cmd), but every process here runs as one uid, so a session
+# with Bash can still read them from /proc/1/environ. A real boundary needs the shell and the session under
+# different uids. Every Secret-sourced env of the intake leaf is classified here or in the harness's
+# read-set list (islands/intake/tests/island-intake-test.sh); a new one fails the harness until it is.
+SESSION_UNSET=(-u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY -u STACK_TS_ACCESS_KEY_ID -u STACK_TS_SECRET_ACCESS_KEY)
 if ! _admit ""; then
   _push 1 "$NIN" 0 0 0; echo "island-intake: $ADMIT_WHY — exit 1, Argo retries with backoff"; exit 1
 fi
@@ -372,7 +379,7 @@ _ts_put /tmp/brief.md brief.md || true
 _ts_put /tmp/sel.json inputs.json || true
 
 : > /tmp/ts-mark; : > /tmp/intake.log
-( cd "$WORK" && timeout "${AUTHOR_TIMEOUT_S:-3600}" env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 ) \
+( cd "$WORK" && timeout "${AUTHOR_TIMEOUT_S:-3600}" env "${SESSION_UNSET[@]}" "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 120 </dev/null 2>&1 ) \
   | tee /tmp/intake.log \
   || echo "WARN: the intake session failed — whatever it printed is still harvested" | tee -a /tmp/intake.log
 gw_release
@@ -677,7 +684,7 @@ REPAIR
     done
     } > /tmp/review/repair-brief.md
     # on stdin: the first-pass report + every findings file can exceed one argv string (MAX_ARG_STRLEN, 128 KiB)
-    ( cd "$WORK" && timeout "$REPAIR_TIMEOUT_S" env "${GW_LLM_ENV[@]}" claude -p --model "$TS_MODEL" \
+    ( cd "$WORK" && timeout "$REPAIR_TIMEOUT_S" env "${SESSION_UNSET[@]}" "${GW_LLM_ENV[@]}" claude -p --model "$TS_MODEL" \
         --permission-mode bypassPermissions --max-turns 80 < /tmp/review/repair-brief.md > /tmp/review/repair.log 2>&1 ) \
       && P_STATUS="ran" || P_STATUS="failed: the repair session ended rc≠0 (its lines are still read)"
     gw_release
