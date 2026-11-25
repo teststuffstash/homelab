@@ -178,7 +178,7 @@ class _DeadStore(MemoryStore):
                  id="an unreachable endpoint and a timeout are told apart"),
     pytest.param("none", "text/html / application/json that is not JSON / 70 KiB (bound 64 KiB)", "upstream-content-type", "quota-unknown",
                  id="a non-JSON, wrong-type or oversize body is refused ⚖"),
-    pytest.param("none", "(the store)", "credential-transient / credential-unresolved", "quota-unknown",
+    pytest.param("none", "(the store) the lock raises / a persisted refreshing marker", "credential-transient / credential-unresolved", "quota-unknown",
                  id="a store that does not answer is transient; a recovery marker is unresolved"),
 ])
 async def test_failed_poll(poll, usage, clock, exchange, last_report, answer, expected_outcome, expected_verdict):
@@ -189,19 +189,24 @@ async def test_failed_poll(poll, usage, clock, exchange, last_report, answer, ex
             assert await poll.poll() == "accepted"
             clock.t += 5
     outcomes: list[str] = []
-    if answer == "(the store)":
-        client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
-        try:
-            dead = UsagePoll(_rail(clock, _DeadStore(creds(clock)[0]), exchange), client, USAGE_URL, Metrics(["platform"]), clock)
+    if answer.startswith("(the store) "):
+        def _store(state: str) -> MemoryStore:
+            """The credential store in the state one variant of the `answer` cell names."""
+            if state == "the lock raises":
+                return _DeadStore(creds(clock)[0])
+            assert state == "a persisted refreshing marker", state
             marked = MemoryStore(creds(clock)[0])
             marked.record = Record(marked.record.credential, "refreshing")
-            stuck = UsagePoll(_rail(clock, marked, exchange), client, USAGE_URL, Metrics(["platform"]), clock)
-            with when(f"the endpoint answers {answer}: a poll on a store that does not answer, one on a persisted refreshing marker"):
-                outcomes = [await dead.poll(), await stuck.poll()]
+            return marked
+        client = httpx.AsyncClient(transport=httpx.MockTransport(usage.handler))
+        try:
+            for state in answer.removeprefix("(the store) ").split(" / "):
+                poll = UsagePoll(_rail(clock, _store(state), exchange), client, USAGE_URL, Metrics(["platform"]), clock)
+                with when(f"answer {answer}: one poll with the store in the state: {state}"):
+                    outcomes.append(await poll.poll())
         finally:
             await client.aclose()
         then_eq("upstream contacted", len(usage.calls), 0, claim="the endpoint is never contacted")
-        poll = stuck
     else:
         variants: list[tuple] = []
         if answer == "401":
