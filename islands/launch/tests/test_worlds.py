@@ -10,7 +10,7 @@ import copy
 import jsonschema
 import pytest
 
-from worlds import SCHEMA_PART, WorldError, load_world, supplier_schema, world_ids
+from worlds import SCHEMA_PART, World, WorldError, load_world, supplier_schema, world_ids
 
 IDS = ["gw-defer", "gw-dispatch-bound", "gw-dispatch-unbound", "gw-error"]
 PLACEHOLDER_TOKEN = "gws_" + "A" * 32
@@ -46,6 +46,20 @@ def test_validation_bites_when_a_required_property_is_removed(world_id) -> None:
     body = copy.deepcopy(world.get("body"))
     del body[schema_required]
     assert validate(world, body) != []
+
+
+def test_error_world_bites_on_a_wrong_code_or_status() -> None:
+    world = load_world("gw-error")
+    assert world.get("body", "error", "code") == "tokenreview-transient"
+    assert world.get("status") == supplier_schema()["errors"]["tokenreview-transient"]["status"]
+    wrong_code = copy.deepcopy(world.get("body"))
+    wrong_code["error"]["code"] = "session-not-found"
+    assert validate(world, wrong_code) != []
+    unknown = copy.deepcopy(world.get("body"))
+    unknown["error"]["code"] = "no-such-class"
+    assert validate(world, unknown) != []
+    wrong_status = World(world.id, {**world.data, "status": 404})
+    assert validate(wrong_status) != []
 
 
 def test_supplier_bound_part_is_still_unsatisfiable() -> None:

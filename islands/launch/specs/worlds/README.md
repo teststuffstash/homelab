@@ -49,5 +49,5 @@ A launcher world has up to three halves, and a row names the halves its case var
 The seam's answers are hand-written, not recorded from a live gateway, and each file's `body` is
 validated in the gate against the supplier's schema
 ([`sessions.schema.json`](../../../../gateway/specs/endpoints/sessions.schema.json)): `post.dispatch_bound`,
-`post.dispatch`, `post.defer`, and the error envelope of `errors.tokenreview-transient`. Requests are
-validated by the cases that send them.
+`post.dispatch`, `post.defer`, and the error envelope of `errors.tokenreview-transient`. Requests will be
+validated by the cases #3484 builds.

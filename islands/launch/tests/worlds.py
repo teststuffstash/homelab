@@ -95,4 +95,22 @@ def validate_body(world: World, body: dict[str, Any] | None = None) -> list[str]
     validator = jsonschema.Draft202012Validator(
         part_schema(world.id), format_checker=jsonschema.FormatChecker()
     )
-    return sorted(e.message for e in validator.iter_errors(world.get("body") if body is None else body))
+    body = world.get("body") if body is None else body
+    problems = [e.message for e in validator.iter_errors(body)]
+    if world.id == "gw-error":
+        problems += _error_class_problems(world, body)
+    return sorted(problems)
+
+
+def _error_class_problems(world: World, body: dict[str, Any]) -> list[str]:
+    """The error world names a class the supplier defines, with the status the supplier gives it."""
+    errors = supplier_schema()["errors"]
+    code = body.get("error", {}).get("code") if isinstance(body, dict) else None
+    problems = []
+    if code != "tokenreview-transient":
+        problems.append(f"error.code {code!r} is not 'tokenreview-transient'")
+    if code not in errors:
+        problems.append(f"error.code {code!r} is not a class of the supplier's errors")
+    elif world.get("status") != errors[code]["status"]:
+        problems.append(f"status {world.get('status')!r} != supplier status {errors[code]['status']}")
+    return problems
