@@ -41,7 +41,7 @@ cd gateway
 devbox run serve          # uvicorn on :8080; GATEWAY_POLICY=/etc/agent-gateway/policy.json, GATEWAY_DB=/data/gateway.db
 ```
 
-Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
+Environment: `GATEWAY_RELEASE` (the running release — the image tag the deploy pin carries, derived at render by the kustomization; answered as `/healthz` `release` and `gateway_build_info{release}`; unset or not tag-shaped = `unknown`), `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
@@ -112,6 +112,26 @@ beside its parser and the old image crash-looped the single Recreate replica for
 (2026-10-22 06:55–07:0xZ). Values of known keys roll freely. Its four rails' tier LISTS are not hand-picked: `GW-MODEL-TIERS` derives them
 from `argocd/resources/agent-gateway/benchmarks.json` (the committed tier evidence) under the
 policy's `tiers` block, and a row fails the suite when a list drifts from the derivation.
+
+## KPIs
+
+The gateway's own numbers, each with a target. Each is a recorded series in the
+`agent-gateway-kpi` group of `argocd/resources/agent-gateway/prometheusrule.yaml`. An alert
+(`triage: dig`) fires when a series has been under its target for an hour; the deep dig reads
+it, and its finding is an input of the island's intake sitting.
+
+| KPI | series | target | when named (7 d to 2026-11-24T05:13Z) | alert |
+|---|---|---|---|---|
+| real requests answered without a 5xx | `gateway:real_requests_success:ratio_7d` | at least 0.99 | 1 (0 of 7 020) | `GatewayRequestSuccessBelowTarget` |
+| session requests dispatched, the prober's left out | `gateway:sessions_dispatched:ratio_7d` | at least 0.90 | 0.963 (534 of 554) | `GatewayDispatchShareBelowTarget` |
+
+A series has no sample while its floor is not met (200 real requests, 50 session requests, in
+the 7 d). A target moves in the rule and in this table in one PR.
+
+Both shares read slightly high after pod rolls: a counter series is born at its first sample,
+and `increase()` does not count that sample. When named, the 7 d held 23 gateway pods; 4
+deferred and 58 dispatched session requests were uncounted, so the dispatched share was about
+0.961 with them, and no 5xx series existed at all.
 
 ## Implementation notes the specs do not state
 

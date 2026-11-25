@@ -99,7 +99,7 @@ recipes in stack repos revert in their own repo. **At switch-over** (a later, se
   field — FU-270); every other stack rides the old self-routing path
   ([admission.md](specs/admission.md#launch-admit-no-model)). The new build admits only through
   `POST /sessions`.
-- Evidence is local and partial: `tests/` (run by `scripts/ci.sh`, gated at `pr-open` via `diff-ci`)
+- Evidence is local and partial: `tests/` (run by `scripts/ci.sh`, gated at `pr-open` via `diff-ci` and in required `ci`, #3391)
   runs the `gateway-admit` replay family as 12 rule-labelled Allure cases against the island helper `islands/launch/lib/gateway-admit.sh`;
   no other family runs, nothing is published, and nothing renders into these pages
   ([specs/README.md](specs/README.md) §Rule 5).

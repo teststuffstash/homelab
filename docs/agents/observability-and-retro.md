@@ -833,6 +833,49 @@ Two fixtures commit the behaviour:
   Prometheus response carrying the same five classes. Asserts the stable sort, the header
   line, and the absence of human board sections.
 
+## Part D — the loop's own KPIs (homelab#3728)
+
+The loop's own numbers, each with a target. Each is a recorded series in the `agent-loop-kpi`
+group of `argocd/resources/pushgateway/prometheusrule.yaml`, one sample per project (the
+repo a ride works on). An alert (`triage: dig`) fires when a series has missed its target for
+the alert's hold time; the [deep dig](roles.md) reads it, and a `cause-found` finding that
+names the alert is an input of the agent-loop island's intake sitting (the alert names match
+the island's pattern `Agent[A-Z]` in `islands/intake/scripts/intake-select.sh`).
+
+| KPI | series | target | when named (7 d to 2026-11-24T06:39Z) | alert |
+|---|---|---|---|---|
+| worker rides that ended without a run record | `agent_loop:rides_unrecorded:count_7d` | at most 1 | homelab 0 of 57, oracle-fleet 0 of 23 | `AgentRidesUnrecorded` |
+| issues done within two worker rounds | `agent_loop:issues_within_two_rounds:ratio_7d` | at least 0.60 | homelab 0.838 (31 of 37), oracle-fleet 0.833 (10 of 12) | `AgentLoopRoundsBelowTarget` |
+| queued issues that left the queue within 4 hours | `agent_loop:queued_within_4h:ratio_7d` | at least 0.60 | homelab 0.907 (39 of 43); oracle-fleet under the floor (7 of 9) | `AgentLoopQueueWaitBelowTarget` |
+
+`agent_loop:rides_ended:count_7d` is the denominator of the first row. A share has no sample
+while its floor is not met (10 issues in the 7 d). A target moves in the rule and in this
+table in one PR.
+
+What the series do not see:
+- A round is a worker round. A round after the first is a PR that came back — changes
+  requested, or a red check — so the share is the closest series to "review rounds per PR"
+  that exists: reviewer runs push no `agent_run_total`.
+- The rounds share does not ask whether an issue is done. Every issue with a worker run
+  pushed in the 7 d counts, and one still on its first or second round reads as within two
+  rounds until a third is pushed.
+- The rounds share has no sample for an hourly evaluation that lands on a Pushgateway roll
+  (one scrape without `agent_run_total`), and `AgentLoopRoundsBelowTarget` then starts its
+  6 hours again. The unrecorded count is bridged over that scrape; the share is not.
+- An issue still queued and under 4 hours counts as within target: the numerator checks how long
+  it has carried `agent/queued` so far (`<= 48` five-minute steps), not whether the label has
+  gone, so `agent_loop:queued_within_4h:ratio_7d` reads optimistic for the trailing 4 hours.
+- A ride is matched to its record by project, issue and round. A round that is dispatched
+  twice (a strike, then a re-dispatch) shares one pod name and one record key, so a second
+  death behind a first record is not counted.
+- Queue time is every 5 minutes an issue carries `agent/queued`, whatever holds it (the WIP
+  cap, a footprint hold, a `blockedBy` edge). A poll of the exporter that fails leaves those
+  minutes uncounted.
+- The exporter lists the first 50 open issues per repo that carry an `agent/*` lifecycle
+  label (`argocd/resources/github-exporter/github-exporter.py`, `agentIssues`). A queued issue
+  past that page has no `github_agent_issue` series and its wait is not counted (open at
+  naming: homelab 37, oracle-fleet 2).
+
 ## Rollout
 
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —

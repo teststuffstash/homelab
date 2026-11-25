@@ -141,7 +141,13 @@ The Composition renders nothing for it; two consumers read it:
 
 **Island intake for a stack repo: `repos[].intake: {facts}`.** Present = the daily
 [island intake](../../islands/intake/README.md#stack-islands) run holds a sitting for the repo as the island `<stack>/<repo>`,
-ruled by the platform's rules and the facts file at that repo-relative path; absent = off. The Composition renders nothing for it.
+ruled by the platform's rules and the facts file at that repo-relative path; absent = off. The Composition
+renders the stack's READ path to those sittings: a per-repo Garage bucket `intake-transcripts-<repo>` (2Gi) with
+a write-only key whose Secret stays in `agent-coordinator` (the sitting leaf loads it) and a read-only key,
+copied into its own Secret first and only that one mirrored into ns `<repo>` as `intake-transcripts-s3`,
+through ClusterSecretStores whose `conditions` admit one namespace each (no store a stack can use reads the
+writer's Secret). Per-repo because Garage grants are per bucket — the canonical `agent-transcripts` reader would
+open every stack's transcripts.
 
 **Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
 has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's

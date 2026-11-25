@@ -14,7 +14,8 @@ codex rail the last ACCEPTED headroom report's windows — GW-CODEX-HEADROOM §G
 `gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
 facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason,traffic}` (a 2xx whose
 body stopped before its end, GW-RAIL-*).
-A label value outside its declared set renders as `other` — a task key, a session id or a model
+`gateway_build_info{release}` (gauge — 1 for the release the process started as, GATEWAY_RELEASE or `unknown`).
+A label value outside its declared set renders as `other` (except `release`, fixed once at start) — a task key, a session id or a model
 string can never become a series (cardinality is a policy decision, not a request's).
 """
 
@@ -129,7 +130,13 @@ class Metrics:
         # mounted tier-evidence snapshot's age (None = none mounted — no series).
         self._rail_choices: dict[tuple[str, str, str], int] = {}
         self._tier_evidence_age: Callable[[], float | None] = lambda: None
+        self._release = "unknown"  # GW-METRICS §gateway_build_info
         self._db_mode: Callable[[], str] = lambda: ""  # GW-METRICS §gateway_db_mode: the store mode the process opened at start
+
+    def bind_release(self, release: str) -> None:
+        """GW-METRICS §gateway_build_info: the release the process started as (config.release_of — already
+        tag-shaped or `unknown`, so no out-of-pattern value reaches the label)."""
+        self._release = release
 
     def bind_db_mode(self, mode: Callable[[], str]) -> None:
         """GW-METRICS §gateway_db_mode: the store mode (`pvc` or `memory`) the gateway opened at start."""
@@ -370,6 +377,9 @@ class Metrics:
             lines += ["# HELP gateway_db_mode The store mode the gateway opened at start: 1 for the active mode, 0 for the other (GW-METRICS).",
                       "# TYPE gateway_db_mode gauge"]
             lines += [f"gateway_db_mode{_fmt_labels({'mode': mode})} {1 if db_mode == mode else 0}" for mode in DB_MODES]
+            lines += ["# HELP gateway_build_info The release the process started as (the value /healthz answers): 1, set once (GW-METRICS).",
+                      "# TYPE gateway_build_info gauge",
+                      f"gateway_build_info{_fmt_labels({'release': self._release})} 1"]
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

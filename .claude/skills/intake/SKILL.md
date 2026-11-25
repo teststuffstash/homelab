@@ -66,9 +66,13 @@ islands and feeds it the inputs the selector cannot see. Design + evidence:
    tracker's single writer). Meta-state bullets of the same shape likewise.
 4. **Dispatch** — one `mode: apply` sitting per island/part, in parallel, background. The dispatch
    prompt carries only: read `agents/jail-subagent-card.md`, then `islands/intake/rules/intake.md` in full, then
-   `docs/intake/<island>.md` (in place of §Island facts; the gateway uses its own block); the
-   inputs; the board-sweep report path as a DRAFT to re-verify, never to replay; the report path
-   (scratchpad, island-named).
+   `docs/intake/<island>.md` (in place of §Island facts — every island, the gateway included, has
+   one); the inputs; the board-sweep report path as a DRAFT to re-verify, never to replay; the
+   report path (scratchpad, island-named). A seat subagent writes under the operator's login (the
+   jail token); the scheduled sitting writes as island intake's own App `homelab-intake` (#3682).
+   An island's pile alone, with no text inputs, is the scheduled run's — submit it by hand as
+   `argo -n agent-coordinator submit --from cronworkflow/island-intake -p island=<i>`
+   ([`islands/intake/README.md`](../../../islands/intake/README.md) §Schedule).
 5. **Collect** — each report (table + bodies + **Facts I lacked**). `deferred (cap)` inputs go to
    one more sitting. A lacked fact that recurs across sittings is a facts-file edit (PR); a rule
    gap is a GAPS entry here.
@@ -86,10 +90,11 @@ its own PR; the tracker/ADR corrections they find come back to the seat.
 
 ## Graduation
 
-The daily [`island-intake`](../../../agents/coordinator/island-intake-argo.yaml) CronWorkflow runs
-the gateway on the dig source AND its issue pile, waits included (`intake-select.sh --source pile`:
-undecided issues + `agent/blocked` / `intake: seat` items re-read once their wait is days old). So
-this skill no longer hand-runs the gateway's pile; a gateway sitting here is for text inputs and
-for a pass the operator asks for. Wiring the other islands is the operator's ruling (spike §Open
-questions 5); this skill is their hand-run until then, and its reports are the evidence (days from filing to `agent/queued`; `seat` outcomes the operator answers
-with "decidable from the island's text").
+The daily [`island-intake`](../../../agents/coordinator/island-intake-argo.yaml) CronWorkflow
+(05:00Z) holds a sitting for every island `intake-select.sh --list-islands` prints — each with a
+selector row and a facts file, the claim-declared stack islands included (homelab#3579) — on the
+dig source AND its issue pile, waits included (`intake-select.sh --source pile`: undecided issues +
+`agent/blocked` / `intake: seat` items re-read once their wait is days old), as `homelab-intake`.
+So this skill no longer hand-runs any island's pile; a sitting here is for text inputs and for a
+pass the operator asks for, and its reports stay evidence (days from filing to `agent/queued`;
+`seat` outcomes the operator answers with "decidable from the island's text").

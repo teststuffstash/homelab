@@ -1,0 +1,14 @@
+{
+  "surface": "prometheus",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/query",
+    "query": {
+      "query": "max(oracle_feedback_untriaged_oldest_age_seconds) > bool 1e12"
+    }
+  },
+  "recorded_at": "2026-11-16T18:11:10Z",
+  "recorded_by": "island intake, curl from the intake pod (#3487)",
+  "status": 200,
+  "body": "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":[{\"metric\":{},\"value\":[1794852670.648,\"0\"]}]}}"
+}

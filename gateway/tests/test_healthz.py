@@ -42,9 +42,9 @@ ACTIVE_RE = re.compile(r'^gateway_sessions_active\{rail="opencode"\} (\d+)$', re
 UNKNOWN_TOKEN = "gws_" + "x" * 32
 
 
-def _app(policy, secrets, path: str):
+def _app(policy, secrets, path: str, extra_env: dict[str, str] | None = None):
     """A gateway on `path` whose rails reach the in-process fakes (no live upstream, ever)."""
-    settings = Settings.from_env({"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
+    settings = Settings.from_env({**(extra_env or {}), "GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": path, "OPENCODE_GO_API_KEY": "go-key-for-tests-only",
                                   "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
                                   "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"]})
     fakes = RailTransport({rail: FakeUpstream(rail) for rail in UPSTREAM_BASES}, UPSTREAM_BASES)
@@ -95,8 +95,30 @@ async def test_which_store_the_gateway_runs_on(tmp_path, policy, secrets, caplog
     with then(f"200 {{ok: true, db: {expected_db}}}; the store log line starts {expected_log_prefix!r} and names the path",
               expected_db={"expected": expected_db, "actual": r.json().get("db")},
               expected_log_prefix={"expected": expected_log_prefix, "actual": line[: len(expected_log_prefix)], "line": line}):
-        assert r.status_code == 200 and r.json() == {"ok": True, "db": expected_db}, r.text
+        assert r.status_code == 200 and r.json().get("db") == expected_db and set(r.json()) == {"ok", "db", "release"}, r.text
         assert line.startswith(expected_log_prefix) and path in line, lines
+
+
+# -- The answer names the running release ---------------------------------------------------------
+RELEASE_ROWS = [
+    pytest.param("2026.11.16-g3446cf3bba98", "2026.11.16-g3446cf3bba98", id="the deploy's pinned tag is answered"),
+    pytest.param("unset", "unknown", id="no release declared is unknown ⚖"),
+    pytest.param("empty", "unknown", id="an empty value is unknown"),
+    pytest.param('v1 {"x"}', "unknown", id="a value that is not tag-shaped is never echoed ⚖"),
+]
+
+
+@pytest.mark.parametrize(("GATEWAY_RELEASE", "expected_release"), RELEASE_ROWS)
+async def test_the_answer_names_the_running_release(tmp_path, policy, secrets, GATEWAY_RELEASE, expected_release):  # noqa: N803 — the header cell is the argname
+    world()
+    env = {} if GATEWAY_RELEASE == "unset" else {"GATEWAY_RELEASE": "" if GATEWAY_RELEASE == "empty" else GATEWAY_RELEASE}
+    with given(f"GATEWAY_RELEASE {GATEWAY_RELEASE}: environment {env}"):
+        (tmp_path / "data").mkdir()
+    with when("the gateway starts with that environment, then GET /healthz"):
+        async with _client(_app(policy, secrets, str(tmp_path / "data" / "gateway.db"), env)) as c:
+            r = await c.get("/healthz")
+    with then(f"200, release = {expected_release}", expected_release={"expected": expected_release, "actual": r.json().get("release")}):
+        assert r.status_code == 200 and r.json()["release"] == expected_release, r.text
 
 
 # -- What survives a restart -----------------------------------------------------------------------
@@ -172,7 +194,7 @@ async def test_an_older_schema_is_migrated_on_open(tmp_path, policy, secrets, st
 
 
 # -- The probe needs no credential -----------------------------------------------------------------
-BODY = '{"ok": true, "db": "pvc"}'
+BODY = '{"ok": true, "db": "pvc", "release": "unknown"}'
 PROBE_ROWS = [
     pytest.param("none", 200, BODY, id="no auth is required"),
     pytest.param("an unknown session token", 200, BODY, id="a bearer changes nothing — the probe reads no credential"),

@@ -90,9 +90,11 @@ templates (it floats) and reverts only by rebuilding it. The detector is `RetroR
 ## Open
 
 - The specs get a rows review but no evidence: homelab's claim lists `islands/retro/specs` under
-  `extraSpecs` (#3379), with no tests root, so an unproven row needs its `🚧 WIP` / `⚑ gap` mark.
-- No evidence pipeline: the fixtures prove clauses, nothing renders them as stories (specs §Rule 5)
-  — the first deliverable of the build.
+  `extraSpecs` (#3379), with no tests root declared, so an unproven row needs its `🚧 WIP` / `⚑ gap` mark.
+- Evidence is local and partial: `tests/` (run by `scripts/ci.sh` at `pr-open` via `diff-ci` and in
+  required `ci`, #3391) carries `rule()`-labelled cases for `RETRO-GUARD-EXPR` and
+  `RETRO-REPORT-FLOOR` and packs them with `scripts/evidence.sh` (Goal #3384); nothing is published
+  (specs §Rule 5).
 - The old-proxy transition path — the self-routing sites, the key mint, `retroKeySecret` and the
   `subscription-capacity` semaphore — is old contract; the new build admits only through the
   gateway. The retro-cell's `subscription` input is declared and read by nothing.

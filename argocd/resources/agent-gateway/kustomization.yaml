@@ -157,4 +157,22 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.11.23-g61544afd387a
+    newTag: 2026.11.24-gbb122d1570fd
+
+# GW-HEALTH / GW-METRICS: the running release is the pinned tag, derived at render so `newTag` stays the
+# only line a pin PR edits. Source = the gateway container's image (after the `images:` transformer, so
+# `<name>:<newTag>`), the part after `:`; target = GATEWAY_RELEASE's value.
+replacements:
+  - source:
+      kind: Deployment
+      name: agent-gateway
+      fieldPath: spec.template.spec.containers.[name=gateway].image
+      options:
+        delimiter: ":"
+        index: 1
+    targets:
+      - select:
+          kind: Deployment
+          name: agent-gateway
+        fieldPaths:
+          - spec.template.spec.containers.[name=gateway].env.[name=GATEWAY_RELEASE].value

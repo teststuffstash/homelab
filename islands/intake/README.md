@@ -130,6 +130,16 @@ absent = intake off for that repo. The island's name is **`<stack>/<repo>`** (th
 - **Records.** Receipts under `s3://agent-transcripts/homelab/intake-<stack>-<repo>-<day>/` (the
   name with `/` replaced by `-`); metrics with `island="<stack>/<repo>"`. The sitting is admitted
   as the platform's (`--stack platform`, role `coordinator`), like every sitting.
+- **The stack's own copy.** Every file the sitting uploads (receipt, logs, review notes, session
+  JSONL) is copied to the repo's own bucket `s3://intake-transcripts-<repo>/intake-<day>/intake-r1-<run>/`,
+  which the stack reads from its namespace (Secret `intake-transcripts-s3`, read-only) — the stack
+  owns the facts file and tunes it from what the sittings did. The bucket, its write-only key (in
+  `agent-coordinator`, loaded by the sitting leaf by the repo half of the island) and the reader
+  mirror are rendered by the AgentStack Composition from `repos[].intake`
+  ([agentstack.md](../../docs/agents/agentstack.md)). A failed copy is said in the log and never fails
+  the canonical upload; the copy covers what the canonical upload covers, with every value of the pod's
+  credential env replaced by its name first (a literal scrub against an accidental `env` dump), and only
+  when the key's Secret names the island's own stack.
 
 Run one by hand — a dry-run writes nothing to GitHub:
 

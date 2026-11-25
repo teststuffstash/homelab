@@ -315,7 +315,10 @@ which `GatewayStoreMemoryMode` reads.
 A Prometheus label whose value set `metrics.schema.json` declares in full
 ([GW-METRICS](endpoints/metrics.md#gw-metrics)): a value outside the set renders as `other`, so a
 task key, a session id, a token or a model the policy does not name can never create a series —
-cardinality is a property of the policy, not of traffic. `model` is bounded to the policy's
+cardinality is a property of the policy, not of traffic. The exception is `release`: the one label whose
+value comes from the deploy, one value per process, bounded by the pattern `^[A-Za-z0-9._-]{1,64}$`, never
+by traffic; it is fixed once at start by [GW-HEALTH](endpoints/health.md#gw-health)'s clause, where anything
+not tag-shaped is already `unknown`, so `other` never appears on it. `model` is bounded to the policy's
 openrouter ids and `provider` to the endpoint snapshot's slugs; `task`, `session`, `id` and `token`
 are no label on any family.
 

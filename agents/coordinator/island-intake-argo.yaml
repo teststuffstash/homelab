@@ -434,6 +434,20 @@ spec:
               valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
             - name: AGENT_TS_READER_SECRET
               valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+            # A STACK island's own copy (`<stack>/<repo>` → the AgentStack Composition's per-repo
+            # `intake-transcripts-<repo>` bucket, repos[].intake): the WRITE-ONLY key, by the repo half
+            # of the island, plus the Secret's `stack` (the sitting copies only when it equals the
+            # island's stack half). A platform island resolves to a name no repo can hold (a namespace
+            # has no `.`), so it never loads a stack's key; absent = no copy, the canonical upload
+            # unaffected.
+            - name: STACK_TS_BUCKET
+              valueFrom: { secretKeyRef: { name: "{{=sprig.contains('/', inputs.parameters.island) ? 'intake-transcripts-' + sprig.regexReplaceAll('^.*/', inputs.parameters.island, '') : 'intake-transcripts.platform'}}", key: bucket, optional: true } }
+            - name: STACK_TS_STACK
+              valueFrom: { secretKeyRef: { name: "{{=sprig.contains('/', inputs.parameters.island) ? 'intake-transcripts-' + sprig.regexReplaceAll('^.*/', inputs.parameters.island, '') : 'intake-transcripts.platform'}}", key: stack, optional: true } }
+            - name: STACK_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: "{{=sprig.contains('/', inputs.parameters.island) ? 'intake-transcripts-' + sprig.regexReplaceAll('^.*/', inputs.parameters.island, '') : 'intake-transcripts.platform'}}", key: writer_access_key_id, optional: true } }
+            - name: STACK_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: "{{=sprig.contains('/', inputs.parameters.island) ? 'intake-transcripts-' + sprig.regexReplaceAll('^.*/', inputs.parameters.island, '') : 'intake-transcripts.platform'}}", key: writer_secret_access_key, optional: true } }
             - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
           volumeMounts:
             - { name: work, mountPath: /work }

@@ -9,7 +9,7 @@
 # WiFi, your laptop) reach it at https://s3.teststuff.net via OPNsense HAProxy -> the BGP VIP
 # below. No Cloudflare tunnel, no public LoadBalancer. Admin (3903) + RPC (3901) stay internal.
 #
-# Chart is VENDORED at argocd/charts/garage (Garage v2.3.0 / chart 0.9.3) so apply doesn't depend
+# Chart is VENDORED at argocd/charts/garage (Garage v2.5.0 / chart 0.10.4 — Chart.yaml is the source) so apply doesn't depend
 # on git.deuxfleurs.fr — see that dir's VENDORED.md. Kept strictly chart-shaped (homelab adds only
 # the LoadBalancer Service as platform wiring), which is what makes the ArgoCD re-point a move
 # rather than a rewrite (ADR-003/004 GitOps migration).

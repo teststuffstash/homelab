@@ -1,0 +1,92 @@
+# The agent-loop-kpi group, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
+# one home) — the rules file that agent-loop-kpi.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources.
+#
+# ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
+# editing the group:
+#
+#   yq -o=json '{"groups":[{"name":"agent-loop-kpi","interval":"1h","rules":[.spec.groups[] | select(.name == "agent-loop-kpi") | .rules[]]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-loop-kpi
+    interval: 1h
+    rules:
+      - record: agent_loop:rides_ended:count_7d
+        expr: |
+          count by (project) (
+            count by (project, issue, round) (
+              label_replace(label_replace(label_replace(
+                max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                "project", "$1", "namespace", "(.+)"),
+                "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+            )
+          )
+      - record: agent_loop:rides_unrecorded:count_7d
+        expr: |
+          count by (project) (
+              count by (project, issue, round) (
+                label_replace(label_replace(label_replace(
+                  max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                  "project", "$1", "namespace", "(.+)"),
+                  "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                  "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+              )
+            unless on (project, issue, round)
+              last_over_time(agent_run_total[1h])
+          )
+          or
+          agent_loop:rides_ended:count_7d * 0
+      - record: agent_loop:issues_within_two_rounds:ratio_7d
+        expr: |
+          (
+              count by (project) (
+                  (count by (project, issue) (count by (project, issue, round) (last_over_time(agent_run_total{role="worker"}[1h]))) <= 2)
+                and on (project, issue)
+                  (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)
+              )
+            or
+              count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) * 0
+          )
+          /
+          (count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) >= 10)
+      - record: agent_loop:queued_within_4h:ratio_7d
+        expr: |
+          (
+              count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)")) <= 48)
+            or
+              count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) * 0
+          )
+          /
+          (count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) >= 10)
+      - alert: AgentRidesUnrecorded
+        expr: |
+          agent_loop:rides_unrecorded:count_7d > 1
+        for: 2h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: '{{ $value }} worker rides on {{ $labels.project }} ended in the last 7 days without a run record — above the KPI target (at most 1)'
+          description: 'agent_loop:rides_unrecorded:count_7d{project="{{ $labels.project }}"} is {{ $value }} (target: at most 1). A ride counts when its pod agent-<project>-issue-<n>-r<round> reached Succeeded or Failed in the 7 d and no agent_run_total series carries the same project, issue and round — the cost boards, the ledger and the retro never saw it. Check: (1) the expression of the record rule without its outer count names each issue and round; (2) the issue''s timeline comment for that round (a strike, a re-dispatch); (3) s3://agent-transcripts/<project>/issue-<n>/ for a worker-r<round>-* prefix — none means the pod died before its finalize step. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+      - alert: AgentLoopRoundsBelowTarget
+        expr: |
+          agent_loop:issues_within_two_rounds:ratio_7d < 0.6
+        for: 6h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: Less than 60 % of the issues {{ $labels.project }} worked in the last 7 days were done within two worker rounds — below the KPI target
+          description: 'agent_loop:issues_within_two_rounds:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues with a worker run in the 7 d). A round after the first is a PR that came back: changes requested, or a red check. Check: (1) count by (issue) (agent_run_total{project="{{ $labels.project }}",role="worker"}) > 2 names the issues; (2) the reviews on their PRs name what came back; (3) the escape records of the island intake receipts for the same PRs. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+      - alert: AgentLoopQueueWaitBelowTarget
+        expr: |
+          agent_loop:queued_within_4h:ratio_7d < 0.6
+        for: 6h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: Less than 60 % of the issues queued on {{ $labels.project }} in the last 7 days left the queue within 4 hours — below the KPI target
+          description: 'agent_loop:queued_within_4h:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues carried agent/queued in the 7 d). An issue counts as waiting for every 5 minutes it carries agent/queued, whatever holds it (the WIP cap, a footprint hold, a blockedBy edge). Check: (1) sum by (number) (count_over_time(github_agent_issue{repo="{{ $labels.project }}",label="agent/queued"}[7d:5m])) / 12 > 4 names the issues and their hours; (2) the scan report''s hold line for each; (3) AgentQueueStalled for a wedged dispatcher. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
