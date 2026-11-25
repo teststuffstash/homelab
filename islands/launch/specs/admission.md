@@ -100,7 +100,7 @@ all empty).
 ### LAUNCH-ADMIT-BOUND
 
 A dispatch is checked before anything is built on it; once a session exists, every refusal
-releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. The
+releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. On an unbound call the model-key check reads the keys of `env` (the answer's `env_keys` is not consulted), so a missing `env` fails that check too. The
 session id must match `^[A-Za-z0-9_-]{1,64}$`. **Bound** (`--bind`): the answer carries no
 credential — a `session.token` or an `env` map means the gateway ignored the bind, and the launcher
 refuses rather than hold a token (GW-SESSIONS-PULL); `env_keys` is a non-empty list of shell names
@@ -127,7 +127,7 @@ the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the ro
 | bad-pull-url | gw-dispatch-bound | launcher | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
 | unusable-env | gw-dispatch-bound | launcher | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
 | harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
-| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
+| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered with the bound shape: no `env`; `env_keys` = [`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`]; `pull_url` present | yes | 3 | `env, env_keys lacks ANTHROPIC_MODEL` |
 | unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
 | unknown-decision ⚖ | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
