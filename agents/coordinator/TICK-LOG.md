@@ -15879,3 +15879,9 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Operator rulings 11-25: cut `goal/3656-scan-checkpoint-b` (done, five children queued); #2588 → scan island (#3776); FU-168/201/147/199/221 → scan intake (#3771–#3775, archived as handed over).
 - Gateway KPIs read: 99.99 % real requests without 5xx, 96.8 % sessions dispatched (7 d).
 
+
+## 2026-11-25 22:17–22:30Z — the one overnight check (operator asleep)
+
+- Scan chain (Goal #3656): #3657 and #3658 closed `agent/done` (PRs #3779, #3783 merged into the goal branch); #3659 riding (`agent-homelab-issue-3659-r1`). Launch chain (Goal #3480): #3483 and #3484 done (#3778, #3785 merged).
+- #3770 proven live: the scan closed #3309 at 21:14Z; assembly PR #3784 opened 21:21Z, armed. It is DIRTY (goal branch 384 behind master, 13 hunks in 7 `gateway/**` files); the checkpoint parked it `blocked-on: human`. Trial merge in a scratch clone → `catalog.md` GW-MODEL-TIERS needs rulings, not a mechanical merge → aborted, nothing pushed; analysis posted on #3784.
+- #3485 r1: the coordinator wrapped the dispatch in `timeout 590` and killed the client → EXIT trap released session `15202be4…` 22:14:38Z → pod's env pull 401 `session-released` 22:15:16Z, exit 97, harness never started. Scan tick 22:20Z: HELD ("worker terminal, no open PR, no merged PR cites it … close it or re-queue it by hand"). No PR, no branch → `gh issue edit 3485 --remove-label agent/in-progress --add-label agent/queued` + a comment naming the cause. The only help given. Nothing else changed; no further check scheduled.

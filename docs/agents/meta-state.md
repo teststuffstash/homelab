@@ -18,6 +18,14 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-25 — gateway day; TICK-LOG 11-25).** In flight when the session ended, re-read each before acting:
+  - **Overnight check 22:17–22:30Z (one look, then stopped).** #3770 is proven live: the scan closed #3309 at 21:14Z and
+    assembly PR #3784 (Goal #3305) opened 21:21Z, armed. **#3784 is DIRTY and parked `blocked-on: human`**: the goal
+    branch is 384 commits behind, 13 conflict hunks in 7 `gateway/**` files. Trial merge read and aborted, nothing pushed;
+    the analysis is a comment on #3784 — six files are keep-both, `catalog.md` GW-MODEL-TIERS needs rulings (master
+    edited the snapshot prose the Goal retires). An attended job. Scan chain: #3657, #3658 done, #3659 riding. Launch
+    chain: #3483, #3484 done; #3485 round 1 died before the harness started (the coordinator killed its dispatch client,
+    which released the gateway session; the pod got 401 at env pull) and the scan held it for a hand re-queue — the seat
+    re-queued it 22:25Z with a comment (the one help). Not re-read after that.
   - #3770 MERGED 21:12Z (`9022934a7`): the goal-child closeout reads merged PRs per goal base and reports what it cannot
     confirm. Root cause of #3309: `gh pr list --state merged --limit N` is ordered by OPEN date — #3590 (opened 11-20,
     merged 11-22) was 56th the moment it merged. **#3309 was deliberately not hand-closed**: read whether the scan closed it
