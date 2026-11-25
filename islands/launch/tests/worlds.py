@@ -114,3 +114,21 @@ def _error_class_problems(world: World, body: dict[str, Any]) -> list[str]:
     elif world.get("status") != errors[code]["status"]:
         problems.append(f"status {world.get('status')!r} != supplier status {errors[code]['status']}")
     return problems
+
+
+STACKS = ISLAND / "specs" / "worlds" / "stacks"
+STACK_REQUIRED = ("name", "repos", "mainRepo", "routerMode")
+
+
+def load_stack_world(world_id: str) -> World:
+    """A recorded stack row (`stack-platform`), read strictly: provenance with the commit, and the
+    row's required fields — a missing one is an error, never a default."""
+    path = STACKS / f"{world_id}.json"
+    if not path.is_file():
+        raise WorldError(f"unknown stack world {world_id!r}")
+    world = World(world_id, json.loads(path.read_text(encoding="utf-8")))
+    for key in ("source", "row", "commit"):
+        world.get("provenance", key)
+    for key in STACK_REQUIRED:
+        world.get("row", key)
+    return world

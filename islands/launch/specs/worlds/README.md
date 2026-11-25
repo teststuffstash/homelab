@@ -33,8 +33,8 @@ A launcher world has up to three halves, and a row names the halves its case var
 | world | what it fixes |
 |---|---|
 | `launcher-vars` | no recorded API state — the row's whole condition is in `rows/<id>/vars.sh` and the `env` column. The default world of every gateway-seam and outcome row. |
-| `stack-platform` | `launcher-vars` with the `stacks.json` row `{"name": "platform"}` and `AGENT_GATEWAY=sessions` — the one stack the gateway admits |
-| `stack-other` | `launcher-vars` with a non-platform stack row — the old path |
+| `stack-platform` | [`stacks/stack-platform.json`](stacks/stack-platform.json): the `platform` row of `agents/stacks.json` recorded whole, with the commit it was read at, and `AGENT_GATEWAY=sessions` — the one stack the gateway admits |
+| `stack-other` | `launcher-vars` with a non-platform stack row — the old path; the island builds no case in it (Goal #3480 pin 6) |
 
 ## The gateway seam
 
