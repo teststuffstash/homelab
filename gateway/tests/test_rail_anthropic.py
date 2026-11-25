@@ -165,14 +165,14 @@ async def test_stream_completeness(gw, upstreams, store, upstream, expected_requ
 
 
 # -- Stream completeness: the pod hangs up --------------------------------------------------------
-HANGUP_ROWS = [  # description | upstream | requests_incomplete? | incomplete? | incomplete_total?
-    ("the client going away mid-stream is recorded incomplete", "upstream-stream", 1, "client-closed", 1),
+HANGUP_ROWS = [  # description | upstream | client | requests_incomplete? | incomplete? | incomplete_total?
+    ("the client going away mid-stream is recorded incomplete", "upstream-stream", "closes after the first chunk", 1, "client-closed", 1),
 ]
 
 
-@pytest.mark.parametrize(("upstream", "expected_requests_incomplete", "expected_incomplete", "expected_incomplete_total"),
+@pytest.mark.parametrize(("upstream", "client", "expected_requests_incomplete", "expected_incomplete", "expected_incomplete_total"),
                          [r[1:] for r in HANGUP_ROWS], ids=[r[0] for r in HANGUP_ROWS])
-async def test_client_closed_mid_stream(gw, app, store, upstream, expected_requests_incomplete, expected_incomplete, expected_incomplete_total):
+async def test_client_closed_mid_stream(gw, app, store, upstream, client, expected_requests_incomplete, expected_incomplete, expected_incomplete_total):
     world(upstream=upstream, note="the gateway's stream is driven directly: the in-process client buffers whole bodies, so a hang-up is the iterator closed early")
     with given("a session on rail anthropic (reviewer, harness claude)"):
         doc = await open_session(gw, role="reviewer", harness="claude")
@@ -184,10 +184,11 @@ async def test_client_closed_mid_stream(gw, app, store, upstream, expected_reque
             yield b'event: content_block_delta\ndata: {"type":"content_block_delta"}\n\n'
 
     resp = httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=_Events())
-    with when(f"the {upstream} answer's first chunk is relayed, then the client hangs up (the body iterator is closed) · {inputs(upstream=upstream)}"):
+    chunks_read = {"closes after the first chunk": 1}[client]  # the legend's one literal: how many relayed chunks the pod reads before it closes
+    with when(f"the {upstream} answer is relayed to a client that {client} (the body iterator is closed) · {inputs(upstream=upstream, client=client)}"):
         sr = app.state.proxy._stream(resp, row, "anthropic", 200, {}, True, time.monotonic(), "")
         it = sr.body_iterator
-        first = await it.__anext__()
+        first = b"".join([await it.__anext__() for _ in range(chunks_read)])
         await it.aclose()
         attach_json("relayed before the hang-up", {"first_chunk": first.decode()})
     count, reason, _ = incomplete_recorded(store, doc)
