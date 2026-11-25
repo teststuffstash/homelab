@@ -580,6 +580,10 @@ another number.
 | on A / on B | exactly one, by `dispatch`, on that pull request; its body's first characters are the marker for that pull request's number; answered 201 |
 | refused | exactly one, by `dispatch`, answered 403; one warning line; `dispatch` exits 0 |
 
+The table below is generated from [`models/scan-clause-goal-b.yaml`](models/scan-clause-goal-b.yaml); an edit is made in the model.
+
+<!-- generated from specs/models/scan-clause-goal-b.yaml by scripts/render_model.py — edit the model, not this table -->
+
 | description | world | open assembly PR | (b) markers on it | fault | lane winner | (b) this wake? | marker write? | (b) next wake? |
 |---|---|---|---|---|---|---|---|---|
 | child-set-complete | goal-checkpoint | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
@@ -593,6 +597,8 @@ another number.
 | goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | this Goal | fires-unmarked | on B | held |
 | quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | this Goal | fires-unmarked | on A | held |
 | head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | this Goal | fires-no-pr | none | fires-no-pr |
+
+<!-- end generated: specs/models/scan-clause-goal-b.yaml -->
 
 `child-set-complete`, `goal-checkpoint-b-held` and `goal-checkpoint-b-replaced-releases` are row
 ids of the replay family `goal`, kept verbatim so the replay comparison finds them. The other rows

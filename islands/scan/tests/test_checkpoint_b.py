@@ -30,13 +30,26 @@ from .sequence import Derived, Wake, derive_open_pr, overlay, run_sequence
 from .world import World
 
 PAGE = SPECS / "scan-decision.md"
+HAND = Path(__file__).resolve().parent.parent / "trial" / "checkpoint-b-hand.md"  # the hand-authored arm, outside the specs root
 SCHEMA = SPECS / "scan-decision.schema.json"
 QUESTION = "Does trigger (b) fire while an assembly pull request is open?"
 COMPONENT = [sys.executable, "-m", "scan_island.checkpoint_b"]
 MUTANT = [sys.executable, str(Path(__file__).resolve().parent / "mutants" / "checkpoint_b_stamp_on_evaluate.py")]
 
-TABLES = tables(PAGE)
+def _load_render():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("render_model", HAND.parent.parent / "scripts" / "render_model.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+TABLES = tables(PAGE)  # the page's (b) table is rendered from the YAML model (arm `model`)
 ARGS, ROWS = page_params(TABLES, QUESTION)
+HAND_ARGS, HAND_ROWS = page_params(tables(HAND), QUESTION)  # arm `hand`
+assert HAND_ARGS == ARGS
+ARMS = {"model": ROWS, "hand": HAND_ROWS}
 [READ_LEGEND] = [{r[0]: r[1:] for r in rows} for _q, h, rows in TABLES if h[0] == "literal" and len(h) == 4 and h[1].startswith("stdout")]
 [WRITE_LEGEND] = [{r[0]: r[1] for r in rows} for _q, h, rows in TABLES if h[0] == "literal" and len(h) == 2 and h[1].startswith("comment writes")]
 
@@ -223,32 +236,46 @@ def check(cells: dict, component: list[str] = COMPONENT) -> None:
 # ── the cases ─────────────────────────────────────────────────────────────────────────────────────
 
 
+def run_row(**cells) -> None:
+    check(cells)
+
+
 @rule("SCAN-CLAUSE-GOAL")
 @allure.label("world", WORLD)
+@allure.label("arm", "model")
 @pytest.mark.parametrize(ARGS, ROWS)
-def test_trigger_b_hold(world, open_assembly_pr, b_markers_on_it, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
-    check(dict(world=world, open_assembly_pr=open_assembly_pr, b_markers_on_it=b_markers_on_it, fault=fault, lane_winner=lane_winner,
-               expected_b_this_wake=expected_b_this_wake, expected_marker_write=expected_marker_write, expected_b_next_wake=expected_b_next_wake))
+def test_trigger_b_hold_model(world, open_assembly_pr, b_markers_on_it, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
+    run_row(**locals())
+
+
+@rule("SCAN-CLAUSE-GOAL")
+@allure.label("world", WORLD)
+@allure.label("arm", "hand")
+@pytest.mark.parametrize(ARGS, HAND_ROWS)
+def test_trigger_b_hold_hand(world, open_assembly_pr, b_markers_on_it, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
+    run_row(**locals())
 
 
 # ── unlabelled: the mutant, the strict read, the evaluate/dispatch split ──────────────────────────
 
 
-def row(case_id: str) -> dict:
-    [r] = [r for r in ROWS if r.id == case_id]
+def row(case_id: str, arm: str = "model") -> dict:
+    [r] = [r for r in ARMS[arm] if r.id == case_id]
     return dict(zip(ARGS, r.values, strict=True))
 
 
-def test_the_stamp_on_evaluation_mutant_fails_lane_lost_stays_eligible_on_the_marker_write_and_the_next_wake():
-    cells = row("lane-lost-stays-eligible ⚖")
+@pytest.mark.parametrize("arm", ARMS)
+def test_the_stamp_on_evaluation_mutant_fails_lane_lost_stays_eligible_on_the_marker_write_and_the_next_wake(arm):
+    cells = row("lane-lost-stays-eligible ⚖", arm)
     actual, _ = wake_the_row(MUTANT, cells)
     failing = sorted(k for k, ok in verdicts(cells, actual).items() if not ok)
     assert failing == ["expected_b_next_wake", "expected_marker_write"], (failing, actual)
     assert actual["expected_marker_write"] == "by evaluate, on A"
 
 
-def test_the_component_passes_the_row_the_mutant_fails():
-    check(row("lane-lost-stays-eligible ⚖"))
+@pytest.mark.parametrize("arm", ARMS)
+def test_the_component_passes_the_row_the_mutant_fails(arm):
+    check(row("lane-lost-stays-eligible ⚖", arm))
 
 
 def test_evaluate_issues_no_write_in_any_case():
@@ -373,6 +400,39 @@ def test_the_trailer_must_be_line_anchored():
     body = w.get("pr-list.json", (d[0].index, "body"))
     w.set("pr-list.json", (d[0].index, "body"), body.replace("Assembly-for: #3118", "see Assembly-for: #3118"))
     assert w.run([*COMPONENT, "evaluate", REPO, GOAL]).stdout.strip().endswith("no open assembly PR")
+
+
+# ── the two arms and the render ───────────────────────────────────────────────────────────────────
+
+RENDER = _load_render()
+
+
+def test_the_two_arms_hold_the_same_rows():
+    assert [(r.id, r.values) for r in ROWS] == [(r.id, r.values) for r in HAND_ROWS]
+
+
+def test_a_fresh_render_equals_the_committed_page_section_and_view():
+    model = RENDER.load()
+    assert RENDER.splice(PAGE.read_text("utf-8"), model) == PAGE.read_text("utf-8"), "page differs from a fresh render"
+    assert RENDER.view(model) == RENDER.VIEW.read_text("utf-8"), "view differs from a fresh render"
+    assert all("unverified" == line.split("|")[-2].strip() for line in RENDER.VIEW.read_text("utf-8").splitlines()[7:])
+
+
+def test_a_changed_expectation_changes_the_table_and_fails_against_the_unchanged_component(tmp_path):
+    copy = tmp_path / "model.yaml"
+    copy.write_text(RENDER.MODEL.read_text("utf-8"), "utf-8")
+    model = RENDER.load(copy)
+    [case] = [c for c in model["cases"] if c["id"] == "goal-checkpoint-b-held"]
+    assert case["expect"]["b_this_wake"] == "held"
+    case["expect"]["b_this_wake"] = "fires-unmarked"
+    copy.write_text(RENDER.yaml.safe_dump(model, allow_unicode=True, sort_keys=False), "utf-8")
+    assert RENDER.table(RENDER.load(copy)) != RENDER.table(RENDER.load())
+    page = tmp_path / "page.md"
+    page.write_text(f"#### {QUESTION}\n\n{RENDER.table(RENDER.load(copy))}\n", "utf-8")
+    args, rows = page_params(tables(page), QUESTION)
+    [changed] = [r for r in rows if r.id == "goal-checkpoint-b-held"]
+    with pytest.raises(AssertionError, match=r"\(b\) this wake\?"):
+        check(dict(zip(args, changed.values, strict=True)))
 
 
 def test_the_cases_read_no_path_under_agents():
