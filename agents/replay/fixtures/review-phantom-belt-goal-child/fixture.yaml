@@ -1,0 +1,23 @@
+# review-phantom-belt-goal-child — the agent/review phantom belt must never re-queue a goal child
+# the FU-143 leg already found merged into its goal base (homelab#3309).
+#
+# THE DEFECT. The belt's merged probe is the repo-wide 40 newest-CREATED merged PRs. #3309's PR
+# merged into goal/3305-runtime-tiers days after it opened, so it was never in that window; the
+# belt HELD #3309 only while two sibling PRs that MENTION it stayed in range, then had nothing left
+# to hold on, and the next tick with an in-progress issue would have re-queued finished work.
+#
+# THE CONTRACT. #90 (in `c6g_nums`, no open PR, no merged mention in the window) is left alone —
+# no label write, no report: the closeout unit owns it. #80, the same shape WITHOUT a goal-base
+# merge, is still reconciled exactly as in `review-phantom-belt` (the positive control).
+name: review-phantom-belt-goal-child
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:../review-phantom-belt/bridge.sh
+  - file:bridge.sh
+  - block:strong-link-count
+  - block:review-phantom-belt
+  - file:../review-phantom-belt/post.sh
+scrub:
+  - 's/`[0-9T:Z-]\{20\}`/`TIMESTAMP`/g'
+  - 's/ [0-9]\{1,\}m / Nm /g'
