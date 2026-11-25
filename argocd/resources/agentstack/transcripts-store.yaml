@@ -65,6 +65,10 @@ subjects:
     name: eso-transcripts-reader
     namespace: agent-coordinator
 ---
+# No `conditions` on purpose — the one exemption in eso-clusterstore-scoped
+# (argocd/resources/extras/eso-guard.yaml, ADR-168): the Composition mirrors this ONE shared
+# write-only key into every stack namespace, so any namespace reading it gains nothing that every
+# stack does not already hold, and a namespace list here would need a hand edit per new stack.
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:

@@ -1,0 +1,35 @@
+# eso-guard decision table (argocd/resources/extras/eso-guard.yaml, ADR-168), run by scripts/eso-guard-test.sh.
+# case<TAB>want<TAB>clause<TAB>base<TAB>yq patch on scripts/fixtures/eso-guard/base-<base>.yaml
+#   want: pass = admitted · fail = refused by the named clause (asserted from the message)
+#   clause: a/b/c = eso-infisical-guard (a)/(b)/(c) · s = eso-clusterstore-scoped · - = none
+es-own-allowlisted-key	pass	-	es	.
+es-common-key	pass	-	es	.spec.data[0].remoteRef.key = "COORDINATOR_CLAUDE_OAUTH_TOKEN"
+es-common-key-unlisted-ns	pass	-	es	.metadata.namespace = "circles" | .spec.data[0].remoteRef.key = "COORDINATOR_CLAUDE_OAUTH_TOKEN"
+es-platform-key	fail	a	es	.spec.data[0].remoteRef.key = "GARAGE_ADMIN_TOKEN"
+es-other-stacks-key	fail	a	es	.metadata.namespace = "sleep-tracking"
+es-unlisted-ns-stack-key	fail	a	es	.metadata.namespace = "circles"
+es-one-bad-item-of-two	fail	a	es	.spec.data += [{"secretKey": "x", "remoteRef": {"key": "DEMO_PING"}}]
+es-platform-ns-any-key	pass	-	es	.metadata.namespace = "crossplane-system" | .spec.data[0].remoteRef.key = "GARAGE_ADMIN_TOKEN"
+es-item-storeref-infisical	fail	a	es	.spec.secretStoreRef = {"name": "own-store", "kind": "SecretStore"} | .spec.data[0].sourceRef = {"storeRef": {"name": "infisical", "kind": "ClusterSecretStore"}} | .spec.data[0].remoteRef.key = "DEMO_PING"
+es-item-storeref-own-store	pass	-	es	.spec.data[0].sourceRef = {"storeRef": {"name": "own-store", "kind": "SecretStore"}} | .spec.data[0].remoteRef.key = "DEMO_PING"
+es-namespaced-store-named-infisical	pass	-	es	.spec.secretStoreRef = {"name": "infisical", "kind": "SecretStore"} | .spec.data[0].remoteRef.key = "DEMO_PING"
+es-kind-omitted-means-secretstore	pass	-	es	.spec.secretStoreRef = {"name": "infisical"} | .spec.data[0].remoteRef.key = "DEMO_PING"
+es-other-cluster-store-any-key	pass	-	es	.spec.secretStoreRef.name = "agent-transcripts" | .spec.data[0].remoteRef.key = "agent-transcripts-s3"
+es-datafrom-extract	fail	b	es	.spec.dataFrom = [{"extract": {"key": "DEMO_PING"}}]
+es-datafrom-find	fail	b	es	.spec.dataFrom = [{"find": {"name": {"regexp": ".*"}}}]
+es-datafrom-storeref-infisical	fail	b	es	.spec.secretStoreRef = {"name": "own-store", "kind": "SecretStore"} | .spec.dataFrom = [{"find": {"name": {"regexp": ".*"}}, "sourceRef": {"storeRef": {"name": "infisical", "kind": "ClusterSecretStore"}}}]
+es-datafrom-generator	pass	-	es	.spec.dataFrom = [{"sourceRef": {"generatorRef": {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password", "name": "pw"}}}]
+es-datafrom-platform-ns	pass	-	es	.metadata.namespace = "monitoring" | .spec.dataFrom = [{"extract": {"key": "DEMO_PING"}}]
+ps-own-secretstore	pass	-	ps	.
+ps-cluster-store	fail	c	ps	.spec.secretStoreRefs[0].kind = "ClusterSecretStore"
+ps-cluster-store-label-selector	fail	c	ps	.spec.secretStoreRefs = [{"kind": "ClusterSecretStore", "labelSelector": {"matchLabels": {"a": "b"}}}]
+ps-cluster-store-platform-ns	pass	-	ps	.metadata.namespace = "agent-coordinator" | .spec.secretStoreRefs[0].kind = "ClusterSecretStore"
+css-scoped	pass	-	css	.
+css-no-conditions	fail	s	css	del(.spec.conditions)
+css-empty-conditions	fail	s	css	.spec.conditions = []
+css-empty-namespace-list	fail	s	css	.spec.conditions[0].namespaces = []
+css-namespace-selector	fail	s	css	.spec.conditions = [{"namespaceSelector": {}}]
+css-selector-beside-list	fail	s	css	.spec.conditions[0].namespaceSelector = {}
+css-namespace-regexes	fail	s	css	.spec.conditions = [{"namespaceRegexes": [".*"]}]
+css-exempt-infisical	pass	-	css	.metadata.name = "infisical" | del(.spec.conditions)
+css-exempt-agent-transcripts	pass	-	css	.metadata.name = "agent-transcripts" | del(.spec.conditions)

@@ -1,0 +1,160 @@
+# ESO tenancy guards (ADR-168). A stack's workbench token and its ArgoCD app hold `admin` in the
+# stack's namespaces, so they can create ExternalSecrets there. An ExternalSecret may name ANY
+# ClusterSecretStore, so without these policies a stack namespace could mirror every Infisical key
+# (the `infisical` store reads the whole homelab/prod project) and every Secret a
+# kubernetes-provider store can reach. Two policies close that:
+#
+# eso-infisical-guard — ExternalSecrets/PushSecrets OUTSIDE the platform namespaces below:
+#   (a) data[] items served by ClusterSecretStore `infisical` name only keys on that namespace's
+#       allowlist (`common` + `perNamespace`)
+#   (b) no dataFrom (extract/find) served by `infisical` — a key list cannot bound a find
+#   (c) a PushSecret names no ClusterSecretStore (secretStoreRefs by name or by labelSelector)
+#   Default-deny by namespace: a namespace missing from `platform` is restricted, so a new
+#   namespace starts with only `common`. A stack that needs a new Infisical key = one
+#   `perNamespace` entry here, written by the platform, never by the stack.
+#   Why not an ESO `conditions` list on `infisical`? `conditions` gates whole namespaces, and stack
+#   namespaces legitimately read a few keys each. Per-stack Infisical identities scoped to a
+#   per-stack folder are the vendor-shaped end state. They need the keys moved in Infisical, so
+#   this allowlist holds the boundary now.
+#
+# eso-clusterstore-scoped — every ClusterSecretStore names the namespaces that may use it, as an
+#   explicit `conditions[].namespaces` list (no namespaceSelector / namespaceRegexes: a `{}`
+#   selector or `.*` would read as scoped and admit everyone). Exempt, each for its reason:
+#     infisical          bounded per key by eso-infisical-guard above
+#     agent-transcripts  one shared WRITE-ONLY key the Composition mirrors into every stack
+#                        namespace (argocd/resources/agentstack/transcripts-store.yaml)
+#
+# Native ValidatingAdmissionPolicy (no Kyverno controller; the jail-clusters/kargo shape).
+# failurePolicy Fail: a broken policy blocks ExternalSecret writes, never reads of existing Secrets.
+# Only CREATE and spec-changing UPDATEs are judged (matchConditions): deletes never wedge.
+# Decision table: scripts/fixtures/eso-guard/cases.tsv (scripts/eso-guard-test.sh).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: eso-infisical-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      # matchPolicy Equivalent (the default): a write through any served version is matched.
+      - apiGroups: [external-secrets.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [externalsecrets]
+      - apiGroups: [external-secrets.io]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE]
+        resources: [pushsecrets]
+  # An UPDATE that leaves spec alone (ESO removing its finalizer on delete, a label) is not judged: an
+  # object a later allowlist edit made invalid must still be deletable, never stuck Terminating.
+  matchConditions:
+    - name: create-or-spec-change
+      expression: "request.operation == 'CREATE' || object.spec != oldObject.spec"
+  variables:
+    # Platform namespaces: no stack identity holds write there; unrestricted.
+    - name: platform
+      expression: >-
+        ['agent-coordinator', 'agent-egress', 'arc-runners', 'cf-api-proxy', 'crossplane-system',
+         'external-secrets', 'forgejo', 'infisical', 'kargo', 'longhorn-system', 'monitoring',
+         'opnsense-config-backup', 'registry', 'registry-cache', 'secrets-demo']
+    # Every restricted namespace: the AgentStack Composition's `claude-session` mirror.
+    - name: common
+      expression: "['COORDINATOR_CLAUDE_OAUTH_TOKEN']"
+    - name: perNamespace
+      expression: >-
+        {
+          'openrouter-operator': ['OPENROUTER_MANAGEMENT_KEY'],
+          'oracle-fleet': ['CNPG_BACKUP_ORACLE_FLEET_KEY_ID', 'CNPG_BACKUP_ORACLE_FLEET_SECRET',
+                           'ORACLE_FEEDBACK_PG_APPLIER_PASSWORD', 'ORACLE_FEEDBACK_PG_RO_PASSWORD',
+                           'ORACLE_GHCR_PULL_TOKEN', 'REGISTRY_PUSH_TOKEN'],
+          'oracle-kargo': ['ORACLE_GHCR_PULL_TOKEN'],
+          'sleep-tracking': ['SLEEP_GHCR_PULL_TOKEN', 'SLEEP_S3_ACCESS_KEY_ID', 'SLEEP_S3_SECRET_KEY',
+                             'SLEEP_STORE_S3_ACCESS_KEY_ID', 'SLEEP_STORE_S3_SECRET_KEY'],
+          'snore-recorder': ['SNORE_DEPLOY_SSH_KEY']
+        }
+    - name: restricted
+      expression: "!(request.namespace in variables.platform)"
+    - name: allowed
+      expression: >-
+        variables.common + (request.namespace in variables.perNamespace
+          ? variables.perNamespace[request.namespace] : [])
+    - name: isES
+      expression: "request.kind.kind == 'ExternalSecret'"
+    # The store an item uses when it names none of its own.
+    - name: topIsInfisical
+      expression: >-
+        variables.isES && has(object.spec.secretStoreRef)
+        && has(object.spec.secretStoreRef.kind) && object.spec.secretStoreRef.kind == 'ClusterSecretStore'
+        && object.spec.secretStoreRef.name == 'infisical'
+  validations:
+    - expression: >-
+        !variables.restricted || !variables.isES || !has(object.spec.data)
+        || object.spec.data.all(d,
+             !((has(d.sourceRef) && has(d.sourceRef.storeRef))
+               ? (has(d.sourceRef.storeRef.kind) && d.sourceRef.storeRef.kind == 'ClusterSecretStore'
+                  && d.sourceRef.storeRef.name == 'infisical')
+               : variables.topIsInfisical)
+             || d.remoteRef.key in variables.allowed)
+      messageExpression: >-
+        'eso-infisical-guard (a): ExternalSecret ' + request.namespace + '/' + object.metadata.name
+        + ' reads an Infisical key outside this namespace allowlist (argocd/resources/extras/eso-guard.yaml)'
+    - expression: >-
+        !variables.restricted || !variables.isES || !has(object.spec.dataFrom)
+        || object.spec.dataFrom.all(f,
+             (has(f.sourceRef) && has(f.sourceRef.generatorRef) && !has(f.sourceRef.storeRef))
+             || !((has(f.sourceRef) && has(f.sourceRef.storeRef))
+                  ? (has(f.sourceRef.storeRef.kind) && f.sourceRef.storeRef.kind == 'ClusterSecretStore'
+                     && f.sourceRef.storeRef.name == 'infisical')
+                  : variables.topIsInfisical))
+      messageExpression: >-
+        'eso-infisical-guard (b): ExternalSecret ' + request.namespace + '/' + object.metadata.name
+        + ' uses dataFrom against the infisical store; list the keys under data instead'
+    - expression: >-
+        !variables.restricted || variables.isES || !has(object.spec.secretStoreRefs)
+        || object.spec.secretStoreRefs.all(r, !has(r.kind) || r.kind != 'ClusterSecretStore')
+      messageExpression: >-
+        'eso-infisical-guard (c): PushSecret ' + request.namespace + '/' + object.metadata.name
+        + ' names a ClusterSecretStore; outside platform namespaces a PushSecret uses its own SecretStore'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: eso-infisical-guard
+spec:
+  policyName: eso-infisical-guard
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: eso-clusterstore-scoped
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [external-secrets.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [clustersecretstores]
+  # An UPDATE that leaves spec alone (ESO removing its finalizer on delete, a label) is not judged: an
+  # object a later allowlist edit made invalid must still be deletable, never stuck Terminating.
+  matchConditions:
+    - name: create-or-spec-change
+      expression: "request.operation == 'CREATE' || object.spec != oldObject.spec"
+  validations:
+    - expression: >-
+        object.metadata.name in ['infisical', 'agent-transcripts']
+        || (has(object.spec.conditions) && size(object.spec.conditions) > 0
+            && object.spec.conditions.all(c, has(c.namespaces) && size(c.namespaces) > 0
+                 && !has(c.namespaceSelector) && !has(c.namespaceRegexes)))
+      messageExpression: >-
+        'eso-clusterstore-scoped: ClusterSecretStore ' + object.metadata.name
+        + ' must list the namespaces that may use it in spec.conditions[].namespaces (ADR-168)'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: eso-clusterstore-scoped
+spec:
+  policyName: eso-clusterstore-scoped
+  validationActions: [Deny]

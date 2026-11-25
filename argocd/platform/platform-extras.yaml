@@ -1,6 +1,7 @@
 # Platform extras (wave 3): the bits that depend on Infisical being up —
 #   * the BGP LoadBalancer VIP for the Infisical UI (.40.18), and
-#   * the ESO ClusterSecretStore that points at Infisical.
+#   * the ESO ClusterSecretStore that points at Infisical, and
+#   * the ESO tenancy admission policies (eso-guard.yaml, ADR-168).
 # Raw manifests in argocd/resources/extras/.
 apiVersion: argoproj.io/v1alpha1
 kind: Application

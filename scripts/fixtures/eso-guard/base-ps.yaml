@@ -1,0 +1,13 @@
+# Base PushSecret for cases.tsv: a stack namespace pushing through its own SecretStore.
+apiVersion: external-secrets.io/v1alpha1
+kind: PushSecret
+metadata:
+  name: case
+  namespace: oracle-fleet
+spec:
+  secretStoreRefs:
+    - { name: own-store, kind: SecretStore }
+  selector:
+    secret: { name: case }
+  data:
+    - match: { secretKey: token, remoteRef: { remoteKey: token } }
