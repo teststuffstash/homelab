@@ -47,3 +47,34 @@ def test_a_clean_call_is_admitted_with_the_request_it_would_send() -> None:
     assert not isinstance(result, Refusal)
     assert result.bind == "homelab/agentstack-worker/agent-homelab-issue-1-r2"
     assert result.body["role"] == "prober" and result.body["round"] == 2
+
+
+def _admit(knobs=None, task="issue-1", **kw):
+    stack = load_stack_world("stack-platform").get("row")
+    return LauncherAdmission(lambda r: None, lambda p: "tok", lambda s: "m", clock=lambda: "010203").admit(
+        knobs or {}, stack, "homelab", task, run="x", **kw)
+
+
+@pytest.mark.parametrize("fb", ["", "abc", "7x", "-1"])
+def test_empty_or_non_integer_fallback_exit_is_ignored(fb) -> None:
+    r = _admit({"AGENT_GATEWAY_FALLBACK_EXIT": fb, "AGENT_GATEWAY_ATTEMPT": "0"})
+    assert isinstance(r, Refusal) and r.rc == 2
+
+
+def test_integer_fallback_exit_applies() -> None:
+    assert _admit({"AGENT_GATEWAY_FALLBACK_EXIT": "75", "AGENT_GATEWAY_ATTEMPT": "0"}).rc == 75
+
+
+def test_empty_attempt_is_attempt_one_and_empty_sa_falls_to_token_file() -> None:
+    r = _admit({"AGENT_GATEWAY_ATTEMPT": "", "AGENT_GATEWAY_CALLER_SA": "", "AGENT_GATEWAY_CALLER_TOKEN_FILE": ""})
+    assert not isinstance(r, Refusal) and "attempt" not in r.body
+
+
+def test_trailing_newline_is_refused() -> None:
+    assert _admit({"AGENT_GATEWAY_CALLER_SA": "platform-agents/agentstack-loop\n"}).rc == 2
+    assert _admit(round="2\n").rc == 2
+
+
+def test_task_is_sanitised_in_the_bind_and_untasked_uses_the_clock() -> None:
+    assert _admit(task="issue-1_A.b", round="3").bind == "homelab/agentstack-worker/agent-homelab-issue-1---b-r3"
+    assert _admit(task="").bind == "homelab/agentstack-worker/agent-homelab-010203"

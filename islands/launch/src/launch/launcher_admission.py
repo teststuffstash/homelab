@@ -13,6 +13,7 @@ world; nothing here ends the calling process.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -20,8 +21,8 @@ from typing import Any
 from launch.gateway_admit import CallerTokenError, Request
 
 DEFAULT_TOKEN_FILE = "/var/run/secrets/agent-gateway/token"
-_CALLER_SA = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?$")
-_INT = re.compile(r"^[0-9]+$")
+_CALLER_SA = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?")
+_INT = re.compile(r"[0-9]+")
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,9 @@ class LauncherAdmission:
         transport: Callable[[Request], Any],
         read_token_file: Callable[[str], str | None],
         mint: Callable[[str], str],
+        clock: Callable[[], str] = lambda: time.strftime("%H%M%S"),
     ) -> None:
+        self.clock = clock
         self.transport = transport
         self.read_token_file = read_token_file
         self.mint = mint
@@ -61,11 +64,13 @@ class LauncherAdmission:
         recipe: str | None = None,
         harness: str | None = None,
     ) -> Refusal | Admitted:
-        fallback = knobs.get("AGENT_GATEWAY_FALLBACK_EXIT")
+        # an empty knob is unset; a non-integer fallback exit is ignored
+        fallback = knobs.get("AGENT_GATEWAY_FALLBACK_EXIT") or ""
+        fallback_rc = int(fallback) if _INT.fullmatch(fallback) else 2
 
         def refuse(why: str) -> Refusal:
             # a refusal before the request takes the wrapper's exit when one is set
-            return Refusal(int(fallback) if fallback is not None else 2, f"PREFLIGHT REFUSED: {why}")
+            return Refusal(fallback_rc, f"PREFLIGHT REFUSED: {why}")
 
         if model is not None:
             # unchanged by the fallback exit: a contradiction, not a failure to ask
@@ -76,13 +81,13 @@ class LauncherAdmission:
             )
         if run is None and recipe is None:
             return refuse("an interactive ride needs --run or --recipe under AGENT_GATEWAY=sessions")
-        if not _INT.match(round):
+        if not _INT.fullmatch(round):
             return refuse(f"--round {round!r} is not an integer")
-        attempt = knobs.get("AGENT_GATEWAY_ATTEMPT")
-        if attempt is not None and not (_INT.match(attempt) and int(attempt) >= 1):
+        attempt = knobs.get("AGENT_GATEWAY_ATTEMPT") or None
+        if attempt is not None and not (_INT.fullmatch(attempt) and int(attempt) >= 1):
             return refuse(f"AGENT_GATEWAY_ATTEMPT={attempt!r} is not an integer >= 1")
-        sa = knobs.get("AGENT_GATEWAY_CALLER_SA")
-        if sa is not None and not _CALLER_SA.match(sa):
+        sa = knobs.get("AGENT_GATEWAY_CALLER_SA") or None
+        if sa is not None and not _CALLER_SA.fullmatch(sa):
             return refuse(f"AGENT_GATEWAY_CALLER_SA={sa!r} is not <namespace>/<serviceaccount>")
         if sa is not None:
             try:
@@ -90,12 +95,14 @@ class LauncherAdmission:
             except CallerTokenError as e:
                 return refuse(f"no caller token could be minted for {sa}: {e}")
         else:
-            path = knobs.get("AGENT_GATEWAY_CALLER_TOKEN_FILE", DEFAULT_TOKEN_FILE)
+            path = knobs.get("AGENT_GATEWAY_CALLER_TOKEN_FILE") or DEFAULT_TOKEN_FILE
             token = self.read_token_file(path)
         if not token or not token.strip():
             return refuse("no caller token (no token file and no AGENT_GATEWAY_CALLER_SA)")
 
-        bind = f"{repo}/agentstack-worker/agent-{repo}-{task}-r{round}"
+        # LAUNCH-POD-IDENTITY: a tasked ride's pod name, non-[a-z0-9] of the task -> '-'
+        pod = f"agent-{repo}-{re.sub('[^a-z0-9]', '-', task)}-r{round}" if task else f"agent-{repo}-{self.clock()}"
+        bind = f"{repo}/agentstack-worker/{pod}"
         body: dict[str, Any] = {
             "stack": stack_row["name"],
             "role": knobs.get("AGENT_GATEWAY_ROLE", "worker"),
