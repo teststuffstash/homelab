@@ -100,7 +100,7 @@ all empty).
 ### LAUNCH-ADMIT-BOUND
 
 A dispatch is checked before anything is built on it; once a session exists, every refusal
-releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. The
+releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. The
 session id must match `^[A-Za-z0-9_-]{1,64}$`. **Bound** (`--bind`): the answer carries no
 credential — a `session.token` or an `env` map means the gateway ignored the bind, and the launcher
 refuses rather than hold a token (GW-SESSIONS-PULL); `env_keys` is a non-empty list of shell names
@@ -155,7 +155,7 @@ command, and an interactive pod has none), a non-integer round, an attempt < 1, 
 `agentstack-worker`, name `agent-<repo>-<task>-r<round>` (the pod-name block reuses it verbatim,
 [LAUNCH-POD-IDENTITY](pod.md#launch-pod-identity)). `--harness` reaches the request only when
 explicit (it narrows the walk to that dialect); `AGENT_GATEWAY_RAIL`, `AGENT_GATEWAY_ROLE`,
-`AGENT_GATEWAY_CANARY` are operator knobs; `AGENT_GATEWAY_ATTEMPT` is set only by the launcher's
+`AGENT_GATEWAY_CANARY` are operator knobs (`AGENT_GATEWAY_CANARY=<model>@<provider>` is split on `@`: the first part becomes the request's `canary.model`, the second its `canary.provider`); `AGENT_GATEWAY_ATTEMPT` is set only by the launcher's
 own re-admission ([LAUNCH-OUTCOME-GATEWAY](outcome.md#launch-outcome-gateway)). A defer or a
 fail-closed is exit 1 — the dispatcher's requeue path; the session is released on every exit from
 here on. On dispatch the harness and model are the gateway's: claude runs `GW_WIRE_MODEL`, opencode
@@ -198,7 +198,7 @@ path, the launcher's own default).
 | dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
 | dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
 | dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
+| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `role: prober`, `canary: {model: deepseek/deepseek-v4.1-flash, provider: deepinfra}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
 | defer | stack-platform · gw-defer | — | `defer` with a reason and a retry | bind | — | — | 1 |
 | http-503 | stack-platform · gw-error | — | 503 error envelope | bind | — | — | 1 |
 | unreachable | stack-platform · gw-error | — | no answer | bind | — | — | 1 |
