@@ -401,7 +401,7 @@ Written at intake, before the result. Not the ride's to change: no PR and no com
 <When no series can show the problem, the one line "Experiment: none — <why>" stands in place of this whole section (§Experiment).>
 
 ## Out of scope
-<the sibling gap on the same row that stays; what step 3 left to the operator>
+<the sibling `⚑ gap` this item does not close — named as still open, never as a ban on touching the requirement; other requirements and pages; what step 3 left to the operator>
 ````
 
 ### The `edit` shape — exact edits, no rows
@@ -433,7 +433,7 @@ Unverified: <as in the `spec` shape>; never a fact the fix depends on.
 Written at intake, before the result. Not the ride's to change: no PR and no comment edits this section.
 
 ## Out of scope
-<what stays as it is; what step 3 left to the operator>
+<what stays as it is outside the requirement the item edits; what step 3 left to the operator>
 ````
 
 Every acceptance line is an exact replacement (the old text, the new text, the file) or a command
@@ -443,7 +443,8 @@ with its expected output. The body carries no rows table.
 
 The bullets that name rows (`Touches` naming the `rule(…)` test file, "you state the rows",
 "quote before you author", "read every row the body touches", the `⚑ gap` flag) bind a `spec`
-body; every other bullet binds both.
+body; every other bullet binds both — "never fence the touched requirement" included, which also
+puts the `rule(…)` test file into the `Touches` of an `edit` body on a spec page.
 
 - The machine block goes through `python3 agents/issue_body.py set … < body > final` and the
   gate `python3 agents/issue_body.py json < final` (exit 2 ⇒ fix, never post) — README §Authoring
@@ -453,6 +454,14 @@ body; every other bullet binds both.
   serialises two issues on the same requirement instead of letting their PRs collide.
 - You state the rows, never the process: the worker's recipe (`.agents/fix.yaml`) carries the
   `Spec changes:` heading (rule 1) and the ratchets.
+- **Never fence the touched requirement.** The specs reviewer reads the whole requirement a PR
+  touches, and a finding on a row the item never named still blocks (ADR-155). So no acceptance
+  line and no `## Out of scope` line forbids a row, legend or test change inside the requirement
+  section the item edits — not "no row changes", not a `git diff --name-only` that must print one
+  file. `## Out of scope` names OTHER requirements, other pages and what step 3 left to the
+  operator. An `edit` body whose file is a spec page still lists, in `Touches`, the test file that
+  carries the requirement's `rule("<RULE-ID>")` label, so the round that fixes such a finding is
+  inside the footprint.
 - **The body is for a worker that does what it is told and does not reason** — the cheapest
   model on the rail may ride it. Every acceptance line is an edit, or a command with its expected
   result. No line asks the worker to choose, to measure before it can choose, or to "stop and

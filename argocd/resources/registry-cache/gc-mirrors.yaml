@@ -62,7 +62,7 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           containers:
             - name: trigger
-              image: registry.teststuff.net/agent-coordinator:2026.11.23-g703b436ee38d
+              image: registry.teststuff.net/agent-coordinator:2026.11.25-gcac2dc85aa38
               command: ["/bin/sh", "-c"]
               args:
                 - |
