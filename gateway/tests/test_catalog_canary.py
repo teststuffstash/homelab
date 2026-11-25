@@ -82,10 +82,10 @@ async def _rides_total(gw) -> dict[str, float | None]:
 
 # ── What a session's ride pins ────────────────────────────────────────────────────────────────
 PIN_ROWS = [
-    pytest.param("worker, tier heavy (M)", "candidate", "none", "none", id="a new cell is a candidate: selection does not pin it ⚖"),
+    pytest.param("worker, rail openrouter, tier heavy (M)", "candidate", "none", "none", id="a new cell is a candidate: selection does not pin it ⚖"),
     pytest.param("prober, canary {M, deepinfra}", "candidate", "order deepinfra, allow_fallbacks false", "deepinfra",
                  id="a canary session is admitted on a candidate cell, pinned to it ⚖"),
-    pytest.param("worker, tier heavy (M)", "eligible (a clean canary)", "order deepinfra, allow_fallbacks false", "none",
+    pytest.param("worker, rail openrouter, tier heavy (M)", "eligible (a clean canary)", "order deepinfra, allow_fallbacks false", "none",
                  id="a clean canary makes the cell eligible: selection pins it"),
 ]
 
@@ -102,9 +102,10 @@ async def test_what_a_ride_pins(gw, app, store, upstreams, session, cell_before,
             with quiet():
                 r = await gw.post("/sessions", json=canary_body(M, "deepinfra"))
         else:
+            role, rail, tier = (part.split(" ")[-1 if i == 0 else 1] for i, part in enumerate(session.split(", ")))  # the cell's own words
             with quiet():
-                r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "harness": "opencode", "task": "homelab-2742-pin",
-                                                     "rail": OR_RAIL, "tier": "heavy"})
+                r = await gw.post("/sessions", json={"stack": "platform", "role": role, "harness": "opencode", "task": "homelab-2742-pin",
+                                                     "rail": rail, "tier": tier})
         doc = r.json()
         attach_json("the admission", {k: doc.get(k) for k in ("decision", "rail", "model", "harness")})
         assert doc["decision"] == "dispatch", doc
