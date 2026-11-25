@@ -609,10 +609,10 @@ the ten markers recorded on #3270 carries it.
 
 | description | world | lineage | expect? |
 |---|---|---|---|
-| goal-open-funded | circles-29-tree | open Goal, budget left | goal-open-funded (store) |
-| goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
+| goal-open-funded | circles-29-tree | open Goal, budget left | the resolved Goal is #29 (open, budget left), `harvest=store` |
+| goal-closed | circles-29-tree | closed Goal | the resolved Goal is #29 (closed), `harvest=inert` |
 | ⚖ deep-sprout | deep-sprout | several levels below the Goal | the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
-| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; no `harvest` disposition on the item (inert) |
+| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; the unit carries no `goal=`, `bucket=` or `harvest=` field (master-lane harvest, inert by breaker #1) |
 | ⚖ bucket-child | homelab-278-tree | under the `post-launch:` bucket | the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
