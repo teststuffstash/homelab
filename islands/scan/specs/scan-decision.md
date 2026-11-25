@@ -36,7 +36,7 @@ grammar, the hold report line and the clause enum.
 | [SCAN-CLAUSE-DEBOUNCE](#scan-clause-debounce) | (marker — [github-grammar.schema.json](github-grammar.schema.json) `markers.state_fp`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `state-fp`, `merge-conflict/debounced`) |
 | [SCAN-CLAUSE-PHANTOM](#scan-clause-phantom) | `clause` (`c4c5-redispatch`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-infeasible`, `c4c5-pod-liveness`, `c4c5-ambig-decidable`, `done-phantom-belt`) |
 | [SCAN-CLAUSE-FLEET](#scan-clause-fleet) | — | 🚧 WIP → #3448 (fixture: `fleet-reader-rekey`) · ⚑ gap (2026-11-15, PR #3450 → work #3448): reads the old proxy's `/router-status` |
-| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) |
+| [SCAN-CLAUSE-GOAL](#scan-clause-goal) | `unit` (`goal-*`, `merged-closeout`) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`) · trigger (b) hold → #3656 — rule-labelled tests in islands/scan/tests/test_checkpoint_b.py over recorded world `goal-checkpoint` ⚖ |
 | [SCAN-LANE-WALK](#scan-lane-walk) | `clause` (priority order), `lane` | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-lane-walk`) |
 
 ## The wake
@@ -505,7 +505,22 @@ The goal lane: an `agent/queued` Goal emits `goal-decompose` (the session author
 `Base:` is mandatory on a Goal, brief §Goal decompose); an open Goal whose tree holds an
 undispositioned member, or whose members are all closed, emits `goal-checkpoint` — bare members
 are counted, never queued (ADR-122 (1)), `deferred` members are excluded and `adopted` ones counted
-(ADR-122 (4)). A checkpoint is due for any of three reasons, and the unit names them: the
+(ADR-122 (4)).
+
+The "child set is complete pre-launch" reason is held while the Goal's assembly pull request is
+open and carries the (b) marker for its own number. The assembly pull request of Goal `<g>` is an
+open pull request whose head is a `goal/**` branch and whose body carries the line-anchored
+trailer `Assembly-for: #<g>`. The marker is a comment on that pull request whose first characters
+are `` 🤖 `state-fp:goal-checkpoint-b:<hash>` ``, `<hash>` being the first 12 hex characters of the
+SHA-256 of `pr=<number>`. Nothing that happens on the pull request releases the hold: it ends when
+the pull request closes or another one replaces it. The marker is written at dispatch, never at
+evaluation, so a Goal that lost its lane is still eligible on the next wake. A refused marker
+write is one warning and the dispatch goes on. The marker read follows every page of the pull request's
+comments, so a marker past the hundredth comment still holds; there is no comment-count bound. A marker read that fails leaves the reason eligible
+with one warning ⚖; this is an exception to "an unreadable probe never becomes a write" below. An open-list read that fails gives no
+decision: exit 4, nothing written.
+
+A checkpoint is due for any of three reasons, and the unit names them: the
 [findings store](../../../docs/glossary.md) holds at least `GOAL_CHECKPOINT_N` (default 5) undispositioned findings (fewer wake nothing) (total minus
 dispositioned, e.g. `findings 5 undispositioned` for 6 total / 1 dispositioned); the child set
 is complete pre-launch; a member is undispositioned. The child set is complete pre-launch when the
@@ -528,7 +543,10 @@ from an open Goal append to the [findings store](../../../docs/glossary.md), fro
 inert (ADR-102, ADR-106 (3); the `harvest-disposition` block, :7061). ⚖ The goal clauses defer
 rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatch-admission)).
 
-**World:** `open-pre`, `terminal` (`goal`); `homelab-278-tree`, `circles-constructed-parents` (`goal-ancestor`); `circles-29-tree`, `deep-sprout`, `master-inert` (`harvest`).
+**World:** `open-pre`, `terminal` (`goal`); `homelab-278-tree`, `circles-constructed-parents` (`goal-ancestor`); `circles-29-tree`, `deep-sprout`, `master-inert` (`harvest`); [`goal-checkpoint`](worlds/README.md#recorded-worlds-worldsname--here) (the trigger (b) table).
+Every row of the (b) table starts from Goal #3118 with its pre-launch child set complete (a case
+input); `A` is the derived open element for pull request #3270, `B` a second derived element with
+another number.
 
 #### Does the Goal's tree wake its checkpoint?
 
@@ -540,6 +558,46 @@ rather than take the Go rail ([SCAN-DISPATCH-ADMISSION](dispatch.md#scan-dispatc
 | ⚖ adopted-open-unlabelled | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, `adopted`, no `agent/*` label | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the member is counted open; one orphan line names it |
 | ⚖ dispositions-unreadable | open-pre | the world's tree (two closed members, the `post-launch:` bucket) plus one open member, the disposition read fails | 6 total, 6 dispositioned | — | `goal-checkpoint` emitted: no — the undispositioned wake is held this pass, one warning |
 | ⚖ base-required | open-pre | (the world's tree) | 6 total, 1 dispositioned | a second Goal `agent/queued`, no `Base:` line | `goal-decompose` refused: no decompose unit, the refusal names `Base: master` and `Base: goal/<branch>` |
+
+#### Does trigger (b) fire while an assembly pull request is open?
+
+`(b) this wake?` — what `evaluate` prints; the case compares the whole line.
+`(b) next wake?` — what `evaluate` prints on the following wake, which reads the world plus the writes this wake issued, with no `fault`.
+
+| literal | stdout, one line | stderr | exit |
+|---|---|---|---|
+| fires-no-pr | `goal-checkpoint-b <g> fires: no open assembly PR` | — | 0 |
+| fires-unmarked | `goal-checkpoint-b <g> fires: pr=<n> carries no marker for pr=<n>` | — | 0 |
+| fires-unreadable | `goal-checkpoint-b <g> fires: pr=<n> marker read failed` | one warning line | 0 |
+| held | `goal-checkpoint-b <g> HELD: pr=<n>` | — | 0 |
+| no-decision | nothing | one warning line | 4 |
+
+`marker write?` — the comment writes issued in the wake, `evaluate` and `dispatch` together:
+
+| literal | comment writes issued |
+|---|---|
+| none | none |
+| on A / on B | exactly one, by `dispatch`, on that pull request; its body's first characters are the marker for that pull request's number; answered 201 |
+| refused | exactly one, by `dispatch`, answered 403; one warning line; `dispatch` exits 0 |
+
+| description | world | open assembly PR | (b) markers on it | fault | lane winner | (b) this wake? | marker write? | (b) next wake? |
+|---|---|---|---|---|---|---|---|---|
+| child-set-complete | goal-checkpoint | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
+| lane-lost-stays-eligible ⚖ | goal-checkpoint | A | none | — | another unit | fires-unmarked | none | fires-unmarked |
+| selected-marks ⚖ | goal-checkpoint | A | none | — | this Goal | fires-unmarked | on A | held |
+| goal-checkpoint-b-held | goal-checkpoint | A | the marker for A | — | this Goal | held | none | held |
+| old-fold-markers-not-identity ⚖ | goal-checkpoint | A | the ten recorded on #3270, none of them the marker for A | — | this Goal | fires-unmarked | on A | held |
+| marker-write-refused ⚖ | goal-checkpoint | A | none | the comment write answers 403 | this Goal | fires-unmarked | refused | fires-unmarked |
+| marker-read-fails ⚖ | goal-checkpoint | A | the marker for A | the read of A's comments fails | another unit | fires-unreadable | none | held |
+| pr-list-unreadable ⚖ | goal-checkpoint | A | none | the open-list read fails | this Goal | no-decision | none | fires-unmarked |
+| goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | this Goal | fires-unmarked | on B | held |
+| quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | this Goal | fires-unmarked | on A | held |
+| head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | this Goal | fires-no-pr | none | fires-no-pr |
+
+`child-set-complete`, `goal-checkpoint-b-held` and `goal-checkpoint-b-replaced-releases` are row
+ids of the replay family `goal`, kept verbatim so the replay comparison finds them. The other rows
+are new. The marker for A is `92c59fe63be7` (`printf 'pr=3270' | sha256sum | cut -c1-12`); none of
+the ten markers recorded on #3270 carries it.
 
 #### Which Goal does a merged PR's finding belong to?
 

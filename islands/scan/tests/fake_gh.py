@@ -107,12 +107,30 @@ def emit(body: bytes, jq: str | None) -> int:
     return 1 if p.returncode else 0
 
 
+def paged(body: bytes, path: str, paginate: bool, slurp: bool) -> bytes:
+    """What `gh api` answers for a list read with `?per_page=<n>`: the first page, or with `--paginate` every page
+    (`--slurp` wraps them into one list of pages). A recorded list longer than a page is the pages' concatenation."""
+    m = re.search(r"[?&]per_page=(\d+)", path)
+    data = json.loads(body)
+    if not m or not isinstance(data, list):
+        return body
+    n = int(m[1])
+    if not paginate and len(data) <= n:
+        return body  # one page, as recorded: the bytes stay
+    pages = [data[i : i + n] for i in range(0, max(len(data), 1), n)]
+    out = (pages if slurp else [x for pg in pages for x in pg]) if paginate else pages[0]
+    return json.dumps(out, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+
+
 def main(argv: list[str]) -> int:
     plan = json.loads(Path(os.environ["FAKE_GH_PLAN"]).read_text())
     world = Path(plan["world"])
     log_path = Path(os.environ["FAKE_GH_LOG"])
     prior = [json.loads(line) for line in log_path.read_text().splitlines()] if log_path.exists() else []
     key, jq = strip_jq(argv)
+    paginate = "--paginate" in key
+    slurp = "--slurp" in key
+    key = [a for a in key if a not in ("--paginate", "--slurp")]
     entry: dict = {"argv": argv}
 
     def finish(rc: int) -> int:
@@ -179,6 +197,8 @@ def main(argv: list[str]) -> int:
             return finish(0)
         if fault["kind"] == "absent":
             body = json.dumps(drop(json.loads(body), fault["field"]), ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+    if key[:1] == ["api"] and api_method(key) == "GET":
+        body = paged(body, api_path(key), paginate, slurp)
     return finish(emit(body, jq))
 
 
