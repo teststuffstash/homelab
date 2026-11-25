@@ -17,17 +17,26 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-25 — gateway day; TICK-LOG 11-25).** In flight when the session ended, re-read each before acting:
+  - #3770 (scan: a merged goal child is found by its goal base, not the repo-wide newest 40 merges) — an opus subagent's PR;
+    its report (why #3309's closeout missed on day one, other stranded children, the assembly trigger) was not in yet.
+    **#3309 is deliberately NOT hand-closed** (the live test case); Goal #3305 has not assembled, `TierEvidenceStale` stays red.
+  - The second jail's handoff `/workspace/.handoff/seat/20261125-2000-eso-tenancy-intake-transcripts.md` is NOT filed
+    (two `fu-new`, the oracle-fleet#1115 comment). An opus subagent took only its urgent pickup — stack Terraform Workspaces
+    → a platform-owned claim: inventory + an additive PR opened UNARMED + a migration plan, nothing live touched. Two older
+    files sit beside it in `seat/` (11-22 gmi-cloud key rotation, 11-23 nx01 fstrim) — check whether they were filed.
+  - Gateway intake inputs filed by the seat: #3764 (the Go usage reading is built but dark: vendor 60 % monthly vs the
+    dashboard's 3 %); the fact on #3538 (the console 403 is the `x-opencode-session` header, the key is fine — no mint).
+  - Not filed, the operator has the options: a read door per island for intake's credentialed reads (ad hoc replay of a
+    declared vendor read); the reviewer-comment route for unchanged-row findings (the intake no-fence rule #3750 went first).
+  - Specs sweep merged (#3754 #3757–#3760); its advisory list and two judgment rows (GW-RAIL-CODEX read-timeout count,
+    GW-RAIL-OPENROUTER "canonical pair") are in the session report only.
 - **⚑ PICKUP (2026-11-23 — cleanup trio; RULINGS OWED, operator: "too late to rule today"; TICK-LOG 11-23 ×2).**
   OPERATOR, recommendation first:
-  1. Merge #3722 (islands+intake docs comb; governance path `.claude/skills/intake/SKILL.md`, bot-approved). #3721 (gateway
-     comb) waits the specs reviewer only.
-  2. Goal branches `goal/3656-…`, `goal/3480-…`, `goal/3482-…` still UNCUT. The fix is on master (#3676 + #3682, 11-22), but no
-     sitting re-read them: #3656 parked `blocked-on: human` (re-read releases only `issue=`, and skips parks <3 d); #3482 waits
-     `issue=3438` (open, the cut never happens there); #3480 has no marker and was not offered. Same class as #3709. CONFLICT:
-     the 11-16 bullet below holds #3480/#3482 uncut ON PURPOSE until the gateway is self-sufficient — is that hold lifted?
-     Rec: seat cuts all three now if lifted, else #3656 only; comment each so 13 children unblock.
-  3. #2588 `AGENT_INFEASIBLE` (`islands/**` in no fix tier). Rec: re-scope into the scan island's updater rows.
-  4. Old-scan FUs FU-168/201/147/199/221 → scan island intake? Rec: yes.
+  1–4 DONE or moved 2026-11-25 (TICK-LOG 11-25): #3721 merged; `goal/3656-scan-checkpoint-b` cut and its five children queued;
+     #3482 was already cut by intake and assembled 11-24 (#3739) — it was never held; #2588 → #3776 and FU-168/201/147/199/221
+     → #3771–#3775, all inputs of the scan island's intake. STILL OWED: #3722's state was not re-read; **#3480 (launch second
+     leg) stays UNCUT on the 11-16 hold — the operator was asked 11-25 whether it is lifted** (seat's read: lift it).
   5. FU-315: wk-metal-02 apiserver refills in ~40 h. Rec: CP role → a 16 GB box (#3695).
   6. FU-297: BACKUP router firmware route. Rec: low-priority gateway via the peer's LAN address.
   7. FU-250: Rec: drop `cloudflare_web_analytics_site`/`_rule` from the composition.
