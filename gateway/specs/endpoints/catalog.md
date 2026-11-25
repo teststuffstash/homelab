@@ -714,7 +714,8 @@ Legend: **the `other` row** is the rankings' `other` permaslug in both slices' l
 #### A failed read keeps the last good (OpenRouter)
 
 Legend: `account_key` = the labelled Secret `catalog.account_ref` names is `present` / `absent`;
-`mcp_calls?` = the MCP requests the refresh made.
+`mcp_calls?` = the MCP requests that reached the MCP during the refresh (`down` = the connection
+fails before any request reaches it, so none is counted).
 
 | description | last_good | mcp_answer | endpoints | account_key | outcome? | models? | mcp_calls? |
 |---|---|---|---|---|---|---|---|
@@ -897,15 +898,17 @@ absent); times are `T0 + N s`.
 
 #### What a session's ride pins
 
-Legend: `session` = the session whose ride pins; `cell_before` = (M, deepinfra)'s state
+Legend: `session` = the session whose ride pins — a canary, or a worker whose `POST /sessions`
+body names `rail` and `tier` (the world's worker order walks opencode first; the body's `rail`
+is what puts the session on openrouter, whose heavy model is M); `cell_before` = (M, deepinfra)'s state
 when it is admitted; `pin?` = the `provider` block of the body the upstream received;
 `canary_provider?` = the session row's `canary_provider`.
 
 | description | session | cell_before | pin? | canary_provider? |
 |---|---|---|---|---|
-| a new cell is a candidate: selection does not pin it ⚖ | worker, tier heavy (M) | candidate | none | none |
+| a new cell is a candidate: selection does not pin it ⚖ | worker, rail openrouter, tier heavy (M) | candidate | none | none |
 | a canary session is admitted on a candidate cell, pinned to it ⚖ | prober, canary {M, deepinfra} | candidate | order deepinfra, allow_fallbacks false | deepinfra |
-| a clean canary makes the cell eligible: selection pins it | worker, tier heavy (M) | eligible (a clean canary) | order deepinfra, allow_fallbacks false | none |
+| a clean canary makes the cell eligible: selection pins it | worker, rail openrouter, tier heavy (M) | eligible (a clean canary) | order deepinfra, allow_fallbacks false | none |
 
 #### Admitting a canary
 
