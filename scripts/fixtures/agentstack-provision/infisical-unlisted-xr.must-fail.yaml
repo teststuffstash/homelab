@@ -1,0 +1,16 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: publishing an Infisical key off the stack's list (overwriting a platform key).
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: x
+          passwords:
+            - { name: p, length: 32 }
+          infisical:
+            projectId: 00000000-0000-4000-8000-000000000000
+            publish:
+              - { name: COORDINATOR_CLAUDE_OAUTH_TOKEN, password: p }

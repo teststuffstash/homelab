@@ -1,0 +1,22 @@
+# agentstack-provision-test fixture: a NEW entry (no adopt) with every default taken — derived
+# Terraform names, the key's Garage name, the Secret named after the entry, output names.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: cache
+          buckets:
+            - { alias: oracle-fleet-cache, maxSizeMi: 2048, output: bucket }
+          readBuckets:
+            - { alias: ert-snapshots }
+          keys:
+            - name: rw
+              grants:
+                - { bucket: oracle-fleet-cache, access: rw }
+                - { bucket: ert-snapshots, access: ro }
+          passwords:
+            - { name: token, length: 40 }

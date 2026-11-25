@@ -34,6 +34,9 @@
 #                                                intake sittings — per-repo bucket, write-only key in
 #                                                agent-coordinator, read-only mirror in-ns through a
 #                                                namespace-conditioned ClusterSecretStore.
+#  11. <repo>.<name> Workspace                — repos[].provision (ADR-169): Garage buckets/keys, generated
+#                                                passwords and their Infisical publication, from FIXED
+#                                                Terraform below; per-stack bounds in $provisionTenancy.
 # Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
@@ -66,6 +69,35 @@ spec:
                  stamped its children into it. */}}
             {{- $mainRepo := default "homelab" (get $xr.spec "mainRepo") }}
             {{- $loop := default (dict) (get $xr.spec "loop") }}
+            {{- /* ADR-169 repos[].provision bounds, per stack (the XR name). Platform-owned: a stack
+                 widens its own only through a platform PR, as with ADR-168's Infisical allowlist.
+                   namespaces     repos whose namespace may receive a provision entry's Secret
+                   aliasPrefixes  bucket aliases the stack may create / read-grant (+ aliases: legacy names)
+                   adopt          legacy stack-authored Workspaces an entry may take over (migration only;
+                                  an entry leaves this list once its legacy object is gone)
+                   infisical      Infisical keys (homelab/prod, path /) the stack may write
+                 A platform bucket alias (agent-transcripts, loki, tofu-state, …) must never fall inside
+                 a stack's space: a stack's readBuckets is a data lookup by alias. */}}
+            {{- $provisionTenancy := dict
+                  "oracle" (dict
+                    "namespaces" (list "oracle-fleet")
+                    "aliasPrefixes" (list "oracle-")
+                    "aliases" (list "allure-reports" "ert-snapshots" "ert-whatif" "ert-whatif-control" "ert-whatif-candidate")
+                    "adopt" (list "allure-reports-garage" "ert-snapshots-garage" "ert-whatif-garage" "oracle-feedback-applier-password" "oracle-feedback-ro-password")
+                    "infisical" (list "ORACLE_FEEDBACK_PG_APPLIER_PASSWORD" "ORACLE_FEEDBACK_PG_RO_PASSWORD"))
+                  "circles" (dict
+                    "namespaces" (list "circles")
+                    "aliasPrefixes" (list "circles-")
+                    "aliases" (list)
+                    "adopt" (list "circles-auth-secrets" "circles-source-garage" "circles-specs-garage")
+                    "infisical" (list))
+                  "sleep" (dict
+                    "namespaces" (list "sleep-tracking" "snore-recorder")
+                    "aliasPrefixes" (list "sleep-")
+                    "aliases" (list)
+                    "adopt" (list "sleep-specs-garage" "sleep-tracking-garage" "snore-recorder-garage")
+                    "infisical" (list "SNORE_S3_ACCESS_KEY_ID" "SNORE_S3_SECRET_KEY")) }}
+            {{- $adoptSeen := dict }}{{- /* one adopter per legacy state, across all repos of the XR */}}
             {{- $profileFQDNs := dict
                   "python" (list "pypi.org" "files.pythonhosted.org")
                   "node"   (list "registry.npmjs.org")
@@ -2282,6 +2314,189 @@ spec:
                   remoteRef: { key: intake-transcripts-{{ $r.name }}.reader, property: reader_access_key_id }
                 - secretKey: reader_secret_access_key
                   remoteRef: { key: intake-transcripts-{{ $r.name }}.reader, property: reader_secret_access_key }
+            {{- end }}
+            {{- range $p := default (list) (get $r "provision") }}
+            {{- /* repos[].provision (ADR-169): platform-held Terraform for what stacks used to get by
+                 authoring a Workspace themselves. The stack picks names, sizes and grants; the code
+                 below is fixed. Every bound a stack must not cross is checked HERE against
+                 $provisionTenancy (top of this template) and refused with `fail` — the PublicRoute
+                 zone-map shape. A failed render changes nothing that exists; it parks the XR with
+                 the reason. */}}
+            {{- $who := printf "AgentStack %s repo %s provision %s" $xr.metadata.name $r.name $p.name }}
+            {{- $ten := get $provisionTenancy $xr.metadata.name }}
+            {{- if not $ten }}{{ fail (printf "%s: stack %q has no provision bounds in the AgentStack Composition ($provisionTenancy) — a platform PR adds them (docs/patterns/app-owned-resources.md)" $who $xr.metadata.name) }}{{ end }}
+            {{- if not (has $r.name $ten.namespaces) }}{{ fail (printf "%s: namespace %q is not one of stack %q's namespaces %v" $who $r.name $xr.metadata.name $ten.namespaces) }}{{ end }}
+            {{- $wsName := printf "%s.%s" $r.name $p.name }}
+            {{- if gt (len $wsName) 63 }}{{ fail (printf "%s: Workspace name %q is over 63 characters (the Terraform state label limit)" $who $wsName) }}{{ end }}
+            {{- $adopt := get $p "adopt" }}
+            {{- $observe := false }}
+            {{- if $adopt }}
+              {{- if not (has $adopt.workspace $ten.adopt) }}{{ fail (printf "%s: adopt.workspace %q is not a legacy Workspace of stack %q (adoptable: %v)" $who $adopt.workspace $xr.metadata.name $ten.adopt) }}{{ end }}
+              {{- if hasKey $adoptSeen $adopt.workspace }}{{ fail (printf "%s: legacy Workspace %q is already adopted by %s — two Workspaces on one state fight" $who $adopt.workspace (get $adoptSeen $adopt.workspace)) }}{{ end }}
+              {{- $_ := set $adoptSeen $adopt.workspace $wsName }}
+              {{- $observe = eq $adopt.mode "observe" }}
+            {{- end }}
+            {{- /* the alias space: own prefixes + the stack's named legacy aliases */}}
+            {{- $inSpace := dict }}
+            {{- range $b := concat (default (list) (get $p "buckets")) (default (list) (get $p "readBuckets")) }}
+              {{- $ok := has $b.alias $ten.aliases }}
+              {{- range $pre := $ten.aliasPrefixes }}{{ if hasPrefix $pre $b.alias }}{{ $ok = true }}{{ end }}{{ end }}
+              {{- if not $ok }}{{ fail (printf "%s: bucket alias %q is outside stack %q's alias space (prefixes %v, names %v)" $who $b.alias $xr.metadata.name $ten.aliasPrefixes $ten.aliases) }}{{ end }}
+            {{- end }}
+            {{- $own := dict }}{{- $read := dict }}
+            {{- range $b := default (list) (get $p "buckets") }}{{ $_ := set $own $b.alias (default (replace "-" "_" $b.alias) (get $b "tfName")) }}{{ end }}
+            {{- range $b := default (list) (get $p "readBuckets") }}{{ $_ := set $read $b.alias (default (replace "-" "_" $b.alias) (get $b "tfName")) }}{{ end }}
+            {{- $keyTf := dict }}
+            {{- range $k := default (list) (get $p "keys") }}{{ $_ := set $keyTf $k.name (default $k.name (get $k "tfName")) }}{{ end }}
+            {{- $pwTf := dict }}{{- $pwStable := dict }}
+            {{- range $pw := default (list) (get $p "passwords") }}
+              {{- $_ := set $pwTf $pw.name (default $pw.name (get $pw "tfName")) }}
+              {{- $_ := set $pwStable $pw.name (default false (get $pw "stable")) }}
+            {{- end }}
+            {{- $access := dict "rw" (list "true" "true") "ro" (list "true" "false") "wo" (list "false" "true") }}
+            ---
+            # repos[].provision {{ $p.name }} (ADR-169, docs/patterns/app-owned-resources.md): fixed Terraform rendered
+            # from the stack's fields.{{ if $adopt }} ADOPTS legacy Workspace {{ $adopt.workspace }} (its state,
+            # via external-name) in mode {{ $adopt.mode }}.{{ end }} No Delete policy: removing the entry orphans.
+            apiVersion: tf.upbound.io/v1beta1
+            kind: Workspace
+            metadata:
+              name: {{ $wsName }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-provision-{{ $p.name }}
+                {{- if $adopt }}
+                crossplane.io/external-name: {{ $adopt.workspace }}
+                {{- end }}
+            spec:
+              deletionPolicy: Orphan
+              {{- if $observe }}
+              managementPolicies: ["Observe"]
+              {{- else }}
+              managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+              {{- end }}
+              providerConfigRef:
+                name: default
+              forProvider:
+                source: Inline
+                module: |
+                  {{- range $b := default (list) (get $p "buckets") }}
+                  resource "garage_bucket" "{{ get $own $b.alias }}" {
+                    global_alias = "{{ $b.alias }}"
+                    max_size     = {{ mul $b.maxSizeMi 1048576 }}
+                    {{- if default false (get $b "website") }}
+                    website_enabled        = true
+                    website_index_document = "index.html"
+                    {{- end }}
+                  }
+                  {{- end }}
+                  {{- range $b := default (list) (get $p "readBuckets") }}
+                  data "garage_bucket" "{{ get $read $b.alias }}" {
+                    global_alias = "{{ $b.alias }}"
+                  }
+                  {{- end }}
+                  {{- range $k := default (list) (get $p "keys") }}
+                  {{- $first := index $k.grants 0 }}
+                  resource "garage_key" "{{ get $keyTf $k.name }}" { name = "{{ default (printf "%s-%s" $first.bucket $k.name) (get $k "garageName") }}" }
+                  {{- range $g := $k.grants }}
+                  {{- $ref := "" }}
+                  {{- if hasKey $own $g.bucket }}{{ $ref = printf "garage_bucket.%s.id" (get $own $g.bucket) }}
+                  {{- else if hasKey $read $g.bucket }}
+                    {{- if ne $g.access "ro" }}{{ fail (printf "%s: key %s may only READ bucket %q (a readBuckets entry)" $who $k.name $g.bucket) }}{{ end }}
+                    {{- $ref = printf "data.garage_bucket.%s.id" (get $read $g.bucket) }}
+                  {{- else }}{{ fail (printf "%s: key %s grants on bucket %q, which is neither in buckets nor readBuckets" $who $k.name $g.bucket) }}{{ end }}
+                  {{- $rw := get $access $g.access }}
+                  resource "garage_bucket_permission" "{{ default (printf "%s_%s" (get $keyTf $k.name) (default (get $read $g.bucket) (get $own $g.bucket))) (get $g "tfName") }}" {
+                    bucket_id     = {{ $ref }}
+                    access_key_id = garage_key.{{ get $keyTf $k.name }}.id
+                    read          = {{ index $rw 0 }}
+                    write         = {{ index $rw 1 }}
+                    owner         = false
+                  }
+                  {{- end }}
+                  {{- end }}
+                  {{- range $g := default (list) (get $p "externalGrants") }}
+                  {{- if not (hasKey $own $g.bucket) }}{{ fail (printf "%s: externalGrants bucket %q is not one of this entry's buckets" $who $g.bucket) }}{{ end }}
+                  {{- $rw := get $access $g.access }}
+                  resource "garage_bucket_permission" "{{ default (printf "ext_%s_%s" (lower $g.accessKeyId) (get $own $g.bucket)) (get $g "tfName") }}" {
+                    bucket_id     = garage_bucket.{{ get $own $g.bucket }}.id
+                    access_key_id = "{{ $g.accessKeyId }}"
+                    read          = {{ index $rw 0 }}
+                    write         = {{ index $rw 1 }}
+                    owner         = false
+                  }
+                  {{- end }}
+                  {{- range $pw := default (list) (get $p "passwords") }}
+                  resource "random_password" "{{ get $pwTf $pw.name }}" {
+                    length  = {{ $pw.length }}
+                    special = false
+                    {{- if get $pwStable $pw.name }}
+                    lifecycle { prevent_destroy = true }
+                    {{- else }}
+                    keepers = { generation = "{{ default "1" (get $pw "generation") }}" }
+                    {{- end }}
+                  }
+                  {{- end }}
+                  {{- $inf := get $p "infisical" }}
+                  {{- if $inf }}
+                  {{- range $pub := $inf.publish }}
+                  {{- if not (has $pub.name $ten.infisical) }}{{ fail (printf "%s: Infisical key %q is not on stack %q's publish list %v" $who $pub.name $xr.metadata.name $ten.infisical) }}{{ end }}
+                  {{- $val := "" }}{{- $n := 0 }}
+                  {{- if hasKey $pub "password" }}{{ $n = add1 $n }}{{ if not (hasKey $pwTf $pub.password) }}{{ fail (printf "%s: publish %s names unknown password %q" $who $pub.name $pub.password) }}{{ end }}{{ $val = printf "random_password.%s.result" (get $pwTf $pub.password) }}{{ end }}
+                  {{- if hasKey $pub "keyId" }}{{ $n = add1 $n }}{{ if not (hasKey $keyTf $pub.keyId) }}{{ fail (printf "%s: publish %s names unknown key %q" $who $pub.name $pub.keyId) }}{{ end }}{{ $val = printf "garage_key.%s.id" (get $keyTf $pub.keyId) }}{{ end }}
+                  {{- if hasKey $pub "keySecret" }}{{ $n = add1 $n }}{{ if not (hasKey $keyTf $pub.keySecret) }}{{ fail (printf "%s: publish %s names unknown key %q" $who $pub.name $pub.keySecret) }}{{ end }}{{ $val = printf "garage_key.%s.secret_access_key" (get $keyTf $pub.keySecret) }}{{ end }}
+                  {{- if ne $n 1 }}{{ fail (printf "%s: publish %s must name exactly one of password / keyId / keySecret" $who $pub.name) }}{{ end }}
+                  resource "infisical_secret" "{{ default (lower $pub.name) (get $pub "tfName") }}" {
+                    name         = "{{ $pub.name }}"
+                    value        = {{ $val }}
+                    env_slug     = "prod"
+                    workspace_id = "{{ $inf.projectId }}"
+                    folder_path  = "/"
+                  }
+                  {{- end }}
+                  {{- end }}
+                  {{- /* outputs: each one is a connection-Secret key */}}
+                  {{- range $b := default (list) (get $p "buckets") }}
+                  {{- with get $b "output" }}
+                  output "{{ . }}" { value = garage_bucket.{{ get $own $b.alias }}.global_alias }
+                  {{- end }}
+                  {{- with get $b "idOutput" }}
+                  output "{{ . }}" { value = garage_bucket.{{ get $own $b.alias }}.id }
+                  {{- end }}
+                  {{- end }}
+                  {{- range $b := default (list) (get $p "readBuckets") }}
+                  {{- with get $b "output" }}
+                  output "{{ . }}" { value = data.garage_bucket.{{ get $read $b.alias }}.global_alias }
+                  {{- end }}
+                  {{- end }}
+                  {{- range $k := default (list) (get $p "keys") }}
+                  {{- if or (not (hasKey $k "outputs")) $k.outputs }}
+                  output "{{ default (printf "%s_access_key_id" $k.name) (get $k "idOutput") }}" { value = garage_key.{{ get $keyTf $k.name }}.id }
+                  output "{{ default (printf "%s_secret_access_key" $k.name) (get $k "secretOutput") }}" {
+                    value     = garage_key.{{ get $keyTf $k.name }}.secret_access_key
+                    sensitive = true
+                  }
+                  {{- end }}
+                  {{- end }}
+                  {{- range $pw := default (list) (get $p "passwords") }}
+                  {{- if or (not (hasKey $pw "outputs")) $pw.outputs }}
+                  output "{{ $pw.name }}" {
+                    value     = random_password.{{ get $pwTf $pw.name }}.result
+                    sensitive = true
+                  }
+                  {{- end }}
+                  {{- end }}
+                  {{- if $inf }}
+                  {{- range $pub := $inf.publish }}
+                  {{- with get $pub "output" }}
+                  output "{{ . }}" { value = infisical_secret.{{ default (lower $pub.name) (get $pub "tfName") }}.name }
+                  {{- end }}
+                  {{- end }}
+                  {{- end }}
+              {{- if not $observe }}
+              writeConnectionSecretToRef:
+                namespace: {{ $r.name }}
+                name: {{ default $p.name (get $p "secretName") }}
+              {{- end }}
             {{- end }}
             {{- if and $r.argo (get $r.argo "enabled") }}
             ---

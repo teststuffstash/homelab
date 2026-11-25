@@ -1,0 +1,70 @@
+# agentstack-provision-test fixture: the oracle stack's five legacy Workspaces as repos[].provision
+# entries in adopt/manage mode (ADR-169). Each entry must render a module provision-adopt-check finds
+# equivalent to expected/<adopt.workspace>.tf — a comment-free copy of the live legacy module
+# (2026-11-25), Infisical project id replaced by the fixture's placeholder.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: allure-reports
+          secretName: allure-reports-s3
+          adopt: { workspace: allure-reports-garage, mode: manage }
+          buckets:
+            - { alias: allure-reports, maxSizeMi: 20480, tfName: allure_reports, output: bucket }
+            - { alias: oracle-specs, maxSizeMi: 5120, website: true, tfName: specs }
+          keys:
+            - name: writer
+              garageName: allure-reports-writer
+              grants:
+                - { bucket: allure-reports, access: rw, tfName: writer_rw }
+                - { bucket: oracle-specs, access: rw, tfName: specs_writer_rw }
+            - name: reader
+              garageName: allure-reports-reader
+              grants:
+                - { bucket: allure-reports, access: ro, tfName: reader_read }
+                - { bucket: oracle-specs, access: ro, tfName: specs_reader_read }
+        - name: ert-snapshots
+          secretName: ert-snapshots-s3
+          adopt: { workspace: ert-snapshots-garage, mode: manage }
+          buckets:
+            - { alias: ert-snapshots, maxSizeMi: 122880, output: bucket }
+          keys:
+            - { name: writer, garageName: ert-snapshots-writer, grants: [{ bucket: ert-snapshots, access: rw, tfName: writer_rw }] }
+            - { name: reader, garageName: ert-snapshots-reader, grants: [{ bucket: ert-snapshots, access: ro, tfName: reader_read }] }
+        - name: ert-whatif
+          secretName: ert-whatif-s3
+          adopt: { workspace: ert-whatif-garage, mode: manage }
+          buckets:
+            - { alias: ert-whatif, maxSizeMi: 4096, output: bucket }
+            - { alias: ert-whatif-control, maxSizeMi: 18432, output: control_bucket }
+            - { alias: ert-whatif-candidate, maxSizeMi: 18432, output: candidate_bucket }
+          readBuckets:
+            - { alias: ert-snapshots, output: snapshot_bucket }
+          keys:
+            - name: runner
+              garageName: ert-whatif-runner
+              grants:
+                - { bucket: ert-whatif, access: rw, tfName: runner_whatif_rw }
+                - { bucket: ert-whatif-control, access: rw, tfName: runner_control_rw }
+                - { bucket: ert-whatif-candidate, access: rw, tfName: runner_candidate_rw }
+                - { bucket: ert-snapshots, access: ro, tfName: runner_snapshots_read }
+        - name: feedback-applier
+          adopt: { workspace: oracle-feedback-applier-password, mode: manage }
+          passwords:
+            - { name: feedback_applier, length: 32, generation: "1", outputs: false }
+          infisical:
+            projectId: 00000000-0000-4000-8000-000000000000
+            publish:
+              - { name: ORACLE_FEEDBACK_PG_APPLIER_PASSWORD, password: feedback_applier, tfName: feedback_applier_password, output: published_key }
+        - name: feedback-ro
+          adopt: { workspace: oracle-feedback-ro-password, mode: observe }
+          passwords:
+            - { name: feedback_ro, length: 32, outputs: false }
+          infisical:
+            projectId: 00000000-0000-4000-8000-000000000000
+            publish:
+              - { name: ORACLE_FEEDBACK_PG_RO_PASSWORD, password: feedback_ro, tfName: feedback_ro_password, output: published_key }

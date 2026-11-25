@@ -1,0 +1,14 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: a read grant on a platform bucket (readBuckets is a lookup by alias, so the space bounds it too).
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: x
+          readBuckets:
+            - { alias: agent-transcripts }
+          keys:
+            - { name: r, grants: [{ bucket: agent-transcripts, access: ro }] }

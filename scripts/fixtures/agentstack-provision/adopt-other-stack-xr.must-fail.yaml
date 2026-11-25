@@ -1,0 +1,13 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: adopting ANOTHER stack's legacy Workspace.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: x
+          adopt: { workspace: sleep-tracking-garage, mode: observe }
+          buckets:
+            - { alias: oracle-x, maxSizeMi: 64 }

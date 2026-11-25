@@ -113,7 +113,7 @@ a port-forward wrapper); keys land in the app's local state (SOPS+age before pub
 to Crossplane is a re-point at the same provider.
 
 ### ADR-076 — App resource provisioning: Crossplane provider-terraform (the "later" landed)
-**Status:** Accepted (2026-06-17, supersedes ADR-075). **Decision:** now that ArgoCD is live (ADR-005),
+**Status:** Accepted (2026-06-17, supersedes ADR-075); for STACKS superseded-in-part by ADR-169 (2026-11-25: the Composition writes their Terraform). **Decision:** now that ArgoCD is live (ADR-005),
 app Garage resources are reconciled **in-cluster** by **Crossplane `provider-terraform`**
 (`xpkg.crossplane.io/crossplane-contrib/provider-terraform`) wrapping the same `jkossis/garage` module —
 declared as a `Workspace` CR in the **app's own repo** (ADR-074) and synced by ArgoCD. The Garage admin
@@ -3192,3 +3192,23 @@ kubernetes-provider stores had no `conditions`.
 **Consequences:** a stack's new Infisical key is one allowlist line in a platform PR. A new platform
 namespace that reads arbitrary keys joins the list. A stack's ExternalSecret outside its allowlist
 fails at sync, visibly.
+
+### ADR-169 — Stacks stop authoring Terraform: buckets, keys and generated passwords come from an AgentStack `repos[].provision` entry (2026-11-25)
+**Status:** Accepted (operator ruling 2026-11-25, option (a); the additive half — the whitelist removal follows the migration).
+Supersedes ADR-076's "a `Workspace` CR in the app's own repo" for stacks; platform-authored Workspaces stay.
+**Decision:** a stack declares what it needs as `repos[].provision` entries on its AgentStack (names,
+quotas, grants, password lengths, Infisical key names); the Composition renders one Workspace per
+entry from FIXED Terraform and checks per-stack bounds it holds (alias space, adoptable legacy
+Workspaces, publishable Infisical keys, namespaces). Legacy Workspaces move by adopting their
+Terraform state, observe-mode first. Then `tf.upbound.io/Workspace` leaves the stack AppProjects.
+Mechanism + migration: [patterns/app-owned-resources.md](patterns/app-owned-resources.md#buckets-keys-and-passwords-reposprovision-adr-169),
+[stack-workspace-migration.md](stack-workspace-migration.md).
+**Considered:** a namespaced claim kind per bucket (the PublicRoute shape — rejected for now: a stack's
+claim already lives in AgentStack and #3724 set that shape); a least-privilege ProviderConfig per stack
+(still runs stack-written code in the provider pod, whose SA reads every Secret); recreate-not-adopt
+(rotates every key and password).
+**Why:** a merged stack-repo Workspace runs arbitrary Terraform in provider-terraform, whose SA reads
+`secrets` cluster-wide and whose ProviderConfig carries the Garage admin, Infisical writer and
+Cloudflare-proxy providers — it bypasses ADR-168 (found by the #3768 review, 2026-11-25).
+**Consequences:** a stack's new bucket is a claim edit; a new alias prefix, adoption or Infisical key is a
+line in the Composition (platform PR). Removing an entry orphans (no Delete); deleting data is an operator act.
