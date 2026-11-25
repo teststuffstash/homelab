@@ -18,9 +18,12 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-25 — gateway day; TICK-LOG 11-25).** In flight when the session ended, re-read each before acting:
-  - #3770 (scan: a merged goal child is found by its goal base, not the repo-wide newest 40 merges) — an opus subagent's PR;
-    its report (why #3309's closeout missed on day one, other stranded children, the assembly trigger) was not in yet.
-    **#3309 is deliberately NOT hand-closed** (the live test case); Goal #3305 has not assembled, `TierEvidenceStale` stays red.
+  - #3770 MERGED 21:12Z (`9022934a7`): the goal-child closeout reads merged PRs per goal base and reports what it cannot
+    confirm. Root cause of #3309: `gh pr list --state merged --limit N` is ordered by OPEN date — #3590 (opened 11-20,
+    merged 11-22) was 56th the moment it merged. **#3309 was deliberately not hand-closed**: read whether the scan closed it
+    and Goal #3305's assembly PR opened (then `TierEvidenceStale` clears after the human verdict). UNTRACKED, same class,
+    four more unscoped lookups in `coordinator-scan.sh` (≈2310 master closeout, ≈5187 in-progress belt, ≈3599
+    assembly-merge detection — the likeliest to bite, ≈5721 done belt): file to the agent-loop island's intake.
   - The second jail's handoff `/workspace/.handoff/seat/20261125-2000-eso-tenancy-intake-transcripts.md` is NOT filed
     (two `fu-new`, the oracle-fleet#1115 comment). An opus subagent took only its urgent pickup — stack Terraform Workspaces
     → a platform-owned claim: inventory + an additive PR opened UNARMED + a migration plan, nothing live touched. Two older
