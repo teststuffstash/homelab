@@ -169,6 +169,8 @@ MAP=(
   # fake kubectl. Scoped to the rig's OWN files — the rig is optional (ADR-108), so an edit elsewhere
   # (agents/agent-session.sh, agents/images.env) never runs it; no ci.yaml step.
   "jail-cluster-self-test:^(scripts/jail-cluster|scripts/fixtures/jail-cluster/|argocd/resources/jail-clusters/)"
+  # the ESO tenancy guards' decision table (ADR-168): kyverno over the policy file, no cluster.
+  "-- bash scripts/eso-guard-test.sh:^(scripts/eso-guard-test\.sh$|scripts/fixtures/eso-guard/|argocd/resources/extras/eso-guard\.yaml$)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
   # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows

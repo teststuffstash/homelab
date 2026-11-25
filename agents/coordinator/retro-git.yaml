@@ -139,6 +139,9 @@ kind: ClusterSecretStore
 metadata:
   name: retro-git
 spec:
+  # Exactly the ride namespaces mirrored below; a new mirror adds its namespace here (ADR-168).
+  conditions:
+    - namespaces: [openrouter-operator, oracle-fleet]
   provider:
     kubernetes:
       remoteNamespace: agent-coordinator
