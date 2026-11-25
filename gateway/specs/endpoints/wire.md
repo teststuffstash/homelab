@@ -114,7 +114,9 @@ answer is whole).
 
 #### The credential never lands in a record
 
-Legend: `credential_sent` = the credential the read carries; `source_class?` = the class the source is
+Legend: `read` = what the console answers the read: `config-401-echo` = a 401 whose body names the Go key;
+`config-200-echo` = a 200 whose body names the Go key; `config-ok` = the 200 console answer, no key in it;
+`credential_sent` = the credential the read carries; `source_class?` = the class the source is
 recorded under; `last_error?` = the failure the recorder notes beside the source (`status <n>` = a non-200
 answer, of which no byte is kept; `withheld` = a 200 answer that echoed a credential the gateway holds, no part of it kept); `record_fields_with_key?` =
 the number of the stored record's fields (body included) that contain the Go key;
@@ -129,7 +131,9 @@ the number of the stored record's fields (body included) that contain the Go key
 #### The account class's allowlist
 
 Legend: `keep_keys` = the source's allowlist in the declarations file; `answer` = what the fake upstream
-answers; `stored?` = the record's bytes; `load?` = whether the declarations load (`—` = no file is read).
+answers (a parenthesis after the JSON says what the row needs known about a value: `credential-shaped,
+held by no rail` = it matches a [GW-REDACT](sessions.md#gw-redact) credential pattern and is no
+credential of the world's); `stored?` = the record's bytes; `load?` = whether the declarations load (`—` = no file is read).
 
 | description | keep_keys | answer | stored? | load? |
 |---|---|---|---|---|
@@ -137,7 +141,7 @@ answers; `stored?` = the record's bytes; `load?` = whether the declarations load
 | no allowlist keeps no string | `[]` | `{"slug": "fixture-model", "note": "hello"}` | both strings as lengths | loads |
 | an allowlisted key is kept at any depth and in a list | `[slug]` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": ["q"]}` | `{"a": {"slug": "x"}, "slug": ["p", 3], "other": [{"len": 1}]}` | loads |
 | no declarations file keeps no string ⚖ | `GATEWAY_WIRE` unset, source `codex-usage` | the observed usage shape | every string as its length | — |
-| an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE…"}` | the value as its length | loads |
+| an allowlisted value that matches a credential pattern is still withheld ⚖ | `[slug]` | `{"slug": "sk-ant-oat-FAKE0123456789"}` (credential-shaped, held by no rail) | the value as its length | loads |
 | an allowlisted value equal to the account id is kept as its length ⚖ | `[slug]` | `{"slug": "dummy-account"}` | the account id as its length | loads |
 
 #### What an allowlist may not name
