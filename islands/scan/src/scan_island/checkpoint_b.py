@@ -90,7 +90,9 @@ def decide(slug: str, goal: str) -> Decision | None:
     pr = assembly_pr(listed, goal)  # type: ignore[arg-type]
     if pr is None:
         return Decision("no-pr", goal)
-    comments = _read_json("api", f"repos/{slug}/issues/{pr}/comments?per_page=100")
+    # every page: a marker written after the 100th comment is on a later page, and a read that cannot see it would stamp again each wake
+    pages = _read_json("api", "--paginate", "--slurp", f"repos/{slug}/issues/{pr}/comments?per_page=100")
+    comments = [c for page in pages for c in page] if isinstance(pages, list) and all(isinstance(page, list) for page in pages) else None
     problem = _unreadable(comments, ISSUE_COMMENTS_READ)
     if problem:
         # a marker read that fails leaves (b) eligible (Goal pin 9): a read that keeps failing must not silence it

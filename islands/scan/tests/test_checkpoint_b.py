@@ -325,6 +325,30 @@ def test_each_required_comment_field_absent_leaves_b_eligible_with_one_warning(p
     assert run.rc == 0 and run.stdout.strip().endswith("marker read failed") and len(run.stderr.strip().splitlines()) == 1, run
 
 
+def _marker_past_the_first_page() -> World:
+    w = World(WORLD)
+    open_pr("A", w)
+    neutralise(w)
+    for _ in range(100):
+        w.add(COMMENTS, (), copy_of=0)
+    overlay(w, COMMENTS, marker(A) + " — placed on the pull request", 0)
+    assert len(w.get(COMMENTS, ())) > 100
+    return w
+
+
+def test_a_marker_past_the_first_hundred_comments_still_holds_and_dispatch_stamps_nothing():
+    for mode in ("evaluate", "dispatch"):
+        run = _marker_past_the_first_page().run([*COMPONENT, mode, REPO, GOAL])
+        assert run.stdout.strip() == f"goal-checkpoint-b {GOAL} HELD: pr={A}" and run.stderr == "", (mode, run)
+        assert [c for c in run.calls if c["kind"] == "write"] == [], mode
+
+
+def test_the_single_page_read_would_miss_that_marker():
+    # the red side: the first page of the same list (what the old `?per_page=100` read saw) does not hold the marker
+    run = _marker_past_the_first_page().run(["gh", "api", comments_path(A)])
+    assert not any(c["body"].startswith(marker(A)) for c in json.loads(run.stdout))
+
+
 def test_a_non_json_open_list_is_no_decision():
     w = World(WORLD).fault("pr-list.json", "non-json")
     run = w.run([*COMPONENT, "evaluate", REPO, GOAL])

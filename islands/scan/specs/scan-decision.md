@@ -515,7 +515,8 @@ are `` 🤖 `state-fp:goal-checkpoint-b:<hash>` ``, `<hash>` being the first 12 
 SHA-256 of `pr=<number>`. Nothing that happens on the pull request releases the hold: it ends when
 the pull request closes or another one replaces it. The marker is written at dispatch, never at
 evaluation, so a Goal that lost its lane is still eligible on the next wake. A refused marker
-write is one warning and the dispatch goes on. A marker read that fails leaves the reason eligible
+write is one warning and the dispatch goes on. The marker read follows every page of the pull request's
+comments, so a marker past the hundredth comment still holds; there is no comment-count bound. A marker read that fails leaves the reason eligible
 with one warning ⚖; this is an exception to "an unreadable probe never becomes a write" below. An open-list read that fails gives no
 decision: exit 4, nothing written.
 
