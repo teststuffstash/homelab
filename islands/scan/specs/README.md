@@ -83,7 +83,9 @@ What this island adds, by rule:
   answers of the surface). Until a requirement is re-sourced its world is a replay world of the
   harness. A row adds its condition in its own cells.
 - **Table shape:** expected columns end in `?`; one question per table; the rows brief's
-  checklist is advisory. Mermaid flow overviews are omitted (no site build).
+  checklist is advisory. A table between generated-marker comments is rendered from the model file the
+  markers name, and the suite fails when the page and a fresh render differ. Mermaid flow overviews are
+  omitted (no site build).
 
 ## Contract page template
 

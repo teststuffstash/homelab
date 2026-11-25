@@ -580,6 +580,10 @@ another number.
 | on A / on B | exactly one, by `dispatch`, on that pull request; its body's first characters are the marker for that pull request's number; answered 201 |
 | refused | exactly one, by `dispatch`, answered 403; one warning line; `dispatch` exits 0 |
 
+The table below is generated from [`models/scan-clause-goal-b.yaml`](models/scan-clause-goal-b.yaml); an edit is made in the model.
+
+<!-- generated from specs/models/scan-clause-goal-b.yaml by scripts/render_model.py — edit the model, not this table -->
+
 | description | world | open assembly PR | (b) markers on it | fault | lane winner | (b) this wake? | marker write? | (b) next wake? |
 |---|---|---|---|---|---|---|---|---|
 | child-set-complete | goal-checkpoint | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
@@ -594,6 +598,8 @@ another number.
 | quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | this Goal | fires-unmarked | on A | held |
 | head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | this Goal | fires-no-pr | none | fires-no-pr |
 
+<!-- end generated: specs/models/scan-clause-goal-b.yaml -->
+
 `child-set-complete`, `goal-checkpoint-b-held` and `goal-checkpoint-b-replaced-releases` are row
 ids of the replay family `goal`, kept verbatim so the replay comparison finds them. The other rows
 are new. The marker for A is `92c59fe63be7` (`printf 'pr=3270' | sha256sum | cut -c1-12`); none of
@@ -603,10 +609,10 @@ the ten markers recorded on #3270 carries it.
 
 | description | world | lineage | expect? |
 |---|---|---|---|
-| goal-open-funded | circles-29-tree | open Goal, budget left | goal-open-funded (store) |
-| goal-closed | circles-29-tree | closed Goal | goal-closed (inert) |
+| goal-open-funded | circles-29-tree | open Goal, budget left | the resolved Goal is #29 (open, budget left), `harvest=store` |
+| goal-closed | circles-29-tree | closed Goal | the resolved Goal is #29 (closed), `harvest=inert` |
 | ⚖ deep-sprout | deep-sprout | several levels below the Goal | the resolved Goal is #29, `harvest=inert` (that Goal is closed) |
-| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; no `harvest` disposition on the item (inert) |
+| ⚖ master-inert | master-inert | no Goal ancestor | no Goal resolved; the unit carries no `goal=`, `bucket=` or `harvest=` field (master-lane harvest, inert by breaker #1) |
 | ⚖ bucket-child | homelab-278-tree | under the `post-launch:` bucket | the resolved Goal is #278, the bucket's parent (one hop above the bucket #295; `walked 1 hop(s) up to goal #278`) |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
