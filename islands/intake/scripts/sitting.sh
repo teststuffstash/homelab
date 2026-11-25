@@ -230,11 +230,11 @@ _admit() { # <task suffix> → rc 0 (rail + TS_MODEL + GW_LLM_ENV set) | 1 (not 
   _rm="$(bash agents/resolve-model.sh --role coordinator --class goal-decompose --fallback opus)"
   eval "$(python3 agents/model_id.py --shell "$_rm")"; TS_MODEL="${MODEL_MODEL:-$_rm}"; return 0
 }
-# The author and the repair sessions read stack-authored input with the pod's environment: their read set
-# (GH_TOKEN and INTAKE_READ_GH_TOKEN — their job is GitHub writes and reads —, the transcripts READER key, the
-# kube ServiceAccount) minus every key ONLY this shell uses: the transcripts WRITER keys (_ts_put,
-# _ts_put_stack). A session steered by an issue body cannot overwrite a sitting's record or write into a
-# stack's bucket. Every Secret-sourced env of the intake leaf is classified here or in the harness's
+# The author and the repair sessions run with the pod's environment minus the transcripts WRITER keys only
+# this shell uses (_ts_put, _ts_put_stack). Scope: hygiene, not a boundary — the keys leave the session's own
+# environ (an env dump in a transcript, a stray s5cmd), but every process here runs as one uid, so a session
+# with Bash can still read them from /proc/1/environ. A real boundary needs the shell and the session under
+# different uids. Every Secret-sourced env of the intake leaf is classified here or in the harness's
 # read-set list (islands/intake/tests/island-intake-test.sh); a new one fails the harness until it is.
 SESSION_UNSET=(-u AGENT_TS_ACCESS_KEY_ID -u AGENT_TS_SECRET_ACCESS_KEY -u STACK_TS_ACCESS_KEY_ID -u STACK_TS_SECRET_ACCESS_KEY)
 if ! _admit ""; then
