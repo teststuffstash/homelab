@@ -25,6 +25,12 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
     (two `fu-new`, the oracle-fleet#1115 comment). An opus subagent took only its urgent pickup — stack Terraform Workspaces
     → a platform-owned claim: inventory + an additive PR opened UNARMED + a migration plan, nothing live touched. Two older
     files sit beside it in `seat/` (11-22 gmi-cloud key rotation, 11-23 nx01 fstrim) — check whether they were filed.
+  - **PR #3782 (UNARMED, operator reads it; ADR-169): `repos[].provision[]` on AgentStack — the platform-owned replacement for
+    stack-authored Terraform Workspaces.** Additive only; the hole stays open until the six-step migration in
+    `docs/stack-workspace-migration.md` (on that branch) ends. **BIGGER HOLE found, NO FU yet (grep: no match) — file it with
+    the handoff:** the `agent-fixer` ApplicationSet and the root oracle/sleep/circles Applications sync stack-repo content
+    under AppProject `default` (any repo, namespace, cluster-scoped kind), so removing `Workspace` from the stack projects
+    closes nothing by itself and a stack repo can apply cluster RBAC. Interim admission guard = an option in the doc (Warn/Audit first).
   - Gateway intake inputs filed by the seat: #3764 (the Go usage reading is built but dark: vendor 60 % monthly vs the
     dashboard's 3 %); the fact on #3538 (the console 403 is the `x-opencode-session` header, the key is fine — no mint).
   - Not filed, the operator has the options: a read door per island for intake's credentialed reads (ad hoc replay of a
