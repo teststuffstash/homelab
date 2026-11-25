@@ -138,3 +138,28 @@ def test_adapter_translates_only() -> None:
     text = (COMPARE / "adapter.sh").read_text(encoding="utf-8") + (COMPARE / "adapter.py").read_text(encoding="utf-8")
     for word in ('"decision"', '"env_keys"', '"pull_url"', '"serviceaccount"', "dispatch-unusable"):
         assert word not in text, word
+
+
+def _ledger_patterns(ruling: str) -> list[re.Pattern[str]]:
+    return [p for rs in ledger().values() for r, _, p in rs if r == ruling]
+
+
+def test_check_red_when_a_spec_ruled_row_changes_its_rc_line() -> None:
+    syn = _rows(r1=(["OUT rc=0", "OUT x"], ["OUT rc=1", "OUT x"]))
+    pats = [("spec", "ledger", p) for p in _ledger_patterns("spec")]
+    unruled, _ = check_rulings(syn, {"r1": pats})
+    assert unruled == ["r1: -OUT rc=0", "r1: +OUT rc=1"]
+
+
+def test_check_red_when_a_spec_ruled_row_changes_its_env_file_line() -> None:
+    syn = _rows(r1=(["OUT env file: absent"], ["OUT env file: present"]))
+    pats = [("spec", "ledger", p) for p in _ledger_patterns("spec")]
+    unruled, _ = check_rulings(syn, {"r1": pats})
+    assert unruled == ["r1: -OUT env file: absent", "r1: +OUT env file: present"]
+
+
+def test_check_red_when_an_old_ruled_row_changes_another_gw_line() -> None:
+    syn = _rows(r1=(["OUT GW_DEFER_REASON=a"], ["OUT GW_DEFER_REASON=b"]))
+    pats = [("old", "ledger", p) for p in _ledger_patterns("old")]
+    unruled, _ = check_rulings(syn, {"r1": pats})
+    assert len(unruled) == 2
