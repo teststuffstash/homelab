@@ -33,29 +33,26 @@ What this island adds, by rule:
   `BUNDLE`, `CARD`, `OUTCOME`, `BUDGET`.
 - **Rule 5 (evidence):** raw Allure results are generated locally by `islands/launch/tests/` (run by
   `islands/launch/scripts/ci.sh`, gated at the worker's `pr-open` through `diff-ci` and in required
-  `ci` (#3391)). A labelled case runs one replay row with `agents/replay/run.sh` from a temporary copy of the
-  harness in which the path `agents/gateway-admit.sh` (today's helper, the one being replaced) holds
-  the file under test, and records that file as its
-  target. Nothing is published, so every row stays unproven to the specs reviewer. The Status-cell
+  `ci` (#3391)). A labelled case is one row of a page's table, run over the
+  worlds under `specs/worlds/` against the Python component under `src/`. The replay harness
+  ([`agents/replay/`](../../../agents/replay/README.md)) is the comparison (rule 4 of
+  [`islands/README.md`](../README.md#built-from-the-specs-never-copied)), not the gate: a family runs
+  through it unlabelled against the old member and against the component, and every difference it
+  prints is ruled `spec`, `old` or `new`, the remaining ones ledgered with their ruling beside the
+  comparison (`tests/compare/`), the gate failing on an unledgered difference. Nothing is published, so every row stays unproven to the specs reviewer. The Status-cell
   forms (rule 10) are the only two: a requirement an OPEN issue builds or proves says
   `🚧 WIP → #<issue>`, with what runs locally and against which target in parentheses; a gap says
-  `⚑ gap (<date>, PR #<n> → work #<m>): <line>`. The proving harness is the clause-replay harness
-  ([`agents/replay/`](../../../agents/replay/README.md)): it extracts the real clause between its
-  `>>>REPLAY:<name>>>>` sentinels, runs it against recorded worlds, and diffs the action stream.
-  It runs in `ci` on every PR; a requirement with no fixture says so. Every requirement carries the
+  `⚑ gap (<date>, PR #<n> → work #<m>): <line>`. Every requirement carries the
   evidence shell under its tables (the fragment it would transclude).
   The replay is PR-head evidence by construction (the clause at head, stubbed `gh`/`kubectl`/`curl`)
   — there is no built artifact; the pod image is agent-runtime's.
 - **Rule 7 (coupling):** each page's schema annotates its paths with `x-requirements`; no
   `spec_gate.py` runs over this root yet (⚑ gap — the gateway's gate reads `gateway/specs/` only).
-- **The join (CONVENTIONS § The intent column):** a replay row's argnames are
-  `(id, world, patch, env, expect, params)` and its state lives in `rows/<id>/vars.sh`. So a table
-  over a tabular fixture keys its description cell on the **row id verbatim** (⚖ appended where
-  the row is a judgment — the ids do not carry it yet), its `world` cell on the row's world, and
-  every other column on a `vars.sh` variable or the expected action stream. A table over a
-  one-case-per-directory family keys the description on the **fixture dir**. Columns are
-  therefore unthreaded until the harness emits per-row parameters (⚑ gap — the join is by id
-  only).
+- **The join (CONVENTIONS § The intent column):** a case's id is the row's description cell (a
+  trailing ` ⚖` dropped); its inputs are the row's cells, read from the page's table at collection —
+  `world` names a file under `specs/worlds/`, the other input cells are the case's arguments, and a
+  prose cell is asserted in the case that carries the id. A table row with no case, or a case with
+  no row, fails the gate.
 - **Rule 9 (external facts):** GitHub REST behaviour (pagination, `author_association`,
   `user.type`, check-run conclusions, the run-list `--status failure` semantics) — each marked on
   the requirement that rests on it, read from the recorded worlds' provenance or "verify during
