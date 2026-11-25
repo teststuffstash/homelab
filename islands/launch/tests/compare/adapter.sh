@@ -15,7 +15,6 @@ gw_admit() {
   local _out _rc=0
   _out="$(mktemp)"
   _gw_py admit "$_out" -- "$@" || _rc=$?
-  # shellcheck disable=SC1090
   # shellcheck disable=SC1090  # the adapter's own mktemp output
   . "$_out"; rm -f "$_out"
   _GW_SID="$GW_SESSION_ID"; _GW_RELEASED=0
@@ -23,7 +22,7 @@ gw_admit() {
 }
 gw_release() {
   [ -n "$_GW_SID" ] || return 0
-  local _out _rel; _out="$(mktemp)"
+  local _out; _out="$(mktemp)"
   _gw_py release "$_out" "$_GW_SID" "$_GW_RELEASED" || true
   # shellcheck disable=SC1090  # the adapter's own mktemp output
   . "$_out"; rm -f "$_out"
