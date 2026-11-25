@@ -26,6 +26,7 @@
 #
 # Native ValidatingAdmissionPolicy (no Kyverno controller; the jail-clusters/kargo shape).
 # failurePolicy Fail: a broken policy blocks ExternalSecret writes, never reads of existing Secrets.
+# Only CREATE and spec-changing UPDATEs are judged (matchConditions): deletes never wedge.
 # Decision table: scripts/fixtures/eso-guard/cases.tsv (scripts/eso-guard-test.sh).
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
@@ -44,6 +45,11 @@ spec:
         apiVersions: [v1alpha1]
         operations: [CREATE, UPDATE]
         resources: [pushsecrets]
+  # An UPDATE that leaves spec alone (ESO removing its finalizer on delete, a label) is not judged: an
+  # object a later allowlist edit made invalid must still be deletable, never stuck Terminating.
+  matchConditions:
+    - name: create-or-spec-change
+      expression: "request.operation == 'CREATE' || object.spec != oldObject.spec"
   variables:
     # Platform namespaces: no stack identity holds write there; unrestricted.
     - name: platform
@@ -130,6 +136,11 @@ spec:
         apiVersions: [v1]
         operations: [CREATE, UPDATE]
         resources: [clustersecretstores]
+  # An UPDATE that leaves spec alone (ESO removing its finalizer on delete, a label) is not judged: an
+  # object a later allowlist edit made invalid must still be deletable, never stuck Terminating.
+  matchConditions:
+    - name: create-or-spec-change
+      expression: "request.operation == 'CREATE' || object.spec != oldObject.spec"
   validations:
     - expression: >-
         object.metadata.name in ['infisical', 'agent-transcripts']
