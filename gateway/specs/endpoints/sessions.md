@@ -1802,7 +1802,9 @@ deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, 
 
 #### What the log says
 
-Legend: `holds?` = a fragment some log line of the call holds; `never_holds?` = a value no line holds.
+Legend: `holds?` = a fragment some log line of the call holds — a cell reading `exactly one line: <line>`
+claims more: the call wrote exactly one control-plane line, and that line is `<line>`, whole;
+`never_holds?` = a value no line holds.
 
 | description | world | sequence | holds? | never_holds? |
 |---|---|---|---|---|
