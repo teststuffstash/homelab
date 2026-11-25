@@ -157,7 +157,7 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.11.25-gb7f2a3ebe997
+    newTag: 2026.11.25-gd8f710d9639f
 
 # GW-HEALTH / GW-METRICS: the running release is the pinned tag, derived at render so `newTag` stays the
 # only line a pin PR edits. Source = the gateway container's image (after the `images:` transformer, so

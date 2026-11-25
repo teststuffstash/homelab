@@ -47,7 +47,7 @@ def observed(store: SqliteStore) -> dict:
     pytest.param("an empty database, a mounted seed", "ready", "seed", 1, id="seed once"),
     pytest.param("rotate, restart on the same seed bytes", "ready", "rotation", 0, id="seed unchanged is not imported again"),
     pytest.param("rotate and leave a refreshing marker, reseed, restart", "ready", "reseed", 1, id="changed seed replaces ⚖"),
-    pytest.param("revoke, restart", "revoked", "rotation", 0, id="restart recovers state"),
+    pytest.param("rotate, revoke, restart", "revoked", "rotation", 0, id="restart recovers state"),
     pytest.param("the child exits in the exchange; the parent acquires; reseed; acquire",
                  "refreshing, then credential-recovery-required, then ready after the reseed", "reseed", 1, id="crash between exchange and save ⚖"),
     pytest.param("a :memory: store path", "credential-store-unavailable", "—", "—", id="memory fallback is refused"),
@@ -82,8 +82,11 @@ def test_durable_ownership(tmp_path, request, sequence, expected_result, expecte
         then_eq("the marker before the reseed", before["state"], "refreshing")
     elif case.startswith("restart recovers"):
         first = SqliteStore(path, str(seed))
-        with first.lock():
-            first.save(Record(NEW, "revoked"))
+        with given("the first owner rotates (saves the rotation ready), then revokes it"):
+            with first.lock():
+                first.save(Record(NEW))
+            with first.lock():
+                first.save(Record(NEW, "revoked"))
         with when("a new owner opens the store"):
             got = observed(SqliteStore(path, str(seed)))
             attach_json("durable row after the restart", got)
