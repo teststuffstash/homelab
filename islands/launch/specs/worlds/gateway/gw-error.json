@@ -1,0 +1,5 @@
+{
+  "provenance": {"kind": "hand-written", "validated_against": "gateway/specs/endpoints/sessions.schema.json", "part": "errors.tokenreview-transient (envelope: $defs.error_envelope)", "note": "placeholder values only; not recorded from a live gateway"},
+  "status": 503,
+  "body": {"error": {"code": "tokenreview-transient", "message": "TokenReview unavailable; retry"}}
+}
