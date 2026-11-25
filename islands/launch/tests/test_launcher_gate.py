@@ -78,3 +78,20 @@ def test_trailing_newline_is_refused() -> None:
 def test_task_is_sanitised_in_the_bind_and_untasked_uses_the_clock() -> None:
     assert _admit(task="issue-1_A.b", round="3").bind == "homelab/agentstack-worker/agent-homelab-issue-1---b-r3"
     assert _admit(task="").bind == "homelab/agentstack-worker/agent-homelab-010203"
+
+
+@pytest.mark.parametrize("task", ["retro-r10", "research-210-arm1", "intake-3"])
+def test_non_issue_task_gets_the_clock_pod_name(task) -> None:
+    r = _admit(task=task, round="3")
+    assert r.bind == "homelab/agentstack-worker/agent-homelab-010203" and r.body["task"] == task
+
+
+def test_empty_knobs_are_unset_and_empty_task_is_adhoc() -> None:
+    r = _admit({"AGENT_GATEWAY_ROLE": "", "AGENT_GATEWAY_RAIL": "", "AGENT_GATEWAY_CANARY": ""}, task="")
+    assert r.body["role"] == "worker" and r.body["task"] == "adhoc"
+    assert "rail" not in r.body and "canary" not in r.body
+
+
+def test_attempt_is_sent_only_when_above_one() -> None:
+    assert "attempt" not in _admit({"AGENT_GATEWAY_ATTEMPT": "1"}).body
+    assert _admit({"AGENT_GATEWAY_ATTEMPT": "2"}).body["attempt"] == 2

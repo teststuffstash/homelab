@@ -23,6 +23,7 @@ from launch.gateway_admit import CallerTokenError, Request
 DEFAULT_TOKEN_FILE = "/var/run/secrets/agent-gateway/token"
 _CALLER_SA = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?")
 _INT = re.compile(r"[0-9]+")
+_TASKED = re.compile(r"(issue|pr)-[0-9]")
 
 
 @dataclass(frozen=True)
@@ -100,23 +101,27 @@ class LauncherAdmission:
         if not token or not token.strip():
             return refuse("no caller token (no token file and no AGENT_GATEWAY_CALLER_SA)")
 
-        # LAUNCH-POD-IDENTITY: a tasked ride's pod name, non-[a-z0-9] of the task -> '-'
-        pod = f"agent-{repo}-{re.sub('[^a-z0-9]', '-', task)}-r{round}" if task else f"agent-{repo}-{self.clock()}"
+        # LAUNCH-POD-IDENTITY: an issue-N / pr-N task names its pod from the task (non-[a-z0-9] -> '-');
+        # every other ride, untasked included, takes the clock name
+        if _TASKED.match(task):
+            pod = f"agent-{repo}-{re.sub('[^a-z0-9]', '-', task)}-r{round}"
+        else:
+            pod = f"agent-{repo}-{self.clock()}"
         bind = f"{repo}/agentstack-worker/{pod}"
         body: dict[str, Any] = {
             "stack": stack_row["name"],
-            "role": knobs.get("AGENT_GATEWAY_ROLE", "worker"),
-            "task": task,
+            "role": knobs.get("AGENT_GATEWAY_ROLE") or "worker",
+            "task": task or "adhoc",
             "round": int(round),
             "bind": bind,
         }
         if harness is not None:
             body["harness"] = harness
-        if attempt is not None:
+        if attempt is not None and int(attempt) > 1:
             body["attempt"] = int(attempt)
-        if "AGENT_GATEWAY_RAIL" in knobs:
+        if knobs.get("AGENT_GATEWAY_RAIL"):
             body["rail"] = knobs["AGENT_GATEWAY_RAIL"]
-        if "AGENT_GATEWAY_CANARY" in knobs:
+        if knobs.get("AGENT_GATEWAY_CANARY"):
             model_id, _, provider = knobs["AGENT_GATEWAY_CANARY"].partition("@")
             body["canary"] = {"model": model_id, "provider": provider}
         return Admitted(body, bind, token.strip())
