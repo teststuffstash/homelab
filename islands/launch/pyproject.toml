@@ -17,6 +17,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src", "tests"]
 # Raw Allure results for every run, local only (never committed, not published).
 addopts = "--alluredir=allure-results --clean-alluredir --allure-no-capture"
 # Case ids are the spec's row ids verbatim; keep them unescaped.
@@ -28,7 +29,7 @@ markers = [
 [tool.ruff]
 line-length = 110
 target-version = "py315"
-src = ["tests"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
