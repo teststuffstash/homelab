@@ -23,9 +23,9 @@ VIEW = ISLAND / "trial" / "checkpoint-b-view.md"
 MODEL_NAME = "specs/models/scan-clause-goal-b.yaml"
 BEGIN = f"<!-- generated from {MODEL_NAME} by scripts/render_model.py — edit the model, not this table -->"
 END = f"<!-- end generated: {MODEL_NAME} -->"
-HEADER = ["description", "world", "open assembly PR", "(b) markers on it", "fault", "lane winner",
+HEADER = ["description", "world", "open assembly PR", "(b) markers on it", "since the marker", "fault", "lane winner",
           "(b) this wake?", "marker write?", "(b) next wake?"]
-FIELDS = ["id", "world", "open_assembly_pr", "b_markers_on_it", "fault", "lane_winner"]
+FIELDS = ["id", "world", "open_assembly_pr", "b_markers_on_it", "since_the_marker", "fault", "lane_winner"]
 EXPECT = ["b_this_wake", "marker_write", "b_next_wake"]
 TEST = "tests/test_checkpoint_b.py::test_trigger_b_hold_model"
 
@@ -45,6 +45,8 @@ MARKERS = {
     "the marker for A": "comment copied from a recorded one, body = the marker for A",
     "the marker for A, quoted (each line starts `> `)": "comment copied from a recorded one, body = the marker for A quoted",
     "none on B; the marker for A stays on A": "comment copied from a recorded one, body = the marker for A, in B's list",
+    "the marker for A, and the three `state-fp:assembly-cr:` markers recorded on #3270": (
+        "comment copied from a recorded one, body = the marker for A; the three recorded assembly-cr markers unchanged"),
 }
 
 
@@ -88,6 +90,8 @@ def view(model: dict) -> str:
         files, derived_pr = OPEN_LIST[c["open_assembly_pr"]]
         recorded = f"`{files}`, `api.issues.3270.comments@per_page=100.json`"
         derived = f"open list: {derived_pr}; comments: {MARKERS[c['b_markers_on_it']]}"
+        if c["since_the_marker"] != "—":
+            derived += f"; since the marker: {c['since_the_marker']}"
         if c["fault"] != "—":
             derived += f"; fault: {c['fault']}"
         node = f"`{TEST}[{c['id']}]`"

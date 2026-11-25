@@ -7,6 +7,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "none",
       "b_markers_on_it": "—",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -20,6 +21,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "none",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "another unit",
       "expect": {
@@ -33,6 +35,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "none",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -46,6 +49,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -59,6 +63,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the ten recorded on #3270, none of them the marker for A",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -72,6 +77,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "none",
+      "since_the_marker": "—",
       "fault": "the comment write answers 403",
       "lane_winner": "this Goal",
       "expect": {
@@ -85,6 +91,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
+      "since_the_marker": "—",
       "fault": "the read of A's comments fails",
       "lane_winner": "another unit",
       "expect": {
@@ -98,6 +105,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "none",
+      "since_the_marker": "—",
       "fault": "the open-list read fails",
       "lane_winner": "this Goal",
       "expect": {
@@ -111,6 +119,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "B (A is closed: not in the open list)",
       "b_markers_on_it": "none on B; the marker for A stays on A",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -124,6 +133,7 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A, quoted (each line starts `> `)",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
@@ -137,12 +147,111 @@
       "world": "goal-checkpoint",
       "open_assembly_pr": "A, its head branch is not a `goal/**` branch",
       "b_markers_on_it": "none",
+      "since_the_marker": "—",
       "fault": "—",
       "lane_winner": "this Goal",
       "expect": {
         "b_this_wake": "fires-no-pr",
         "marker_write": "none",
         "b_next_wake": "fires-no-pr"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-verdict-held",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "the reviewer bot's APPROVED, newer than the marker",
+      "fault": "—",
+      "lane_winner": "another unit",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-content-push-held",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "a new head commit id and a second, non-merge commit",
+      "fault": "—",
+      "lane_winner": "another unit",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-check-flip-held",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "`ci` settled on FAILURE",
+      "fault": "—",
+      "lane_winner": "another unit",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-inflight-check-held",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "a new head commit id, `ci` with no conclusion yet",
+      "fault": "—",
+      "lane_winner": "another unit",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-red-rerun-held",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "`ci` re-run after FAILURE, no conclusion yet",
+      "fault": "—",
+      "lane_winner": "another unit",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "goal-checkpoint-b-c-armed",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A",
+      "since_the_marker": "one open member of the Goal is undispositioned",
+      "fault": "—",
+      "lane_winner": "this Goal",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
+      }
+    },
+    {
+      "id": "assembly-cr-wake-b-silent ⚖",
+      "world": "goal-checkpoint",
+      "open_assembly_pr": "A",
+      "b_markers_on_it": "the marker for A, and the three `state-fp:assembly-cr:` markers recorded on #3270",
+      "since_the_marker": "CHANGES_REQUESTED on A",
+      "fault": "—",
+      "lane_winner": "this Goal",
+      "expect": {
+        "b_this_wake": "held",
+        "marker_write": "none",
+        "b_next_wake": "held"
       }
     }
   ]

@@ -513,7 +513,8 @@ open pull request whose head is a `goal/**` branch and whose body carries the li
 trailer `Assembly-for: #<g>`. The marker is a comment on that pull request whose first characters
 are `` 🤖 `state-fp:goal-checkpoint-b:<hash>` ``, `<hash>` being the first 12 hex characters of the
 SHA-256 of `pr=<number>`. Nothing that happens on the pull request releases the hold: it ends when
-the pull request closes or another one replaces it. The marker is written at dispatch, never at
+the pull request closes or another one replaces it. A marker of another clause on the pull request
+(`state-fp:assembly-cr:`) is not the (b) marker and neither holds nor releases (b). The marker is written at dispatch, never at
 evaluation, so a Goal that lost its lane is still eligible on the next wake. A refused marker
 write is one warning and the dispatch goes on. The marker read follows every page of the pull request's
 comments, so a marker past the hundredth comment still holds; there is no comment-count bound. A marker read that fails leaves the reason eligible
@@ -563,6 +564,7 @@ another number.
 
 `(b) this wake?` — what `evaluate` prints; the case compares the whole line.
 `(b) next wake?` — what `evaluate` prints on the following wake, which reads the world plus the writes this wake issued, with no `fault`.
+`since the marker` — what happened on the pull request after the marker was written; `—` where nothing did.
 
 | literal | stdout, one line | stderr | exit |
 |---|---|---|---|
@@ -584,19 +586,26 @@ The table below is generated from [`models/scan-clause-goal-b.yaml`](models/scan
 
 <!-- generated from specs/models/scan-clause-goal-b.yaml by scripts/render_model.py — edit the model, not this table -->
 
-| description | world | open assembly PR | (b) markers on it | fault | lane winner | (b) this wake? | marker write? | (b) next wake? |
-|---|---|---|---|---|---|---|---|---|
-| child-set-complete | goal-checkpoint | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
-| lane-lost-stays-eligible ⚖ | goal-checkpoint | A | none | — | another unit | fires-unmarked | none | fires-unmarked |
-| selected-marks ⚖ | goal-checkpoint | A | none | — | this Goal | fires-unmarked | on A | held |
-| goal-checkpoint-b-held | goal-checkpoint | A | the marker for A | — | this Goal | held | none | held |
-| old-fold-markers-not-identity ⚖ | goal-checkpoint | A | the ten recorded on #3270, none of them the marker for A | — | this Goal | fires-unmarked | on A | held |
-| marker-write-refused ⚖ | goal-checkpoint | A | none | the comment write answers 403 | this Goal | fires-unmarked | refused | fires-unmarked |
-| marker-read-fails ⚖ | goal-checkpoint | A | the marker for A | the read of A's comments fails | another unit | fires-unreadable | none | held |
-| pr-list-unreadable ⚖ | goal-checkpoint | A | none | the open-list read fails | this Goal | no-decision | none | fires-unmarked |
-| goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | this Goal | fires-unmarked | on B | held |
-| quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | this Goal | fires-unmarked | on A | held |
-| head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | this Goal | fires-no-pr | none | fires-no-pr |
+| description | world | open assembly PR | (b) markers on it | since the marker | fault | lane winner | (b) this wake? | marker write? | (b) next wake? |
+|---|---|---|---|---|---|---|---|---|---|
+| child-set-complete | goal-checkpoint | none | — | — | — | this Goal | fires-no-pr | none | fires-no-pr |
+| lane-lost-stays-eligible ⚖ | goal-checkpoint | A | none | — | — | another unit | fires-unmarked | none | fires-unmarked |
+| selected-marks ⚖ | goal-checkpoint | A | none | — | — | this Goal | fires-unmarked | on A | held |
+| goal-checkpoint-b-held | goal-checkpoint | A | the marker for A | — | — | this Goal | held | none | held |
+| old-fold-markers-not-identity ⚖ | goal-checkpoint | A | the ten recorded on #3270, none of them the marker for A | — | — | this Goal | fires-unmarked | on A | held |
+| marker-write-refused ⚖ | goal-checkpoint | A | none | — | the comment write answers 403 | this Goal | fires-unmarked | refused | fires-unmarked |
+| marker-read-fails ⚖ | goal-checkpoint | A | the marker for A | — | the read of A's comments fails | another unit | fires-unreadable | none | held |
+| pr-list-unreadable ⚖ | goal-checkpoint | A | none | — | the open-list read fails | this Goal | no-decision | none | fires-unmarked |
+| goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | — | this Goal | fires-unmarked | on B | held |
+| quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | — | this Goal | fires-unmarked | on A | held |
+| head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
+| goal-checkpoint-b-verdict-held | goal-checkpoint | A | the marker for A | the reviewer bot's APPROVED, newer than the marker | — | another unit | held | none | held |
+| goal-checkpoint-b-content-push-held | goal-checkpoint | A | the marker for A | a new head commit id and a second, non-merge commit | — | another unit | held | none | held |
+| goal-checkpoint-b-check-flip-held | goal-checkpoint | A | the marker for A | `ci` settled on FAILURE | — | another unit | held | none | held |
+| goal-checkpoint-b-inflight-check-held | goal-checkpoint | A | the marker for A | a new head commit id, `ci` with no conclusion yet | — | another unit | held | none | held |
+| goal-checkpoint-b-red-rerun-held | goal-checkpoint | A | the marker for A | `ci` re-run after FAILURE, no conclusion yet | — | another unit | held | none | held |
+| goal-checkpoint-b-c-armed | goal-checkpoint | A | the marker for A | one open member of the Goal is undispositioned | — | this Goal | held | none | held |
+| assembly-cr-wake-b-silent ⚖ | goal-checkpoint | A | the marker for A, and the three `state-fp:assembly-cr:` markers recorded on #3270 | CHANGES_REQUESTED on A | — | this Goal | held | none | held |
 
 <!-- end generated: specs/models/scan-clause-goal-b.yaml -->
 
