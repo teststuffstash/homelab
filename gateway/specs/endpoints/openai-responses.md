@@ -653,6 +653,11 @@ are never read, logged, attached or rendered. Every outcome is counted on
 only while the policy DECLARES the codex rail (an undeclared rail renders no series, so the
 silent-poll alert cannot fire on it) and then every outcome renders from 0; a refused or failed poll
 leaves the last ACCEPTED report standing.
+A poll whose `Lifecycle.acquire()` fails stops at the credential store, the endpoint never
+contacted, and is counted in the class admission gives the same store state
+([GW-CODEX-OAUTH](#gw-codex-oauth)): a store that does not answer (`credential-store-unavailable`)
+is `credential-transient`, a persisted `refreshing` marker (`credential-recovery-required`) is
+`credential-unresolved`.
 
 **World: [policy-codex](../worlds/README.md#the-codex-rails-fakes-tests_codex_worldpy)** —
 `poll_interval_s` 30 under `max_age_s` 120; the fake usage endpoint answers the observed shape with
