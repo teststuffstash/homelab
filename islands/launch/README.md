@@ -100,7 +100,9 @@ recipes in stack repos revert in their own repo. **At switch-over** (a later, se
   ([admission.md](specs/admission.md#launch-admit-no-model)). The new build admits only through
   `POST /sessions`.
 - Evidence is local and partial: `tests/` (run by `scripts/ci.sh`, gated at `pr-open` via `diff-ci` and in required `ci`, #3391)
-  runs the `gateway-admit` replay family as 12 rule-labelled Allure cases against the island helper `islands/launch/lib/gateway-admit.sh`;
+  runs 12 page-sourced cases against `src/launch/gateway_admit.py` and the `gateway-admit` replay
+  family as a comparison (`tests/compare/`) between `agents/gateway-admit.sh` and that component,
+  every remaining difference ruled in `tests/compare/gateway-admit.rulings.tsv`;
   no other family runs, nothing is published, and nothing renders into these pages
   ([specs/README.md](specs/README.md) §Rule 5).
 - Exit codes mix two defer conventions (exit 0 and exit 1) —
