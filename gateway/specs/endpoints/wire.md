@@ -114,7 +114,9 @@ answer is whole).
 
 #### The credential never lands in a record
 
-Legend: `credential_sent` = the credential the read carries; `source_class?` = the class the source is
+Legend: `read` = what the console answers the read: `config-401-echo` = a 401 whose body names the Go key;
+`config-200-echo` = a 200 whose body names the Go key; `config-ok` = the 200 console answer, no key in it;
+`credential_sent` = the credential the read carries; `source_class?` = the class the source is
 recorded under; `last_error?` = the failure the recorder notes beside the source (`status <n>` = a non-200
 answer, of which no byte is kept; `withheld` = a 200 answer that echoed a credential the gateway holds, no part of it kept); `record_fields_with_key?` =
 the number of the stored record's fields (body included) that contain the Go key;
