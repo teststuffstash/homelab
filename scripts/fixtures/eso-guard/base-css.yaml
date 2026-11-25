@@ -1,0 +1,13 @@
+# Base ClusterSecretStore for cases.tsv: scoped to one named namespace.
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: case
+spec:
+  conditions:
+    - namespaces: [oracle-fleet]
+  provider:
+    kubernetes:
+      remoteNamespace: agent-coordinator
+      auth: { serviceAccount: { name: case, namespace: agent-coordinator } }
+      server: { url: kubernetes.default }

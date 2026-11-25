@@ -1,0 +1,47 @@
+# Name-only stubs of the three ESO CRDs: kyverno CLI needs them to map kind -> resource
+# (scripts/eso-guard-test.sh). Schemas are open; the policy reads the real objects' fields.
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: externalsecrets.external-secrets.io
+spec:
+  group: external-secrets.io
+  scope: Namespaced
+  names: { kind: ExternalSecret, plural: externalsecrets, singular: externalsecret, listKind: ExternalSecretList }
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema: { type: object, x-kubernetes-preserve-unknown-fields: true }
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: pushsecrets.external-secrets.io
+spec:
+  group: external-secrets.io
+  scope: Namespaced
+  names: { kind: PushSecret, plural: pushsecrets, singular: pushsecret, listKind: PushSecretList }
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema: { type: object, x-kubernetes-preserve-unknown-fields: true }
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clustersecretstores.external-secrets.io
+spec:
+  group: external-secrets.io
+  scope: Cluster
+  names: { kind: ClusterSecretStore, plural: clustersecretstores, singular: clustersecretstore, listKind: ClusterSecretStoreList }
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema: { type: object, x-kubernetes-preserve-unknown-fields: true }

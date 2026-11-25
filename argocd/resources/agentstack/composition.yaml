@@ -1676,6 +1676,10 @@ spec:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-store
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
+              # Only the repo's own namespace may use this store: without it any namespace that
+              # can create an ExternalSecret could mirror this repo's token (ADR-168).
+              conditions:
+                - namespaces: [{{ $r.name }}]
               provider:
                 kubernetes:
                   remoteNamespace: agent-coordinator

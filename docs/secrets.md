@@ -86,7 +86,8 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
        - secretKey: MY_API_KEY
          remoteRef: { key: MY_API_KEY }
    ```
-   Commit it (ArgoCD applies it); ESO writes Secret `my-app/my-app`. The `secrets-demo/demo-ping`
+   Commit it (ArgoCD applies it); ESO writes Secret `my-app/my-app`. Outside the platform
+   namespaces the key must be on that namespace's allowlist ([§Boundaries](#boundaries)). The `secrets-demo/demo-ping`
    canary proves the whole chain is healthy.
 
 ## Useful commands
@@ -133,6 +134,17 @@ jail/wallet credential, even when one token *could* technically serve both.
   the UI (ad-hoc, as admin), or a **Crossplane Workspace** publishing via the Infisical TF provider
   (the `crossplane-tf-writer` identity — how app-generated keys land in Infisical, ADR-076).
 - Rotation: re-run the relevant `tofu`/`infisical-secret`; ESO re-syncs consumers on its refresh.
+- **Which namespace may read what (ADR-168).** A stack holds `admin` in its own namespaces, so it can
+  write ExternalSecrets there, and an ExternalSecret may name any ClusterSecretStore. Two admission
+  policies in [`eso-guard.yaml`](../argocd/resources/extras/eso-guard.yaml) bound that:
+  `eso-infisical-guard` gives every namespace outside the platform list a per-namespace key allowlist
+  for the `infisical` store (no `dataFrom`, no PushSecret to a ClusterSecretStore), and
+  `eso-clusterstore-scoped` makes every other ClusterSecretStore list its namespaces in
+  `spec.conditions` (exempt: `agent-transcripts`, one shared write-only key). **A stack that needs a
+  new Infisical key** = add the key to its namespace's `perNamespace` entry in the same PR as the
+  ExternalSecret; without it the apiserver refuses the ExternalSecret and ArgoCD reports the sync
+  error. **A new platform namespace** that reads arbitrary keys joins `platform`. Decision table:
+  `bash scripts/eso-guard-test.sh`.
 
 ## Credential expiry is telemetry, not documentation (design direction 2026-08-08, FU-156)
 
