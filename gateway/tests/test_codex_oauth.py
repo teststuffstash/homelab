@@ -185,7 +185,7 @@ def _fault(case: str, lab: Lab) -> tuple[str, object]:
 
 
 @pytest.mark.parametrize(("store", "exchange", "expected_result", "expected_exchanges", "expected_state"), [
-    pytest.param("save #1 raises", "—", "credential-store-unavailable, then the rotation", "0, then 1", "ready, rotated",
+    pytest.param("save #1 raises", "the rotation", "credential-store-unavailable, then the rotation", "0, then 1", "ready, rotated",
                  id="a failed marker write prevents the exchange"),
     pytest.param("save #2 raises", "the rotation", "credential-store-unavailable, then credential-recovery-required", 1, "refreshing",
                  id="a failed rotation write blocks restart"),
