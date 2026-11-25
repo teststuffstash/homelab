@@ -215,11 +215,13 @@ for the row's reason (`no-terminal` when the row is complete).
 
 A pod that closes its connection after the first relayed chunk ends the stream on the gateway's
 side: the request row records `client-closed`, whatever the upstream still had to send. Legend as
-above.
+above; `client` = what the pod does with the answer (`closes after the first chunk` = it closes its
+connection once the first relayed chunk arrived; on every other table of this rule the pod reads
+the answer to its end).
 
-| description | upstream | requests_incomplete? | incomplete? | incomplete_total? |
-|---|---|---|---|---|
-| the client going away mid-stream is recorded incomplete | `upstream-stream` | `1` | `client-closed` | `1` |
+| description | upstream | client | requests_incomplete? | incomplete? | incomplete_total? |
+|---|---|---|---|---|---|
+| the client going away mid-stream is recorded incomplete | `upstream-stream` | `closes after the first chunk` | `1` | `client-closed` | `1` |
 
 <details markdown="1"><summary>Evidence — latest run</summary>
 

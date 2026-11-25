@@ -59,8 +59,8 @@ What this island adds, by rule:
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
   belong to — the ADR-096 ladder past its capacity half, the FU-088 latches the admission rows do
   not cover, the capacity doorbell, `/route`
-  compatibility, the git broker (FU-269), the Zen rail, the codex rail's production credential
-  write-back / upstream profile / report ingress, the cost ledger, HA (FU-271).
+  compatibility, the git broker (FU-269), the Zen rail, the codex rail's upstream profile /
+  report ingress / reservation, the cost ledger, HA (FU-271).
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.
 - **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
