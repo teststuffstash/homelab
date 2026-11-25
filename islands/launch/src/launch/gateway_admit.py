@@ -109,13 +109,16 @@ def _parse_args(argv: list[str]) -> dict[str, Any]:
     if ("bind" in given) == ("env-file" in given):
         raise _Refused("exactly one of --bind / --env-file")
     out: dict[str, Any] = dict(given)
-    if "bind" in given and not _BIND.match(given["bind"]):
+    if "bind" in given and not _BIND.fullmatch(given["bind"]):
         raise _Refused("--bind must be <ns>/<sa>/<pod>")
-    if "canary" in given and not _CANARY.match(given["canary"]):
+    if "canary" in given and not _CANARY.fullmatch(given["canary"]):
         raise _Refused("--canary must be <model>@<provider>")
     out["round"] = _integer(given.get("round", "0"), "round", 0)
     out["attempt"] = _integer(given.get("attempt", "1"), "attempt", 1)
     out["harnesses"] = [h for h in given.get("harnesses", ",".join(HARNESSES)).split(",") if h]
+    unknown = [h for h in out["harnesses"] if h not in HARNESSES]
+    if unknown:
+        raise _Refused(f"--harnesses: unknown {', '.join(unknown)}")
     return out
 
 
@@ -133,17 +136,17 @@ def _request_body(a: dict[str, Any]) -> dict[str, Any]:
         if key in a:
             body[key] = a[key]
     if "canary" in a:
-        model, provider = _CANARY.match(a["canary"]).groups()  # type: ignore[union-attr]
+        model, provider = _CANARY.fullmatch(a["canary"]).groups()  # type: ignore[union-attr]
         body["canary"] = {"model": model, "provider": provider}
     if "bind" in a:
-        ns, sa, pod = _BIND.match(a["bind"]).groups()  # type: ignore[union-attr]
+        ns, sa, pod = _BIND.fullmatch(a["bind"]).groups()  # type: ignore[union-attr]
         body["bind"] = {"namespace": ns, "serviceaccount": sa, "pod": pod}
     return body
 
 
 def _is_shell_names(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(
-        isinstance(k, str) and _SHELL_NAME.match(k) for k in value
+        isinstance(k, str) and _SHELL_NAME.fullmatch(k) for k in value
     )
 
 
@@ -167,7 +170,7 @@ def _unusable(answer: dict[str, Any], a: dict[str, Any], session_id: str) -> lis
         ok = (
             isinstance(env, dict)
             and bool(env)
-            and all(_SHELL_NAME.match(k) for k in env)
+            and all(_SHELL_NAME.fullmatch(k) for k in env)
             and all(isinstance(v, str) and "\n" not in v for v in env.values())
         )
         if not ok:
@@ -230,7 +233,7 @@ class GatewayAdmit:
     def _dispatch(self, answer: dict[str, Any], a: dict[str, Any]) -> Admission:
         session = answer.get("session") if isinstance(answer.get("session"), dict) else {}
         session_id = session.get("id")
-        if not (isinstance(session_id, str) and _SESSION_ID.match(session_id)):
+        if not (isinstance(session_id, str) and _SESSION_ID.fullmatch(session_id)):
             return self._fail("dispatch-unusable: session id")
         failed = _unusable(answer, a, session_id)
         if failed:
@@ -259,7 +262,14 @@ class GatewayAdmit:
             out["GW_PULL_URL"] = answer["pull_url"]
             out["GW_PULL_PRELUDE"] = PULL_PRELUDE
         else:
-            _write_env(a["env-file"], answer["env"])
+            try:
+                _write_env(a["env-file"], answer["env"])
+            except OSError:
+                adm = self._fail("dispatch-unusable: env-file")
+                adm.outputs["GW_SESSION_ID"] = session_id
+                self.release(adm)
+                adm.outputs.pop("GW_SESSION_ID")
+                return adm
         return Admission(0, out, [f"→ gateway(sessions): dispatch {model} on {out['GW_RAIL']} ({out['GW_HARNESS']})"])
 
     def release(self, admission: Admission) -> None:

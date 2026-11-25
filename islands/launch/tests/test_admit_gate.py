@@ -52,3 +52,53 @@ def test_strict_world_reader_refuses_an_unknown_world() -> None:
 
     with pytest.raises(WorldError):
         load_world("gw-nope")
+
+
+def _unbound_gateway(**changes):
+    import copy
+
+    from test_admit_cases import Gateway
+    from worlds import load_world
+
+    world = load_world("gw-dispatch-unbound")
+    body = copy.deepcopy(world.get("body"))
+    for path, value in changes.items():
+        node = body
+        *parents, last = path.split(".")
+        for key in parents:
+            node = node[key]
+        node[last] = value
+    return Gateway(world, body), body
+
+
+def test_trailing_newline_is_refused_in_env_key_and_session_id(tmp_path) -> None:
+    gw, body = _unbound_gateway()
+    body["env"]["FOO\n"] = "x"
+    result = GatewayAdmit(gw, lambda: "t").admit(
+        ["--stack", "platform", "--role", "responder", "--task", "t", "--env-file", str(tmp_path / "env")])
+    assert result.rc == 3 and not (tmp_path / "env").exists()
+    assert len(gw.deletes()) == 1
+
+    gw, body = _unbound_gateway()
+    body["session"]["id"] = "s-1\n"
+    result = GatewayAdmit(gw, lambda: "t").admit(
+        ["--stack", "platform", "--role", "responder", "--task", "t", "--env-file", str(tmp_path / "env2")])
+    assert result.rc == 3 and "GW_SESSION_ID" not in result.outputs
+
+
+def test_unknown_harnesses_entry_is_refused_before_any_request(tmp_path) -> None:
+    gw, _ = _unbound_gateway()
+    result = GatewayAdmit(gw, lambda: "t").admit(
+        ["--stack", "platform", "--role", "responder", "--task", "t", "--env-file", str(tmp_path / "env"),
+         "--harnesses", "foo"])
+    assert result.rc == 2 and gw.requests == []
+
+
+def test_unwritable_env_file_releases_the_session_and_fails_closed(tmp_path) -> None:
+    gw, body = _unbound_gateway()
+    result = GatewayAdmit(gw, lambda: "t").admit(
+        ["--stack", "platform", "--role", "responder", "--task", "t",
+         "--env-file", str(tmp_path / "missing-dir" / "env")])
+    assert result.rc == 3
+    assert result.outputs["GW_DEFER_REASON"] == "dispatch-unusable: env-file"
+    assert [d.path for d in gw.deletes()] == [f"/sessions/{body['session']['id']}"]
