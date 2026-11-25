@@ -5,6 +5,9 @@
 # the keyword could not close" — the C6 clause downstream turns each into a merged-closeout unit.
 printf 'C6G [%s]\n' "$(printf '%b' "${c6g:-}" | tr '\n' ',' | sed 's/,$//')"
 printf 'C6G_NUMS [%s]\n' "$(printf '%s' "${c6g_nums:-}" | sed 's/[[:space:]]*$//')"
+# `goalheld_nums`: the children the block reported HELD — the agent/review phantom belt excludes
+# them, so a held report is held in fact (#3770 review).
+printf 'GOALHELD [%s]\n' "$(printf '%s' "${goalheld_nums:-}" | sed 's/[[:space:]]*$//')"
 printf '%b' "${orphans:-}" | while IFS= read -r l; do
   if [ -n "$l" ]; then printf 'ORPHAN %s\n' "$l"; fi
 done

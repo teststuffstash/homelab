@@ -8,3 +8,17 @@ repo="homelab"
 orphans=""
 c6g=""
 c6g_nums=""
+goalheld_nums=""
+# GitHub's own LIST semantics for `gh pr list --state merged` (homelab#3309). The stub serves one
+# recorded file whatever the flags; GitHub filters server-side by `--base` and returns the first
+# `--limit` PRs in CREATION order, newest first (the recorded file's order). Modelled here so a
+# row can pin the window: a merge older than the newest N is invisible to an unscoped read.
+gh() {
+  case " $* " in *" pr list "*" --state merged "*) ;; *) command gh "$@"; return ;; esac
+  local _b="" _l="30" _p="" _a
+  for _a in "$@"; do
+    case "$_p" in --base) _b="$_a" ;; --limit) _l="$_a" ;; esac
+    _p="$_a"
+  done
+  command gh "$@" | jq -c --arg b "$_b" --argjson l "$_l" '[.[] | select($b == "" or .baseRefName == $b)] | .[0:$l]'
+}

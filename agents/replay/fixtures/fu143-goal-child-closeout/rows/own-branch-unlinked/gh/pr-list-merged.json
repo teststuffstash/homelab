@@ -1,0 +1,8 @@
+[
+  {
+    "number": 200,
+    "body": "Retire the snapshot (the PR body forgot its issue line).",
+    "baseRefName": "goal/x",
+    "headRefName": "fix/issue-100-retire-snapshot"
+  }
+]
