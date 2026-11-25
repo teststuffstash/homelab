@@ -561,10 +561,12 @@ Legend: the clock is `now` = 1800000000; `reports` = the reports offered, in ord
 
 #### The window label
 
-Legend: `profile_minutes` = the windows of one accepted report; `labels?` = the `window` label
-values rendered on `rail="codex"`.
+Legend: `profile` = the row's policy profile: the world's policy with
+`rails.codex.headroom.windows_minutes` replaced by these minutes (the world's own profile is
+`300, 10080`); one report carrying exactly these windows is offered and accepted; `labels?` = the
+`window` label values rendered on `rail="codex"`.
 
-| description | profile_minutes | labels? |
+| description | profile | labels? |
 |---|---|---|
 | the window label is the profile's minutes in the window vocabulary ⚖ | `300, 10080, 1440, 90` | `5h, 7d, other` |
 
