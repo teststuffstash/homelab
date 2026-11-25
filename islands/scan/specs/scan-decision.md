@@ -561,7 +561,8 @@ another number.
 
 #### Does trigger (b) fire while an assembly pull request is open?
 
-`(b) this wake?` and `(b) next wake?` — what `evaluate` prints; the case compares the whole line:
+`(b) this wake?` — what `evaluate` prints; the case compares the whole line.
+`(b) next wake?` — what `evaluate` prints on the following wake, which reads the world plus the writes this wake issued, with no `fault`.
 
 | literal | stdout, one line | stderr | exit |
 |---|---|---|---|
