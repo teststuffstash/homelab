@@ -714,7 +714,8 @@ Legend: **the `other` row** is the rankings' `other` permaslug in both slices' l
 #### A failed read keeps the last good (OpenRouter)
 
 Legend: `account_key` = the labelled Secret `catalog.account_ref` names is `present` / `absent`;
-`mcp_calls?` = the MCP requests the refresh made.
+`mcp_calls?` = the MCP requests that reached the MCP during the refresh (`down` = the connection
+fails before any request reaches it, so none is counted).
 
 | description | last_good | mcp_answer | endpoints | account_key | outcome? | models? | mcp_calls? |
 |---|---|---|---|---|---|---|---|
