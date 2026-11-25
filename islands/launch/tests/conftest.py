@@ -77,3 +77,15 @@ def replay_row(row_id: str, target: Path, fixture: str = "gateway-admit") -> tup
         out = proc.stdout + proc.stderr
     passed = proc.returncode == 0 and f"{fixture}/{row_id} " in out and "1 passed, 0 failed" in out
     return passed, out
+
+
+def pytest_collection_modifyitems(items):
+    """Each labelled case id appears exactly once among the rule()-labelled items."""
+    seen: dict[str, str] = {}
+    for item in items:
+        if item.get_closest_marker("rule") is None or not hasattr(item, "callspec"):
+            continue
+        case_id = item.callspec.id
+        if case_id in seen:
+            raise pytest.UsageError(f"labelled case id {case_id!r} appears twice: {seen[case_id]} and {item.nodeid}")
+        seen[case_id] = item.nodeid

@@ -32,8 +32,8 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 | Requirement | section | Status |
 |---|---|---|
-| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3390 (fixture: `gateway-admit` — its 9 rows pass locally in `islands/launch/tests` against `islands/launch/lib/gateway-admit.sh`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island helper does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) |
+| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3480 (its 9 rows are cases sourced from this page over the worlds in `worlds/gateway/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/gateway_admit.py`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island component does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3480 (harness-not-run, unbound-answer-bound, unbound-env-newline are cases sourced from this page, passing locally against `islands/launch/src/launch/gateway_admit.py`; the four `via launcher` rows are #3408's; nothing published) |
 | [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
@@ -41,11 +41,11 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 ### LAUNCH-ADMIT-HELPER
 
-`gw_admit` speaks `POST /sessions` for its caller and never exits or traps: every outcome is a
+`gw_admit` speaks `POST /sessions` for its caller and never ends the caller's process: every outcome is a
 return code, and the caller decides what it means (`agents/gateway-admit.sh` header, :12–58).
 **rc 0** — `dispatch`: `GW_SESSION_ID`, `GW_RAIL`, `GW_HARNESS`, `GW_MODEL`, `GW_WIRE_MODEL` (the
 model with its rail prefix stripped — the harness invocation's id), `GW_CONTEXT_TOKENS`,
-`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`). A bound
+`GW_ENV_KEYS` are set; from here the caller owns the release (`gw_release`, on every way out). A bound
 call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (the in-pod pull,
 [LAUNCH-POD-ENV-PULL](pod.md#launch-pod-env-pull)). On an unbound call the dispatch's
 `session.token` and env values go only to the `--env-file`, written 0600, never to a `GW_*` variable.
@@ -60,8 +60,7 @@ request: `--stack`, `--role`, `--task` missing, neither or both of `--bind` / `-
 that is not `<ns>/<sa>/<pod>`, a non-integer round, an attempt < 1. Optional fields reach the
 request only when given; `attempt` only when > 1. The caller's identity is a fresh token per call
 (the projected file, or — jail canary only — a 10-minute minted token for
-`AGENT_GATEWAY_CALLER_SA`), never kept in a variable, carried by `curl -H @<(…)` so it never rides
-argv (GW-SESSIONS-AUTH). `gw_release` is idempotent: one DELETE however often it is called, a
+`AGENT_GATEWAY_CALLER_SA`), never on argv and never kept after the call (GW-SESSIONS-AUTH). `gw_release` is idempotent: one DELETE however often it is called, a
 failed one warns and leaves the slot to the session TTL.
 
 `gw_admit_lane <env-file> …` is the unbound shape for a workflow pod that runs its own claude: the
@@ -71,7 +70,7 @@ knob check (`AGENT_GATEWAY=sessions`), the platform gate, the caller preflight a
 proxy" — the knob is off (silent), the stack is not platform (one line), or a refusal / fail-closed
 became the transition fallback (one loud line, FU-270).
 
-**World:** `launcher-vars` + the gateway seam; every row runs under `set -u`.
+**World:** `launcher-vars` + the gateway seam; no row reads an unset value as an empty one.
 
 #### What a call returns
 
