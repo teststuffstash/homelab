@@ -46,12 +46,13 @@ def rule(rule_id: str) -> list:
 
 
 def pytest_collection_modifyitems(items):
-    """Each labelled case id appears exactly once among the rule()-labelled items."""
+    """Each labelled case id appears exactly once per rule among the rule()-labelled items (two rules'
+    tables may share a description, e.g. `defer`: the id is the row's, the rule says which table)."""
     seen: dict[str, str] = {}
     for item in items:
         if item.get_closest_marker("rule") is None or not hasattr(item, "callspec"):
             continue
-        case_id = item.callspec.id
+        case_id = (item.get_closest_marker("rule").args[0], item.callspec.id)
         if case_id in seen:
-            raise pytest.UsageError(f"labelled case id {case_id!r} appears twice: {seen[case_id]} and {item.nodeid}")
+            raise pytest.UsageError(f"labelled case id {case_id[1]!r} of {case_id[0]} appears twice: {seen[case_id]} and {item.nodeid}")
         seen[case_id] = item.nodeid

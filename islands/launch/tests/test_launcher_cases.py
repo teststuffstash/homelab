@@ -1,4 +1,4 @@
-"""The 9 labelled LAUNCH-ADMIT-LAUNCHER cases that refuse before any request (homelab#3486).
+"""The 9 labelled LAUNCH-ADMIT-LAUNCHER cases that refuse before any request (homelab#3486); the 13 that send one are `test_launcher_ask_cases.py`.
 
 One case per row of "Admission through the launcher" that sends no request; id = the row's
 description cell; `world` and `rc?` are read from the page at collection. The `knobs` cell is
@@ -20,12 +20,6 @@ from worlds import load_stack_world
 ROWS = table_under("Admission through the launcher")
 # Rows the island does not build (Goal #3480 pin 6): the old path.
 NEVER_BUILT = ["off", "other-stack"]
-# The 13 rows that send a request: #3408's — an explicit list that it empties.
-OWNED_BY_3408 = [
-    "caller-minted", "dispatch-opencode", "dispatch-claude-explicit", "dispatch-claude-subscription",
-    "dispatch-goose", "dispatch-codex", "dispatch-attempt-2", "dispatch-canary",
-    "defer", "http-503", "unreachable", "fallback-unreachable", "fallback-defer",
-]
 
 OK_TOKEN = "placeholder-caller-token"
 

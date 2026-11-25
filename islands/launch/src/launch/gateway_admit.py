@@ -62,6 +62,7 @@ class Request:
     path: str
     headers: Mapping[str, str]
     body: dict[str, Any] | None = None
+    base: str = ""  # the gateway's address when the caller names one; empty = the transport's own
 
 
 @dataclass(frozen=True)
@@ -190,9 +191,10 @@ def _unusable(answer: dict[str, Any], a: dict[str, Any], session_id: str) -> lis
 class GatewayAdmit:
     """The admission component: `admit(argv)` and `release(admission)` over an injected transport."""
 
-    def __init__(self, transport: Transport, caller_token: CallerToken) -> None:
+    def __init__(self, transport: Transport, caller_token: CallerToken, base_url: str = "") -> None:
         self._transport = transport
         self._caller_token = caller_token
+        self._base = base_url
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._caller_token()}", "Content-Type": "application/json"}
@@ -207,7 +209,7 @@ class GatewayAdmit:
         except CallerTokenError as why:
             return Admission(2, stderr=[f"gw_admit: refused: no caller token ({why})"])
         try:
-            reply = self._transport(Request("POST", "/sessions", headers, _request_body(a)))
+            reply = self._transport(Request("POST", "/sessions", headers, _request_body(a), self._base))
         except TransportError:
             return self._fail("gateway-unreachable")
         if reply.status != 200:
@@ -279,7 +281,7 @@ class GatewayAdmit:
             return
         admission.released = True
         try:
-            reply = self._transport(Request("DELETE", f"/sessions/{admission.session_id}", self._headers()))
+            reply = self._transport(Request("DELETE", f"/sessions/{admission.session_id}", self._headers(), None, self._base))
         except (TransportError, CallerTokenError):
             admission.stderr.append(f"gw_release: DELETE {admission.session_id} failed; the slot ends with the session TTL")
             return

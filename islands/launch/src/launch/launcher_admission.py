@@ -4,7 +4,7 @@
 (a mapping of the operator's knobs), the argv values the page names, the stack row and the
 repo/task, and answers a `Refusal` (exit code + one stderr line) or an `Admitted` (the request it
 would send). A refusal reaches nothing: the gateway transport is never called. Sending the request
-is the next component's (#3408); the transport is held for it.
+is `ask`: it hands the admitted request to the admission component and maps its rc to the exit.
 
 The caller-token file read and the canary token mint are injected, so a case answers them from a
 world; nothing here ends the calling process.
@@ -18,8 +18,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from launch.gateway_admit import CallerTokenError, Request
+from launch.gateway_admit import Admission, CallerTokenError, GatewayAdmit, Request
 
+DEFAULT_GATEWAY_URL = "http://agent-gateway.agent-egress.svc.cluster.local:8080"
 DEFAULT_TOKEN_FILE = "/var/run/secrets/agent-gateway/token"
 _CALLER_SA = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9.]*[a-z0-9])?")
 _INT = re.compile(r"[0-9]+")
@@ -37,6 +38,15 @@ class Admitted:
     body: dict[str, Any]  # the POST /sessions body
     bind: str  # <repo>/agentstack-worker/agent-<repo>-<task>-r<round>
     caller_token: str
+
+
+@dataclass(frozen=True)
+class Asked:
+    """The gateway was asked: the exit, what the admission component answered, the request sent."""
+
+    exit: int
+    admission: Admission
+    admitted: Admitted
 
 
 class LauncherAdmission:
@@ -125,3 +135,41 @@ class LauncherAdmission:
             model_id, _, provider = knobs["AGENT_GATEWAY_CANARY"].partition("@")
             body["canary"] = {"model": model_id, "provider": provider}
         return Admitted(body, bind, token.strip())
+
+    def ask(
+        self,
+        knobs: Mapping[str, str],
+        stack_row: Mapping[str, Any],
+        repo: str,
+        task: str,
+        **kwargs: Any,
+    ) -> Refusal | Asked:
+        """`admit`, then send the request and map the answer: dispatch 0; a defer 1; a fail-closed
+        1, or `AGENT_GATEWAY_FALLBACK_EXIT` when the wrapper sets one. A session that is not
+        handed on (any non-zero exit) is released."""
+        admitted = self.admit(knobs, stack_row, repo, task, **kwargs)
+        if isinstance(admitted, Refusal):
+            return admitted
+        body = admitted.body
+        argv = ["--stack", body["stack"], "--role", body["role"], "--task", body["task"],
+                "--round", str(body["round"]), "--bind", body["bind"]]
+        for key in ("harness", "rail", "attempt"):
+            if key in body:
+                argv += [f"--{key}", str(body[key])]
+        if "canary" in body:
+            argv += ["--canary", f"{body['canary']['model']}@{body['canary']['provider']}"]
+        if "harness" in body:
+            argv += ["--harnesses", body["harness"]]  # an explicit harness narrows what is run
+        gateway = GatewayAdmit(self.transport, lambda: admitted.caller_token,
+                               knobs.get("AGENT_GATEWAY_URL") or DEFAULT_GATEWAY_URL)
+        admission = gateway.admit(argv)
+        if admission.rc == 0:
+            code = 0
+        elif admission.rc == 3:
+            fallback = knobs.get("AGENT_GATEWAY_FALLBACK_EXIT") or ""
+            code = int(fallback) if _INT.fullmatch(fallback) else 1
+        else:
+            code = admission.rc if admission.rc == 1 else 2
+        if code != 0:
+            gateway.release(admission)
+        return Asked(code, admission, admitted)
