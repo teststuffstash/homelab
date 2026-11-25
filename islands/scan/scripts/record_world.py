@@ -8,6 +8,12 @@ A world is the set of GitHub reads one surface makes. For each read the recorder
 field removed, no header kept, no token kept. `provenance.yaml` beside the files names the repo,
 the items, every read (its `gh` argv and its file), the recording time and the recorder's commit.
 
+    uv run --frozen python scripts/record_world.py goal-checkpoint <goal> <assembly-pr>
+
+`goal-checkpoint` records the reads the trigger (b) hold makes: the Goal issue and its comments, the
+open pull request list, and the assembly pull request's REST read, `gh pr view` (commits, reviews,
+status check rollup) and comments. Its one write, `create-comment`, is declared like any other.
+
     uv run --frozen python scripts/record_world.py <world> --add pull-commits
 
 `--add pull-commits` adds, for each item of an already recorded world, the pull-commits read
@@ -51,6 +57,8 @@ BOARD_LIST_FIELDS = (
     "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,"
     "latestReviews,baseRefName,reviews,author,headRefName"
 )
+# The `--json` field list of the scan's open-PR fetch (agents/coordinator-scan.sh `prsjson`) — what the (b) hold reads.
+CHECKPOINT_LIST_FIELDS = "number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid"
 
 
 @dataclass(frozen=True)
@@ -167,7 +175,25 @@ def board_per_pr(n: str, oid: str) -> list[list[str]]:
     ]
 
 
-PLANS = {"pr-handoff": plan_pr_handoff, "pr-board": plan_pr_board, "pr-merges": plan_pr_merges}
+def plan_goal_checkpoint(prs: list[str]) -> Plan:
+    """A Goal and its assembly pull request as the checkpoint (b) hold reads them. Items: [goal, assembly-pr]."""
+    if len(prs) != 2:
+        raise SystemExit("record_world: goal-checkpoint records <goal> <assembly-pr>")
+    goal, pr = prs
+    open_list = ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100", "--json", CHECKPOINT_LIST_FIELDS]
+    reads = [
+        ["api", f"repos/{REPO}/issues/{goal}"],
+        ["api", f"repos/{REPO}/issues/{goal}/comments?per_page=100"],
+        open_list,
+        ["api", f"repos/{REPO}/pulls/{pr}"],
+        ["pr", "view", pr, "--repo", REPO, "--json", "commits,reviews,statusCheckRollup"],
+        ["api", f"repos/{REPO}/issues/{pr}/comments?per_page=100"],
+    ]
+    writes = [Write("create-comment", "POST", f"repos/{REPO}/issues/{{issue_number}}/comments", "issues/create-comment", ("201", "403"))]
+    return Plan([Read(r, file_for(r)) for r in reads], writes)
+
+
+PLANS = {"pr-handoff": plan_pr_handoff, "pr-board": plan_pr_board, "pr-merges": plan_pr_merges, "goal-checkpoint": plan_goal_checkpoint}
 
 
 def refuse_private(repo: str) -> str:
