@@ -62,6 +62,9 @@ request only when given; `attempt` only when > 1. The caller's identity is a fre
 (the projected file, or — jail canary only — a 10-minute minted token for
 `AGENT_GATEWAY_CALLER_SA`), never on argv and never kept after the call (GW-SESSIONS-AUTH). `gw_release` is idempotent: one DELETE however often it is called, a
 failed one warns and leaves the slot to the session TTL.
+Every call also says its verdict in one stderr line — the outcome and its operative values (a
+dispatch names the model, rail and harness; a defer its reason and retry; a fail-closed its cause),
+never a session token; the wording is not pinned, and a release that succeeds is silent.
 
 `gw_admit_lane <env-file> …` is the unbound shape for a workflow pod that runs its own claude: the
 knob check (`AGENT_GATEWAY=sessions`), the platform gate, the caller preflight and `gw_admit
@@ -99,7 +102,7 @@ all empty).
 ### LAUNCH-ADMIT-BOUND
 
 A dispatch is checked before anything is built on it; once a session exists, every refusal
-releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. On an unbound call the model-key check reads the keys of `env` (the answer's `env_keys` is not consulted), so a missing `env` fails that check too. The
+releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). A refused dispatch leaves no `GW_*` output set but `GW_DEFER_REASON` and `GW_RETRY_AFTER`: the helper it replaces left the refused answer's rail, harness, model and env keys in `GW_*` on rc 3 (rows harness-not-run, unbound-answer-bound, unbound-env-newline), so a caller reading them would act on an answer it was told not to use. An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. On an unbound call the model-key check reads the keys of `env` (the answer's `env_keys` is not consulted), so a missing `env` fails that check too. The
 session id must match `^[A-Za-z0-9_-]{1,64}$`. **Bound** (`--bind`): the answer carries no
 credential — a `session.token` or an `env` map means the gateway ignored the bind, and the launcher
 refuses rather than hold a token (GW-SESSIONS-PULL); `env_keys` is a non-empty list of shell names
