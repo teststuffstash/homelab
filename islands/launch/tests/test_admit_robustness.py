@@ -33,7 +33,7 @@ def _unbound(env_file):
     return ["--stack", "platform", "--role", "responder", "--task", "t", "--env-file", str(env_file)]
 
 
-@pytest.mark.parametrize("rail", [["anthropic"], {"a": 1}, 7])
+@pytest.mark.parametrize("rail", [["anthropic"], {"a": 1}, 7, None])
 def test_non_string_rail_fails_closed_and_releases(rail) -> None:
     result, gw = _admit("gw-dispatch-bound", BOUND, lambda b: b.update(rail=rail))
     assert result.rc == 3 and "rail" in result.outputs["GW_DEFER_REASON"]

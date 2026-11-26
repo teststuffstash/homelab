@@ -191,8 +191,7 @@ def _unusable(answer: dict[str, Any], a: dict[str, Any], session_id: str) -> lis
     model = answer.get("model")
     if not (isinstance(model, str) and model):
         failed.append("model")
-    rail = answer.get("rail")
-    if rail is not None and not isinstance(rail, str):
+    if "rail" in answer and not isinstance(answer["rail"], str):
         failed.append("rail")
     harness = answer.get("harness")
     if harness not in a["harnesses"]:
