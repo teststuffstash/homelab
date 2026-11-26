@@ -83,7 +83,9 @@ What this island adds, by rule:
   answers of the surface). Until a requirement is re-sourced its world is a replay world of the
   harness. A row adds its condition in its own cells.
 - **Table shape:** expected columns end in `?`; one question per table; the rows brief's
-  checklist is advisory. Mermaid flow overviews are omitted (no site build).
+  checklist is advisory. A table between generated-marker comments is rendered from the model file the
+  markers name, and the suite fails when the page and a fresh render differ. Mermaid flow overviews are
+  omitted (no site build).
 
 ## Contract page template
 
@@ -128,7 +130,7 @@ Start here: **[use-cases/uc-1-queued-issue.md](use-cases/uc-1-queued-issue.md)**
 | [SCAN-CLAUSE-DEBOUNCE](scan-decision.md#scan-clause-debounce) | scan-decision | a condition over unchanged PR state is a report line, not a fresh unit (the state fingerprint) | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `state-fp`, `assembly-cr-debounced`, `merge-conflict/debounced`, `unarmed-major/debounced`) |
 | [SCAN-CLAUSE-PHANTOM](scan-decision.md#scan-clause-phantom) | scan-decision | a lifecycle label no live pod or PR backs is reconciled after it persists | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `c4c5-*`, `review-phantom-belt`, `done-phantom-belt`, `review-flip-belt`) |
 | [SCAN-CLAUSE-FLEET](scan-decision.md#scan-clause-fleet) | scan-decision | one fleet fault is one latch, not N parks; it unlatches when its cause closes green · `⚑ gap`: reads the old proxy's `/router-status` | 🚧 WIP → #3448 · ⚑ gap (2026-11-15, PR #3450 → work #3448): reads the old proxy's `/router-status` — no evidence pipeline yet (fixture: `fleet-reader-rekey`, `fleet-strike-reader`, `fleet-fault-unlatch-*`, `ci-red-fleet-hold`) |
-| [SCAN-CLAUSE-GOAL](scan-decision.md#scan-clause-goal) | scan-decision | the goal lane: decompose, checkpoint, merged-closeout, harvest disposition | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`, `merged-closeout-*`, `fu143-goal-child-closeout`, `assembly-cr-*`, `goal-budget-gate`) |
+| [SCAN-CLAUSE-GOAL](scan-decision.md#scan-clause-goal) | scan-decision | the goal lane: decompose, checkpoint, merged-closeout, harvest disposition | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `goal`, `goal-ancestor`, `harvest`, `merged-closeout-*`, `fu143-goal-child-closeout`, `assembly-cr-*`, `goal-budget-gate`) · trigger (b) hold → #3656 — rule-labelled tests in islands/scan/tests/test_checkpoint_b.py over recorded world `goal-checkpoint` ⚖ |
 | [SCAN-LANE-WALK](scan-decision.md#scan-lane-walk) | scan-decision | one unit per (repo, base) lane per pass, fixed clause priority, aging after N lost dispatches | 🚧 WIP → #3448 — no evidence pipeline yet (fixture: `scan-lane-walk`) |
 | [SCAN-DISPATCH-ITEM](dispatch.md#scan-dispatch-item) | dispatch | the item argv the launch side receives — `repo item clause [class parent work-branch goal bucket harvest themes]`, `--wip`, `--detach` · `⚑ gap`: `--model` still sent | 🚧 WIP — no evidence pipeline yet (fixture: `dispatch-phase`, `fu146-resumable-quoted`, `coordinator-pod-manifest`) |
 | [SCAN-DISPATCH-ATOMIC](dispatch.md#scan-dispatch-atomic) | dispatch | one coordinator pod per (repo, item); exit 3 = a racing dispatcher won, the walk moves on | 🚧 WIP — no evidence pipeline yet (fixture: `session-atomic-gate`, `fu146-dispatch-loop-scan`, `fu146-dispatch-loop-exit1`) |

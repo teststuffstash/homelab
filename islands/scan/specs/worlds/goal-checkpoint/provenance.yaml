@@ -1,0 +1,34 @@
+# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).
+world: "goal-checkpoint"
+repo: "teststuffstash/homelab"
+visibility: "public"
+items: [3118, 3270]
+recorded_at: "2026-11-25T20:17:41Z"
+recorder: "islands/scan/scripts/record_world.py"
+recorder_commit: "ba79cc048a017ace2dbd923b1bd8809a4927bbc0"
+rest_description: {"repo": "github/rest-api-description", "commit": "c9c95fe34ced05fe076001f5c55704742bc8e7f8", "file": "descriptions-next/api.github.com/api.github.com.2022-11-28.json"}
+reads:
+  - argv: ["api", "repos/teststuffstash/homelab/issues/3118"]
+    file: "api.issues.3118.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/issues/3118/comments?per_page=100"]
+    file: "api.issues.3118.comments@per_page=100.json"
+    auth: "token"
+  - argv: ["pr", "list", "--repo", "teststuffstash/homelab", "--state", "open", "--limit", "100", "--json", "number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid"]
+    file: "pr-list.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/pulls/3270"]
+    file: "api.pulls.3270.json"
+    auth: "token"
+  - argv: ["pr", "view", "3270", "--repo", "teststuffstash/homelab", "--json", "commits,reviews,statusCheckRollup"]
+    file: "pr-view-3270.commits,reviews,statusCheckRollup.json"
+    auth: "token"
+  - argv: ["api", "repos/teststuffstash/homelab/issues/3270/comments?per_page=100"]
+    file: "api.issues.3270.comments@per_page=100.json"
+    auth: "token"
+writes:
+  - op: "create-comment"
+    method: "POST"
+    path: "repos/teststuffstash/homelab/issues/{issue_number}/comments"
+    operation_id: "issues/create-comment"
+    statuses: ["201", "403"]
