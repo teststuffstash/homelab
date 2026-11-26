@@ -26,7 +26,7 @@ update-fail | old | the old member tells a merge by its title and makes no paren
 two-lanes-two-updates | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
 same-lane-one-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
 bot-approved-head-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
-stale-approval-no-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+stale-approval-no-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit); and the ci read of the inherited-red leg (updater.md SCAN-UPDATER-PICK, homelab#2588)
 automerge-changes-requested-no-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
 renovate-untouched-cr-no-update | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
 renovate-updater-merged-cr-handback | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
