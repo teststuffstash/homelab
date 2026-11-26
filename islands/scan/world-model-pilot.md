@@ -27,3 +27,37 @@ Start the YAML with one decision. Give each case a stable identity, named world 
 Begin with trigger (b)'s precondition met: the pre-launch child set is complete. An open assembly PR A without a matching marker is eligible. Let another candidate win the lane. A must remain eligible on the next wake. Select A, allow the marker write to succeed, then vary the checks, head and verdict on A across wakes. Trigger (b) contributes zero additional dispatches. Close A or replace it with B: evaluate eligibility again. The [old guard and dispatch site](../../agents/coordinator-scan.sh) deliberately leave (b) eligible on an unreadable fingerprint and attempt the marker write only after selection. A failed marker write can therefore leave the next wake eligible. Exercise these boundaries explicitly.
 
 Change the implementation to stamp on evaluation or to release on same-PR churn: a sequence must fail. Change the model's expected decision alone: the generated table must change and the test against the unchanged implementation must fail. Run old replay as a separate comparison and rule each difference under the island convention. Report which historical mistake the trial detected, what the views exposed to a reviewer, and the authoring cost. That evidence is the basis for adoption by another island.
+
+## Result
+
+The trial of [#3550](https://github.com/teststuffstash/homelab/issues/3550) on trigger (b), goal [#3656](https://github.com/teststuffstash/homelab/issues/3656). One table; a row per measure, a column per arm: `hand` is [`trial/checkpoint-b-hand.md`](trial/checkpoint-b-hand.md) with its decoding in `tests/test_checkpoint_b.py`; `model` is [`specs/models/scan-clause-goal-b.yaml`](specs/models/scan-clause-goal-b.yaml), whose table is the one on the [spec page](specs/scan-decision.md). `tests/test_trial_result.py` fails when a cell differs from what the suite and [`trial/measure.py`](trial/measure.py) produce.
+
+| measure | hand | model |
+|---|---|---|
+| mutants detected (of 2) | 2 | 2 |
+| facts written twice | 83 | 0 |
+| edits for one policy change | 16 (2 arm-specific) | 16 (2 arm-specific) |
+
+- **Mutants detected.** The two mutants under `tests/mutants/`, each run against every labelled row of the arm: the stamp-on-evaluation mutant turns `lane-lost-stays-eligible` red, the release-on-churn mutant turns `goal-checkpoint-b-content-push-held` red, in both arms.
+- **Facts written twice.** `trial/measure.py` counts, per case, the cells that decide the verdict and that name a pull request number, a marker hash or an expected literal (open assembly PR, markers, the three expected cells), and asks whether a second authored file of the arm holds the same text as a string literal. The files are the issue's: `model` has one, so its count is zero by construction; `hand` has two (the table and the decoders). The count is crude: a literal such as `none` or `A` that the decoders happen to spell counts, so 83 of 90 is an upper bound. The same count for the model's cases over the decoders and `scripts/render_model.py`'s lookup tables (files the issue does not list, because the model arm still needs them) is also 83 (`note.` line of `measure.py`): the YAML states each fact once, the arm around it restates them.
+- **Edits for one policy change.** The change is fixed: "a marker read that fails holds (b) this pass" in place of Goal pin 9 — the component's decision (`HELD: pr=<n> marker read failed`), the page's legend literal and sentence, one test name, and the one case row (`marker-read-fails`) that expects it. It was applied on a scratch copy per arm and the added plus deleted lines counted over the authored files; the two diffs are [`trial/policy-change/hand.diff`](trial/policy-change/hand.diff) and [`model.diff`](trial/policy-change/model.diff). `model.diff` leaves out the regenerated table rows of the page and `trial/checkpoint-b-view.md` (generated files); the suite passed on each scratch copy for that arm's rows (`test_trigger_b_hold_<arm>`) after the change, the model one after `scripts/render_model.py`. Counted for the hand arm: the hand table and the shared files; the test file's decoding needed no line beyond the shared test name. 14 of the 16 lines are shared (component, page legend and sentence, test name); the arm-specific edit is one row (2 lines) in either arm. The change is not merged: the page, the model, the hand table and the component at this head still state pin 9.
+
+**Order.** The hand arm was written first (child 2, #3658), the model arm second (child 3, #3659). The arm written second is cheaper to write: it reused the case list, the decoders, the recorded world and the sequence driver the first arm had built, so no authoring-cost number in this report compares the arms on equal terms.
+
+**What each view shows.** The page table and `trial/checkpoint-b-hand.md` carry the same ten columns; `trial/checkpoint-b-view.md` is the case view rendered from the model.
+
+| field that decides the verdict | page table | `checkpoint-b-hand.md` | `checkpoint-b-view.md` |
+|---|---|---|---|
+| open assembly PR | yes | yes | yes (`open list:` in the derived elements) |
+| markers | yes | yes | yes (`comments:`) |
+| since the marker | yes | yes | yes, when not `—` |
+| fault | yes | yes | yes, when not `—` |
+| lane winner | yes | yes | no |
+
+The view also omits the three expected cells; it shows what a case stands on and where its test is, not what it decides. `since the marker` is decoded into the world but the component reads only the open list and the comments (`test_the_component_reads_only_the_open_list_and_the_comments`).
+
+**Which historical mistake a mutant stands for.** The stamp-on-evaluation mutant writes the marker in `evaluate`: a Goal that lost its lane is stamped without being dispatched — the mistake the trial question names. The release-on-churn mutant folds the head commit id into the marker, so a push to the same assembly PR releases the hold: the storm of 2026-11-12 ([#3312](https://github.com/teststuffstash/homelab/pull/3312), ruled in [#3319](https://github.com/teststuffstash/homelab/pull/3319)).
+
+**Result as measured.** A tie on mutants detected (2 and 2) and on edits for the policy change (16 and 16, 2 arm-specific each). The one difference, facts written twice, is 83 against 0 on the issue's file list and 83 against 83 when the model's lookup tables and the shared decoders are counted. The model arm shows no measured advantage here; it also shows no loss.
+
+**Unresolved.** Step 3 of #3550 (the deferral forks) is not run and waits on #3553. Which table stays is the Goal's verdict; neither table is removed.
