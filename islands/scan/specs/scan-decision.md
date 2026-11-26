@@ -574,9 +574,9 @@ another number.
 | held | `goal-checkpoint-b <g> HELD: pr=<n>` | — | 0 |
 | no-decision | nothing | one warning line | 4 |
 
-`marker write?` — the comment writes issued in the wake, `evaluate` and `dispatch` together:
+`marker write?` — the writes of the (b) marker issued in the wake, `evaluate` and `dispatch` together; the same wake's `state-fp:assembly-cr:` write belongs to SCAN-CLAUSE-DEBOUNCE and is not counted here:
 
-| literal | comment writes issued |
+| literal | (b) marker writes issued |
 |---|---|
 | none | none |
 | on A / on B | exactly one, by `dispatch`, on that pull request; its body's first characters are the marker for that pull request's number; answered 201 |
@@ -599,11 +599,11 @@ The table below is generated from [`models/scan-clause-goal-b.yaml`](models/scan
 | goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | — | this Goal | fires-unmarked | on B | held |
 | quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | — | this Goal | fires-unmarked | on A | held |
 | head-not-goal-branch-is-no-assembly-pr ⚖ | goal-checkpoint | A, its head branch is not a `goal/**` branch | none | — | — | this Goal | fires-no-pr | none | fires-no-pr |
-| goal-checkpoint-b-verdict-held | goal-checkpoint | A | the marker for A | the reviewer bot's APPROVED, newer than the marker | — | another unit | held | none | held |
-| goal-checkpoint-b-content-push-held | goal-checkpoint | A | the marker for A | a new head commit id and a second, non-merge commit | — | another unit | held | none | held |
-| goal-checkpoint-b-check-flip-held | goal-checkpoint | A | the marker for A | `ci` settled on FAILURE | — | another unit | held | none | held |
-| goal-checkpoint-b-inflight-check-held | goal-checkpoint | A | the marker for A | a new head commit id, `ci` with no conclusion yet | — | another unit | held | none | held |
-| goal-checkpoint-b-red-rerun-held | goal-checkpoint | A | the marker for A | `ci` re-run after FAILURE, no conclusion yet | — | another unit | held | none | held |
+| goal-checkpoint-b-verdict-held ⚖ | goal-checkpoint | A | the marker for A | the reviewer bot's APPROVED, newer than the marker | — | another unit | held | none | held |
+| goal-checkpoint-b-content-push-held ⚖ | goal-checkpoint | A | the marker for A | a new head commit id and a second, non-merge commit | — | another unit | held | none | held |
+| goal-checkpoint-b-check-flip-held ⚖ | goal-checkpoint | A | the marker for A | `ci` settled on FAILURE | — | another unit | held | none | held |
+| goal-checkpoint-b-inflight-check-held ⚖ | goal-checkpoint | A | the marker for A | a new head commit id, `ci` with no conclusion yet | — | another unit | held | none | held |
+| goal-checkpoint-b-red-rerun-held ⚖ | goal-checkpoint | A | the marker for A | `ci` re-run after FAILURE, no conclusion yet | — | another unit | held | none | held |
 | goal-checkpoint-b-c-armed | goal-checkpoint | A | the marker for A | one open member of the Goal is undispositioned | — | this Goal | held | none | held |
 | assembly-cr-wake-b-silent ⚖ | goal-checkpoint | A | the marker for A, and the three `state-fp:assembly-cr:` markers recorded on #3270 | CHANGES_REQUESTED on A | — | this Goal | held | none | held |
 

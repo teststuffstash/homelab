@@ -157,7 +157,7 @@
       }
     },
     {
-      "id": "goal-checkpoint-b-verdict-held",
+      "id": "goal-checkpoint-b-verdict-held ⚖",
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
@@ -171,7 +171,7 @@
       }
     },
     {
-      "id": "goal-checkpoint-b-content-push-held",
+      "id": "goal-checkpoint-b-content-push-held ⚖",
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
@@ -185,7 +185,7 @@
       }
     },
     {
-      "id": "goal-checkpoint-b-check-flip-held",
+      "id": "goal-checkpoint-b-check-flip-held ⚖",
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
@@ -199,7 +199,7 @@
       }
     },
     {
-      "id": "goal-checkpoint-b-inflight-check-held",
+      "id": "goal-checkpoint-b-inflight-check-held ⚖",
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
@@ -213,7 +213,7 @@
       }
     },
     {
-      "id": "goal-checkpoint-b-red-rerun-held",
+      "id": "goal-checkpoint-b-red-rerun-held ⚖",
       "world": "goal-checkpoint",
       "open_assembly_pr": "A",
       "b_markers_on_it": "the marker for A",
