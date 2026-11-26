@@ -154,7 +154,7 @@ def test_launcher_request(case_id: str) -> None:
             assert req.headers["Authorization"] == f"Bearer {OK_TOKEN}"
     if "AGENT_GATEWAY_URL" in knobs:
         with allure.step("then the request went to the overridden address"):
-            assert req.base == OVERRIDDEN_URL
+            assert req.base == OVERRIDDEN_URL == row["request?"].split(" → ")[1].strip("`")
     else:
         assert req.base == DEFAULT_GATEWAY_URL
     with allure.step(f"then harness {row['harness?']}, model {row['model?']}, exit {row['rc?']}"):

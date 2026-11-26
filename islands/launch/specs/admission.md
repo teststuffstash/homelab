@@ -34,7 +34,7 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 |---|---|---|
 | [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3480 (its 9 rows are cases sourced from this page over the worlds in `worlds/gateway/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/gateway_admit.py`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island component does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
 | [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3480 (all 7 rows are cases sourced from this page: 3 against `islands/launch/src/launch/gateway_admit.py`, 4 through `islands/launch/src/launch/launcher_admission.py`; nothing published) |
-| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3480 (22 of its 24 rows are cases sourced from this page over the worlds in `worlds/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/launcher_admission.py`; nothing published) · ⚑ gap (2026-11-25, PR #3788 → work #3409): rows `off` and `other-stack` are the old path, which the island does not build; the old launcher admits the platform stack only and sends the literal `platform` (FU-270) |
+| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3480 (22 of its 24 rows are cases sourced from this page over the worlds in `worlds/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/launcher_admission.py`; nothing published) · ⚑ gap (2026-11-25, PR #3788 → work #3409): rows `off` and `other-stack` are the old path, which the island does not build; the old launcher admits the platform stack only and sends the literal `platform` (FU-270) · ⚑ gap (2026-11-26, PR #3789 → work #3480): dispatch-canary's request.canary is absent from sessions.schema.json post.input (additionalProperties: false); the case strips it before validating |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
 ## The helper
@@ -173,13 +173,15 @@ sends the repo's own stack and lets
 [GW-SESSIONS-AUTH](../../../gateway/specs/endpoints/sessions.md#gw-sessions-auth)'s `callers`
 decide (unverified — expected once the policy names the other stacks).
 
+`AGENT_GATEWAY_URL` replaces the gateway base the request is sent to.
+
 **World:** `stack-platform` unless the row says otherwise; the gateway seam answers.
 
 #### Admission through the launcher
 
 Legend: `knobs` = the row's `env` column + `vars.sh` flags; `reply` = the seam's answer (world;
 `—` = no request, so none); `request?` = what the POST body carries beyond `{stack: platform, role,
-task, round}`; `harness?` = what the launcher runs; `model?` = the dispatch's `GW_MODEL` (on the old
+task, round}` (→ `<base>` when the request goes to a base other than the default); `harness?` = what the launcher runs; `model?` = the dispatch's `GW_MODEL` (on the old
 path, the launcher's own default).
 
 | description | world | knobs | reply | request? | harness? | model? | rc? |
@@ -197,7 +199,7 @@ path, the launcher's own default).
 | dispatch-opencode | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_RAIL=opencode` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `rail: opencode`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-explicit | stack-platform · gw-dispatch-bound | `--harness claude`, `issue-42` r2 | dispatch `opencode-go/deepseek-v4-flash` on opencode (harness claude) | `harness: claude`, bind | claude | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-subscription | stack-platform · gw-dispatch-bound | `--harness claude` | dispatch `claude/sonnet` on anthropic (harness claude) | `harness: claude`, bind | claude | `claude/sonnet` | 0 |
-| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
+| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind → `http://gateway.override.invalid:9000` | goose | `deepseek/deepseek-v4-flash` | 0 |
 | dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
 | dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `role: prober`, `canary: {model: deepseek/deepseek-v4.1-flash, provider: deepinfra}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
