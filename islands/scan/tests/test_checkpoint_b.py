@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import allure
@@ -34,15 +35,21 @@ HAND = Path(__file__).resolve().parent.parent / "trial" / "checkpoint-b-hand.md"
 SCHEMA = SPECS / "scan-decision.schema.json"
 QUESTION = "Does trigger (b) fire while an assembly pull request is open?"
 COMPONENT = [sys.executable, "-m", "scan_island.checkpoint_b"]
-MUTANT = [sys.executable, str(Path(__file__).resolve().parent / "mutants" / "checkpoint_b_stamp_on_evaluate.py")]
+MUTANTS = Path(__file__).resolve().parent / "mutants"
+MUTANT = [sys.executable, str(MUTANTS / "checkpoint_b_stamp_on_evaluate.py")]
+CHURN_MUTANT = [sys.executable, str(MUTANTS / "checkpoint_b_release_on_churn.py")]
 
-def _load_render():
+def _load_script(name: str, path: Path):
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("render_model", HAND.parent.parent / "scripts" / "render_model.py")
+    spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _load_render():
+    return _load_script("render_model", HAND.parent.parent / "scripts" / "render_model.py")
 
 
 TABLES = tables(PAGE)  # the page's (b) table is rendered from the YAML model (arm `model`)
@@ -101,8 +108,9 @@ def open_pr(cell: str, w: World) -> list[Derived]:
     raise ValueError(f"open assembly PR cell {cell!r}: no decoder")
 
 
-def markers(cell: str, target: int, w: World) -> list[Derived]:
-    """`(b) markers on it` → the comment list the open assembly PR's read answers."""
+def markers(cell: str, target: int, w: World, stamp: Callable[[World], str] | None = None) -> list[Derived]:
+    """`(b) markers on it` → the comment list the open assembly PR's read answers. `stamp`: the marker a mutant stamps on A."""
+    mark = stamp(w) if stamp else marker(A)
     if cell == "—":
         return []
     if cell.startswith("the ten recorded on #3270"):
@@ -113,13 +121,71 @@ def markers(cell: str, target: int, w: World) -> list[Derived]:
     if cell == "none":
         return []
     if cell == "the marker for A":
-        return [overlay(w, COMMENTS, marker(A) + " — placed on the pull request", 0)]
+        return [overlay(w, COMMENTS, mark + " — placed on the pull request", 0)]
+    if cell == "the marker for A, and the three `state-fp:assembly-cr:` markers recorded on #3270":
+        other = [c["body"] for c in w.get(COMMENTS, ()) if c["body"].startswith("🤖 `state-fp:assembly-cr:")]
+        assert len(other) == 3, other
+        return [overlay(w, COMMENTS, mark + " — placed on the pull request", 0)]
     if cell == "the marker for A, quoted (each line starts `> `)":
         return [overlay(w, COMMENTS, "> " + marker(A) + "\n> — placed on the pull request", 0)]
     if cell == "none on B; the marker for A stays on A":
         # the list B's read serves also holds the marker for A: B's own is absent, A's does not count for B
         return [overlay(w, COMMENTS, marker(A) + " — placed on A", 0)]
     raise ValueError(f"markers cell {cell!r}: no decoder")
+
+
+STATUS = "pr-view-3270.commits,reviews,statusCheckRollup.json"
+NEW_HEAD = "5e17c0de5e17c0de5e17c0de5e17c0de5e17c0de"
+
+
+def list_index(w: World, n: int) -> int:
+    [i] = [i for i, p in enumerate(w.get("pr-list.json", ())) if p["number"] == n]
+    return i
+
+
+def _ci(w: World) -> int:
+    [i] = [i for i, c in enumerate(w.get(STATUS, ("statusCheckRollup",))) if c.get("name") == "ci"]
+    return i
+
+
+def since(cell: str, target: int, w: World) -> list[Derived]:
+    """`since the marker` → what the open pull request looks like after the marker: its head commit, review decision and checks.
+
+    The component reads the open list and the pull request's comments and nothing else; these cells change the
+    world's answers it does not read as well as the two it does (the head commit id and the review decision sit
+    on the open-list element), and `test_the_component_reads_only_the_open_list_and_the_comments` holds the reads.
+    """
+    if cell == "—":
+        return []
+    i = list_index(w, target)
+
+    def set_ci(**fields: str) -> None:
+        for k, v in fields.items():
+            w.set(STATUS, ("statusCheckRollup", _ci(w), k), v)
+
+    def new_head() -> None:
+        w.set("pr-list.json", (i, "headRefOid"), NEW_HEAD)
+        w.add(STATUS, ("commits",), copy_of=0, changes={("oid",): NEW_HEAD, ("messageHeadline",): "a second commit, not a merge"})
+
+    if cell == "the reviewer bot's APPROVED, newer than the marker":
+        w.set("pr-list.json", (i, "reviewDecision"), "APPROVED")
+    elif cell == "a new head commit id and a second, non-merge commit":
+        new_head()
+    elif cell == "`ci` settled on FAILURE":
+        set_ci(conclusion="FAILURE", status="COMPLETED")
+    elif cell == "a new head commit id, `ci` with no conclusion yet":
+        new_head()
+        set_ci(conclusion="", status="IN_PROGRESS")
+    elif cell == "`ci` re-run after FAILURE, no conclusion yet":
+        set_ci(conclusion="FAILURE", status="COMPLETED")  # the recorded green, then the red the re-run follows
+        set_ci(conclusion="", status="IN_PROGRESS")
+    elif cell == "one open member of the Goal is undispositioned":
+        pass  # a Goal-side condition (trigger (c), #3448's): the component never reads the Goal's tree
+    elif cell == "CHANGES_REQUESTED on A":
+        w.set("pr-list.json", (i, "reviewDecision"), "CHANGES_REQUESTED")
+    else:
+        raise ValueError(f"since the marker cell {cell!r}: no decoder")
+    return [Derived("since-the-marker", "pr-list.json", i, "the recorded #3270 read", cell)]
 
 
 def fault(cell: str, w: World) -> None:
@@ -174,14 +240,17 @@ def actual_writes(result, runs_of: list[str]) -> str:
     return f"dispatch on {letter}: rc {rc}, body {body[:60]!r}"
 
 
-def wake_the_row(component: list[str], cells: dict) -> tuple[dict, object]:
+def wake_the_row(component: list[str], cells: dict, stamp: Callable[[World], str] | None = None) -> tuple[dict, object]:
     """Build the row's state, run wake 1 and wake 2 through the sequence driver; the three actual cells."""
     w = World(WORLD)
     derived: list[Derived] = []
-    with allure.step(f"Given {cells['world']}: open assembly PR {cells['open_assembly_pr']}; markers {cells['b_markers_on_it']}; fault {cells['fault']}"):
+    with allure.step(
+        f"Given {cells['world']}: open assembly PR {cells['open_assembly_pr']}; markers {cells['b_markers_on_it']}; since the marker {cells['since_the_marker']}; fault {cells['fault']}"
+    ):
         derived += open_pr(cells["open_assembly_pr"], w)
         target = B if cells["open_assembly_pr"].startswith("B") else A
-        derived += markers(cells["b_markers_on_it"], target, w)
+        derived += markers(cells["b_markers_on_it"], target, w, stamp)
+        derived += since(cells["since_the_marker"], target, w)
         fault(cells["fault"], w)
     evaluate = [*component, "evaluate", REPO, GOAL]
     dispatch = [*component, "dispatch", REPO, GOAL]
@@ -244,7 +313,7 @@ def run_row(**cells) -> None:
 @allure.label("world", WORLD)
 @allure.label("arm", "model")
 @pytest.mark.parametrize(ARGS, ROWS)
-def test_trigger_b_hold_model(world, open_assembly_pr, b_markers_on_it, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
+def test_trigger_b_hold_model(world, open_assembly_pr, b_markers_on_it, since_the_marker, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
     run_row(**locals())
 
 
@@ -252,7 +321,7 @@ def test_trigger_b_hold_model(world, open_assembly_pr, b_markers_on_it, fault, l
 @allure.label("world", WORLD)
 @allure.label("arm", "hand")
 @pytest.mark.parametrize(ARGS, HAND_ROWS)
-def test_trigger_b_hold_hand(world, open_assembly_pr, b_markers_on_it, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
+def test_trigger_b_hold_hand(world, open_assembly_pr, b_markers_on_it, since_the_marker, fault, lane_winner, expected_b_this_wake, expected_marker_write, expected_b_next_wake):
     run_row(**locals())
 
 
@@ -284,6 +353,7 @@ def test_evaluate_issues_no_write_in_any_case():
         w = World(WORLD)
         open_pr(cells["open_assembly_pr"], w)
         markers(cells["b_markers_on_it"], A, w)
+        since(cells["since_the_marker"], A, w) if cells["open_assembly_pr"] == "A" else None
         fault(cells["fault"], w)
         run = w.run([*COMPONENT, "evaluate", REPO, GOAL])
         assert [c for c in run.calls if c["kind"] == "write"] == [], r.id
@@ -438,3 +508,62 @@ def test_a_changed_expectation_changes_the_table_and_fails_against_the_unchanged
 def test_the_cases_read_no_path_under_agents():
     here = Path(__file__).read_text("utf-8")
     assert here.count("agents" + "/") == 0
+
+
+# ── the second mutant: the head commit id folded into the hash ───────────────────────────────────
+
+CHURN = _load_script("checkpoint_b_release_on_churn", MUTANTS / "checkpoint_b_release_on_churn.py")
+
+
+def churn_stamp(w: World) -> str:
+    """The marker the churn mutant would have stamped on A at the head the open list shows before the row's push."""
+    return CHURN.marker_for(A, w.get("pr-list.json", (list_index(w, A), "headRefOid")))
+
+
+def churn_failing(case_id: str, arm: str) -> list[str]:
+    cells = row(case_id, arm)
+    actual, _ = wake_the_row(CHURN_MUTANT, cells, churn_stamp)
+    return sorted(k for k, ok in verdicts(cells, actual).items() if not ok)
+
+
+@pytest.mark.parametrize("arm", ARMS)
+def test_the_release_on_churn_mutant_fails_content_push_held(arm):
+    assert churn_failing("goal-checkpoint-b-content-push-held", arm) == ["expected_b_next_wake", "expected_b_this_wake"]
+
+
+@pytest.mark.parametrize("arm", ARMS)
+@pytest.mark.parametrize("case_id", ["goal-checkpoint-b-inflight-check-held"])
+def test_the_release_on_churn_mutant_fails_every_row_that_pushes(arm, case_id):
+    assert churn_failing(case_id, arm) == ["expected_b_next_wake", "expected_b_this_wake"]
+
+
+@pytest.mark.parametrize("arm", ARMS)
+@pytest.mark.parametrize(
+    "case_id",
+    ["goal-checkpoint-b-held", "goal-checkpoint-b-verdict-held", "goal-checkpoint-b-check-flip-held", "goal-checkpoint-b-red-rerun-held", "goal-checkpoint-b-c-armed", "assembly-cr-wake-b-silent ⚖"],
+)
+def test_the_release_on_churn_mutant_holds_where_nothing_pushes(arm, case_id):
+    # the mutant is a head-commit mistake only: with the head unchanged its marker still holds, so the rows around the push stay green
+    assert churn_failing(case_id, arm) == []
+
+
+@pytest.mark.parametrize("arm", ARMS)
+def test_the_component_passes_the_row_the_churn_mutant_fails(arm):
+    check(row("goal-checkpoint-b-content-push-held", arm))
+
+
+def test_the_component_reads_only_the_open_list_and_the_comments():
+    # the since cells change answers the component never asks for; they cannot matter unless it reads them
+    for r in ROWS:
+        cells = dict(zip(ARGS, r.values, strict=True))
+        if cells["since_the_marker"] == "—" or cells["open_assembly_pr"] != "A":
+            continue
+        w = World(WORLD)
+        open_pr("A", w)
+        markers(cells["b_markers_on_it"], A, w)
+        since(cells["since_the_marker"], A, w)
+        run = w.run([*COMPONENT, "dispatch", REPO, GOAL])
+        reads = {tuple(c["argv"][:2]) for c in run.calls if c["kind"] != "write"}
+        assert {a[0] for a in reads} <= {"pr", "api"}, reads
+        assert all(c["argv"][1] == "list" for c in run.calls if c["argv"][0] == "pr"), run.calls
+        assert all("/comments" in c["argv"][-1] for c in run.calls if c["argv"][0] == "api"), run.calls
