@@ -1,0 +1,15 @@
+{
+  "provenance": {"kind": "hand-written", "validated_against": "gateway/specs/endpoints/sessions.schema.json", "part": "post.dispatch_bound", "note": "placeholder values only; not recorded from a live gateway"},
+  "status": 200,
+  "body": {
+    "decision": "dispatch",
+    "session": {"id": "s-coord-1", "expires_at": "2026-11-01T16:00:00Z"},
+    "rail": "anthropic",
+    "harness": "claude",
+    "model": "claude/opus",
+    "env_keys": ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"],
+    "pull_url": "http://agent-gateway.agent-egress.svc.cluster.local:8080/sessions/s-coord-1/env",
+    "context_tokens": 200000,
+    "rail_choice": null
+  }
+}
