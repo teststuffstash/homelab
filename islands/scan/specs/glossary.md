@@ -85,5 +85,9 @@ A commit with two or more parents. Its message decides nothing: a two-parent com
 
 An armed PR with nothing but currency and CI between it and auto-merge: `reviewDecision`
 APPROVED, or `""` with the reviewer bot's APPROVED newer than the [newest non-merge commit](#merge-commit) (or the
-`automerge` label). The updater's leg-1 predicate ([SCAN-UPDATER-PICK](updater.md#scan-updater-pick)).
+`automerge` label). The updater's leg-1 predicate ([SCAN-UPDATER-PICK](updater.md#scan-updater-pick)); leg 1 also updates a pull request that is not merge-ready when its red is an [inherited red](#inherited-red).
 For a Renovate PR that is untouched or updater-merged ([SCAN-UPDATER-RENOVATE](updater.md#scan-updater-renovate)) the rollup must also be green, and a CANCELLED check outlived by a same-named sibling is not red.
+
+## inherited red
+
+A pull request's red that is its base's, not its own: the newest `ci` check run at its head failed, and it started before the newest `ci` check run at its base's head, which succeeded. An update merges the healed base in and the next run decides. The predicate and its reads: [SCAN-UPDATER-PICK](updater.md#scan-updater-pick).

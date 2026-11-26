@@ -17,17 +17,43 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-25 — gateway day; TICK-LOG 11-25).** In flight when the session ended, re-read each before acting:
+  - **Overnight check 22:17–22:30Z (one look, then stopped).** #3770 is proven live: the scan closed #3309 at 21:14Z and
+    assembly PR #3784 (Goal #3305) opened 21:21Z, armed. **#3784 is DIRTY and parked `blocked-on: human`**: the goal
+    branch is 384 commits behind, 13 conflict hunks in 7 `gateway/**` files. Trial merge read and aborted, nothing pushed;
+    the analysis is a comment on #3784 — six files are keep-both, `catalog.md` GW-MODEL-TIERS needs rulings (master
+    edited the snapshot prose the Goal retires). An attended job. Scan chain: #3657, #3658 done, #3659 riding. Launch
+    chain: #3483, #3484 done; #3485 round 1 died before the harness started (the coordinator killed its dispatch client,
+    which released the gateway session; the pod got 401 at env pull) and the scan held it for a hand re-queue — the seat
+    re-queued it 22:25Z with a comment (the one help). Not re-read after that.
+  - #3770 MERGED 21:12Z (`9022934a7`): the goal-child closeout reads merged PRs per goal base and reports what it cannot
+    confirm. Root cause of #3309: `gh pr list --state merged --limit N` is ordered by OPEN date — #3590 (opened 11-20,
+    merged 11-22) was 56th the moment it merged. **#3309 was deliberately not hand-closed**: read whether the scan closed it
+    and Goal #3305's assembly PR opened (then `TierEvidenceStale` clears after the human verdict). UNTRACKED, same class,
+    four more unscoped lookups in `coordinator-scan.sh` (≈2310 master closeout, ≈5187 in-progress belt, ≈3599
+    assembly-merge detection — the likeliest to bite, ≈5721 done belt): file to the agent-loop island's intake.
+  - The second jail's handoff `/workspace/.handoff/seat/20261125-2000-eso-tenancy-intake-transcripts.md` is NOT filed
+    (two `fu-new`, the oracle-fleet#1115 comment). An opus subagent took only its urgent pickup — stack Terraform Workspaces
+    → a platform-owned claim: inventory + an additive PR opened UNARMED + a migration plan, nothing live touched. Two older
+    files sit beside it in `seat/` (11-22 gmi-cloud key rotation, 11-23 nx01 fstrim) — check whether they were filed.
+  - **PR #3782 (UNARMED, operator reads it; ADR-169): `repos[].provision[]` on AgentStack — the platform-owned replacement for
+    stack-authored Terraform Workspaces.** Additive only; the hole stays open until the six-step migration in
+    `docs/stack-workspace-migration.md` (on that branch) ends. **BIGGER HOLE found, NO FU yet (grep: no match) — file it with
+    the handoff:** the `agent-fixer` ApplicationSet and the root oracle/sleep/circles Applications sync stack-repo content
+    under AppProject `default` (any repo, namespace, cluster-scoped kind), so removing `Workspace` from the stack projects
+    closes nothing by itself and a stack repo can apply cluster RBAC. Interim admission guard = an option in the doc (Warn/Audit first).
+  - Gateway intake inputs filed by the seat: #3764 (the Go usage reading is built but dark: vendor 60 % monthly vs the
+    dashboard's 3 %); the fact on #3538 (the console 403 is the `x-opencode-session` header, the key is fine — no mint).
+  - Not filed, the operator has the options: a read door per island for intake's credentialed reads (ad hoc replay of a
+    declared vendor read); the reviewer-comment route for unchanged-row findings (the intake no-fence rule #3750 went first).
+  - Specs sweep merged (#3754 #3757–#3760); its advisory list and two judgment rows (GW-RAIL-CODEX read-timeout count,
+    GW-RAIL-OPENROUTER "canonical pair") are in the session report only.
 - **⚑ PICKUP (2026-11-23 — cleanup trio; RULINGS OWED, operator: "too late to rule today"; TICK-LOG 11-23 ×2).**
   OPERATOR, recommendation first:
-  1. Merge #3722 (islands+intake docs comb; governance path `.claude/skills/intake/SKILL.md`, bot-approved). #3721 (gateway
-     comb) waits the specs reviewer only.
-  2. Goal branches `goal/3656-…`, `goal/3480-…`, `goal/3482-…` still UNCUT. The fix is on master (#3676 + #3682, 11-22), but no
-     sitting re-read them: #3656 parked `blocked-on: human` (re-read releases only `issue=`, and skips parks <3 d); #3482 waits
-     `issue=3438` (open, the cut never happens there); #3480 has no marker and was not offered. Same class as #3709. CONFLICT:
-     the 11-16 bullet below holds #3480/#3482 uncut ON PURPOSE until the gateway is self-sufficient — is that hold lifted?
-     Rec: seat cuts all three now if lifted, else #3656 only; comment each so 13 children unblock.
-  3. #2588 `AGENT_INFEASIBLE` (`islands/**` in no fix tier). Rec: re-scope into the scan island's updater rows.
-  4. Old-scan FUs FU-168/201/147/199/221 → scan island intake? Rec: yes.
+  1–4 DONE or moved 2026-11-25 (TICK-LOG 11-25): #3721 merged; `goal/3656-scan-checkpoint-b` cut and its five children queued;
+     #3482 was already cut by intake and assembled 11-24 (#3739) — it was never held; #2588 → #3776 and FU-168/201/147/199/221
+     → #3771–#3775, all inputs of the scan island's intake. #3722 merged. **#3480 (launch second
+     leg): the operator LIFTED the 11-16 hold on 11-25 — branch cut, five children queued.**
   5. FU-315: wk-metal-02 apiserver refills in ~40 h. Rec: CP role → a 16 GB box (#3695).
   6. FU-297: BACKUP router firmware route. Rec: low-priority gateway via the peer's LAN address.
   7. FU-250: Rec: drop `cloudflare_web_analytics_site`/`_rule` from the composition.

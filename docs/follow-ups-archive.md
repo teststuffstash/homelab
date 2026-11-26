@@ -10,6 +10,16 @@ scrub only the **TODO-shaped** references (`FU: FU-NNN` gap-register cells, `Tra
 the lint reds them as TODO-RETIRED); every other reference is a **provenance name** — a stable
 coordinate in a never-reused namespace — and stays untouched, forever.
 
+- **FU-168** *(archived 2026-11-25)* — **Dispatch revisit (cron-woken dispatches): handed to the scan island's intake.** Not resolved: the open points
+      moved verbatim into homelab#3771 (operator ruling 2026-11-25), where the island's sitting re-tests each one.
+- **FU-201** *(archived 2026-11-25)* — **Arbitrate 're-dispatch stronger' carrier: handed to the scan island's intake.** Not resolved: the open points
+      moved verbatim into homelab#3772 (operator ruling 2026-11-25), where the island's sitting re-tests each one.
+- **FU-147** *(archived 2026-11-25)* — **No-op changes-requested round detector: handed to the scan island's intake.** Not resolved: the open points
+      moved verbatim into homelab#3773 (operator ruling 2026-11-25), where the island's sitting re-tests each one.
+- **FU-199** *(archived 2026-11-25)* — **Silent holds freeze lanes: handed to the scan island's intake.** Not resolved: the open points
+      moved verbatim into homelab#3774 (operator ruling 2026-11-25), where the island's sitting re-tests each one.
+- **FU-221** *(archived 2026-11-25)* — **Updater burns CI on a relational red: handed to the scan island's intake.** Not resolved: the open points
+      moved verbatim into homelab#3775 (operator ruling 2026-11-25), where the island's sitting re-tests each one.
 - **FU-314** *(archived 2026-11-23)* — **Specs-reviewer legacy artifact fallback removed.** Packs come only from the
       `gateway-specs` bucket since #2796; #3718 (`bbf65572`) dropped `EVIDENCE_ARTIFACT`, the `gh run download|list`
       paths and `run download` from the shadow allow-list (now a refused write in the self-test, 187 ok).

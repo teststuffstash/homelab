@@ -10,7 +10,7 @@ import pytest
 from .world import ISLAND, WORLDS, UnrecordedCall, World, parse_provenance
 
 RECORDER = ISLAND / "scripts" / "record_world.py"
-RECORDED = ["pr-handoff", "pr-board", "pr-merges"]
+RECORDED = ["pr-handoff", "pr-board", "pr-merges", "goal-checkpoint"]
 REPO = "teststuffstash/homelab"
 
 # GitHub's token formats (classic/OAuth/user-to-server/server-to-server/refresh `gh[opsur]_`, fine-grained
@@ -242,3 +242,34 @@ def test_add_pull_commits_failing_second_read_leaves_the_world_byte_identical(tm
         rw.add_pull_commits(args)
     assert len(calls) == 2
     assert {p.name: p.read_bytes() for p in recorded.iterdir()} == before
+
+
+def test_add_base_ci_issues_the_visibility_read_then_the_one_base_read(tmp_path):
+    rw = _recorder_module()
+    src = tmp_path / "add-src"
+    src.mkdir()
+    (src / "r0.json").write_text(json.dumps({"private": False, "visibility": "public"}))
+    (src / "r1.json").write_text(json.dumps({"total_count": 1, "check_runs": [{"name": "ci"}]}))
+    (src / "provenance.yaml").write_text(
+        "\n".join(["reads:", f"  - argv: {json.dumps(['api', f'repos/{REPO}'])}", '    file: "r0.json"',
+                   f"  - argv: {json.dumps(rw.base_ci_read())}", '    file: "r1.json"', "writes:"]) + "\n"
+    )
+    out = tmp_path / "out"
+    recorded = out / "pr-board"
+    recorded.mkdir(parents=True)
+    head = (
+        '# Written by scripts/record_world.py — re-record, never hand-edit. Every value is JSON (valid YAML).\n'
+        'world: "pr-board"\nitems: [7]\nrecorded_at: "2026-11-19T22:18:15Z"\nrecorder_commit: "' + "d" * 40 + '"\nreads:\n'
+        f'  - argv: ["pr", "list", "--repo", "{REPO}"]\n    file: "pr-list.json"\n    auth: "token"\nwrites:\n'
+    )
+    (recorded / "pr-list.json").write_text("[]")
+    (recorded / "provenance.yaml").write_text(head)
+    run = World("add-src", root=tmp_path).run([sys.executable, str(RECORDER), "pr-board", "--add", "base-ci", "--out", str(out)])
+    assert run.rc == 0, run.stderr
+    assert run.argvs == [["api", f"repos/{REPO}"], rw.base_ci_read()]  # the visibility read, then the one read; nothing recorded is read again
+    text = (recorded / "provenance.yaml").read_text()
+    assert text.startswith(head.split("writes:")[0]) and text.endswith("writes:\n")  # no existing line changes or moves
+    [added] = parse_provenance(text)["reads"][1:]
+    assert added["file"] == "api.commits.heads.master.check-runs@per_page=100.json"
+    assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", added["recorder_commit"]) and "recorded_at" in added and added["auth"] == "token"
+    assert (recorded / added["file"]).read_bytes() == (src / "r1.json").read_bytes()

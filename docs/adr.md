@@ -3173,3 +3173,22 @@ cluster, so nothing in its toolchain may require it):** no pre-push gate and no 
 depend on a jail cluster; push and wait for CI stays the fallback.
 **Consequences:** that kata contains a privileged container is ASSUMED until the smoke's device probe
 passes — no token before it; ~4 GiB per pod is an estimate; the dind pin lives twice, test-held equal.
+
+### ADR-168 — Stack namespaces read Infisical through a per-namespace key allowlist enforced at admission (2026-11-25)
+**Status:** Accepted (operator, 2026-11-25: "Urgent: ESO/Infisical").
+**Decision:** two ValidatingAdmissionPolicies bound what an ExternalSecret may pull.
+`eso-infisical-guard`: outside a short platform namespace list, an ExternalSecret reads from the
+`infisical` ClusterSecretStore only the keys on its namespace's allowlist (a common list + a
+`perNamespace` map, in the policy file), never via `dataFrom`, and a PushSecret names no
+ClusterSecretStore. Default-deny: an unlisted namespace gets only the common list.
+`eso-clusterstore-scoped`: every other ClusterSecretStore lists its namespaces explicitly in
+`spec.conditions[].namespaces`. Mechanism: [secrets.md §Boundaries](secrets.md#boundaries).
+**Considered:** ESO `conditions` on `infisical` (rejected: stack namespaces legitimately read a few
+keys each, and a condition admits whole namespaces); per-stack Infisical folders + identities + stores
+(the vendor-shaped end state, deferred: it moves keys in Infisical); Kyverno (no controller here).
+**Why:** a stack's workbench token and its ArgoCD app could mirror ANY key of the homelab/prod project
+(proven 2026-11-25: `oracle-workbench` synced `DEMO_PING` into `oracle-fleet`), and four
+kubernetes-provider stores had no `conditions`.
+**Consequences:** a stack's new Infisical key is one allowlist line in a platform PR. A new platform
+namespace that reads arbitrary keys joins the list. A stack's ExternalSecret outside its allowlist
+fails at sync, visibly.

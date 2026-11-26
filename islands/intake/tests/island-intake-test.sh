@@ -682,7 +682,8 @@ run_script() { # <mode>
       INTAKE_WAIT_MAX="${WAIT_MAX:-0}" INTAKE_REFS_JSON="${REFS_JSON:-$TMP/refs-empty.json}" \
       INTAKE_ISSUES_JSON="${PILE_JSON:-$TMP/pile-empty.json}" INTAKE_PRS_JSON="${PRS_JSON:-$TMP/pile-empty.json}" \
       INTAKE_TS_DIR="$TS" INTAKE_NOW="$NOW" GH_TOKEN=x INTAKE_READ_GH_TOKEN=y AGENT_TS_BUCKET=b AGENT_TS_ENDPOINT=e \
-      AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s PUSHGATEWAY="" env ${RUN_ENV:-} bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
+      AGENT_TS_ACCESS_KEY_ID=k AGENT_TS_SECRET_ACCESS_KEY=s STACK_TS_ACCESS_KEY_ID=sk STACK_TS_SECRET_ACCESS_KEY=ss \
+      PUSHGATEWAY="" env ${RUN_ENV:-} bash "$TMP/script.sh" ) > "$TMP/run.log" 2>&1
 }
 cat > "$TMP/claude.out" <<EOF
 … the sitting's report …
@@ -1532,7 +1533,7 @@ case "\$p" in
   *"REPAIR PASS"*) s=repair;; *"ISLAND INTAKE sitting"*) s=author;; *"Unit review"*) s=unit;;
   *"PASS 1 of a staged read"*) s=pass1;; *"PASS 2 of a staged read"*) s=pass2;; *) s=other;;
 esac
-echo "\$s cwd=\$PWD gh_token=\${GH_TOKEN:+set} allow=\$allow read_token=\${INTAKE_READ_GH_TOKEN:+set}" >> "\$T/r.calls"
+echo "\$s cwd=\$PWD gh_token=\${GH_TOKEN:+set} allow=\$allow writer=\${AGENT_TS_ACCESS_KEY_ID:+a}\${AGENT_TS_SECRET_ACCESS_KEY:+b}\${STACK_TS_ACCESS_KEY_ID:+c}\${STACK_TS_SECRET_ACCESS_KEY:+d} read_token=\${INTAKE_READ_GH_TOKEN:+set}" >> "\$T/r.calls"
 printf '%s' "\$p" > "\$T/prompt-\$s.txt"
 out="\$(printf '%s' "\$p" | grep -oE '/[^ ]*/review/out/[a-z]+-[0-9]+\.md' | head -1)"
 case "\$s" in
@@ -1643,6 +1644,9 @@ grep -q "^pass2 cwd=$TMP/run/review/case-rows-1 gh_token= .*Bash(git -C $TMP/wor
 { grep -q '^author .* read_token=set$' "$TMP/r.calls" && grep -q '^repair .* read_token=set$' "$TMP/r.calls" \
     && [ -z "$(grep -E '^(unit|pass1|pass2) ' "$TMP/r.calls" | grep -v ' read_token=$')" ]; } \
   && ok "INTAKE_READ_GH_TOKEN reaches the author and the repair sessions; no lens gets it (env -i)" || bad "read token reach" "$(cat "$TMP/r.calls")"
+# the transcripts WRITER keys are the shell's alone (SESSION_UNSET): no session of the run holds one
+{ grep -q '^author ' "$TMP/r.calls" && grep -q '^repair ' "$TMP/r.calls" && ! grep -qE ' writer=[a-d]+ ' "$TMP/r.calls"; } \
+  && ok "no session (author, repair, lens) holds a transcripts writer key" || bad "writer key reach" "$(cat "$TMP/r.calls")"
 grep -q -- '- 9/r1.1' "$TMP/run/review/out/rows-1.md" && grep -q 'R10/9/r1.1' "$TMP/run/review/out/rows-1.md" \
   && ok "the rows file keeps its frozen Pass 1 and gains pass 2's findings" || bad "rows file" "$(cat "$TMP/run/review/out/rows-1.md")"
 grep -q 'LENS FINDINGS FILE: unit-0.md' "$TMP/prompt-repair.txt" && grep -q 'LENS FINDINGS FILE: rows-1.md' "$TMP/prompt-repair.txt" && grep -q 'Review units' "$TMP/prompt-repair.txt" \
@@ -2368,6 +2372,15 @@ done
     && [ "$(yq -r "$SPEC.templates[] | select(.name == \"intake\") | .container.env[] | select(.name == \"INTAKE_READ_GH_TOKEN\") | .valueFrom.secretKeyRef | [.name, .key, .optional] | join(\",\")" "$YAML")" = "intake-read-git,GH_TOKEN,true" ] \
     && ! grep -q 'INTAKE_READ_GH_TOKEN' "$TMP/tok-intake.sh"; } \
   && ok "INTAKE_READ_GH_TOKEN: the sitting leaf only, Secret intake-read-git, optional, no startup refusal" || bad "read token env" "$(yq -c "$SPEC.templates[].container.env[]? | select(.name == \"INTAKE_READ_GH_TOKEN\")" "$YAML")"
+# every Secret-sourced env of the intake leaf is classified: the sessions' read set below, or SESSION_UNSET in the
+# sitting (the shell's alone) — a new credential env fails here until someone decides which
+_unset="$(sed -n 's/^SESSION_UNSET=(\(.*\))$/\1/p' "$REPO/islands/intake/scripts/sitting.sh" | tr ' ' '\n' | grep -v '^-u$' | sort)"
+_keep="$(printf '%s\n' GH_TOKEN INTAKE_READ_GH_TOKEN AGENT_TS_READER_ID AGENT_TS_READER_SECRET STACK_TS_BUCKET STACK_TS_STACK | sort)"
+_secret_env="$(yq -r "$SPEC.templates[] | select(.name == \"intake\") | .container.env[] | select(.valueFrom.secretKeyRef) | .name" "$YAML" | sort -u)"
+{ [ -n "$_unset" ] && [ -n "$_secret_env" ] && [ -z "$(comm -23 <(printf '%s\n' "$_secret_env") <(printf '%s\n' "$_unset" "$_keep" | sort -u))" ] \
+    && [ -z "$(comm -12 <(printf '%s\n' "$_unset") <(printf '%s\n' "$_keep"))" ]; } \
+  && ok "every Secret-sourced env of the intake leaf is classified: session read set or SESSION_UNSET" \
+  || bad "secret env classification" "unclassified: $(comm -23 <(printf '%s\n' "$_secret_env") <(printf '%s\n' "$_unset" "$_keep" | sort -u) | tr '\n' ' ')"
 # the identity: the ServiceAccount is the workflow's (one for every template), the token and the writer key are the sitting's
 [ "$(yq -r "$SPEC.serviceAccountName" "$YAML")" = island-intake ] && [ "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName // \"\"" "$YAML")" = "" ] \
   && ok "…under the workflow's island-intake ServiceAccount (the leaf names none of its own)" || bad "leaf identity" "$(yq -r "$SPEC.templates[] | select(.name == \"experiments\") | .serviceAccountName" "$YAML")"

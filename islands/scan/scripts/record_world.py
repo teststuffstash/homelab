@@ -8,12 +8,25 @@ A world is the set of GitHub reads one surface makes. For each read the recorder
 field removed, no header kept, no token kept. `provenance.yaml` beside the files names the repo,
 the items, every read (its `gh` argv and its file), the recording time and the recorder's commit.
 
+    uv run --frozen python scripts/record_world.py goal-checkpoint <goal> <assembly-pr>
+
+`goal-checkpoint` records the reads the trigger (b) hold makes: the Goal issue and its comments, the
+open pull request list, and the assembly pull request's REST read, `gh pr view` (commits, reviews,
+status check rollup) and comments. Its one write, `create-comment`, is declared like any other.
+
     uv run --frozen python scripts/record_world.py <world> --add pull-commits
 
 `--add pull-commits` adds, for each item of an already recorded world, the pull-commits read
 (`gh api repos/<repo>/pulls/<n>/commits?per_page=100`, which carries each commit's `parents`): it writes
 each answer file and appends one entry per read to `provenance.yaml`'s `reads`, with that entry's own
 `recorded_at` and `recorder_commit`; no existing line changes and no recorded read is performed again.
+
+    uv run --frozen python scripts/record_world.py <world> --add base-ci
+
+`--add base-ci` adds the one read of the base's head, `master`'s
+(`gh api repos/<repo>/commits/heads/master/check-runs?per_page=100`): it writes the answer file and appends
+one entry to `provenance.yaml`'s `reads`, with its own `recorded_at` and `recorder_commit`, as
+`--add pull-commits` does; no recorded read is performed again.
 
 The repo's visibility is read first: a repo GitHub reports as private is refused before any other
 read. A read the token may not make (HTTP 403) is recorded unauthenticated over the public REST API
@@ -51,6 +64,8 @@ BOARD_LIST_FIELDS = (
     "number,createdAt,mergeStateStatus,autoMergeRequest,reviewDecision,labels,headRefOid,"
     "latestReviews,baseRefName,reviews,author,headRefName"
 )
+# The `--json` field list of the scan's open-PR fetch (agents/coordinator-scan.sh `prsjson`) — what the (b) hold reads.
+CHECKPOINT_LIST_FIELDS = "number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body,baseRefName,headRefOid"
 
 
 @dataclass(frozen=True)
@@ -156,6 +171,11 @@ def plan_pr_merges(prs: list[str]) -> Plan:
     return Plan([Read(r, file_for(r)) for r in reads], [])
 
 
+def base_ci_read() -> list[str]:
+    """The read of the check runs at the head of the base branch `master` (`heads/<branch>` is a ref the REST read takes)."""
+    return ["api", f"repos/{REPO}/commits/heads/master/check-runs?per_page=100"]
+
+
 def board_per_pr(n: str, oid: str) -> list[list[str]]:
     return [
         ["pr", "view", n, "--repo", REPO, "--json", "commits"],
@@ -167,7 +187,25 @@ def board_per_pr(n: str, oid: str) -> list[list[str]]:
     ]
 
 
-PLANS = {"pr-handoff": plan_pr_handoff, "pr-board": plan_pr_board, "pr-merges": plan_pr_merges}
+def plan_goal_checkpoint(prs: list[str]) -> Plan:
+    """A Goal and its assembly pull request as the checkpoint (b) hold reads them. Items: [goal, assembly-pr]."""
+    if len(prs) != 2:
+        raise SystemExit("record_world: goal-checkpoint records <goal> <assembly-pr>")
+    goal, pr = prs
+    open_list = ["pr", "list", "--repo", REPO, "--state", "open", "--limit", "100", "--json", CHECKPOINT_LIST_FIELDS]
+    reads = [
+        ["api", f"repos/{REPO}/issues/{goal}"],
+        ["api", f"repos/{REPO}/issues/{goal}/comments?per_page=100"],
+        open_list,
+        ["api", f"repos/{REPO}/pulls/{pr}"],
+        ["pr", "view", pr, "--repo", REPO, "--json", "commits,reviews,statusCheckRollup"],
+        ["api", f"repos/{REPO}/issues/{pr}/comments?per_page=100"],
+    ]
+    writes = [Write("create-comment", "POST", f"repos/{REPO}/issues/{{issue_number}}/comments", "issues/create-comment", ("201", "403"))]
+    return Plan([Read(r, file_for(r)) for r in reads], writes)
+
+
+PLANS = {"pr-handoff": plan_pr_handoff, "pr-board": plan_pr_board, "pr-merges": plan_pr_merges, "goal-checkpoint": plan_goal_checkpoint}
 
 
 def refuse_private(repo: str) -> str:
@@ -369,6 +407,32 @@ def add_pull_commits(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_base_ci(args: argparse.Namespace) -> int:
+    """`--add base-ci`: the one read of `master`'s head check runs; nothing already recorded is read again."""
+    if args.prs:
+        raise SystemExit("record_world: --add base-ci takes no pull request: it reads master's head")
+    world = Path(args.out) / args.world
+    prov_path = world / "provenance.yaml"
+    if not prov_path.is_file():
+        raise SystemExit(f"record_world: {args.world} is not recorded — nothing to add to")
+    text = prov_path.read_text("utf-8")
+    refuse_private(REPO)  # before any other read
+    commit = recorder_commit()
+    read = Read(base_ci_read(), "")
+    read.file = file_for(read.argv)
+    if (world / read.file).exists() or f"file: {_y(read.file)}" in text:
+        raise SystemExit(f"record_world: {args.world} already holds {read.file}")
+    body = perform(read)
+    read.recorded_at = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    read.recorder_commit = commit
+    (world / read.file).write_bytes(body)
+    lines = text.split("\n")
+    at = lines.index("writes:")
+    prov_path.write_text("\n".join([*lines[:at], *read_lines(read), *lines[at:]]), "utf-8")
+    print(f"record_world: {args.world} — 1 read added → {world}")
+    return 0
+
+
 def _recorded_items(text: str) -> list[int]:
     m = re.search(r"^items: (\[.*\])$", text, re.M)
     if not m:
@@ -380,11 +444,13 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("world", choices=sorted(PLANS))
     ap.add_argument("prs", nargs="*")
-    ap.add_argument("--add", choices=["pull-commits"], help="add a read to an already recorded world, for its recorded items")
+    ap.add_argument("--add", choices=["pull-commits", "base-ci"], help="add a read to an already recorded world, for its recorded items")
     ap.add_argument("--rest-description", default="", help="github/rest-api-description commit (default: main's head)")
     ap.add_argument("--description-file", default="", help="a local copy of the description at that commit (no download)")
     ap.add_argument("--out", default=str(WORLDS), help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.add == "base-ci":
+        return add_base_ci(args)
     if args.add:
         return add_pull_commits(args)
     if not args.prs:

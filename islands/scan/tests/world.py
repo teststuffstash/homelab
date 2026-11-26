@@ -184,6 +184,11 @@ class World:
         self._faults.append({"target": target, "kind": kind, "occurrence": occurrence, "field": list(field), "status": status, "stderr": stderr})
         return self
 
+    def clear_faults(self) -> World:
+        """The fault is gone: the next wake's calls are answered as recorded (a sequence case's second wake)."""
+        self._faults.clear()
+        return self
+
     def run(self, argv: Sequence[str], env: dict[str, str] | None = None, cwd: Path | None = None) -> Run:
         with tempfile.TemporaryDirectory(prefix=f"world-{self.name}-") as t:
             tmp = Path(t)

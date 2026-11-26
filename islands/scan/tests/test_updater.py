@@ -73,6 +73,11 @@ def pull(n: int) -> str:
     return _READS[("api", f"repos/{REPO}/pulls/{n}")]
 
 
+def base_ci(name: str = "master") -> str:
+    """The base ci read's recorded answer file: the check runs at the head of `master` (the only recorded base)."""
+    return _READS[("api", f"repos/{REPO}/commits/heads/{name}/check-runs?per_page=100")]
+
+
 def parents_read(n: int) -> str:
     """The pull-commits read for a recorded item: which commit is a merge commit (glossary.md merge commit)."""
     return _READS[("api", f"repos/{REPO}/pulls/{n}/commits?per_page=100")]
@@ -221,6 +226,7 @@ MERGE_TITLED_CONTENT = (
     "`Merge branch 'master' into <head>` (content: stale)"
 )
 NO_REVIEW = "`reviewDecision \"\"`, no review, no `automerge` label"
+BREAKERED = "; the PR carries `agent/error`"
 
 
 def pick_review(b: Board, cell: str) -> None:
@@ -228,6 +234,10 @@ def pick_review(b: Board, cell: str) -> None:
         assert not b.added, "the row adds a PR its review cell says is not there"
         return
     prs = list(b.added)
+    if cell.endswith(BREAKERED):  # the PR carries `agent/error`
+        cell = cell.removesuffix(BREAKERED)
+        for pr in prs:
+            b.set(pr, "labels", [{**LABEL, "name": "agent/error"}])
     if cell.endswith(" (both PRs)"):
         assert len(prs) == 2, cell
         cell = cell.removesuffix(" (both PRs)")
@@ -275,6 +285,8 @@ def fault(b: Board, cell: str, the_pr: str | None = None) -> None:
     elif cell == "the check-runs read for the PR's head answers an error":
         assert the_pr is not None, cell
         b.w.fault(check_runs(b.n(the_pr)), "fail")
+    elif m := re.fullmatch(r"the check-runs read for `(#\d+)`'s head answers an error", cell):
+        b.w.fault(check_runs(b.n(m[1])), "fail")
     else:
         raise ValueError(f"fault cell {cell!r}: no decoder")
 
@@ -401,6 +413,35 @@ def _run(name: str, state: str, at: dt.datetime) -> dict:
     return {**CHECK_RUN, "name": name, "status": run_status, "conclusion": conclusion, "started_at": _iso(at), "completed_at": done}
 
 
+def ci(b: Board, cell: str) -> None:
+    """The World line's `ci` cell: every PR the row adds has one `ci` run at its head, completed `success`, unless the cell
+    says otherwise; the cell's base read is the check runs at `master`'s head (`—`: the base's is not read)."""
+    day = T.replace(minute=0, second=0, microsecond=0)
+    for pr in b.added:
+        _set_runs(b, check_runs(b.n(pr)), [_run("ci", "success", T)])
+    if cell == "—":
+        return
+    m = re.fullmatch(
+        r"PR `(success|failure)` (\d\d):00( \(both PRs\))?; base(?: `(success|failure)` (\d\d):00"
+        r"|: no `ci` run \(one `approve / approve` run, `skipped`, (\d\d):00\))",
+        cell,
+    )
+    if not m:
+        raise ValueError(f"ci cell {cell!r}: no decoder")
+    assert bool(m[3]) == (len(b.added) == 2), f"{cell!r}: `(both PRs)` and the PRs the row adds disagree"
+    for pr in b.added:
+        _set_runs(b, check_runs(b.n(pr)), [_run("ci", m[1], day.replace(hour=int(m[2])))])
+    if m[4]:
+        base_run = _run("ci", m[4], day.replace(hour=int(m[5])))
+    else:  # a goal head reads green on two skipped runs: no `ci` run
+        base_run = {**_run("approve / approve", "success", day.replace(hour=int(m[6]))), "conclusion": "skipped"}
+    _set_runs(b, base_ci(), [base_run])
+
+
+def _set_runs(b: Board, file: str, runs: list[dict]) -> None:
+    b.w.set(file, ("check_runs",), runs).set(file, ("total_count",), len(runs))
+
+
 def checks(b: Board, pr: str, cell: str, fault_cell: str) -> None:
     file = check_runs(b.n(pr))
     if cell == "not read":  # the commit probe is unreadable before the rollup: no read is issued
@@ -440,6 +481,9 @@ class Expect:
     only: bool  # the quoted lines are the whole output
     stderr: bool  # gh's stderr of the failed PUT passes through
     rc: int
+    ci: int = 0  # the ci reads: one per pull request the leg asks (the PRs the row adds, oldest first)
+    base_ci: int = 0  # the base ci reads
+    per_pr: str | None = None  # a line quoted once per pull request the row adds, each with its own number
 
 
 _PROBES = re.compile(
@@ -454,14 +498,26 @@ _UPDATES = {
     "two PUTs, one per base lane": [("oldest-per-lane", True)],
     "PUT for the older PR (422, skipped), then PUT for the lane's next PR": [("oldest", False), ("next", True)],
     "one PUT for the Renovate PR": [("the PR", True)],
+    "one PUT for the pull request": [("the PR", True)],
     "one PUT for the CR ∧ BEHIND PR": [("the PR", True)],
 }
 _NOT_A_LINE = re.compile(r"action\.label\.op|^(POST|DELETE) |^--json ")
 
 
+def _ci_probes(cell: str) -> tuple[int, int, int] | None:
+    """`0, plus the ci read (the candidate)` → (probes, ci reads, base ci reads); None for a cell that is not one."""
+    m = re.fullmatch(
+        r"(\d+), plus the ci read( of both candidates| \(the candidate\))?( and the base ci read| and one base ci read)?(, unreadable)?", cell
+    )
+    if not m:
+        return None
+    return int(m[1]), 2 if m[2] == " of both candidates" else 1, 1 if m[3] else 0
+
+
 def expect(literal: str) -> Expect:
     probes_cell, updates_cell, other = LEGEND[literal]
-    m = _PROBES.fullmatch(probes_cell)
+    cip = _ci_probes(probes_cell)
+    m = _PROBES.fullmatch(probes_cell) if cip is None else _PROBES.fullmatch(f"{cip[0]}")
     if not m:
         raise ValueError(f"legend {literal}: probes cell {probes_cell!r}: no decoder")
     rollup = {None: None, ", unreadable": None, ", then the check-runs read fails": "check-runs-only"}.get(m[3], "both")
@@ -472,9 +528,21 @@ def expect(literal: str) -> Expect:
     else:
         raise ValueError(f"legend {literal}: updates cell {updates_cell!r}: no decoder")
     e = Expect(int(m[1]), m[2] or "commits", rollup, updates, None, False, [], None, False, False, 0)
+    if cip:
+        e.ci, e.base_ci = cip[1], cip[2]
+    if two := re.fullmatch(
+        r"as `([\w-]+)`, the `inherited red` line once per pull request, each with that pull request's own number \(the older's first\); "
+        r"the `updating` line's `#n` is the older's",
+        other,
+    ):
+        base_e = expect(two[1])
+        e.per_pr = next(p for p in base_e.phrases if "inherited red" in p)
+        e.phrases = [p for p in base_e.phrases if p != e.per_pr]
+        return e
     if inherit := re.fullmatch(r"as `([\w-]+)`", other):
         base_e = expect(inherit[1])
         e.phrases, e.per_update, e.label, e.handback, e.only = base_e.phrases, base_e.per_update, base_e.label, base_e.handback, base_e.only
+        e.per_pr = base_e.per_pr
         return e
     if lab := re.match(r"label op \(`action\.label\.op` = (add|remove)\)", other):
         e.label = lab[1]
@@ -523,11 +591,12 @@ def phrases_of(b: Board, e: Expect, targets: list[tuple[str, bool]]) -> list[str
     numbers = [b.n(p) for p, _ in targets] or [b.n(p) for p in b.added[:1]]
     phrases = [e.per_update] * len(targets) if e.per_update else e.phrases
     it = iter(numbers)
-    out = []
+    out = [e.per_pr.replace("#n", f"#{b.n(pr)}") for pr in b.added] if e.per_pr else []
+    last = numbers[-1] if numbers else 0
     for p in phrases:
         p = re.sub(r"#(\d+)", lambda m: f"#{b.n(m[0])}", p)
         while "#n" in p:
-            p = p.replace("#n", f"#{next(it)}", 1)
+            p = p.replace("#n", f"#{next(it, last)}", 1)  # a second `#n` of one literal names the same pull request
         out.append(p)
     return out
 
@@ -541,7 +610,7 @@ def line_matches(phrase: str, out: str) -> bool:
 
 # ── what the process issued ───────────────────────────────────────────────────────────────────────
 
-_FILES: dict[str, tuple] = {SNAPSHOT: ("snapshot",)}
+_FILES: dict[str, tuple] = {SNAPSHOT: ("snapshot",), base_ci(): ("base-ci",)}
 for _n in ITEMS:
     _FILES[parents_read(_n)] = ("parents", _n)
     _FILES[commit_probe(_n)] = ("probe", _n, "commits")
@@ -598,7 +667,14 @@ def check(b: Board, literal: str, note: str = "") -> Run:
                 assert calls[i + 1 : i + 2] == [("parents", c[1])], f"no pull-commits read right after the probe of #{c[1]}{trace}"
         assert [c for c in calls if c[0] == "parents"] == [("parents", c[1]) for i, c in enumerate(calls) if c[0] == "probe" and i not in unreadable_views], trace
         runs_, stats = [c for c in calls if c[0] == "check-runs"], [c for c in calls if c[0] == "status"]
-        if e.rollup is None:
+        base_reads = [c for c in calls if c[0] == "base-ci"]
+        assert len(base_reads) == e.base_ci, f"base ci reads {base_reads}, want {e.base_ci}{trace}"
+        if e.rollup is None and e.ci:  # the inherited-red leg's reads: one ci read per PR it asks, after every probe
+            assert not stats and len(b.added) == e.ci, trace
+            assert runs_ == [("check-runs", b.n(p)) for p in b.added], trace
+            assert all(calls.index(c) < calls.index(runs_[0]) for c in calls if c[0] in ("probe", "parents")), trace
+            assert all(calls.index(runs_[0]) < calls.index(c) for c in base_reads), trace  # the base is read once a PR failed
+        elif e.rollup is None:
             assert not runs_ and not stats, trace
         else:
             [pr] = b.added
@@ -660,11 +736,12 @@ PICK_Q, UNSTRAND_Q = "Which PR does the main leg update?", "Is a changes-request
 CONFLICT_Q, RENOVATE_Q = "Does an armed, conflicted PR carry the label — and only while it is?", "Whose currency is this Renovate PR?"
 
 
-def pick_board(world: str, base_cell: str, review_cell: str, fault_cell: str, env_cell: str) -> Board:
+def pick_board(world: str, base_cell: str, review_cell: str, ci_cell: str, fault_cell: str, env_cell: str) -> Board:
     assert world == WORLD, world
     b = Board()
     base(b, base_cell)
     pick_review(b, review_cell)
+    ci(b, ci_cell)
     fault(b, fault_cell)
     env(b, env_cell)
     return b
@@ -705,9 +782,9 @@ RENOVATE_ARGS, RENOVATE_ROWS = params(TABLES, RENOVATE_Q)
 
 @rule("SCAN-UPDATER-PICK")
 @pytest.mark.parametrize(PICK_ARGS, PICK_ROWS)
-def test_pick(world, base, review, fault, env, expected_expect):
-    with allure.step(f"Given {world}: base {base}; review {review}; fault {fault}; env {env}"):
-        b = pick_board(world, base, review, fault, env)
+def test_pick(world, base, review, ci, fault, env, expected_expect):
+    with allure.step(f"Given {world}: base {base}; review {review}; ci {ci}; fault {fault}; env {env}"):
+        b = pick_board(world, base, review, ci, fault, env)
     check(b, _expect_parenthetical(b, expected_expect))
 
 
@@ -752,7 +829,7 @@ def every_row() -> list[tuple[str, Board, str]]:
 
 def test_the_tables_hold_the_rows_the_issue_counts():
     counts = {q: len(table(TABLES, q)[1]) for q in BUILDERS}
-    assert counts == {PICK_Q: 16, UNSTRAND_Q: 6, CONFLICT_Q: 3, RENOVATE_Q: 12}, counts
+    assert counts == {PICK_Q: 26, UNSTRAND_Q: 6, CONFLICT_Q: 3, RENOVATE_Q: 12}, counts
 
 
 def test_rows_differ_by_input_cells():
@@ -860,13 +937,14 @@ def shape_paths(shape: object, where: tuple = ()) -> list[tuple[tuple, str, bool
 def _shapes() -> dict[str, object]:
     from scan_island.merges import PULL_COMMITS_READ
     from scan_island.renovate import CHECK_RUNS_READ, COMMIT_PROBE, COMMIT_REVIEW_PROBE, STATUS_READ
-    from scan_island.updater import PR
+    from scan_island.updater import CI_CHECK_READ, PR
 
     return {"pr": PR, "commit_probe": COMMIT_PROBE, "commit_review_probe": COMMIT_REVIEW_PROBE,
-            "check_runs_read": CHECK_RUNS_READ, "status_read": STATUS_READ, "pull_commits_read": PULL_COMMITS_READ}
+            "check_runs_read": CHECK_RUNS_READ, "status_read": STATUS_READ, "pull_commits_read": PULL_COMMITS_READ,
+            "ci_check_read": CI_CHECK_READ}
 
 
-@pytest.mark.parametrize("part", ["pr", "commit_probe", "commit_review_probe", "check_runs_read", "status_read", "pull_commits_read"])
+@pytest.mark.parametrize("part", ["pr", "commit_probe", "commit_review_probe", "check_runs_read", "status_read", "pull_commits_read", "ci_check_read"])
 def test_component_requires_exactly_the_schema_list(part):
     """Each read's required fields in the component are the schema part's: same paths, leaf types and nulls."""
     assert sorted(map(str, shape_paths(_shapes()[part]))) == sorted(map(str, schema_paths(SCHEMA["properties"][part])))
@@ -888,6 +966,8 @@ def test_the_recording_satisfies_the_schema():
         _validate(_recorded(check_runs(n)), "check_runs_read")
         _validate(_recorded(status(n)), "status_read")
         _validate(_recorded(parents_read(n)), "pull_commits_read")
+        _validate(_recorded(check_runs(n)), "ci_check_read")
+    _validate(_recorded(base_ci()), "ci_check_read")
 
 
 def _row(q: str, rid: str) -> Board:
@@ -952,6 +1032,7 @@ COMMIT_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["commit_pro
 REVIEW_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["commit_review_probe"])]
 RUNS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["check_runs_read"])]
 STATUS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["status_read"])]
+CI_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["ci_check_read"])]
 PARENTS_PATHS = [p for p, _t, _n in schema_paths(SCHEMA["properties"]["pull_commits_read"])]
 
 
@@ -974,6 +1055,14 @@ def test_a_check_runs_read_lacking_a_required_field_holds(path):
     b = _row(RENOVATE_Q, "renovate-untouched-green-update")
     b.w.fault(check_runs(b.n(RENOVATE_PR)), "absent", field=path)
     check(b, "renovate-probe-hold")
+
+
+@pytest.mark.parametrize("path", CI_PATHS, ids=[".".join(map(str, p)) for p in CI_PATHS])
+def test_a_ci_check_read_lacking_a_required_field_holds(path):
+    """The ci read is raw and strict: lacking a field the schema's `ci_check_read` requires, that PR holds."""
+    b = _row(PICK_Q, "inherited-red-unreviewed-update")
+    b.w.fault(check_runs(b.n("#101")), "absent", field=path)
+    check(b, "noop-ci-hold")
 
 
 @pytest.mark.parametrize("path", STATUS_PATHS, ids=[".".join(map(str, p)) for p in STATUS_PATHS])

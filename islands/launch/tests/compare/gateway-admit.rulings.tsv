@@ -1,0 +1,18 @@
+# id	ruling	line	pattern
+# pattern: a regex over the row's unified-diff lines (the `-`/`+` lines of old-vs-new streams, headers excluded).
+# Every differing line of a row must match at least one of THAT row's patterns; every pattern must match at least one differing line.
+bound-dispatch	spec	the verdict line's wording (and stdout vs stderr, the release confirmation) is not pinned by the page; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+unbound-dispatch	spec	the verdict line's wording (and stdout vs stderr, the release confirmation) is not pinned by the page; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+unbound-env-newline	spec	the verdict line's wording and the release confirmation are not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+unbound-env-newline	old	the old helper leaves the refused answer's rail, harness, model and env keys in GW_*; admission.md §LAUNCH-ADMIT-BOUND says so	^[-+]OUT GW_(SESSION_ID|ENV_KEYS)=
+unbound-answer-bound	spec	the verdict line's wording and the release confirmation are not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+unbound-answer-bound	old	the old helper leaves the refused answer's rail, harness, model and env keys in GW_*; admission.md §LAUNCH-ADMIT-BOUND says so	^[-+]OUT GW_(SESSION_ID|ENV_KEYS)=
+harness-not-run	spec	the verdict line's wording and the release confirmation are not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+harness-not-run	old	the old helper leaves the refused answer's rail, harness, model and env keys in GW_*; admission.md §LAUNCH-ADMIT-BOUND says so	^[-+]OUT GW_(SESSION_ID|ENV_KEYS)=
+defer	spec	the verdict line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+http-503	spec	the verdict line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+no-mode	spec	the refusal line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+both-modes	spec	the refusal line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+bad-bind	spec	the refusal line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+bad-round	spec	the refusal line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
+missing-role	spec	the refusal line's wording is not pinned; admission.md §The helper now says so	^[-+](OUT|ERR) (→ gateway\(sessions\)|gw_admit:|gw_release:|PREFLIGHT REFUSED:|WARN gateway)
