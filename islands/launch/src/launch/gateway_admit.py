@@ -33,18 +33,19 @@ _CANARY = re.compile(r"^([^@]+)@([^@]+)$")
 
 # the in-pod pull (LAUNCH-POD-ENV-PULL): first in the pod command, exits 97 before the harness
 PULL_PRELUDE = r"""
-_gw_try=0; _gw_ans=''
-while [ -z "$_gw_ans" ] && [ "$_gw_try" -lt 3 ]; do
-  _gw_try=$((_gw_try + 1))
-  _gw_ans=$(printf 'Authorization: Bearer %s\n' "$(cat /var/run/secrets/agent-gateway/token)" \
-    | curl -sf --max-time 30 -X POST -H @- "$AGENT_GATEWAY_PULL_URL") || _gw_ans=''
-done
-[ -n "$_gw_ans" ] || exit 97
+_gw_ans=$(printf 'Authorization: Bearer %s\n' "$(cat /var/run/secrets/agent-gateway/token)" \
+  | curl -sf --max-time 30 --retry 3 --retry-delay 2 --retry-connrefused -X POST -H @- "$AGENT_GATEWAY_PULL_URL") || {
+  echo "gateway(sessions): env pull FAILED at ${AGENT_GATEWAY_PULL_URL} - the harness does not start" >&2
+  exit 97
+}
 for _gw_k in $(printf '%s' "$AGENT_GATEWAY_ENV_KEYS" | tr ',' ' '); do
-  _gw_v=$(printf '%s' "$_gw_ans" | jq -er --arg k "$_gw_k" '.env[$k]') || exit 97
+  _gw_v=$(printf '%s' "$_gw_ans" | jq -er --arg k "$_gw_k" '.env[$k] | strings') || {
+    echo "gateway(sessions): the env pull answer lacks ${_gw_k} as a string - the harness does not start" >&2
+    exit 97
+  }
   export "$_gw_k=$_gw_v"
 done
-unset _gw_try _gw_ans _gw_k _gw_v
+unset _gw_ans _gw_k _gw_v
 """.strip()
 
 
@@ -107,6 +108,9 @@ def _parse_args(argv: list[str]) -> dict[str, Any]:
     for name in ("stack", "role", "task"):
         if not given.get(name):
             raise _Refused(f"--{name} is required")
+    for name in ("bind", "env-file"):
+        if name in given and not given[name]:
+            raise _Refused(f"--{name} must not be empty")
     if ("bind" in given) == ("env-file" in given):
         raise _Refused("exactly one of --bind / --env-file")
     out: dict[str, Any] = dict(given)
@@ -145,6 +149,13 @@ def _request_body(a: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
+def _pull_url(session_id: str) -> re.Pattern[str]:
+    """http(s), a plain host[:port], plain path segments, then /sessions/<id>/env — nothing else."""
+    return re.compile(
+        rf"https?://[A-Za-z0-9.:-]+(?:/[A-Za-z0-9._-]+)*/sessions/{re.escape(session_id)}/env", re.ASCII
+    )
+
+
 def _is_shell_names(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(
         isinstance(k, str) and _SHELL_NAME.fullmatch(k) for k in value
@@ -163,7 +174,7 @@ def _unusable(answer: dict[str, Any], a: dict[str, Any], session_id: str) -> lis
         if not _is_shell_names(answer.get("env_keys")):
             failed.append("env_keys")
         pull = answer.get("pull_url")
-        if not (isinstance(pull, str) and re.fullmatch(rf"https?://[^/]+/(.*/)?sessions/{re.escape(session_id)}/env", pull)):
+        if not (isinstance(pull, str) and _pull_url(session_id).fullmatch(pull)):
             failed.append("pull_url")
         keys = answer.get("env_keys") if isinstance(answer.get("env_keys"), list) else []
     else:
@@ -180,6 +191,8 @@ def _unusable(answer: dict[str, Any], a: dict[str, Any], session_id: str) -> lis
     model = answer.get("model")
     if not (isinstance(model, str) and model):
         failed.append("model")
+    if "rail" in answer and not isinstance(answer["rail"], str):
+        failed.append("rail")
     harness = answer.get("harness")
     if harness not in a["harnesses"]:
         failed.append(f"harness '{harness}' (this launcher runs {','.join(a['harnesses'])})")
@@ -266,7 +279,8 @@ class GatewayAdmit:
         else:
             try:
                 _write_env(a["env-file"], answer["env"])
-            except OSError:
+            except (OSError, ValueError):
+                _remove(a["env-file"])
                 adm = self._fail("dispatch-unusable: env-file")
                 adm.outputs["GW_SESSION_ID"] = session_id
                 self.release(adm)
@@ -287,6 +301,13 @@ class GatewayAdmit:
             return
         if reply.status != 200:
             admission.stderr.append(f"gw_release: DELETE {admission.session_id} answered {reply.status}")
+
+
+def _remove(path: str) -> None:
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def _write_env(path: str, env: Mapping[str, str]) -> None:
