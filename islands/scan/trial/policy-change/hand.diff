@@ -1,0 +1,80 @@
+diff --git a/specs/scan-decision.md b/specs/scan-decision.md
+index 10e06da..f7b3138 100644
+--- a/specs/scan-decision.md
++++ b/specs/scan-decision.md
+@@ -517,7 +517,7 @@ the pull request closes or another one replaces it. A marker of another clause o
+ (`state-fp:assembly-cr:`) is not the (b) marker and neither holds nor releases (b). The marker is written at dispatch, never at
+ evaluation, so a Goal that lost its lane is still eligible on the next wake. A `goal-checkpoint` dispatch whose (b) reason is already held — the marker for the open assembly pull request is already on it — issues no marker write, because the marker is written only when (b) is the reason that releases the unit. A refused marker
+ write is one warning and the dispatch goes on. The marker read follows every page of the pull request's
+-comments, so a marker past the hundredth comment still holds; there is no comment-count bound. A marker read that fails leaves the reason eligible
++comments, so a marker past the hundredth comment still holds; there is no comment-count bound. A marker read that fails holds the reason this pass
+ with one warning ⚖; this is an exception to "an unreadable probe never becomes a write" below. An open-list read that fails gives no
+ decision: exit 4, nothing written.
+ 
+@@ -570,7 +570,7 @@ another number.
+ |---|---|---|---|
+ | fires-no-pr | `goal-checkpoint-b <g> fires: no open assembly PR` | — | 0 |
+ | fires-unmarked | `goal-checkpoint-b <g> fires: pr=<n> carries no marker for pr=<n>` | — | 0 |
+-| fires-unreadable | `goal-checkpoint-b <g> fires: pr=<n> marker read failed` | one warning line | 0 |
++| held-unreadable | `goal-checkpoint-b <g> HELD: pr=<n> marker read failed` | one warning line | 0 |
+ | held | `goal-checkpoint-b <g> HELD: pr=<n>` | — | 0 |
+ | no-decision | nothing | one warning line | 4 |
+ 
+diff --git a/src/scan_island/checkpoint_b.py b/src/scan_island/checkpoint_b.py
+index 2b78ab1..f234c0f 100644
+--- a/src/scan_island/checkpoint_b.py
++++ b/src/scan_island/checkpoint_b.py
+@@ -38,14 +38,14 @@ class Decision:
+ 
+     @property
+     def eligible(self) -> bool:
+-        return self.kind != "held"
++        return self.kind not in ("held", "unreadable")
+ 
+     def line(self) -> str:
+         head = f"goal-checkpoint-b {self.goal}"
+         return {
+             "no-pr": f"{head} fires: no open assembly PR",
+             "unmarked": f"{head} fires: pr={self.pr} carries no marker for pr={self.pr}",
+-            "unreadable": f"{head} fires: pr={self.pr} marker read failed",
++            "unreadable": f"{head} HELD: pr={self.pr} marker read failed",
+             "held": f"{head} HELD: pr={self.pr}",
+         }[self.kind]
+ 
+@@ -95,8 +95,8 @@ def decide(slug: str, goal: str) -> Decision | None:
+     comments = [c for page in pages for c in page] if isinstance(pages, list) and all(isinstance(page, list) for page in pages) else None
+     problem = _unreadable(comments, ISSUE_COMMENTS_READ)
+     if problem:
+-        # a marker read that fails leaves (b) eligible (Goal pin 9): a read that keeps failing must not silence it
+-        warn(f"the comments read of {slug}#{pr} {problem} — (b) stays eligible")
++        # a marker read that fails holds (b) this pass
++        warn(f"the comments read of {slug}#{pr} {problem} — (b) is held this pass")
+         return Decision("unreadable", goal, pr)
+     want = marker(pr)
+     held = any(c["body"].startswith(want) for c in comments)  # type: ignore[union-attr]
+diff --git a/tests/test_checkpoint_b.py b/tests/test_checkpoint_b.py
+index 0be28be..2faf489 100644
+--- a/tests/test_checkpoint_b.py
++++ b/tests/test_checkpoint_b.py
+@@ -412,7 +412,7 @@ def test_each_required_open_list_field_absent_is_unreadable(path):
+ 
+ 
+ @pytest.mark.parametrize("path", COMMENT_REQUIRED, ids=[".".join(map(str, p)) for p in COMMENT_REQUIRED])
+-def test_each_required_comment_field_absent_leaves_b_eligible_with_one_warning(path):
++def test_each_required_comment_field_absent_holds_b_this_pass_with_one_warning(path):
+     w = World(WORLD)
+     open_pr("A", w)
+     neutralise(w)
+diff --git a/trial/checkpoint-b-hand.md b/trial/checkpoint-b-hand.md
+index a8790d7..f8787f3 100644
+--- a/trial/checkpoint-b-hand.md
++++ b/trial/checkpoint-b-hand.md
+@@ -13,7 +13,7 @@ tests (arm `hand`). The page's table is generated from `specs/models/scan-clause
+ | goal-checkpoint-b-held | goal-checkpoint | A | the marker for A | — | — | this Goal | held | none | held |
+ | old-fold-markers-not-identity ⚖ | goal-checkpoint | A | the ten recorded on #3270, none of them the marker for A | — | — | this Goal | fires-unmarked | on A | held |
+ | marker-write-refused ⚖ | goal-checkpoint | A | none | — | the comment write answers 403 | this Goal | fires-unmarked | refused | fires-unmarked |
+-| marker-read-fails ⚖ | goal-checkpoint | A | the marker for A | — | the read of A's comments fails | another unit | fires-unreadable | none | held |
++| marker-read-fails ⚖ | goal-checkpoint | A | the marker for A | — | the read of A's comments fails | another unit | held-unreadable | none | held |
+ | pr-list-unreadable ⚖ | goal-checkpoint | A | none | — | the open-list read fails | this Goal | no-decision | none | fires-unmarked |
+ | goal-checkpoint-b-replaced-releases | goal-checkpoint | B (A is closed: not in the open list) | none on B; the marker for A stays on A | — | — | this Goal | fires-unmarked | on B | held |
+ | quoted-marker-is-inert ⚖ | goal-checkpoint | A | the marker for A, quoted (each line starts `> `) | — | — | this Goal | fires-unmarked | on A | held |
