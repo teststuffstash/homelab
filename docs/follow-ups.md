@@ -521,14 +521,6 @@ the block needs pruning, not more headings.
       merge `stacks_json()` already does; or extract that seam for the launchers. Relates
       FU-049 (generating the mirror), ADR-085.
 
-- [ ] **FU-168** — **Dispatch revisit (#278 closeout): build + soak.** (a) concurrency shipped 08-12, acceptance
-      `AgentDispatchCronWoken` ≈ 0 — soak FAILED 08-25; (b) `Touches:` fence demotion + governance lint = A4.
-      Evidence: [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md) findings 4–5.
-      10-03 hunt (oracle-fleet pr-780, ×11 cron dispatches): (A) scan labels `agent/arbitrate`, rings nothing;
-      (B) exporter skips CI/conflict rings on arbitrate PRs; (C) a lane walk leaves unit 2 for the cron; (D) the
-      gauge stamps before a refused dispatch, `unarmed-major` counts. **Next:** fix A–D (A/C/D `agents/`, B the
-      exporter); A4's fence half; close when cron-woken ≈ 0 holds. Relates ADR-106, ADR-094, ADR-097, FU-167.
-
 - [ ] **FU-169** — **Differential coverage as a REVIEW INPUT (operator design, 2026-08-13).**
       The reviewer can't see whether a PR improves or reduces coverage; the blanket per-repo
       % gate can't say WHICH new lines are uncovered. Target (the SonarQube shape): CI computes
@@ -543,15 +535,6 @@ the block needs pruning, not more headings.
       a cleanup pass (cron or push-time) deleting terminal-ride groups older than the ledger's retention need,
       sized so reads stay flat. Relates FU-131, observability §B1.
 
-
-- [ ] **FU-201** — **The arbitrate "re-dispatch stronger" verdict has no carrier to the router.** Ruled 09-01: the
-      carrier is the EXISTING size label. **Next:** (a) `agent-budget/*` RE-GRADE by arbitrate/breaker plays
-      (label_map md/lg rows); (b) a brief section naming the label vocabulary per play; (c) strikes gain the
-      served-provider column, serving-shaped strikes exclude the (model, provider) pair on re-pick — BUILT but
-      dead in production 3× (#1268; 09-13 `no-output`; 09-23 `repetition-loop`) → now the gateway's per-cell strikes
-      (GW-SESSIONS-OUTCOME; Goal #1640 closed superseded 2026-11-01).
-      Rejected options + history: [`chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink; identity:
-      [`model-identity-free-vs-paid.md`](spikes/model-identity-free-vs-paid.md). Relates FU-174, FU-186, ADR-094/096/115.
 
 - [ ] **FU-283** — **A hung CI run has no run-level watchdog, so the ci-red directive never
       fires and the issue stays parked** (oracle handoff, 2026-09-23). oracle-fleet PR #716's run
@@ -585,15 +568,6 @@ the block needs pruning, not more headings.
       straggler small families as touched.
       Relates ADR-097, ADR-103, FU-168.
 
-- [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
-      broken.** A `changes-requested` round that pushes nothing was invisible (circles PR#39
-      r3); reusing FU-115b's predicate exposed two bugs in IT (committedDate read at the wrong
-      level → "no-op" for every PR; and a good round posts stats AFTER its push). **Counting**
-      is the fix (`>= 2` stats after the newest non-merge commit), one shared `NOOP_ROUND_JQ`.
-      **Fired live 2026-08-24** (the #862 arbitrate cycle) — and MIS-fired: it re-labeled over
-      a newer arbitration ruling on a LANDING PR (state-fp mutates every tick post-approval,
-      3 sessions/5min) — fixed via #868 → PR#873 (SELECT excludes APPROVED+armed, "gated on
-      fresh evidence"). **Next:** one CLEAN organic fire on a genuine no-op round post-#873.
 - [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
@@ -604,14 +578,6 @@ the block needs pruning, not more headings.
       the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
       axis — [`model-routing-history.md`](spikes/model-routing-history.md) §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
-- [ ] **FU-199** — **Silent holds freeze whole lanes invisibly: POINTER.** Faces + fixes:
-      [`agents/coordinator/README.md`](../agents/coordinator/README.md) §"FU-199 (2026-09-03)" (the 09-08 face: TICK-LOG 2026-09-08). Fixed: state-fp
-      fingerprint faces (PR#1352), cap split (PR#1375/#1376), arbitrate rule-2 capacity re-arm (#2546, r8 F5 —
-      the deferral is still coordinator prose, not a launcher marker). Open: the RULED-BUT-NEVER-DISPATCHED
-      arbitrate face (09-08, PR#1513/#1515 — no re-arm for a ruling with no round behind it, or dispatch BEFORE
-      the comment); the checkpoint-(b) marker surviving a DEFERRED launch (#3553, 11-19). **Next:** honest strike-held rows + hold-chain propagation; that re-arm. No-strike C4/C5
-      limbo is FU-204's. Relates FU-187, FU-143, FU-147.
-
 - [ ] **FU-200** — **The brief's fleet-strike rule: reader BUILT, re-key open.** "Same `error_class=` on ≥2 issues
       in 24 h ⇒ one `AGENT_ERROR` + one platform issue" (retro r4 F2) was prose; 09-01's four `unknown` strikes went
       uncorrelated. Reader BUILT (#1235; IL-T30 in [`issue-lifecycle-fsm.md`](agents/issue-lifecycle-fsm.md));
@@ -628,13 +594,6 @@ the block needs pruning, not more headings.
       **Next:** full walk proven 11-23 (11 sittings, one Failed 07:09Z, the walk continued) — read that failed sitting; Goal #3586 (outcome experiments) in build; the replay runner + the edit-PR leg; meta-state pickup; the sittings' `prefer: strongest` spent Fable's weekly limit on 11-21 (45 sessions in 7 d) — weigh a Fable share vs opus (meta-state).
       oracle-fleet as second island RULED (facts in the stack repo, ADR-160, #3209). Settle: bot-filing → `agent/queued`
       ≈ 0 days, two weeks, rides ≤ 2 rounds. Relates FU-270, FU-249, ADR-139, ADR-155/156, ADR-122.
-- [ ] **FU-221** — **The updater burns a CI cycle per pass on a PR whose red is RELATIONAL (diff × base).** The
-      pick has no green requirement on purpose — wrong for a gate a catch-up merge cannot move (PR#1468: 26 merges,
-      never green, pool starved — FU-218). #1489 (ADR-103 addendum) shrank the class to all-vacuous PRs.
-      Candidate: skip when the newest CI failure is the ADR-103 ratchet step, report-only. **Next:** build only on
-      a second sighting (ratchet-step red through ≥3 catch-up merges). Relates [`merge-path.md`](agents/merge-path.md)
-      MP-T02, ADR-111.
-
 - [ ] **FU-220** — **Locked python rides no longer use the PyPI cache; recovering it needs a
       TRANSPARENT cache, which is a trust decision.** `UV_FROZEN=1` (2026-09-07, PR#1485) stops uv
       rewriting committed locks to the LAN index, at the price of `--frozen` installs fetching

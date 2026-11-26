@@ -15868,3 +15868,20 @@ updates or reverts as much as possible — mechanical revert or a responder."
 
 - fu-sweep: all 130 items classified by 4 read-only slice subagents; seat applied. Archived FU-186/286/290/170/181/251/095/314 (#3718 merged `bbf65572`); moved to island issues FU-307→#3711 (router-pair), FU-310→#3712 + FU-324→#3713 (launch), FU-174→#3714 (gateway), FU-058→#3715 (retro). Soaks: FU-013 router leg accepted, FU-319 clean, FU-249(g) proven, FU-286 passed. 130 → 117 open; loop pass found no new do-nows.
 - docs-cleanup (operator picked TARGETED, not the corpus): links resolve; today's ids synced into 5 docs; dependency coverage regenerated (master was stale on pins); 4 comb PRs — #3719 root+SERVICES MERGED, #3720 ops MERGED, #3721 gateway (armed, waits the specs reviewer), #3722 islands+intake (bot-approved, governance path → operator merge).
+
+## 2026-11-25 ~16:20–20:30Z — gateway day: #3721/#3731 landed, intake no-fence rule, specs sweep, two alerts traced (seat)
+
+- #3731 (one sentence, parked `blocked-on: human` on an unchanged row its issue forbade touching) → row fix #3746 (seat), then merged; #3721 merged after a `Spec changes:` body edit. Class: intake rule #3750 (an item never fences the requirement it edits; both templates aligned after one review round).
+- Specs sweep (subagent, 12 forks): 38 gateway requirements read staged, 13 rows/legends fixed in #3754 #3757 #3758 #3759 #3760 (all merged); the reviewer still found one row the sweep passed (#3758).
+- `GoCatalogStale`: the console read answers 403 only when the request carries `x-opencode-session`; same key without it → 200 (probed from the jail host, wallet key == cluster Secret by hash). Fact posted on #3538; no mint needed.
+- Go usage: `GET /zen/go/v1/usage` 200 with the same key (rolling 0 / weekly 40 / monthly 60 %) vs the dashboard's old-proxy estimate 0/0/3 %; the gateway's poll is built (#3118 assembled 11-12) and dark (no `rails.opencode.headroom`, no `OPENCODE_USAGE_URL`) → #3764 for gateway intake.
+- `TierEvidenceStale`: Goal #3305's last child #3309 never closed after #3590 merged into the goal branch (11-22 19:26Z); the merged-closeout reads the repo's newest 40 merged PRs, #3590 is out of range → opus subagent, PR #3770.
+- Operator rulings 11-25: cut `goal/3656-scan-checkpoint-b` (done, five children queued); #2588 → scan island (#3776); FU-168/201/147/199/221 → scan intake (#3771–#3775, archived as handed over).
+- Gateway KPIs read: 99.99 % real requests without 5xx, 96.8 % sessions dispatched (7 d).
+
+
+## 2026-11-25 22:17–22:30Z — the one overnight check (operator asleep)
+
+- Scan chain (Goal #3656): #3657 and #3658 closed `agent/done` (PRs #3779, #3783 merged into the goal branch); #3659 riding (`agent-homelab-issue-3659-r1`). Launch chain (Goal #3480): #3483 and #3484 done (#3778, #3785 merged).
+- #3770 proven live: the scan closed #3309 at 21:14Z; assembly PR #3784 opened 21:21Z, armed. It is DIRTY (goal branch 384 behind master, 13 hunks in 7 `gateway/**` files); the checkpoint parked it `blocked-on: human`. Trial merge in a scratch clone → `catalog.md` GW-MODEL-TIERS needs rulings, not a mechanical merge → aborted, nothing pushed; analysis posted on #3784.
+- #3485 r1: the coordinator wrapped the dispatch in `timeout 590` and killed the client → EXIT trap released session `15202be4…` 22:14:38Z → pod's env pull 401 `session-released` 22:15:16Z, exit 97, harness never started. Scan tick 22:20Z: HELD ("worker terminal, no open PR, no merged PR cites it … close it or re-queue it by hand"). No PR, no branch → `gh issue edit 3485 --remove-label agent/in-progress --add-label agent/queued` + a comment naming the cause. The only help given. Nothing else changed; no further check scheduled.
