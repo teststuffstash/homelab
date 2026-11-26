@@ -31,7 +31,16 @@ BOUND_ROWS = {r.id: r for r in table_under("An unusable dispatch")}
 # Rows the island does not build (Goal #3480 pin 6): the old path, work #3409.
 NEVER_BUILT = ["off", "other-stack"]
 MINTED = "placeholder-minted-token"
-OVERRIDDEN_URL = "http://gateway.override.invalid:9000"
+
+
+def _knob_url(case_id: str) -> str:
+    """The `AGENT_GATEWAY_URL=<value>` the case's knobs cell on the page sets."""
+    m = re.search(r"AGENT_GATEWAY_URL=([^\s`,]+)", ROWS[case_id]["knobs"])
+    assert m, f"{case_id}: knobs cell carries no AGENT_GATEWAY_URL=<value>"
+    return m.group(1)
+
+
+OVERRIDDEN_URL = _knob_url("dispatch-goose")
 
 # case id → (knobs, admit kwargs, task, round, reply: (rail, harness, model) or None, answer: "world" | "none")
 _OPENCODE = ("opencode", "opencode", "opencode-go/deepseek-v4-flash")
@@ -154,7 +163,7 @@ def test_launcher_request(case_id: str) -> None:
             assert req.headers["Authorization"] == f"Bearer {OK_TOKEN}"
     if "AGENT_GATEWAY_URL" in knobs:
         with allure.step("then the request went to the overridden address"):
-            assert req.base == OVERRIDDEN_URL == row["request?"].split(" → ")[1].strip("`")
+            assert req.base == _knob_url(case_id) == row["request?"].split(" → ")[1].strip("`")
     else:
         assert req.base == DEFAULT_GATEWAY_URL
     with allure.step(f"then harness {row['harness?']}, model {row['model?']}, exit {row['rc?']}"):

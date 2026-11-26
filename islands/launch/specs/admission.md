@@ -129,7 +129,7 @@ the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the ro
 | bad-pull-url | gw-dispatch-bound | launcher | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
 | unusable-env | gw-dispatch-bound | launcher | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
 | harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
-| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered with the bound shape: no `env`; `env_keys` = [`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`]; `pull_url` present | yes | 3 | `env, env_keys lacks ANTHROPIC_MODEL` |
+| unbound-answer-bound ⚖ | gw-dispatch-unbound | gw_admit | an unbound call answered with the bound shape: no `env`; `env_keys` = [`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`]; `pull_url` present | yes | 3 | `env, env_keys lacks ANTHROPIC_MODEL` |
 | unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
 | unknown-decision ⚖ | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
@@ -199,7 +199,7 @@ path, the launcher's own default).
 | dispatch-opencode | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_RAIL=opencode` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `rail: opencode`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-explicit | stack-platform · gw-dispatch-bound | `--harness claude`, `issue-42` r2 | dispatch `opencode-go/deepseek-v4-flash` on opencode (harness claude) | `harness: claude`, bind | claude | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-subscription | stack-platform · gw-dispatch-bound | `--harness claude` | dispatch `claude/sonnet` on anthropic (harness claude) | `harness: claude`, bind | claude | `claude/sonnet` | 0 |
-| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind → `http://gateway.override.invalid:9000` | goose | `deepseek/deepseek-v4-flash` | 0 |
+| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL=http://gateway.override.invalid:9000` | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind → `http://gateway.override.invalid:9000` | goose | `deepseek/deepseek-v4-flash` | 0 |
 | dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
 | dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `role: prober`, `canary: {model: deepseek/deepseek-v4.1-flash, provider: deepinfra}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
