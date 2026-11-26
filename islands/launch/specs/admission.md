@@ -32,20 +32,20 @@ place the code still names one is counted under [LAUNCH-ADMIT-NO-MODEL](#launch-
 
 | Requirement | section | Status |
 |---|---|---|
-| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3390 (fixture: `gateway-admit` — its 9 rows pass locally in `islands/launch/tests` against `islands/launch/lib/gateway-admit.sh`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island helper does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
-| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3390 (fixtures: `gateway-admit` — harness-not-run, unbound-answer-bound, unbound-env-newline pass locally against `islands/launch/lib/gateway-admit.sh`; the four `(exit)` rows run only through the worker launcher's `gateway-sessions` — no island component) · ⚑ gap: the seam answers are not validated against `sessions.schema.json` |
-| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3408 (fixture: `gateway-sessions`) · ⚑ gap: admission is platform-only and the request's stack is the literal `platform` (FU-270) |
+| [LAUNCH-ADMIT-HELPER](#launch-admit-helper) | the helper | 🚧 WIP → #3480 (its 9 rows are cases sourced from this page over the worlds in `worlds/gateway/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/gateway_admit.py`; nothing published); unverified — the jail-canary caller path (a minted token for `AGENT_GATEWAY_CALLER_SA`) has no row; the island component does not implement the lane (`gw_admit_lane`) yet, and it has no replay row — `agents/deep-dig-test.sh` and `agents/island-intake-test.sh` drive `agents/gateway-admit.sh`, not the island file |
+| [LAUNCH-ADMIT-BOUND](#launch-admit-bound) | the helper | 🚧 WIP → #3480 (all 7 rows are cases sourced from this page: 3 against `islands/launch/src/launch/gateway_admit.py`, 4 through `islands/launch/src/launch/launcher_admission.py`; nothing published) |
+| [LAUNCH-ADMIT-LAUNCHER](#launch-admit-launcher) | the worker launcher | 🚧 WIP → #3480 (22 of its 24 rows are cases sourced from this page over the worlds in `worlds/`, passing locally in `islands/launch/tests` against `islands/launch/src/launch/launcher_admission.py`; nothing published) · ⚑ gap (2026-11-25, PR #3788 → work #3409): rows `off` and `other-stack` are the old path, which the island does not build; the old launcher admits the platform stack only and sends the literal `platform` (FU-270) · ⚑ gap (2026-11-26, PR #3789 → work #3791): dispatch-canary's request.canary is absent from sessions.schema.json post.input (additionalProperties: false); the case strips it before validating |
 | [LAUNCH-ADMIT-NO-MODEL](#launch-admit-no-model) | the worker launcher | ⚑ gap (2026-11-14, PR #3401 → work #3409): every non-platform ride takes the old path — 1 `/route`, 2 `/router-status`, 1 `/opencode-limit`, 1 `--pick-rail`, 2 `/report` + 1 report URL, 3 `model_id.py` parses, 7 model-literal lines in `agent-session.sh` (fixtures pinning the OLD behaviour: `route-request`, `rail-degrade`, `go-rail-latch`, `fu088-ladder`, `model-id-carrier`, `pick-rail`, `strike-retry`, `router-report-*`) |
 
 ## The helper
 
 ### LAUNCH-ADMIT-HELPER
 
-`gw_admit` speaks `POST /sessions` for its caller and never exits or traps: every outcome is a
+`gw_admit` speaks `POST /sessions` for its caller and never ends the caller's process: every outcome is a
 return code, and the caller decides what it means (`agents/gateway-admit.sh` header, :12–58).
 **rc 0** — `dispatch`: `GW_SESSION_ID`, `GW_RAIL`, `GW_HARNESS`, `GW_MODEL`, `GW_WIRE_MODEL` (the
 model with its rail prefix stripped — the harness invocation's id), `GW_CONTEXT_TOKENS`,
-`GW_ENV_KEYS` are set; from here the caller owns the release (`trap gw_release EXIT`). A bound
+`GW_ENV_KEYS` are set; from here the caller owns the release (`gw_release`, on every way out). A bound
 call also sets `GW_PULL_URL` (the dispatch's `pull_url`) and `GW_PULL_PRELUDE` (the in-pod pull,
 [LAUNCH-POD-ENV-PULL](pod.md#launch-pod-env-pull)). On an unbound call the dispatch's
 `session.token` and env values go only to the `--env-file`, written 0600, never to a `GW_*` variable.
@@ -60,9 +60,11 @@ request: `--stack`, `--role`, `--task` missing, neither or both of `--bind` / `-
 that is not `<ns>/<sa>/<pod>`, a non-integer round, an attempt < 1. Optional fields reach the
 request only when given; `attempt` only when > 1. The caller's identity is a fresh token per call
 (the projected file, or — jail canary only — a 10-minute minted token for
-`AGENT_GATEWAY_CALLER_SA`), never kept in a variable, carried by `curl -H @<(…)` so it never rides
-argv (GW-SESSIONS-AUTH). `gw_release` is idempotent: one DELETE however often it is called, a
+`AGENT_GATEWAY_CALLER_SA`), never on argv and never kept after the call (GW-SESSIONS-AUTH). `gw_release` is idempotent: one DELETE however often it is called, a
 failed one warns and leaves the slot to the session TTL.
+Every call also says its verdict in one stderr line — the outcome and its operative values (a
+dispatch names the model, rail and harness; a defer its reason and retry; a fail-closed its cause),
+never a session token; the wording is not pinned, and a release that succeeds is silent.
 
 `gw_admit_lane <env-file> …` is the unbound shape for a workflow pod that runs its own claude: the
 knob check (`AGENT_GATEWAY=sessions`), the platform gate, the caller preflight and `gw_admit
@@ -71,7 +73,7 @@ knob check (`AGENT_GATEWAY=sessions`), the platform gate, the caller preflight a
 proxy" — the knob is off (silent), the stack is not platform (one line), or a refusal / fail-closed
 became the transition fallback (one loud line, FU-270).
 
-**World:** `launcher-vars` + the gateway seam; every row runs under `set -u`.
+**World:** `launcher-vars` + the gateway seam; no row reads an unset value as an empty one.
 
 #### What a call returns
 
@@ -81,9 +83,9 @@ all empty).
 
 | description | world | args | reply | rc? | outputs? |
 |---|---|---|---|---|---|
-| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier strong --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
+| bound-dispatch | gw-dispatch-bound | `--role coordinator --task 'coordinate platform' --round 0 --tier heavy --bind platform-agents/agentstack-loop/coordinator-platform-1` | dispatch `claude/opus` on anthropic | 0 | `GW_WIRE_MODEL=opus`, `GW_ENV_KEYS=ANTHROPIC_BASE_URL,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_MODEL`, `GW_PULL_URL=…/sessions/s-coord-1/env`, `GW_PULL_PRELUDE` non-empty |
 | unbound-dispatch | gw-dispatch-unbound | `--role responder --task 'respond homelab#7' --env-file F` | dispatch `claude/sonnet` with a token and env | 0 | env written 0600 to F; no `GW_*` holds the token |
-| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer subscription-sessions-full 120` | 1 | `GW_DEFER_REASON=subscription-sessions-full`, `GW_RETRY_AFTER=120` |
+| defer | gw-defer | `--role coordinator --task t --round 3 --attempt 2 --bind platform-agents/agentstack-loop/p1` | `defer rail-capacity 120` | 1 | `GW_DEFER_REASON=rail-capacity`, `GW_RETRY_AFTER=120` |
 | http-503 | gw-error | `--role responder --task t --env-file F` | 503 `tokenreview-transient` | 3 | `GW_DEFER_REASON=gateway-http 503: {…}` |
 | no-mode | launcher-vars | `--role responder --task t` | — | 2 | — |
 | both-modes | launcher-vars | `--role responder --task t --env-file F --bind a/b/c` | — | 2 | — |
@@ -100,7 +102,7 @@ all empty).
 ### LAUNCH-ADMIT-BOUND
 
 A dispatch is checked before anything is built on it; once a session exists, every refusal
-releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. The
+releases it before returning rc 3 with `GW_DEFER_REASON=dispatch-unusable: <what>` (:212–268). A refused dispatch leaves no `GW_*` output set but `GW_DEFER_REASON` and `GW_RETRY_AFTER`: the helper it replaces left the refused answer's rail, harness, model and env keys in `GW_*` on rc 3 (rows harness-not-run, unbound-answer-bound, unbound-env-newline), so a caller reading them would act on an answer it was told not to use. An answer that is neither `dispatch` nor `defer` (an unknown `decision`) creates no session — the helper fails closed with rc 3 before any session id is read, so there is nothing to release and no DELETE is sent. `<what>` names every failed check, not just the first, joined by `, `, in the order the helper runs them: `a credential in a bound answer` (bound only), `env_keys` (bound) or `env` (unbound), `pull_url` (bound only), `model`, `rail` (present and not a string), then either `harness '<h>' (…)` or `env_keys lacks <the harness's model key>`. On an unbound call the model-key check reads the keys of `env` (the answer's `env_keys` is not consulted), so a missing `env` fails that check too. The
 session id must match `^[A-Za-z0-9_-]{1,64}$`. **Bound** (`--bind`): the answer carries no
 credential — a `session.token` or an `env` map means the gateway ignored the bind, and the launcher
 refuses rather than hold a token (GW-SESSIONS-PULL); `env_keys` is a non-empty list of shell names
@@ -127,7 +129,7 @@ the entire `GW_DEFER_REASON` with no such prefix; `via` = the entry point the ro
 | bad-pull-url | gw-dispatch-bound | launcher | `pull_url` not this session's env URL | yes | 1 (exit) | `pull_url` |
 | unusable-env | gw-dispatch-bound | launcher | harness `opencode`; `env_keys` is `["BAD KEY"]` (a name that is not a shell name, and not the opencode model key) | yes | 1 (exit) | `env_keys, env_keys lacks OPENCODE_CONFIG_CONTENT` |
 | harness-not-run | gw-dispatch-bound | gw_admit | harness `opencode`, caller runs `claude` only | yes | 3 | `harness 'opencode' (this launcher runs claude)` |
-| unbound-answer-bound | gw-dispatch-unbound | gw_admit | an unbound call answered without `env` | yes | 3 | `env` |
+| unbound-answer-bound ⚖ | gw-dispatch-unbound | gw_admit | an unbound call answered with the bound shape: no `env`; `env_keys` = [`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`]; `pull_url` present | yes | 3 | `env, env_keys lacks ANTHROPIC_MODEL` |
 | unbound-env-newline | gw-dispatch-unbound | gw_admit | an `env` value with a newline | yes | 3 | `env` |
 | unknown-decision ⚖ | gw-dispatch-unbound | launcher | `decision: maybe` (with a token) | no | 1 (exit) | *(whole)* `gateway-http 200, unknown decision 'maybe'` (body never printed) |
 
@@ -155,7 +157,7 @@ command, and an interactive pod has none), a non-integer round, an attempt < 1, 
 `agentstack-worker`, name `agent-<repo>-<task>-r<round>` (the pod-name block reuses it verbatim,
 [LAUNCH-POD-IDENTITY](pod.md#launch-pod-identity)). `--harness` reaches the request only when
 explicit (it narrows the walk to that dialect); `AGENT_GATEWAY_RAIL`, `AGENT_GATEWAY_ROLE`,
-`AGENT_GATEWAY_CANARY` are operator knobs; `AGENT_GATEWAY_ATTEMPT` is set only by the launcher's
+`AGENT_GATEWAY_CANARY` are operator knobs (`AGENT_GATEWAY_CANARY=<model>@<provider>` is split on `@`: the first part becomes the request's `canary.model`, the second its `canary.provider`); `AGENT_GATEWAY_ATTEMPT` is set only by the launcher's
 own re-admission ([LAUNCH-OUTCOME-GATEWAY](outcome.md#launch-outcome-gateway)). A defer or a
 fail-closed is exit 1 — the dispatcher's requeue path; the session is released on every exit from
 here on. On dispatch the harness and model are the gateway's: claude runs `GW_WIRE_MODEL`, opencode
@@ -171,13 +173,15 @@ sends the repo's own stack and lets
 [GW-SESSIONS-AUTH](../../../gateway/specs/endpoints/sessions.md#gw-sessions-auth)'s `callers`
 decide (unverified — expected once the policy names the other stacks).
 
+`AGENT_GATEWAY_URL` replaces the gateway base the request is sent to.
+
 **World:** `stack-platform` unless the row says otherwise; the gateway seam answers.
 
 #### Admission through the launcher
 
 Legend: `knobs` = the row's `env` column + `vars.sh` flags; `reply` = the seam's answer (world;
 `—` = no request, so none); `request?` = what the POST body carries beyond `{stack: platform, role,
-task, round}`; `harness?` = what the launcher runs; `model?` = the dispatch's `GW_MODEL` (on the old
+task, round}` (→ `<base>` when the request goes to a base other than the default); `harness?` = what the launcher runs; `model?` = the dispatch's `GW_MODEL` (on the old
 path, the launcher's own default).
 
 | description | world | knobs | reply | request? | harness? | model? | rc? |
@@ -195,10 +199,10 @@ path, the launcher's own default).
 | dispatch-opencode | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_RAIL=opencode` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `rail: opencode`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-explicit | stack-platform · gw-dispatch-bound | `--harness claude`, `issue-42` r2 | dispatch `opencode-go/deepseek-v4-flash` on opencode (harness claude) | `harness: claude`, bind | claude | `opencode-go/deepseek-v4-flash` | 0 |
 | dispatch-claude-subscription | stack-platform · gw-dispatch-bound | `--harness claude` | dispatch `claude/sonnet` on anthropic (harness claude) | `harness: claude`, bind | claude | `claude/sonnet` | 0 |
-| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL` overridden | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind | goose | `deepseek/deepseek-v4-flash` | 0 |
+| dispatch-goose | stack-platform · gw-dispatch-bound | `--harness goose`, `AGENT_GATEWAY_URL=http://gateway.override.invalid:9000` | dispatch `deepseek/deepseek-v4-flash` on openrouter (harness goose) | `harness: goose`, bind → `http://gateway.override.invalid:9000` | goose | `deepseek/deepseek-v4-flash` | 0 |
 | dispatch-codex | stack-platform · gw-dispatch-bound | `--harness codex`, `AGENT_GATEWAY_ROLE=prober` | dispatch `codex/gpt-6-astra` on codex (harness codex) | `role: prober`, `harness: codex`, bind | codex | `codex/gpt-6-astra` | 0 |
 | dispatch-attempt-2 | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ATTEMPT=2` | dispatch `opencode-go/deepseek-v4-flash` on opencode | `attempt: 2`, bind | opencode | `opencode-go/deepseek-v4-flash` | 0 |
-| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `canary: {model, provider}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
+| dispatch-canary | stack-platform · gw-dispatch-bound | `AGENT_GATEWAY_ROLE=prober`, `AGENT_GATEWAY_CANARY=deepseek/deepseek-v4.1-flash@deepinfra` | dispatch `deepseek/deepseek-v4.1-flash` on openrouter (harness opencode) | `role: prober`, `canary: {model: deepseek/deepseek-v4.1-flash, provider: deepinfra}`, bind | opencode | `deepseek/deepseek-v4.1-flash` | 0 |
 | defer | stack-platform · gw-defer | — | `defer` with a reason and a retry | bind | — | — | 1 |
 | http-503 | stack-platform · gw-error | — | 503 error envelope | bind | — | — | 1 |
 | unreachable | stack-platform · gw-error | — | no answer | bind | — | — | 1 |

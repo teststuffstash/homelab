@@ -2132,7 +2132,7 @@ EOF_BUSYFPS
     # non-default base": the mirror hazard is agent-runtime#32 (an ordinary stacked PR closing
     # too EARLY), and the goal/ prefix is the same key arming already trusts to carry the
     # ruleset. Design: issue-authoring.md FU-143 section. Probe failures skip LOUDLY (rule #6).
-    c6g=""; c6g_nums=""
+    c6g=""; c6g_nums=""; goalheld_nums=""
     # ⚠ Candidate set is DELIBERATELY wider than $inprog: a goal child that lands cleanly in ONE
     # round ends in `agent/review`, not `agent/in-progress` (the scan's review-flip belt moves it
     # at PR-open — MP-T14; historically the launcher performed no such flip). Keying the
@@ -2187,7 +2187,20 @@ EOF_GOALBASED
     # a separate set so `goalbased` stays `number|base` (its two-field shape is read by the loop).
     goalblocked_nums="$(printf '%s' "$goalcand" | jq -r '[.[] | (.labels|map(.name)) as $L | select($L|index("agent/blocked")) | .number] | .[]' 2>/dev/null | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
-      gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
+      # ⚠ SCOPED TO EACH GOAL BASE, never the repo-wide merge stream (homelab#3309). `gh pr list`
+      # orders by CREATION, newest first, so the old unscoped `--limit 40` saw only the 40
+      # newest-CREATED merged PRs of the whole repo: a child PR that sat in review for two days
+      # (#3590, opened 11-20, merged 11-22) was the 56th the moment it merged and never entered the
+      # window — no closeout, no mention report, silent. One read per distinct goal base (the
+      # #3507 dead-ride leg's own scoped form); a FULL page is an incomplete window and a child it
+      # cannot find there is reported below, never dropped.
+      gmerged='[]'; gfull=" "
+      for gbb in $(printf '%s' "$goalbased" | sed -n 's/^[^|]*|//p' | sort -u); do
+        gmb="$(gh pr list --repo "$slug" --state merged --base "$gbb" --limit 100 --json number,body,baseRefName,headRefName 2>/dev/null)" || { gmerged='X'; break; }
+        jq -e 'type == "array"' >/dev/null 2>&1 <<<"${gmb:-null}" || { gmerged='X'; break; }
+        [ "$(jq 'length' <<<"$gmb")" -lt 100 ] || gfull="${gfull}${gbb} "
+        gmerged="$(jq -c --argjson a "$gmb" '. + $a' <<<"$gmerged")" || { gmerged='X'; break; }
+      done
       gopen="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,body,baseRefName 2>/dev/null)" || gopen='X'
       if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
@@ -2262,7 +2275,21 @@ EOF_GOALBASED
             fi
             c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
           elif [ "${gmention:-0}" -gt 0 ] && [ "${ghit:-0}" -eq 0 ]; then
+            # Every HELD report below records the child in `goalheld_nums`, which the agent/review
+            # phantom belt excludes: "held" in the report must be held in fact (#3770 review).
+            goalheld_nums="${goalheld_nums}${gn} "
             orphans="${orphans}[$repo] ⛔ issue #${gn} — a merged PR into ${gbase} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close. Auto-closeout resumes once agent-runtime#34's finalize ships the \`Implements #${gn}\` line.\n"
+          elif [ "${ghit:-0}" -eq 0 ] && [ "${gref:-0}" -eq 0 ]; then
+            # Not found — say so whenever the evidence is not conclusive (homelab#3309): its OWN
+            # branch merged into the base without citing it, or the base's page was full.
+            gown="$(jq -r --arg b "$gbase" --arg p "fix/issue-${gn}-" '[.[] | select(.baseRefName == $b) | select((.headRefName // "") | startswith($p)) | "#\(.number)"] | join(", ")' <<<"$gmerged")" || gown=""
+            if [ -n "$gown" ]; then
+              goalheld_nums="${goalheld_nums}${gn} "
+              orphans="${orphans}[$repo] ⛔ goal child #${gn} — its OWN branch merged into ${gbase} (${gown}) but the PR does not cite it: finished work, not closed. HELD — close it by hand.\n"
+            elif case "$gfull" in *" ${gbase} "*) true;; *) false;; esac; then
+              goalheld_nums="${goalheld_nums}${gn} "
+              orphans="${orphans}[$repo] ⚠ goal child #${gn} — no merged PR into ${gbase} links it, but that base has ≥100 merged PRs (one page): the closeout window is INCOMPLETE, so a merge older than the page is not seen. Verify by hand.\n"
+            fi
           fi
         done
       else
@@ -5292,8 +5319,14 @@ EOF_GTHEMES_OPEN
             # Also exclude issues with frozen open PRs (homelab#2281 — extended belt below).
             frozen_pr_fetch="$(gh pr list --repo "$slug" --state open --limit "$ISSUE_LIST_LIMIT" --json number,reviewDecision,autoMergeRequest,mergeStateStatus,statusCheckRollup,updatedAt,body 2>/dev/null)" || frozen_pr_fetch=''
             jq -e . >/dev/null 2>&1 <<<"${frozen_pr_fetch:-null}" || frozen_pr_fetch='[]'
+            # A goal child in `c6g` (its PR found merged into its goal base above) is finished work
+            # with a closeout unit, never a phantom: this belt's merged probe below is the repo-wide
+            # 40 newest-created, which a days-old merge is outside (homelab#3309 — held only while
+            # a sibling PR's mention stayed in range, then exposed to a re-queue of merged work).
+            # Same for `goalheld_nums`: a child whose OWN branch merged into its goal base uncited —
+            # the goal-child leg reports it HELD, so the belt must not re-queue it.
             [ -n "$dispatchable" ] && review_phantom_cands="$(printf '%s' "$review_only" \
-              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-}" \
+              | jq -r --argjson bodies "$BODIES" --arg done "${c4c5_cleared:-}${infeas_done:-} ${c6g_nums:-} ${goalheld_nums:-}" \
                 '[.[] | (.labels|map(.name)) as $L
                        | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
                        | (.number|tostring) as $n

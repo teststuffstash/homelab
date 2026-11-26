@@ -1,0 +1,50 @@
+[
+  {
+    "number": 90,
+    "title": "gateway: retire the tier snapshot (goal child)",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/review"
+      },
+      {
+        "name": "task/build"
+      }
+    ],
+    "body": "---\nTouches: gateway/scripts/tiers.py\nBase: goal/3305-runtime-tiers\n---\n\nThe homelab#3309 shape: its PR merged into the goal base days ago, outside the repo-wide merged window.\n",
+    "updatedAt": "2026-08-25T06:00:00Z"
+  },
+  {
+    "number": 80,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/review"
+      },
+      {
+        "name": "task/fix"
+      }
+    ],
+    "body": "The janitor cron drops the tick exit code.\n\nTouches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-25T06:00:00Z"
+  },
+  {
+    "number": 91,
+    "title": "goal child whose own branch merged uncited",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/review"
+      }
+    ],
+    "body": "---\nTouches: gateway/README.md\nBase: goal/3305-runtime-tiers\n---\n\nIts fix/issue-91-* branch merged into the goal base; the PR body forgot the issue line.\n",
+    "updatedAt": "2026-08-25T06:00:00Z"
+  }
+]
