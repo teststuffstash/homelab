@@ -58,7 +58,7 @@ HAND_ARGS, HAND_ROWS = page_params(tables(HAND), QUESTION)  # arm `hand`
 assert HAND_ARGS == ARGS
 ARMS = {"model": ROWS, "hand": HAND_ROWS}
 [READ_LEGEND] = [{r[0]: r[1:] for r in rows} for _q, h, rows in TABLES if h[0] == "literal" and len(h) == 4 and h[1].startswith("stdout")]
-[WRITE_LEGEND] = [{r[0]: r[1] for r in rows} for _q, h, rows in TABLES if h[0] == "literal" and len(h) == 2 and h[1].startswith("comment writes")]
+[WRITE_LEGEND] = [{r[0]: r[1] for r in rows} for _q, h, rows in TABLES if h[0] == "literal" and len(h) == 2 and h[1].startswith("(b) marker writes")]
 
 WORLD = "goal-checkpoint"
 _PROBE = World(WORLD)
@@ -528,11 +528,11 @@ def churn_failing(case_id: str, arm: str) -> list[str]:
 
 @pytest.mark.parametrize("arm", ARMS)
 def test_the_release_on_churn_mutant_fails_content_push_held(arm):
-    assert churn_failing("goal-checkpoint-b-content-push-held", arm) == ["expected_b_next_wake", "expected_b_this_wake"]
+    assert churn_failing("goal-checkpoint-b-content-push-held ⚖", arm) == ["expected_b_next_wake", "expected_b_this_wake"]
 
 
 @pytest.mark.parametrize("arm", ARMS)
-@pytest.mark.parametrize("case_id", ["goal-checkpoint-b-inflight-check-held"])
+@pytest.mark.parametrize("case_id", ["goal-checkpoint-b-inflight-check-held ⚖"])
 def test_the_release_on_churn_mutant_fails_every_row_that_pushes(arm, case_id):
     assert churn_failing(case_id, arm) == ["expected_b_next_wake", "expected_b_this_wake"]
 
@@ -540,7 +540,7 @@ def test_the_release_on_churn_mutant_fails_every_row_that_pushes(arm, case_id):
 @pytest.mark.parametrize("arm", ARMS)
 @pytest.mark.parametrize(
     "case_id",
-    ["goal-checkpoint-b-held", "goal-checkpoint-b-verdict-held", "goal-checkpoint-b-check-flip-held", "goal-checkpoint-b-red-rerun-held", "goal-checkpoint-b-c-armed", "assembly-cr-wake-b-silent ⚖"],
+    ["goal-checkpoint-b-held", "goal-checkpoint-b-verdict-held ⚖", "goal-checkpoint-b-check-flip-held ⚖", "goal-checkpoint-b-red-rerun-held ⚖", "goal-checkpoint-b-c-armed", "assembly-cr-wake-b-silent ⚖"],
 )
 def test_the_release_on_churn_mutant_holds_where_nothing_pushes(arm, case_id):
     # the mutant is a head-commit mistake only: with the head unchanged its marker still holds, so the rows around the push stay green
@@ -549,7 +549,7 @@ def test_the_release_on_churn_mutant_holds_where_nothing_pushes(arm, case_id):
 
 @pytest.mark.parametrize("arm", ARMS)
 def test_the_component_passes_the_row_the_churn_mutant_fails(arm):
-    check(row("goal-checkpoint-b-content-push-held", arm))
+    check(row("goal-checkpoint-b-content-push-held ⚖", arm))
 
 
 def test_the_component_reads_only_the_open_list_and_the_comments():

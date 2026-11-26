@@ -15,7 +15,7 @@ from .page import tables
 from .rules import SPECS
 
 IDS = compared_ids()
-PAGE_ROWS = {r.id: r.values for r in page_params(tables(SPECS / "scan-decision.md"), "Does trigger (b) fire while an assembly pull request is open?")[1]}
+PAGE_ROWS = {r.id.removesuffix(" ⚖"): r.values for r in page_params(tables(SPECS / "scan-decision.md"), "Does trigger (b) fire while an assembly pull request is open?")[1]}
 PAGE_ARGS = page_params(tables(SPECS / "scan-decision.md"), "Does trigger (b) fire while an assembly pull request is open?")[0]
 
 
