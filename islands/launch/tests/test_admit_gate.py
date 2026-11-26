@@ -9,7 +9,8 @@ import pytest
 
 from launch.gateway_admit import GatewayAdmit, Request, TransportError
 from page import ADMISSION
-from test_admit_cases import BOUND_ROWS, BOUND_VIA_GW_ADMIT, CASES, DEFECTS, HELPER_ROWS, LAUNCHER_ROWS
+from test_admit_cases import BOUND_ROWS, BOUND_VIA_GW_ADMIT, CASES, DEFECTS, HELPER_ROWS
+from test_launcher_ask_cases import BOUND_CASES as LAUNCHER_BOUND_CASES
 from worlds import WorldError
 
 SRC = Path(__file__).resolve().parent.parent / "src"
@@ -18,11 +19,11 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 def test_every_page_row_has_a_case_and_every_case_a_row() -> None:
     rows = {r.id for r in HELPER_ROWS} | {r.id for r in BOUND_ROWS}
     assert len(HELPER_ROWS) == 9 and len(BOUND_VIA_GW_ADMIT) == 3
-    assert rows - set(CASES) == set(LAUNCHER_ROWS)  # the only rows without a case
+    assert rows - set(CASES) == set(LAUNCHER_BOUND_CASES)  # the rows through the launcher: test_launcher_ask_cases
     assert set(CASES) - rows == set()
     assert set(DEFECTS) == {r.id for r in BOUND_VIA_GW_ADMIT}
-    assert all(r["via"] == "launcher" for r in BOUND_ROWS if r.id in LAUNCHER_ROWS)
-    assert len(LAUNCHER_ROWS) == 4
+    assert all(r["via"] == "launcher" for r in BOUND_ROWS if r.id in LAUNCHER_BOUND_CASES)
+    assert len(LAUNCHER_BOUND_CASES) == 4
 
 
 def test_page_prose_names_no_shell_mechanism() -> None:

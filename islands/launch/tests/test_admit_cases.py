@@ -1,7 +1,7 @@
 """The 12 labelled admission cases — one per page row, sourced from `specs/admission.md`.
 
 LAUNCH-ADMIT-HELPER: the 9 rows of "What a call returns". LAUNCH-ADMIT-BOUND: the 3 `via gw_admit`
-rows of "An unusable dispatch". A case's id is the row's description cell; its world, args, via and
+rows of "An unusable dispatch" (the 4 `via launcher` rows: `test_launcher_ask_cases.py`). A case's id is the row's description cell; its world, args, via and
 rc? cells are read from the page at collection, its prose cells are asserted in the case carrying the
 id. The gateway's answer is the row's world, loaded through the strict reader; a BOUND row's defect is
 applied to that whole world here — never a second hand-written file. Every request sent is validated
@@ -25,8 +25,6 @@ from worlds import load_world, supplier_schema
 
 HELPER_ROWS = table_under("What a call returns")
 BOUND_ROWS = table_under("An unusable dispatch")
-# The four rows that run through the launcher: #3408's, an explicit list that may not grow.
-LAUNCHER_ROWS = ["credential-in-answer", "bad-pull-url", "unusable-env", "unknown-decision"]
 BOUND_VIA_GW_ADMIT = [r for r in BOUND_ROWS if r["via"] == "gw_admit"]
 
 BOUND_ARGS = "--role coordinator --task t --bind platform-agents/agentstack-loop/p1"
