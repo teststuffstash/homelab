@@ -51,6 +51,11 @@ reads:
     auth: "token"
     recorded_at: "2026-11-23T06:17:41Z"
     recorder_commit: "6ee13da3bf20d09baf41cf10ca214292b3186e7f"
+  - argv: ["api", "repos/teststuffstash/homelab/commits/heads/master/check-runs?per_page=100"]
+    file: "api.commits.heads.master.check-runs@per_page=100.json"
+    auth: "token"
+    recorded_at: "2026-11-26T06:20:36Z"
+    recorder_commit: "3b129f3b7b4a60dfdfab5144cd0638b722b0d817"
 writes:
   - op: "update-branch"
     method: "PUT"

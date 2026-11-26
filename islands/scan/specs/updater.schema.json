@@ -10,6 +10,7 @@
     "/properties/commit_review_probe": ["SCAN-UPDATER-UNSTRAND"],
     "/properties/pull_commits_read": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-RENOVATE"],
     "/properties/check_runs_read": ["SCAN-UPDATER-RENOVATE"],
+    "/properties/ci_check_read": ["SCAN-UPDATER-PICK"],
     "/properties/status_read": ["SCAN-UPDATER-RENOVATE"],
     "/properties/action/oneOf/0": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND"],
     "/properties/action/oneOf/1": ["SCAN-UPDATER-CONFLICT"],
@@ -73,6 +74,12 @@
       "type": "object",
       "required": ["check_runs"],
       "properties": {"check_runs": {"type": "array", "items": {"type": "object", "required": ["name", "status", "conclusion"], "properties": {"name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {"type": ["string", "null"], "description": "null while the run has not concluded: its status stands"}}}}}
+    },
+    "ci_check_read": {
+      "description": "The raw answer of the ci read and of the base ci read (`gh api repos/<slug>/commits/<ref>/check-runs?per_page=100`). Lacking a field, the read is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["check_runs"],
+      "properties": {"check_runs": {"type": "array", "items": {"type": "object", "required": ["name", "status", "conclusion", "started_at"], "properties": {"name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {"type": ["string", "null"]}, "started_at": {"type": ["string", "null"]}}}}}
     },
     "status_read": {
       "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/status`. Lacking a field, the rollup is unreadable and that PR holds.",
