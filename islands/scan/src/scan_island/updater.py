@@ -1,7 +1,8 @@
 """Keep one merge-ready PR per lane current (legs 1 and 2 of the updater; ADR-111, ADR-125).
 
 Leg 1 (the main pick) updates the oldest merge-ready, armed, BEHIND PR of each (repo, base) lane,
-hopping to the lane's next member when an update fails (homelab#2203). Leg 2 (unstrand) updates an
+hopping to the lane's next member when an update fails (homelab#2203); it also admits an armed, BEHIND PR that is
+not merge-ready when its red is its base's (the inherited red, homelab#2588). Leg 2 (unstrand) updates an
 armed, BEHIND, CHANGES_REQUESTED PR only when content landed after the reviewer's verdict.
 Leg 1b (the Renovate hand-back sweep) runs over the PRs outside legs 1 and 2; leg 3 labels armed ∧ DIRTY PRs
 `merge-conflict` over REST. Renovate authorship and currency live in `renovate.py`.
@@ -10,6 +11,7 @@ Every read is strict (goal #3490 pin 5, updater.schema.json): a snapshot entry l
 holds the WHOLE pass (exit 4, nothing written); a probe answer lacking one holds that PR.
 """
 
+import datetime as dt
 import json
 import os
 import sys
@@ -35,6 +37,10 @@ PR = {
     "reviews": [{"author": Nullable({"login": str}), "state": str, "submittedAt": str}],
     "author": Nullable({"login": str}),
 }
+
+
+# The fields updater.schema.json requires of the ci read and the base ci read: `/properties/ci_check_read`.
+CI_CHECK_READ = {"check_runs": [{"name": str, "status": str, "conclusion": Nullable(str), "started_at": Nullable(str)}]}
 
 
 def _login(review: dict) -> str | None:
@@ -89,7 +95,8 @@ def _newest_content(commits: list) -> str:
     return max((c["committedDate"] for c in commits if not c["merge"]), default="")
 
 
-def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
+def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool | None:
+    """True when merge-ready, False when the admission gives the PR up, None when its commit probe holds it."""
     n = pr["number"]
     decision = pr["reviewDecision"]
     cj = None
@@ -97,7 +104,7 @@ def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
         cj = renovate.probe(slug, n, pr["headRefOid"])
         if cj is None:
             print(f"updater[{slug}]: #{n} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
-            return False
+            return None
         # the merge-ready exception (ADR-153): untouched + green falls through to the admission below
         if renovate.untouched(cj) and not renovate.green(cj):
             if renovate.merged_into(cj):
@@ -118,7 +125,7 @@ def _merge_ready(slug: str, pr: dict, bot: str, ready_only: bool) -> bool:
     probe = cj if cj is not None else _probe(slug, n, "commits")
     if probe is None:
         print(f"updater[{slug}]: #{n} commit probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
-        return False
+        return None
     return approved_at > _newest_content(probe["commits"])
 
 
@@ -133,8 +140,58 @@ def _update(slug: str, n: int, oid: str | None) -> bool:
     return True
 
 
+def _ci_run(read: dict) -> dict | None:
+    """The newest `ci` check run of a ci read, by `started_at`; a run with no `started_at` has not started: it is the newest."""
+    runs = [r for r in read["check_runs"] if r["name"] == "ci"]
+    return max(runs, key=lambda r: (r["started_at"] is None, r["started_at"] or ""), default=None)
+
+
+def _started(run: dict) -> dt.datetime | None:
+    return None if run["started_at"] is None else dt.datetime.fromisoformat(run["started_at"])
+
+
+def _ci_read(slug: str, ref: str) -> dict | None:
+    return renovate.read("api", f"repos/{slug}/commits/{ref}/check-runs?per_page=100", shape=CI_CHECK_READ)
+
+
+def inherited_red(slug: str, pr: dict, bases: dict[str, dict | None]) -> bool:
+    """The PR's red is its base's: its newest `ci` run is a completed failure that started before the newest `ci` run at
+    its base's head, a completed success. The base's read is made once per base per pass (`bases`); an unreadable
+    read of either holds the PR with a line."""
+    n = pr["number"]
+    mine = _ci_read(slug, pr["headRefOid"])
+    if mine is None:
+        print(f"updater[{slug}]: #{n} ci check read unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
+        return False
+    head = _ci_run(mine)
+    if head is None or head["status"] != "completed" or head["conclusion"] != "failure":
+        return False
+    base_name = pr["baseRefName"]
+    if base_name not in bases:
+        bases[base_name] = _ci_read(slug, f"heads/{base_name}")
+    theirs = bases[base_name]
+    if theirs is None:
+        print(f"updater[{slug}]: #{n} base check read unreadable — HOLDING, not updating (rule #6; the */15 cron retries)")
+        return False
+    base = _ci_run(theirs)
+    if base is None or base["status"] != "completed" or base["conclusion"] != "success":
+        return False
+    before, after = _started(head), _started(base)
+    if before is None or after is None or not before < after:
+        return False
+    print(f"updater[{slug}]: #{n} ci failed before {base_name}'s head went green — inherited red, admitted without merge-ready")
+    return True
+
+
 def leg1(slug: str, prs: list[dict], bot: str, ready_only: bool) -> None:
-    ready = [pr for pr in prs if leg1_cand(pr) and _merge_ready(slug, pr, bot, ready_only)]
+    verdicts = {pr["number"]: _merge_ready(slug, pr, bot, ready_only) for pr in prs if leg1_cand(pr)}
+    ready = [pr for pr in prs if verdicts.get(pr["number"])]
+    bases: dict[str, dict | None] = {}
+    # the inherited-red leg is asked where the admission gives a PR up (never where its commit probe holds it)
+    asked = [pr for pr in prs if verdicts.get(pr["number"], False) is False and _behind(pr) and pr["reviewDecision"] != "CHANGES_REQUESTED"
+             and not breakered(pr) and not renovate.author(pr)]
+    if ready_only:  # the pre-#1452 pick is armed ∧ BEHIND alone: nothing is left over to ask
+        ready += [pr for pr in sorted(asked, key=lambda p: p["createdAt"]) if inherited_red(slug, pr, bases)]
     lanes: dict[str, list[dict]] = {}
     for pr in prs:
         if pr in ready:
