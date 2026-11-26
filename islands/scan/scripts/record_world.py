@@ -21,6 +21,13 @@ status check rollup) and comments. Its one write, `create-comment`, is declared 
 each answer file and appends one entry per read to `provenance.yaml`'s `reads`, with that entry's own
 `recorded_at` and `recorder_commit`; no existing line changes and no recorded read is performed again.
 
+    uv run --frozen python scripts/record_world.py <world> --add base-ci
+
+`--add base-ci` adds the one read of the base's head, `master`'s
+(`gh api repos/<repo>/commits/heads/master/check-runs?per_page=100`): it writes the answer file and appends
+one entry to `provenance.yaml`'s `reads`, with its own `recorded_at` and `recorder_commit`, as
+`--add pull-commits` does; no recorded read is performed again.
+
 The repo's visibility is read first: a repo GitHub reports as private is refused before any other
 read. A read the token may not make (HTTP 403) is recorded unauthenticated over the public REST API
 and marked `auth: none`.
@@ -162,6 +169,11 @@ def plan_pr_merges(prs: list[str]) -> Plan:
     n = prs[0]
     reads = [["pr", "view", n, "--repo", REPO, "--json", "commits"], pull_commits_read(n)]
     return Plan([Read(r, file_for(r)) for r in reads], [])
+
+
+def base_ci_read() -> list[str]:
+    """The read of the check runs at the head of the base branch `master` (`heads/<branch>` is a ref the REST read takes)."""
+    return ["api", f"repos/{REPO}/commits/heads/master/check-runs?per_page=100"]
 
 
 def board_per_pr(n: str, oid: str) -> list[list[str]]:
@@ -395,6 +407,32 @@ def add_pull_commits(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_base_ci(args: argparse.Namespace) -> int:
+    """`--add base-ci`: the one read of `master`'s head check runs; nothing already recorded is read again."""
+    if args.prs:
+        raise SystemExit("record_world: --add base-ci takes no pull request: it reads master's head")
+    world = Path(args.out) / args.world
+    prov_path = world / "provenance.yaml"
+    if not prov_path.is_file():
+        raise SystemExit(f"record_world: {args.world} is not recorded — nothing to add to")
+    text = prov_path.read_text("utf-8")
+    refuse_private(REPO)  # before any other read
+    commit = recorder_commit()
+    read = Read(base_ci_read(), "")
+    read.file = file_for(read.argv)
+    if (world / read.file).exists() or f"file: {_y(read.file)}" in text:
+        raise SystemExit(f"record_world: {args.world} already holds {read.file}")
+    body = perform(read)
+    read.recorded_at = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    read.recorder_commit = commit
+    (world / read.file).write_bytes(body)
+    lines = text.split("\n")
+    at = lines.index("writes:")
+    prov_path.write_text("\n".join([*lines[:at], *read_lines(read), *lines[at:]]), "utf-8")
+    print(f"record_world: {args.world} — 1 read added → {world}")
+    return 0
+
+
 def _recorded_items(text: str) -> list[int]:
     m = re.search(r"^items: (\[.*\])$", text, re.M)
     if not m:
@@ -406,11 +444,13 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("world", choices=sorted(PLANS))
     ap.add_argument("prs", nargs="*")
-    ap.add_argument("--add", choices=["pull-commits"], help="add a read to an already recorded world, for its recorded items")
+    ap.add_argument("--add", choices=["pull-commits", "base-ci"], help="add a read to an already recorded world, for its recorded items")
     ap.add_argument("--rest-description", default="", help="github/rest-api-description commit (default: main's head)")
     ap.add_argument("--description-file", default="", help="a local copy of the description at that commit (no download)")
     ap.add_argument("--out", default=str(WORLDS), help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.add == "base-ci":
+        return add_base_ci(args)
     if args.add:
         return add_pull_commits(args)
     if not args.prs:
