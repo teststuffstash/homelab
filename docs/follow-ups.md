@@ -153,8 +153,8 @@ six OVERSIZE items pointer-ized into
       `OPENROUTER_API_KEY` branch, the worker sidecar, the loop roles, the lint.
 - [ ] **FU-326** — **A stack repo can still reach platform credentials and cluster scope through ArgoCD (beside ADR-168).**
       Found by the #3768 security review, 2026-11-25. Mechanism, inventory and the six-step migration:
-      `docs/stack-workspace-migration.md` (on PR #3782, ADR-169, `repos[].provision[]`; armed
-      2026-11-27 after the seat's review — findings in a comment there). Open beside the migration: Applications in
+      [`stack-workspace-migration.md`](stack-workspace-migration.md) (ADR-169, `repos[].provision[]`, #3782 merged
+      2026-11-27; the seat's review findings are a comment there). Open beside the migration: Applications in
       AppProject `default`; the provision bounds are keyed on an AgentStack name the stack itself writes; no per-stack
       storage ceiling; no gate keeps a platform bucket out of a stack's alias prefix; oracle-fleet's Infisical
       allowlist carries the platform `REGISTRY_PUSH_TOKEN`. **Next:** the migration steps (stack PRs, observe first);
