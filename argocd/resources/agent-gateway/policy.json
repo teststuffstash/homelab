@@ -63,6 +63,7 @@
           }
         }
       },
+      "headroom": {"max_age_s": 900, "ceiling": 0.80, "windows": ["rolling", "weekly", "monthly"], "poll_interval_s": 60},
       "plan": "go",
       "max_sessions": 3,
       "models": {
