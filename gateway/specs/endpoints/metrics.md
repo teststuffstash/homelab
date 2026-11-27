@@ -145,8 +145,8 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_provider_requests_total` | `rail`, `model`, `provider`, `outcome` | every ATTEMPT on a (rail, model, provider) cell of the openrouter rail by how it ended ([GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter)): `ok`, `incomplete`, the pre-byte failures the gateway fails over on (`5xx`, `429`, `unreachable`, `timeout`, `content-type`, `provider-error`) and the request-scoped answers it never does (`refused`, `auth`, `edge`). ⚖ `model` is bounded to the POLICY's openrouter ids, `provider` to the endpoint SNAPSHOT's slugs plus `unattributed` — never a value a response invented (one slugged by rule renders `other`) |
 | `gateway_provider_failovers_total` | `model`, `from`, `to` | requests reissued to the next provider before the first byte; the same bounds |
 | `gateway_openrouter_catalog_refresh_total` | `outcome` | OpenRouter catalog refresh attempts by outcome; every outcome renders from 0 ([GW-CATALOG-OR](catalog.md#gw-catalog-or)) |
-| `gateway_canary_rides_total` | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged) |
-| `gateway_canary_admissions_total` | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog` |
+| `gateway_canary_rides_total` | `outcome` | canary verdicts: `eligible` (a clean ride), `excluded` (a struck one) — and `no-verdict` (a 429'd one: the cell backs off, nothing is judged); every outcome renders from 0 on a fresh process ⚖ |
+| `gateway_canary_admissions_total` | `outcome` | canary admissions by answer: `dispatch`, `budget`, `not-due`, `not-in-catalog`; every outcome renders from 0 on a fresh process ⚖ |
 | `gateway_rail_choice_total` | `model`, `rail`, `reason` | admissions where the tier named one model on two allowed rails ([GW-MODEL-TIERS §The rail choice](catalog.md#the-rail-choice)), by the rail that walked first and why — `price`, `clean-rate`, `headroom`, `not-in-catalog`, `no-eligible-endpoint`, `order`; ⚖ `model` is the twin's openrouter spelling, the provider families' bound |
 
 #### The families — gauges and the histogram
@@ -166,7 +166,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_openrouter_catalog_age_seconds` | gauge | — | seconds since the last good OpenRouter catalog refresh ([GW-CATALOG-OR](catalog.md#gw-catalog-or)) — absent until one exists; `OpenRouterCatalogStale` reads it |
 | `gateway_openrouter_catalog_models` | gauge | — | models in the last good snapshot; 0 = none yet |
 | `gateway_openrouter_catalog_last_outcome` | gauge | `outcome` | 1 for the latest attempt's outcome, 0 for the others — `OpenRouterCatalogParseFailed` reads it |
-| `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell |
+| `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell; every state renders from 0 on a fresh process ⚖ |
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
 | `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
@@ -390,6 +390,9 @@ Legend: `families` = the families to find — `the schema's, less the codex rail
 > a verdict, an admission an answer~~ → the two canary rows; ~~class is a strike class, source the
 > writer~~ → the `class` and `source` rows; ~~no task label, ever~~ (one row, two claims) → the two
 > rows above.
+
+> Tombstone (removed by PR #3819; one cycle): ~~window is 5h or 7d~~ → window is a subscription window name
+> (the bound widened by the Go usage reading's `rolling` / `weekly` / `monthly`).
 
 #### The running release is an info series
 
