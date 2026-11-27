@@ -11,7 +11,7 @@ The payload shape (probed 200 on 2026-11-01 with the gateway's key, synthetic va
 `{"usage": {"rolling"|"weekly"|"monthly": {"status": "ok"|…, "percent": 0–100, "resetsAt": RFC 3339}}}`.
 Account-level only: no per-model split, no absolute amounts — and nothing else in the payload is read.
 
-ADR-108 holds: the poll feeds the gateway's own headroom state; the outcome is logged, never rendered.
+ADR-108 holds: the poll feeds the gateway's own headroom state, and no admission reads Prometheus; the outcome is logged and counted on gateway_opencode_usage_poll_total.
 """
 
 from __future__ import annotations
@@ -24,13 +24,14 @@ from datetime import datetime
 
 import httpx
 
+from . import __version__
 from .headroom import Headroom, ReportError
-from .responses import USER_AGENT
 
 log = logging.getLogger("gateway.opencode.usage")
 
 MAX_BODY_BYTES = 64 * 1024
 TIMEOUT_S = 10.0
+USER_AGENT = f"agent-gateway/{__version__} (go-usage)"  # names the gateway; the poll sends no session header
 
 
 def translate(doc, now: float) -> dict:
@@ -62,8 +63,9 @@ def translate(doc, now: float) -> dict:
 class GoUsagePoll:
     """`poll()` = one observation, returning its bounded outcome; `run()` = the schedule."""
 
-    def __init__(self, headroom: Headroom, client: httpx.AsyncClient, url: str, key: str | None, clock: Callable[[], float]):
+    def __init__(self, headroom: Headroom, client: httpx.AsyncClient, url: str, key: str | None, clock: Callable[[], float], metrics=None):
         self.headroom, self.client, self.url, self.key, self.clock = headroom, client, url, key, clock
+        self.metrics = metrics
         self.polls = 0
         self.last_outcome: str | None = None
 
@@ -83,6 +85,8 @@ class GoUsagePoll:
         outcome = await self._poll()
         self.polls += 1
         self.last_outcome = outcome
+        if self.metrics is not None:
+            self.metrics.go_poll(outcome)
         (log.info if outcome == "accepted" else log.warning)("opencode usage poll: %s", outcome)
         return outcome
 

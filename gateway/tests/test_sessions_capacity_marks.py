@@ -138,12 +138,15 @@ MEMORY = "worker ride on openrouter → 429, reset T0 + 42 s, on a :memory: gate
 GAUGES = 'gateway_cells_cooled{rail="openrouter"} 1 · gateway_credentials_rejected{rail="opencode"} 1'
 RELOAD_LINE = "capacity: reloaded 3 marks from the store (1 cooled, 0 latched, 1 rejected, 1 holds; 0 dropped as expired)"
 
+R_TABLE, R_SCRAPE, R_LINE, R_ASK = ("the marks table, then a worker ask on openrouter", "the first scrape", "the reload line",
+                                    "a worker ask on openrouter")  # the `read` column's cells
+
 SHOWS_ROWS = [
-    pytest.param("policy-default · upstream-429-reset", "worker ride on openrouter → 429, reset T0 + 42 s", "+42 s",
+    pytest.param("policy-default · upstream-429-reset", "worker ride on openrouter → 429, reset T0 + 42 s", "+42 s", R_TABLE,
                  "capacity_marks holds no row; worker, rail openrouter → dispatch openrouter", id="an expired mark is not reloaded"),
-    pytest.param("policy-default · upstream-429-reset", TWO_MARKS, "+10 s", GAUGES, id="the gauges show the reloaded counts on the first scrape ⚖"),
-    pytest.param("policy-default · upstream-429-reset", TWO_MARKS, "+10 s", RELOAD_LINE, id="the reload is logged"),
-    pytest.param("policy-default · upstream-429-reset", MEMORY, "+10 s, a new :memory: store", "dispatch openrouter", id="the memory store keeps no mark ⚖"),
+    pytest.param("policy-default · upstream-429-reset", TWO_MARKS, "+10 s", R_SCRAPE, GAUGES, id="the gauges show the reloaded counts on the first scrape ⚖"),
+    pytest.param("policy-default · upstream-429-reset", TWO_MARKS, "+10 s", R_LINE, RELOAD_LINE, id="the reload is logged"),
+    pytest.param("policy-default · upstream-429-reset", MEMORY, "+10 s, a new :memory: store", R_ASK, "dispatch openrouter", id="the memory store keeps no mark ⚖"),
 ]
 
 
@@ -158,17 +161,17 @@ async def _two_marks(gw, upstreams, clock) -> None:
         await _ride(gw, upstreams, clock, rail="opencode", role="worker", behaviour="upstream-401-key-expired")
 
 
-@pytest.mark.parametrize(("world", "arrange", "roll", "expected_observed"), SHOWS_ROWS)
+@pytest.mark.parametrize(("world", "arrange", "roll", "read", "expected_observed"), SHOWS_ROWS)
 async def test_what_the_second_gateway_shows_first(gw, app, upstreams, mcp_transport, clock, secrets, settings, policy, reviews, pods, caplog,
-                                                   world, arrange, roll, expected_observed):
+                                                   world, arrange, roll, read, expected_observed):
     enter_world(world)
-    inputs(arrange=arrange, roll=roll)
+    inputs(arrange=arrange, roll=roll, read=read)
     caplog.set_level(logging.INFO, logger="gateway.capacity")
     if arrange == TWO_MARKS:
         await _two_marks(gw, upstreams, clock)
         caplog.clear()
         async with _rolled(app, mcp_transport, clock, roll) as (_second, gw2):
-            if expected_observed == GAUGES:
+            if read == R_SCRAPE:
                 with quiet():
                     text = (await gw2.get("/metrics")).text
                 got = {s: _value(text, s) for s in ('gateway_cells_cooled{rail="openrouter"}', 'gateway_credentials_rejected{rail="opencode"}')}
