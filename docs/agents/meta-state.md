@@ -29,13 +29,14 @@ dig for days by being listed). Write the marker only when the cause is known; th
     `global_alias` change updates in place). #3828 (a sentinel tool error prints its cause) merged 11:04Z.
   - **Goal #3803 assembly #3821 MERGED 2026-11-27 13:39Z** (the seat merged master into the goal branch — FU-327 is
     the stall's class). The switch is on: first Go usage poll `accepted` at 13:40Z on the image before the counter.
-    NEXT: the pin PR #3829 (`2026.11.27-g492d65dddc6a`) lands, then the Goal's acceptance 4 read
-    (`gateway_opencode_usage_poll_total{outcome="accepted"}` increasing, the three `rail="opencode"` utilization
-    series = vendor % / 100, neither `GoUsagePoll*` alert, a Go-rail `POST /sessions` dispatches). Verdict: operator's.
+    Pin #3829 merged 13:48Z. Acceptance 4 read 21:17Z: `accepted` +359 in 6 h, the three `rail="opencode"` series
+    present (monthly 0.6, weekly 0.4, rolling 0 — vendor % not cross-read), no `GoUsagePoll*` in 6 h. UNREAD: a Go-rail
+    `POST /sessions` dispatch (8 h: opencode 0, anthropic 10). Verdict: operator's.
   - #3810 (the specs reviewer rings `/coordinate` after CHANGES_REQUESTED, #3809) merged 13:22Z on the operator's word.
   - `/workspace/teststuff` (operator's checkout): 5 unpushed commits that conflict with Forgejo main on LOG.md/STATE.md
     (the second jail pushed 8dfe0f9 on top of remote main, 11-22). The `pull --rebase` is the operator's.
-  - #3563's experiment bound is 2026-11-27T13:14Z: exactly ONE verdict comment, a second run writes nothing (bullet below).
+  - #3563's experiment bound passed 11-27 13:14Z, but the experiments step last ran 05:03Z: the 11-28 05:00Z run decides
+    it — read exactly ONE verdict comment, and the 11-29 run writes nothing (bullet below).
   - Scan/launch Goals #3656 and #3480 are assembled and on master (#3796, #3793), open post-launch: the verdicts are the operator's.
   - Gateway intake inputs filed by the seat: #3764 (the Go usage reading — now Goal #3803, bullet below); the
     fact on #3538. Scan intake: #3826 (five unscoped merged-PR lookups). Unrouted: #3825 (episodic dig alerts).
@@ -69,8 +70,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   `required-checks` has `do_not_enforce_on_create` (probe: goal ref create 201 / delete 204). NEXT:
   - After the 2026-11-23 05:00Z `island-intake` run: its first write is authored by `homelab-intake[bot]`, and it cut
     `goal/3656-…` and the #3480/#3482 Goal branches (or said why not). Then weigh a create+delete rule on `goal/**` with
-    homelab-intake the only non-admin bypass (it can delete a goal ref today — gap row on the access page); fix
-    `meta-throughput.sh` (counts intake writes by the old author) and the stale coordinator-git cell in `gateway/specs/access.md`.
+    homelab-intake the only non-admin bypass (it can delete a goal ref today — gap row on the access page).
   - #3683 and #3678 (jail-cluster rig, ADR-167) MERGED 11-22; #3688 fixed the rig's ghcr blob egress + `list`; smoke PASSED
     (SERVICES row LIVE). Operator: k3d is not a goal (kind is proven) — if k3d breaks again, document it unsupported, no rework.
 - **⚑ PICKUP (2026-11-21 — nx-02 incident RECOVERED; [draft](../incidents/2026-11-20-nx-02-boot-disk.md); FU-299, FU-322).**
@@ -129,11 +129,6 @@ dig for days by being listed). Write the marker only when the cause is known; th
   docs/renovate.md's own: `[tool.uv] exclude-newer` ≥7 d back + `uv lock` (fixed ≥21.14.13 exists aged, e.g. 21.15.6
   of 11-06), or admin-merge whichever head lock-intake-lint passes. Scan routing armed non-major #111 to unarmed-major:
   unchecked, a loop component → stop-and-ask.
-- **⚑ PICKUP (2026-11-21 — Crossplane managed-resource belt, #3650 MERGED 19:54Z `31491512`).** Scrape live (3/3 providers
-  `up=1`); `CrossplaneManagedResourceNotSynced` was PENDING at 19:56Z — confirm it FIRED `gvk="tf.upbound.io/v1beta1, Kind=Workspace"` ~30 min after the first scrape — the live positive control is
-  Workspace `pr-oracle-fleet-minutark` (Synced=False, "failed to make http request"; the oracle stack's). Not firing = the
-  PodMonitor or the expr is wrong. Coordinator scan fix #3636 LIVE (a gateway stack's goal lane no longer defers on the old
-  proxy's latch; proven 16:10Z by #3586's checkpoint opening #3637).
 - **⚑ PICKUP (2026-11-17 → 19 — router session; TICK-LOG 11-17; FU-297).** OPERATOR RULING OWED before any firmware
   window: how a node gets packages — the BACKUP (`opnsense-pve`) cannot reach the mirror ("Could not find the repository
   on the selected mirror"; only the CARP master has WAN — inferred, the routing table was not traced). Options in FU-297.
@@ -144,9 +139,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   started on the box 11-19 at wind-down and NOT read — expect ~17 (the dnsmasq rows gone, the rest wait on the firmware).
   #3539 (content-keyed test-VM verdict) MERGED 11-19 05:47Z — the first bot update of an open router PR should
   post "PASS carried from"; unproven live. Also unproven live from #3528: the hourly re-read of a drifted group and the
-  7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. Same host-key class
-  as #3527 still in `opnsense-test-vm.sh`, `opnsense-drill.sh`, `host-maintenance.sh`, `node-maintenance.sh`,
-  `mgmt-tf.sh`, `mgmt-bmc.sh`, `mgmt-human-plan.sh` (default `known_hosts`, not the pinned file). JAIL: the running
+  7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. JAIL: the running
   image has no `ssh` (the Dockerfile lists openssh-client — rebuild the container); `~/.ssh/known_hosts` starts empty.
 
 - **⚑ PICKUP (2026-11-20 — scan island Goal #3490 on master, built overnight by seat subagents; TICK-LOG 11-19/20).**
@@ -214,8 +207,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   close stays open; parts for other islands are verbatim copies). SEAT: (c) trial issues open and unruled — #3425,
   #3427 (dependency-upgrades), #3426 (agent-loop); #3424 open with its `intake: split` ruling; the 11-16 05:00Z sitting ran `island=gateway` only and ruled none —
   the first unattended `forward`/split read is still owed; (d) `intake-select.sh` copies the scan's `blocked-on:`
-  grammar (a second reader) — fold into one definition; (e) `docs/intake/retro.md` still says the island is "not yet
-  selectable"; (f) PR #3147's draft `intake-select` spec predates `pr-hold` and `forward`; (g) a plain `forward` and
+  grammar (a second reader) — fold into one definition; (f) PR #3147's draft `intake-select` spec predates `pr-hold` and `forward`; (g) a plain `forward` and
   the hop cap have run only in the selector tests and one hand-written comment (#3427).
 
 - **⚑ PICKUP (2026-11-15 — intake review stage live, islands scan/launch/retro started; TICK-LOG 11-14 → 15; FU-320).**
@@ -286,12 +278,9 @@ dig for days by being listed). Write the marker only when the cause is known; th
   history` = one version (the last unread item from the 10-26 garage-0 rebuild; needs an exec).
 - **⚑ wk-metal-04 on Big Data (#2758).** Watch the MX500's lifetime used (attr 202 = 34 %, flat since 10-20; no alert watches it).
   **OPERATOR:** does `sensor.plug_opnsense_power` (live, ~56 W) meter this box, or retire it (`docs/router-move.md`)?
-- **#1101** (retro r2 batch): close by hand — #1651 closed 11-01, the 72 h passed.
 - **⚑ OPEN GOALS / CONTAINERS (verdicts are the operator's):** #818 G-B HELD (4-clause verdict posted). #1302 G-G post-launch
   (#1311/#1334; RUM residual = FU-250). #1418 S8 stint closes after #2589. Newest: #3384 #3390 #3389 (top bullet).
 - **⚑ OPERATOR-OWED (one list, re-verified 2026-11-16):**
-  (1) the claude-jail HOST REBUILD — the Dockerfile reads the stamp (claude-jail#10); `VersionSetMembersDisagree` +
-  `VersionSetBehindPin` (jails at 2.1.316 behind the pin, 11-16) still fire and clear on it.
   (2) Garage: prod is on **v2.5.0** since 2026-11-13 17:29Z (#3341 proposer, #3345 verbs, #3344 the bump —
   ONE-WAY, attended). Rulings: a one-way release = stop and escalate; v2 → v3 stays human. Owed by the seat: the
   verbs as PreSync/PostSync hooks with stop-and-page, no revert lease (#3358 fixed preflight/verify; its
