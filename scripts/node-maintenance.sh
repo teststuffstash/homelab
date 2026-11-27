@@ -1047,7 +1047,7 @@ spec:
   tolerations: [{ operator: Exists }]
   containers:
     - name: scrub
-      image: docker.io/library/python:3.13-slim
+      image: docker.io/library/python:3.15-slim@sha256:3c5426211a36454d7a58b31e306cfefaac2c63b016e9f1a067b652ec602a4d15
       securityContext: { privileged: true }
       env: [{ name: DRY, value: "$dry" }]
       command: [python3, -c]

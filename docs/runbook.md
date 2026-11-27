@@ -24,16 +24,12 @@ Gotchas:
   not hypothetical: on 2026-08-05 a python-plugin line ended up welded into a minted kube token
   (`Directoryexistsbutisnotavalid…eyJhbGciOi…`), and the resulting kubeconfig answered a bare 401,
   which reads exactly like an expired token. Fixed at both ends —
-  `tools/stack-jail.sh` filters + shape-gates the JWT, and the plugin no longer talks (below).
-- **The python venv must NOT live in the shared workspace.** `devbox.json` sets
-  `VENV_DIR=$HOME/.cache/devbox-venv/homelab`, because `/workspace` is the same directory as the
-  host's `~/Projects` and a venv's `bin/python` is an **absolute** symlink into whichever project
-  root created it. Sharing one `.venv` made the two sides invalidate each other on every single
-  run — devbox's `venvShellHook.sh` checks `bin/python` exists, sees a dangling link, prints
-  *"Directory exists but is not a valid virtual environment. Creating a new one…"* and rebuilds it,
-  forever. `$HOME` differs (`/home/node` in the jail, `/home/rasmus` on the host), so each side
-  keeps its own and neither touches the repo. Nothing here uses that venv (ESPHome has its own
-  `esphome/.flash-venv`); it exists only because devbox auto-creates one for `python3`.
+  `tools/stack-jail.sh` filters + shape-gates the JWT, and the python plugin is gone (below).
+- **No python venv.** python rides a nixpkgs flake ref (`#python315`, the gateway/islands shape,
+  homelab#2610), which devbox's python plugin does not attach to, so `devbox run` creates no venv
+  and sets no `VENV_DIR`. (Under the old `python3@latest` pin the plugin auto-created one; it had to
+  live under `$HOME/.cache` because `/workspace` is the host's `~/Projects` and a shared venv's
+  absolute `bin/python` symlink flipped between the two sides on every run.)
 - `devbox run` runs scripts under **dash** and from the **repo root** regardless of `cwd` →
   use `tofu -chdir=...` / absolute paths, and avoid `bash -c '<multiline>'` (mangles newlines).
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
