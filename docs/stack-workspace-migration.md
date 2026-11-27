@@ -49,7 +49,7 @@ Hence: adopt the existing state, never recreate.
 The adopting entry runs the Composition's Terraform in the legacy state (`crossplane.io/external-name`
 = the legacy name) with the legacy Terraform names (`tfName`), so the plan is EMPTY: no move, no
 replace. `scripts/fixtures/agentstack-provision/{oracle,circles,sleep}-adopt-xr.yaml` are the eleven
-entries, ready to copy; `devbox run -- bash scripts/agentstack-provision-test.sh` proves each one
+entries, ready to copy (the `provision` blocks — a fixture's own `metadata.name` carries a `--<case>` suffix); `devbox run -- bash scripts/agentstack-provision-test.sh` proves each one
 equivalent to the live module (`expected/`, captured 2026-11-25). A row whose legacy manifest has
 changed since must be re-captured and re-checked first.
 
