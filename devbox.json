@@ -37,9 +37,7 @@
     "nodejs_22": {
       "version": "latest"
     },
-    "python3": {
-      "version": "latest"
-    },
+    "github:NixOS/nixpkgs/f05535a0efcb2134c478d1e88434fadf486d42b5#python315": "",
     "nmap": {
       "version": "latest"
     },
@@ -121,8 +119,7 @@
   },
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",
-    "KUBECONFIG": "$PWD/tofu/kubeconfig",
-    "VENV_DIR": "$HOME/.cache/devbox-venv/homelab"
+    "KUBECONFIG": "$PWD/tofu/kubeconfig"
   },
   "shell": {
     "init_hook": [],
@@ -301,7 +298,8 @@
         "python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test"
       ],
       "version-sets-selftest": [
-        "python3 argocd/resources/version-sets/probe.py --self-test"
+        "python3 argocd/resources/version-sets/probe.py --self-test",
+        "python3 argocd/resources/version-sets/python-set.py"
       ],
       "request-flow-render": [
         "python3 scripts/request-flow-render.py \"$@\""

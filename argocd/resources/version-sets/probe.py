@@ -9,7 +9,7 @@ what RUNS, never what a build was asked for.
 
 Two modes, one script (mounted from a ConfigMap into every step of version-set-probe-argo.yaml):
 
-  pins  [--consumers-out FILE]   (python:3.14-slim, the workflow's first step)
+  pins  [--consumers-out FILE]   (python:3.15-slim, the workflow's first step)
         reads homelab MASTER: agents/images.env (which images the cluster runs), the stamp file
         version-sets/devbox.lock (the set's ONE source once #2014's stamp lands — absent until then,
         pushed as version_set_pin_present 0), and devbox.lock (the jail's kubectl: the seat runs

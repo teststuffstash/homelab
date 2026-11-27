@@ -2,7 +2,7 @@
 name = "retro-island"
 version = "0.1.0"
 description = "Retro island (homelab islands/retro, Goal #3384): rows proven over the replay oracle. Components under src/retro_island/ are pure and caller-free."
-requires-python = ">=3.11"
+requires-python = ">=3.15"
 dependencies = []
 
 [build-system]

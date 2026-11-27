@@ -1,6 +1,6 @@
 # cloudflare-spend-probe (homelab#217) — the spend-toggle drift belt on the two PRODUCT zones.
 # Stock python image + the script from the generated ConfigMap, the github-exporter/openrouter-proxy
-# pattern (both pin `python:3.13-slim` the same way — no custom image pipeline, so nothing here to
+# pattern (both pin `python:3.15-slim` the same way — no custom image pipeline, so nothing here to
 # digest-pin beyond what those two already established). Parks in CreateContainerConfigError until
 # ESO materialises the token Secret — the SAME Secret the exporter beside it uses, no new credential.
 apiVersion: apps/v1

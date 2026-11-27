@@ -30,7 +30,7 @@ one (see the `_or_capacity_*` block). It is what makes "the provider is down" a 
 defer (`or-capacity-down:*`) instead of one more silent deferral — the launcher degrades a
 class=fix ride to the haiku subscription rail on it (docs/spikes/model-routing-history.md §M12).
 
-Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter pattern).
+Stdlib only; runs on a stock python:3.15-slim from a ConfigMap (github-exporter pattern).
 """
 
 import base64
@@ -110,7 +110,7 @@ def _rail_disabled(leg: str) -> bool:
 # OpenAI-format /chat/completions call and forwarded to OpenRouter. The prefix is STRIPPED
 # before forwarding (OpenRouter takes bare model ids). Ported from scripts/claude-model-shim.py
 # (the jail shim is the working prototype) but WITHOUT litellm: the proxy runs stock
-# python:3.13-slim and does the translation inline with stdlib.
+# python:3.15-slim and does the translation inline with stdlib.
 OR_PREFIX = "openrouter/"
 # ADR-108: Go pricing moved to gometer.py (single home for proxy + jail shim).
 # Re-export for backwards compatibility within this file.
@@ -1028,7 +1028,7 @@ def normalize_model(model: str) -> str:
 # to an OpenAI-format /chat/completions request, forward to OpenRouter, and
 # translate the response back. Ported from scripts/claude-model-shim.py (the
 # jail shim is the working prototype — scripts/claude-model-shim.py _translate)
-# but WITHOUT litellm: the proxy runs stock python:3.13-slim and does the
+# but WITHOUT litellm: the proxy runs stock python:3.15-slim and does the
 # translation inline with stdlib.
 
 # OpenAI finish_reason → Anthropic stop_reason mapping

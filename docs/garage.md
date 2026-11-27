@@ -613,7 +613,7 @@ reconciler: [management-box.md](management-box.md) §MB4).
   created with, and the ArgoCD app ignores the field (`RespectIgnoreDifferences`).
 - **The controller:** a CronJob every minute
   ([`controller.py`](../argocd/resources/garage-disruption/controller.py), stdlib Python, the
-  pinned `python:3.13-slim` image the other garage jobs use). It queries the signal and patches the
+  pinned `python:3.15-slim` image the other garage jobs use). It queries the signal and patches the
   PDB to `maxUnavailable: 1` on exactly one sample reading 1, and to `0` on anything else:
   0, absent, several series, or Prometheus unreachable. That is **fail closed**. RBAC is `get` +
   `patch` on that one PDB. It has no pod, secret or admin-API access.
