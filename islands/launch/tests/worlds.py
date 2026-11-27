@@ -72,22 +72,7 @@ def part_schema(world_id: str) -> dict[str, Any]:
     for key in SCHEMA_PART[world_id]:
         node = node[key]
     node = json.loads(json.dumps(node))
-    if world_id == "gw-dispatch-bound":
-        node = _correct_bound_required(node)
     return {**node, "$defs": schema["$defs"], "post": schema["post"]}
-
-
-def _correct_bound_required(node: dict[str, Any]) -> dict[str, Any]:
-    """Supplier defect (homelab#3483): `post.dispatch_bound.properties.session.required` lists
-    `rail_choice`, which `session` forbids (additionalProperties:false) and the page puts at the
-    top level — so no body can satisfy the part as written. Move the requirement to the top level;
-    a no-op once the supplier fixes its schema (`test_supplier_bound_part_is_still_unsatisfiable`
-    then fails and this correction is deleted)."""
-    session = node["properties"]["session"]
-    if "rail_choice" in session.get("required", []):
-        session["required"] = [k for k in session["required"] if k != "rail_choice"]
-        node["required"] = [*node["required"], "rail_choice"]
-    return node
 
 
 def validate_body(world: World, body: dict[str, Any] | None = None) -> list[str]:
