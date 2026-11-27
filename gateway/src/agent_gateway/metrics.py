@@ -44,6 +44,10 @@ DB_MODES = ("pvc", "memory")  # GW-METRICS §gateway_db_mode — the store modes
 POLL_OUTCOMES = ("accepted", "quota-invalid", "quota-time-invalid", "quota-out-of-order", "credential-unresolved",
                  "credential-transient", "upstream-auth", "upstream-http-error", "upstream-content-type",
                  "upstream-unreachable", "upstream-timeout")
+# GW-SESSIONS-CAPACITY §Go account headroom — the Go usage poll's outcomes: the codex poll's less `credential-transient`
+GO_POLL_OUTCOMES = tuple(o for o in POLL_OUTCOMES if o != "credential-transient")
+# The Go usage reading's window names (the vendor's, not spans) — the `window` vocabulary beside `5h`, `7d`
+GO_WINDOWS = ("rolling", "weekly", "monthly")
 # GW-CODEX-HEADROOM §Upstream headers — codex_headers.OUTCOMES, spelled once per side like the poll's
 HEADROOM_HEADER_OUTCOMES = ("accepted", "absent", "quota-invalid", "quota-time-invalid", "quota-out-of-order")
 # GW-RAIL-OPENROUTER: how one attempt on a (rail, model, provider) cell ended — `ok` (a complete 2xx),
@@ -105,6 +109,8 @@ class Metrics:
         self.upstream_auth_total: dict[str, int] = {}
         self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
         self.headroom_header_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Upstream headers
+        self.go_poll_total: dict[str, int] = {}  # GW-SESSIONS-CAPACITY §Go account headroom
+        self.go_declared = False  # the Go poll family renders only under `rails.opencode.headroom` (bind_go_rail)
         self.codex_declared = False  # the family renders only for a declared codex rail (bind_codex_rail)
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
@@ -247,7 +253,7 @@ class Metrics:
         r = _bounded(rail, RAILS)
         with self._lock:
             for w in windows:
-                label = _bounded(window_label(w.key), SUBSCRIPTION_WINDOWS)
+                label = _bounded(w.key if isinstance(w.key, str) else window_label(w.key), (*SUBSCRIPTION_WINDOWS, *GO_WINDOWS))
                 self.sub_util[(r, label)] = w.used
                 self.sub_reset[(r, label)] = w.resets_at
 
@@ -266,6 +272,17 @@ class Metrics:
         o = _bounded(outcome, POLL_OUTCOMES)
         with self._lock:
             self.poll_total[o] = self.poll_total.get(o, 0) + 1
+
+    def bind_go_rail(self, declared: bool) -> None:
+        """GW-SESSIONS-CAPACITY §Go account headroom: `gateway_opencode_usage_poll_total` exists only while the policy
+        carries `rails.opencode.headroom` — otherwise no series, so GoUsagePollSilent cannot fire on it."""
+        self.go_declared = declared
+
+    def go_poll(self, outcome: str) -> None:
+        """GW-SESSIONS-CAPACITY §Go account headroom: one Go usage poll's bounded outcome."""
+        o = _bounded(outcome, GO_POLL_OUTCOMES)
+        with self._lock:
+            self.go_poll_total[o] = self.go_poll_total.get(o, 0) + 1
 
     def codex_upstream_headroom(self, outcome: str) -> None:
         """GW-CODEX-HEADROOM §Upstream headers: one relayed answer's headroom-header read (`accepted` = a
@@ -346,6 +363,11 @@ class Metrics:
                           "# TYPE gateway_codex_upstream_headroom_total counter"]
                 for outcome in HEADROOM_HEADER_OUTCOMES:
                     lines.append(f"gateway_codex_upstream_headroom_total{_fmt_labels({'outcome': outcome})} {self.headroom_header_total.get(outcome, 0)}")
+            if self.go_declared:
+                lines += ["# HELP gateway_opencode_usage_poll_total The Go rail's usage polls by outcome (GW-SESSIONS-CAPACITY §Go account headroom); accepted = the headroom took the reading.",
+                          "# TYPE gateway_opencode_usage_poll_total counter"]
+                for outcome in GO_POLL_OUTCOMES:
+                    lines.append(f"gateway_opencode_usage_poll_total{_fmt_labels({'outcome': outcome})} {self.go_poll_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
             for (rail, dialect, reason, traffic), n in sorted(self.incomplete_total.items()):

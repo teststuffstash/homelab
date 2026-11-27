@@ -753,6 +753,8 @@ blocks lifts.
   a fallback (operator ruling 4). This is the 2026-10-14 retirement (the spike's §F3) turned from
   silent into a typed defer.
 
+**World: [policy-default](../worlds/README.md#policy-worlds)** (`gateway/specs/worlds/policy-default.json`) — the worker walks `opencode`, then `openrouter`, on the standard tier; the reviewer `anthropic`, then `opencode`, on the heavy tier; the researcher `openrouter`, then `anthropic`, on the heavy tier; the prober `anthropic` alone, on the light tier. The anthropic heavy tier is the list `claude/sonnet`, then `claude/opus`. In the `openrouter-endpoints` world the providers eligible for `deepseek/deepseek-v4.1-flash` under the worker's harness are five: `deepinfra`, `atlas-cloud`, `morph`, `inference-net`, `baidu`.
+
 **Worlds** (the `world` column): `policy-default` with the fake upstream's behaviour after the `·`
 ([worlds/README.md §Upstream behaviours](../worlds/README.md#upstream-behaviours-fake-upstreams)); `T0` = Fri 2027-01-15 08:00:00Z, the clock every
 row starts at (a Go peak hour); every `then` / `roll` cell is seconds that pass before the ask.
@@ -798,7 +800,7 @@ fake answered them (`upstream-429` sends `retry-after: 30`; `no retry-after` = `
 
 #### The Go rail's 429 latch, and a rail that declares none
 
-The worker's body. Legend: `arrange` as above (`openrouter at its 20` = the rail at its cap);
+The worker's body. Legend: `arrange` as above (`openrouter at its 20` = the rail at its cap, which frees after the policy's `defer_retry_s`, 60 s);
 `rail` / `tier` = the body's, `(policy)` = the policy walk (the worker's rails: opencode, then openrouter).
 
 | description | world | arrange | rail | tier | decision? | rail? | reason? | retry_after_s? |
@@ -853,7 +855,7 @@ value; `the Secret then holds a new key` = the platform key is rotated); `then` 
 
 The probe pass is the app's background loop. `policy-default`'s opencode probe is `POST
 /v1/chat/completions` (1 token, backoff `[60, 3600]`); anthropic declares none (hold 900 s). Legend:
-`arrange` as above; `then` = seconds that pass before the probe pass; `probe_answers` = what the
+`arrange` as above (`upstream-403-edge` = the upstream answers 403 `text/plain` `error code: 1010`, an edge's refusal that names no credential reason); `then` = seconds that pass before the probe pass; `probe_answers` = what the
 upstream answers the probe (`—` = no pass runs); `probes_sent?` = the probes the pass sent.
 
 | description | world | arrange | then | role | rail | probe_answers | probes_sent? | decision? | rail? | reason? | retry_after_s? |
@@ -937,7 +939,7 @@ only (no per-model split, no absolute amounts). The gateway polls the URL named 
 `OPENCODE_USAGE_URL` (no default: unset = no poll) with its own key, every `poll_interval_s` ⚖ (30 s),
 and keeps ONE snapshot as the codex rail does ([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom)):
 a strictly newer valid reading replaces it, and the verdicts are the same — `admit`, `quota-unknown`,
-`quota-stale`, `quota-limited` — read from `rails.opencode.headroom`. A reading older than `max_age_s`
+`quota-stale`, `quota-limited` — read from `rails.opencode.headroom`. The numbers in parentheses here (30 s, 120 s, 0.95) are the [policy-go](../worlds/README.md#policy-worlds) world's; a deployed policy declares its own in that block. A reading older than `max_age_s`
 (120 s ⚖) is stale. A window at or above `ceiling` (0.95 ⚖) limits the account until that window's
 reset. A window whose `status` is not `ok` limits it too ⚖ — the vendor's other status spellings are
 unverified, and `percent` is taken as a number from 0 to 100 (observed as whole numbers).
@@ -953,7 +955,7 @@ The verdict gates the whole Go rail before any Go model is walked, because it is
 every Go model: no ride admits onto a Go cell against an exhausted block. A reading the gateway refuses
 (a window missing, a window outside the profile, a reset already passed) changes nothing: the last
 accepted reading stands. A policy without `rails.opencode.headroom` admits the Go rail as it did before
-this block existed, on the window draw and the latch alone.
+this block existed, on the window draw and the latch alone. An ACCEPTED reading — and only one — sets the two subscription gauges of [GW-METRICS](metrics.md#gw-metrics) for `rail="opencode"`, one series per window, the `window` label being the vendor's name (`rolling`, `weekly`, `monthly` ⚖ — names, not spans, as above): `gateway_subscription_utilization` = `percent / 100`, `gateway_subscription_reset_seconds` = `resetsAt` as unix seconds. A refused reading reaches no gauge; a gateway renders no opencode series of either gauge until a reading is accepted.
 
 The worker's body. Legend: the `world` is [policy-go](../worlds/README.md#policy-worlds) (its
 `rails.opencode.headroom`) except the one `policy-default` row; `usage_url` = whether
@@ -980,14 +982,44 @@ worker's rails: opencode, then openrouter).
 | a headroom block with no usage URL sends no poll: the Go rail answers quota-unknown ⚖ | policy-go · upstream-ok | unset | none | 0 | opencode | defer | — | quota-unknown | 60 |
 
 The poll's request carries `authorization: Bearer <the Go key>`. The answer's fields beyond `usage` are
-never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`),
-with no counter family yet ⚖. Legend: one poll at T0 − 10 answers a `fresh` reading that also carries a
-dummy account identity; `observable` = what is looked at afterwards.
+never read, stored or logged. Each outcome is logged as one line (`opencode usage poll: <outcome>`) and counted on `gateway_opencode_usage_poll_total{outcome}` ([GW-METRICS](metrics.md#gw-metrics)): the family exists only while the policy carries `rails.opencode.headroom` (a policy without the block renders no series, so the silent-poll alert cannot fire on it) and then every outcome renders from 0 ⚖. A poll's outcome is one of ten ⚖ — the codex poll's eleven ([GW-CODEX-USAGE-POLL](openai-responses.md#gw-codex-usage-poll)) less `credential-transient`, since the Go key is a mounted value with no store that can fail to answer: `accepted`; `credential-unresolved` (the Go key mount is empty — the endpoint is never contacted); `upstream-auth` (a 401 or a 403 ⚖: the vendor refuses the request on the usage path); `upstream-http-error` (any other status that is not 200); `upstream-content-type` (a 200 whose body is not JSON: another content type, `application/json` that does not parse, or a body over the poll's 64 KiB bound ⚖ — counted as the codex poll counts it); `quota-invalid` (a 200 JSON answer the gateway refuses as a reading: not an object, no `usage` object, a window missing or outside the profile — unverified for "outside the profile": no row proves it, expected to be refused as `quota-invalid` — a reset already passed); `quota-out-of-order` (a reading not strictly newer than the snapshot's: a second poll in the same clock instant); `quota-time-invalid` (the snapshot refuses the reading's own time stamp — the poll stamps a reading with the gateway's clock, so no vendor answer produces it; its series stays 0 and is kept so that every answer the snapshot can give has a label ⚖); `upstream-unreachable`; `upstream-timeout`. A failed or refused poll leaves the last accepted reading standing. The poll sends `user-agent: agent-gateway/<version> (go-usage)` — `<version>` is the gateway package's own version, as on the Go catalog's reads ([catalog.md §What a fetch sends](catalog.md#what-a-fetch-sends)) — and no `x-opencode-session` ⚖: the request the vendor answered 200 on 2026-11-25 (the operator's probe on #3764) named the gateway and carried no session header. Legend: one poll at T0 − 10 answers a `fresh` reading that also carries a
+dummy account identity; `observable` = what is looked at afterwards; `<version>` in a `value?` cell = the gateway package's own version (`agent_gateway.__version__`), whatever it is in the build under test.
 
 | description | world | observable | value? |
 |---|---|---|---|
 | the poll carries the Go key | policy-go · upstream-ok | poll authorization | Bearer <the Go key> |
 | no identity reaches a log | policy-go · upstream-ok | identity in log lines | none |
+| the poll names the gateway ⚖ | policy-go · upstream-ok | poll user-agent | agent-gateway/<version> (go-usage) |
+| the poll carries no session header ⚖ | policy-go · upstream-ok | poll x-opencode-session | absent |
+
+An accepted reading renders the gauges. Legend: `usage_url`, `polls` as in the table above (`fresh` = rolling 20 %, weekly 46 %, monthly 36 %, resetting at T0 + 18000, T0 + 80000 and T0 + 2000000); `utilization?` / `reset_seconds?` = the `rolling` / `weekly` / `monthly` series of each gauge on `rail="opencode"`, read at T0 (`absent` = no series).
+
+| description | world | usage_url | polls | utilization? | reset_seconds? |
+|---|---|---|---|---|---|
+| an accepted reading renders both gauges per window | policy-go · upstream-ok | set | fresh @ T0 − 10 → accepted | 0.2 / 0.46 / 0.36 | T0 + 18000 / T0 + 80000 / T0 + 2000000 |
+| a refused reading leaves the gauges unchanged ⚖ | policy-go · upstream-ok | set | fresh @ T0 − 20 → accepted; rolling 50 % resets T0 − 15, others fresh @ T0 − 10 → quota-invalid | 0.2 / 0.46 / 0.36 | T0 + 18000 / T0 + 80000 / T0 + 2000000 |
+| no accepted reading, no opencode series | policy-go · upstream-ok | set | none | absent | absent |
+| no headroom block, no opencode series ⚖ | policy-default · upstream-ok | set | none | absent | absent |
+
+A failed poll is counted. Legend: `last_reading` = the snapshot before the poll (`accepted` = one accepted `fresh` reading 5 s earlier; `none`); `answer` = what the fake usage endpoint answers the poll (`/`-separated variants are each offered; `(the key) …` = the endpoint is never contacted: the poll stops at the Go key, the gateway's own mount, `OPENCODE_GO_API_KEY`, which is empty in this row — as §The Go key's `env unset`); `outcome?` = the poll's counted outcome per variant; `verdict?` = the Go rail's headroom verdict after.
+
+| description | world | last_reading | answer | outcome? | verdict? |
+|---|---|---|---|---|---|
+| an upstream 401 or 403 is counted and changes nothing ⚖ | policy-go · upstream-ok | accepted | 401 / 403 | upstream-auth | admit |
+| a 429 or a 500 is an http error, nothing accepted | policy-go · upstream-ok | none | 429 / 500 | upstream-http-error | quota-unknown |
+| an unreachable endpoint and a timeout are told apart | policy-go · upstream-ok | none | connect error / read timeout | upstream-unreachable / upstream-timeout | quota-unknown |
+| a body that is not JSON is refused ⚖ | policy-go · upstream-ok | none | 200 text/html / 200 application/json that is not JSON / 200 application/json of 70 KiB (bound 64 KiB) | upstream-content-type | quota-unknown |
+| a JSON answer that is no reading is refused as a reading, not as a content type ⚖ | policy-go · upstream-ok | none | 200 application/json `[]` / 200 application/json `{"usage": []}` | quota-invalid | quota-unknown |
+| an empty Go key mount is counted, the endpoint never contacted ⚖ | policy-go · upstream-ok | none | (the key) the Go key mount is empty | credential-unresolved | quota-unknown |
+
+The poll counter. Legend: `policies` = the world(s) `GET /metrics` is read under; `usage_url`, `polls` as above (`unset` = `OPENCODE_USAGE_URL` is not set, so no poll ever runs; `—` = none); `series?` = the `gateway_opencode_usage_poll_total` series rendered and their values.
+
+| description | policies | usage_url | polls | series? |
+|---|---|---|---|---|
+| a policy without the headroom block renders no poll family; one with it renders every outcome from 0 ⚖ | policy-default / policy-go | set | — | none / the 10 outcomes, each 0 |
+| the headroom block without a usage URL still renders every outcome from 0: the poll is dark, the family is not ⚖ | policy-go | unset | — | the 10 outcomes, each 0 |
+| each poll adds one to its outcome | policy-go | set | fresh @ T0 − 20 → accepted; monthly absent @ T0 − 10 → quota-invalid | accepted 1 · quota-invalid 1 · the other eight 0 |
+| a second reading in the same instant is counted out of order ⚖ | policy-go | set | fresh @ T0 − 10 → accepted; rolling 50 %, others fresh @ T0 − 10 → quota-out-of-order | accepted 1 · quota-out-of-order 1 · the other eight 0 |
 
 #### Kept across a restart
 
@@ -1040,15 +1072,16 @@ pass sent.
 
 Legend: `arrange`, `roll` as above (`on a :memory: gateway` = the first gateway failed open to the
 memory store; `a new :memory: store` = so does the second); `observed?` = what the second gateway
-shows before any admission — its `capacity_marks` rows after the load and the answer to a worker on
-openrouter, its gauges on the first scrape, or its reload line.
+shows before any admission; `read` = where it is read — its `capacity_marks` rows after the load and
+the answer to a worker on openrouter, its gauges on the first scrape, its reload line, or the answer to
+a worker ask on openrouter.
 
-| description | world | arrange | roll | observed? |
-|---|---|---|---|---|
-| an expired mark is not reloaded | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s | +42 s | capacity_marks holds no row; worker, rail openrouter → dispatch openrouter |
-| the gauges show the reloaded counts on the first scrape ⚖ | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s; worker ride on opencode → upstream-401-key-expired | +10 s | gateway_cells_cooled{rail="openrouter"} 1 · gateway_credentials_rejected{rail="opencode"} 1 |
-| the reload is logged | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s; worker ride on opencode → upstream-401-key-expired | +10 s | capacity: reloaded 3 marks from the store (1 cooled, 0 latched, 1 rejected, 1 holds; 0 dropped as expired) |
-| the memory store keeps no mark ⚖ | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s, on a :memory: gateway | +10 s, a new :memory: store | dispatch openrouter |
+| description | world | arrange | roll | read | observed? |
+|---|---|---|---|---|---|
+| an expired mark is not reloaded | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s | +42 s | the marks table, then a worker ask on openrouter | capacity_marks holds no row; worker, rail openrouter → dispatch openrouter |
+| the gauges show the reloaded counts on the first scrape ⚖ | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s; worker ride on opencode → upstream-401-key-expired | +10 s | the first scrape | gateway_cells_cooled{rail="openrouter"} 1 · gateway_credentials_rejected{rail="opencode"} 1 |
+| the reload is logged | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s; worker ride on opencode → upstream-401-key-expired | +10 s | the reload line | capacity: reloaded 3 marks from the store (1 cooled, 0 latched, 1 rejected, 1 holds; 0 dropped as expired) |
+| the memory store keeps no mark ⚖ | policy-default · upstream-429-reset | worker ride on openrouter → 429, reset T0 + 42 s, on a :memory: gateway | +10 s, a new :memory: store | a worker ask on openrouter | dispatch openrouter |
 
 #### The provider axis (openrouter)
 

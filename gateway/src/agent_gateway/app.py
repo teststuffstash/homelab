@@ -206,8 +206,12 @@ def create_app(
     go_headroom = (Headroom(clock, policy.rails["opencode"].headroom)
                    if "opencode" in policy.rails and policy.rails["opencode"].headroom is not None else None)
     sessions.go_headroom = go_headroom
-    go_poll = (GoUsagePoll(go_headroom, client, settings.opencode_usage_url, settings.opencode_go_api_key, clock)
+    go_poll = (GoUsagePoll(go_headroom, client, settings.opencode_usage_url, settings.opencode_go_api_key, clock, m)
                if go_headroom is not None else None)
+    m.bind_go_rail(go_headroom is not None)  # the Go poll counter family exists only under the headroom block
+    if go_headroom is not None:
+        # GW-SESSIONS-CAPACITY §Go account headroom: an ACCEPTED reading renders gateway_subscription_*{rail="opencode"}.
+        go_headroom.on_accept = lambda snapshot: m.subscription_report("opencode", snapshot.windows)
     if go_poll is not None and not go_poll.enabled:
         log.warning("opencode usage poll dark: OPENCODE_USAGE_URL unset — the Go rail answers quota-unknown")
 

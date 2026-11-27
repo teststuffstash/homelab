@@ -480,7 +480,7 @@ SESSION_LABEL_ROWS = [
     pytest.param(OK, DRIVEN, "gateway_requests_total", "status", STATUS_PATTERN, id="status is a numeric HTTP status"),
     pytest.param(OK, DRIVEN, "gateway_tokens_total", "class", "in, cache_read, cache_write, out", id="class is one of the four usage classes"),
     pytest.param(OK, DRIVEN, "gateway_requests_total", "traffic", "real, synthetic, none", id="traffic is real, synthetic or none"),
-    pytest.param(OK, DRIVEN, "gateway_subscription_utilization", "window", "5h, 7d, other", id="window is 5h or 7d"),
+    pytest.param(OK, DRIVEN, "gateway_subscription_utilization", "window", "5h, 7d, rolling, weekly, monthly, other", id="window is a subscription window name"),
 ]
 
 
@@ -563,15 +563,15 @@ async def test_no_unbounded_label_ever(fx, world, event, absent, expected_found)
 
 # -- Every family is declared: description | world | families | undeclared? -----------------------
 DECLARED_ROWS = [
-    pytest.param(BASE, "the schema's, less the codex rail's", "none", id="every family renders HELP and TYPE, zeros included"),
+    pytest.param(BASE, "the schema's, less the codex rail's and the Go usage poll's", "none", id="every family renders HELP and TYPE, zeros included"),
 ]
 
 
 @pytest.mark.parametrize(("world", "families", "expected_undeclared"), DECLARED_ROWS)
 async def test_every_family_is_declared(fx, world, families, expected_undeclared):
     _world(world, "none")
-    assert families == "the schema's, less the codex rail's"
-    wanted = [f for f in SCHEMA["families"] if not f.startswith("gateway_codex_")]
+    assert families == "the schema's, less the codex rail's and the Go usage poll's"
+    wanted = [f for f in SCHEMA["families"] if not f.startswith("gateway_codex_") and f != "gateway_opencode_usage_poll_total"]
     with when(f"GET /metrics on a fresh gateway: HELP and TYPE for {len(wanted)} families ({families})"):
         text = await _metrics(fx.gw)
         attach_json("HELP/TYPE lines", [line for line in text.splitlines() if line.startswith(("# HELP gateway_", "# TYPE gateway_"))])
