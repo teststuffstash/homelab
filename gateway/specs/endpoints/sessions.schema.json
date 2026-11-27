@@ -341,7 +341,8 @@
         "model",
         "env_keys",
         "pull_url",
-        "context_tokens"
+        "context_tokens",
+        "rail_choice"
       ],
       "description": "the answer to a body carrying `bind`: no token, no env values \u2014 the bound pod pulls them",
       "properties": {
@@ -353,9 +354,8 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "expires_at",
-        "rail_choice"
-      ],
+            "expires_at"
+          ],
           "properties": {
             "id": {
               "$ref": "#/$defs/session_id"
