@@ -385,6 +385,7 @@ def lift_row(spec: Spec, fam: Family, row: Row, tmp: Path) -> Lifted:
 
     for n, commits in viewed.items():
         _serve_parents(groups, rec_dir, repo, n, commits, out, lifted_reads)
+    _serve_ci(groups, rec_dir, repo, out, lifted_reads)
 
     env: dict[str, str] = {}
     for entry in env_entries(fam, row):
@@ -446,6 +447,33 @@ def _serve_parents(groups: dict, rec_dir: Path, repo: str, n: str, commits: list
     name = f"lifted.parents.{n}.json"
     (out / name).write_text(json.dumps(listed, ensure_ascii=False) + "\n", "utf-8")
     lifted_reads.append({"argv": ["api", f"repos/{repo}/pulls/{n}/commits?per_page=100"], "file": name})
+
+
+def _serve_ci(groups: dict, rec_dir: Path, repo: str, out: Path, lifted_reads: list[dict]) -> None:
+    """The ci read (updater.md SCAN-UPDATER-PICK) of every pull request of the lifted snapshot that is armed ∧ BEHIND and
+    not CHANGES_REQUESTED, when the family answers no check-runs read for that head: a copy of a recorded check-runs
+    answer addressed to the family's head SHA, its `ci` run `completed` / `success` (the leg then finds no red)."""
+    snapshot = next((r for r in lifted_reads if r["argv"][:2] == ["pr", "list"]), None)
+    if snapshot is None:
+        return
+    group = groups.get(("api", f"repos/{repo}/commits/{SHA}/check-runs?per_page=100"))
+    served = {tuple(r["argv"]) for r in lifted_reads}
+    for pr in json.loads((out / snapshot["file"]).read_text("utf-8")):
+        if not (pr.get("autoMergeRequest") is not None and pr.get("mergeStateStatus") == "BEHIND" and pr.get("reviewDecision") != "CHANGES_REQUESTED"):
+            continue
+        argv = ("api", f"repos/{repo}/commits/{pr['headRefOid']}/check-runs?per_page=100")
+        if argv in served:
+            continue
+        if group is None:
+            raise NotLiftable("the recorded world holds no check-runs read (commits/<sha>/check-runs?per_page=100) to lift the ci read over")
+        body = copy.deepcopy(next(a for a in group.answers(rec_dir) if any(r["name"] == "ci" for r in a["check_runs"])))  # type: ignore[union-attr, index]
+        for run in body["check_runs"]:
+            run["head_sha"] = pr["headRefOid"]
+            if run["name"] == "ci":
+                run["status"], run["conclusion"] = "completed", "success"
+        name = f"lifted.ci.{pr['number']}.json"
+        (out / name).write_text(json.dumps(body, ensure_ascii=False) + "\n", "utf-8")
+        lifted_reads.append({"argv": list(argv), "file": name})
 
 
 def _failure(argv: Sequence[str], env: dict[str, str], entry: str) -> dict:

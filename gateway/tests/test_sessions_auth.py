@@ -443,14 +443,14 @@ def test_the_policy_shape(world, policy, expected_load):
 
 # -- what the log says -----------------------------------------------------------------------------------------
 LOG_ROWS = [
-    pytest.param("policy-enforce", "the platform loop admits", f"caller={LOOP}", "the presented token", id="a dispatch line names the caller, never its token"),
-    pytest.param("policy-default", "POST /sessions with no bearer", "exactly one line: control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe", DASH,
+    pytest.param("policy-enforce", "the platform loop admits", DASH, f"caller={LOOP}", "the presented token", id="a dispatch line names the caller, never its token"),
+    pytest.param("policy-default", "POST /sessions with no bearer", "1", "control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe", DASH,
                  id="an unauthenticated call is one line naming the route and the reason"),
 ]
 
 
-@pytest.mark.parametrize(("world", "sequence", "expected_holds", "expected_never_holds"), LOG_ROWS)
-async def test_what_the_log_says(gws, caplog, world, sequence, expected_holds, expected_never_holds):
+@pytest.mark.parametrize(("world", "sequence", "expected_lines", "expected_holds", "expected_never_holds"), LOG_ROWS)
+async def test_what_the_log_says(gws, caplog, world, sequence, expected_lines, expected_holds, expected_never_holds):
     enter_world(world)
     inputs(sequence=sequence)
     gw = gws[world]
@@ -466,6 +466,7 @@ async def test_what_the_log_says(gws, caplog, world, sequence, expected_holds, e
         never = "the presented token" if not leaked else "the presented token IS in a line"
     else:
         lines = [rec.getMessage() for rec in caplog.records if rec.name == "gateway.control"]
-        holds = ("exactly one line: " + lines[0]) if len(lines) == 1 else f"{len(lines)} control-plane lines: {lines}"
+        holds = expected_holds if any(expected_holds in line for line in lines) else f"control-plane lines: {lines}"
         never = DASH
-    expect({"holds": holds, "never_holds": never}, holds=expected_holds, never_holds=expected_never_holds)
+    count = str(len(lines)) if world != "policy-enforce" else DASH
+    expect({"lines": count, "holds": holds, "never_holds": never}, lines=expected_lines, holds=expected_holds, never_holds=expected_never_holds)

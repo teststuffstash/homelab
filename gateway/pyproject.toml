@@ -42,6 +42,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "rule(id): the spec requirement this decision table proves (GW-…); fails at collection when specs/ has no such heading",
+    "real_walk: the test walks the DERIVED tier lists only (GW-SESSIONS-ADMIT) — no stand-in derivation from the policy's lists",
 ]
 
 [tool.ruff]

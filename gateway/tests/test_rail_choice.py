@@ -126,25 +126,27 @@ def _choice_cell(doc: dict) -> str:
 
 
 CHOICE_ROWS = [
-    pytest.param("nothing", "light", "dispatch", "opencode", "MG", "opencode over openrouter: price", 'rail="opencode",reason="price" 1',
+    pytest.param("nothing", "light", "dispatch", "opencode", "MG", "opencode over openrouter: price", 'rail="opencode",reason="price" 1', "—", "—",
                  id="Go wins with free headroom and an equal clean rate ⚖"),
-    pytest.param(NEAR_SHARE, "light", "dispatch", "openrouter", "M", "openrouter over opencode: headroom", 'rail="openrouter",reason="headroom" 1',
+    pytest.param(NEAR_SHARE, "light", "dispatch", "openrouter", "M", "openrouter over opencode: headroom", 'rail="openrouter",reason="headroom" 1', "—", "—",
                  id="openrouter wins when Go's window is near its share ⚖"),
-    pytest.param(LOW_RATE, "light", "dispatch", "openrouter", "M", "openrouter over opencode: clean-rate", 'rail="openrouter",reason="clean-rate" 1',
+    pytest.param(LOW_RATE, "light", "dispatch", "openrouter", "M", "openrouter over opencode: clean-rate", 'rail="openrouter",reason="clean-rate" 1', "—", "—",
                  id="openrouter wins when Go's clean rate is lower ⚖"),
-    pytest.param(TRIMMED, "light", "dispatch", "opencode", "MG", "opencode over openrouter: no-eligible-endpoint", 'rail="opencode",reason="no-eligible-endpoint" 1',
+    pytest.param(TRIMMED, "light", "dispatch", "opencode", "MG", "opencode over openrouter: no-eligible-endpoint", 'rail="opencode",reason="no-eligible-endpoint" 1', "—", "—",
                  id="no eligible openrouter endpoint: Go ⚖"),
-    pytest.param(ALL_CANDIDATE, "light", "dispatch", "opencode", "MG", "opencode over openrouter: no-eligible-endpoint", 'rail="opencode",reason="no-eligible-endpoint" 1',
+    pytest.param(ALL_CANDIDATE, "light", "dispatch", "opencode", "MG", "opencode over openrouter: no-eligible-endpoint", 'rail="opencode",reason="no-eligible-endpoint" 1', "—", "—",
                  id="no openrouter cell has passed the entry canary yet: Go ⚖"),
-    pytest.param(BOTH_HELD, "light", "defer", "none", "none", "none", "none",
+    pytest.param(BOTH_HELD, "light", "defer", "none", "none", "none", "none", "no-eligible-provider", "60",
                  id="both twins held: no choice, the walk defers with the hold that lifts first ⚖"),
-    pytest.param("nothing", "standard", "dispatch", "opencode", "MG", "null", "none", id="no twin at the tier: the role's order, no choice"),
+    pytest.param("nothing", "standard", "dispatch", "opencode", "MG", "null", "none", "—", "—", id="no twin at the tier: the role's order, no choice"),
 ]
 
 
-@pytest.mark.parametrize(("arrange", "tier", "expected_decision", "expected_rail", "expected_model", "expected_rail_choice", "expected_counted"), CHOICE_ROWS,
+@pytest.mark.parametrize(("arrange", "tier", "expected_decision", "expected_rail", "expected_model", "expected_rail_choice", "expected_counted",
+                          "expected_reason", "expected_retry_after_s"), CHOICE_ROWS,
                          ids=[p.id for p in CHOICE_ROWS])
-async def test_rail_choice(gw, app, store, upstreams, arrange, tier, expected_decision, expected_rail, expected_model, expected_rail_choice, expected_counted):
+async def test_rail_choice(gw, app, store, upstreams, arrange, tier, expected_decision, expected_rail, expected_model, expected_rail_choice, expected_counted,
+                           expected_reason, expected_retry_after_s):
     world(upstream="upstream-ok", note=f"{WORLD}; {arrange}")
     task = "homelab-2743-choice"
     with given(f"arrange = {arrange}; Go's promise $0.075/M vs deepinfra's $0.42/M at the prior rate"):
@@ -154,15 +156,16 @@ async def test_rail_choice(gw, app, store, upstreams, arrange, tier, expected_de
         r = await gw.post("/sessions", json=body)
     doc = r.json()
     short = {M: "M", MG: "MG"}
-    verdict(f"decision = {expected_decision} · rail = {expected_rail} · model = {expected_model} · rail_choice = {expected_rail_choice} · counted = {expected_counted}",
+    verdict(f"decision = {expected_decision} · rail = {expected_rail} · model = {expected_model} · rail_choice = {expected_rail_choice} · counted = {expected_counted}"
+            f" · reason = {expected_reason} · retry_after_s = {expected_retry_after_s}",
             expected_decision={"expected": expected_decision, "actual": doc.get("decision")},
             expected_rail={"expected": expected_rail, "actual": doc.get("rail") or "none"},
             expected_model={"expected": expected_model, "actual": short.get(doc.get("model"), doc.get("model") or "none")},
             expected_rail_choice={"expected": expected_rail_choice, "actual": _choice_cell(doc)},
             expected_counted={"expected": expected_counted, "actual": await _choice_series(gw)},
             status={"expected": 200, "actual": r.status_code},
-            defer={"expected": {"reason": "no-eligible-provider", "retry_after_s": 60} if expected_decision == "defer" else {"reason": None, "retry_after_s": None},
-                   "actual": {k: doc.get(k) for k in ("reason", "retry_after_s")}},
+            expected_reason={"expected": expected_reason, "actual": doc.get("reason") or "—"},
+            expected_retry_after_s={"expected": expected_retry_after_s, "actual": "—" if doc.get("retry_after_s") is None else str(doc["retry_after_s"])},
             arrange={"actual": arrange}, tier={"actual": tier})
 
 

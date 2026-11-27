@@ -211,6 +211,14 @@ budget class — the rest of the ADR-096 ladder is a gap, rendered as rows, not 
 transport facts the gateway sees FIRST-HAND (a 429, a 401/403, a stream's end) are its own and are
 [GW-SESSIONS-CAPACITY](#gw-sessions-capacity)'s rows; a ride's outcome is the consumer's and is not read here. The
 caller never polls `/anthropic-limit` / `/opencode-limit`: the defer IS the limit answer.
+⚖ **A tier's list is the derived one** ([GW-MODEL-TIERS §The derivation at a refresh](catalog.md#the-derivation-at-a-refresh);
+operator ruling 2026-11-12, "2 defer"): the walk reads each rail's list from the gateway's last good
+derivation, never from the policy's `rails.<rail>.models`; everything else about the walk — the order,
+the overrides, the harness rule, `prefer`, the rail choice — is as above. A rail with **no derivation** is
+held — the typed defer `tiers-underived`, `retry_after_s` the policy's `defer_retry_s` — and the walk moves to
+the role's next rail; every rail held answers that defer, so a gateway on an empty store defers every session
+until its first derivation lands. A tier a derived rail holds no list for is passed over on that rail. The last
+good derivation is stored and a restart on a file store dispatches from it at once.
 
 #### The policy walk
 
@@ -228,6 +236,64 @@ sessions per rail as `anthropic/opencode/openrouter`; `credential` = how the sta
 | the stack's anthropic ref does not resolve, the walk continues ⚖ | policy-default | platform | reviewer | 0/0/0 | anthropic_ref definitive miss | dispatch | opencode | opencode-go/claude-haiku-5-5 | — |
 | the only allowed rail's credential does not resolve | policy-default | platform | prober | 0/0/0 | anthropic_ref definitive miss | defer | — | — | credential-unresolved |
 | an unknown stack | policy-default | nope | worker | 0/0/0 | all resolve | defer | — | — | stack-unknown |
+
+#### Where a tier's list comes from
+
+**World: [policy-default](../worlds/README.md#policy-worlds)**, the task `homelab-2588-r1`, no rail holds a session,
+the stack's refs all resolve. Legend: `derivation` = what the gateway's derivation holds
+(`O` = `opencode`, `R` = `openrouter`; `none` = no derivation on any rail); the policy's lists would answer
+`opencode-go/deepseek-v4.1-flash` for the worker's `standard` tier.
+
+| description | world | derivation | role | tier | decision? | rail? | model? | reason? | retry_after_s? |
+|---|---|---|---|---|---|---|---|---|---|
+| the walk reads the derived list, not the policy's ⚖ | policy-default | O and R derived, O standard `opencode-go/claude-haiku-5-5` | worker | standard | dispatch | opencode | opencode-go/claude-haiku-5-5 | — | — |
+| no derivation anywhere: every session defers ⚖ | policy-default | none | worker | standard | defer | — | — | tiers-underived | 60 |
+| a rail with no derivation is held, the next rail serves ⚖ | policy-default | R derived, R standard `deepseek/deepseek-v4.1-flash`, none for O | worker | standard | dispatch | openrouter | deepseek/deepseek-v4.1-flash | — | — |
+| an undecided tier walks its last derived list ⚖ | policy-default | O derived, light undecided, its kept list `opencode-go/claude-haiku-5-5` | worker | light | dispatch | opencode | opencode-go/claude-haiku-5-5 | — | — |
+| a tier never derived on a derived rail is empty there ⚖ | policy-default | O derived with an empty heavy list, R derived, R heavy `deepseek/deepseek-v4.1-flash` | worker | heavy | dispatch | openrouter | deepseek/deepseek-v4.1-flash | — | — |
+
+⚑ gap: the issue's sixth proposed row (an explicit `model` outside the derived lists) has no input — a
+`POST /sessions` body names no model; the explicit overrides are `tier`, `harness`, `rail` and `prefer`, whose rows
+are unchanged and read the derived lists.
+
+#### A restart keeps the derivation
+
+**World: [policy-default](../worlds/README.md#policy-worlds)**, a file store; the derivation at T0 is stored; the
+new gateway starts on that file (a pod roll) before any refresh.
+
+`store_state` names what the T0 derivation holds: on `opencode` the `standard` list leads with
+`opencode-go/claude-haiku-5-5`, on `openrouter` the `standard` list is `deepseek/deepseek-v4.1-flash`; `empty` holds none.
+
+| description | world | store_state | role | tier | decision? | model? | reason? |
+|---|---|---|---|---|---|---|---|
+| a restart on a file store dispatches from the stored derivation ⚖ | policy-default | a derivation at T0 (opencode standard `opencode-go/claude-haiku-5-5`) | worker | standard | dispatch | opencode-go/claude-haiku-5-5 | — |
+| a restart on an empty store defers until the first derivation ⚖ | policy-default | empty | worker | standard | defer | — | tiers-underived |
+
+The first derivation does not wait out the snapshot's interval: a restart that holds no derivation refreshes at
+once, even on an OpenRouter snapshot younger than `refresh_s` (the leg that carries the benchmark rows) (else every session defers for up to `refresh_s`).
+
+| description | world | store_state | openrouter_delay_s? |
+|---|---|---|---|
+| a restart with no derivation and a young OpenRouter snapshot refreshes at once ⚖ | policy-default | a young snapshot, no derivation | 0 |
+| a restart with a derivation and a young OpenRouter snapshot waits out the interval | policy-default | a young snapshot, a derivation | more than 0 and at most 21600 (`refresh_s`) |
+
+The verdict step and attachment of each row carry the seconds compared: the delay the second gateway returned and the
+bound it is checked against.
+
+A boot refresh that does not come back `ok` still derives from the stored snapshots, and while no derivation exists the loop retries after a short wait (60 s), not `refresh_s`.
+
+| description | world | store_state | boot_refresh | derivation? | next_sleep_s? |
+|---|---|---|---|---|---|
+| a failed boot refresh derives from the stored snapshot, then waits the interval ⚖ | policy-default | no derivation; an OpenRouter snapshot with benched rows | fetch-failed | exists | 21600 |
+| a failed boot refresh that cannot derive retries on the short wait ⚖ | policy-default | no derivation; an OpenRouter snapshot with no benched rows | fetch-failed | none | 60 |
+
+#### The policy without the priced rails' lists
+
+| description | policy | load? |
+|---|---|---|
+| a policy with the lists loads; they order nothing | policy-default | ok |
+| a policy without `rails.opencode.models` and `rails.openrouter.models` loads ⚖ | policy-default without `rails.opencode.models` and `rails.openrouter.models` | ok |
+| a policy without `rails.anthropic.models` is refused ⚖ | policy-default without `rails.anthropic.models` | refused, naming rails.anthropic.models |
 
 #### Explicit tier, harness and rail
 
@@ -1835,14 +1901,13 @@ deploy-revert chain's judge step (`agents/coordinator/deploy-revert-argo.yaml`, 
 
 #### What the log says
 
-Legend: `holds?` = a fragment some log line of the call holds — a cell reading `exactly one line: <line>`
-claims more: the call wrote exactly one control-plane line, and that line is `<line>`, whole;
-`never_holds?` = a value no line holds.
+Legend: `lines?` = how many log lines of the call name the route (`—` = not counted); `holds?` = a
+fragment some log line of the call holds; `never_holds?` = a value no line holds.
 
-| description | world | sequence | holds? | never_holds? |
-|---|---|---|---|---|
-| a dispatch line names the caller, never its token | policy-enforce | the platform loop admits | caller=system:serviceaccount:platform-agents:agentstack-loop | the presented token |
-| an unauthenticated call is one line naming the route and the reason | policy-default | POST /sessions with no bearer | exactly one line: control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe | — |
+| description | world | sequence | lines? | holds? | never_holds? |
+|---|---|---|---|---|---|
+| a dispatch line names the caller, never its token | policy-enforce | the platform loop admits | — | caller=system:serviceaccount:platform-agents:agentstack-loop | the presented token |
+| an unauthenticated call is one line naming the route and the reason | policy-default | POST /sessions with no bearer | 1 | control-plane: admit unauthenticated (absent) — ADMITTED under control_plane_auth=observe | — |
 
 #### Named gaps — auth
 

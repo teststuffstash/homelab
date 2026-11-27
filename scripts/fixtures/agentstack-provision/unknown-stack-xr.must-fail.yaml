@@ -1,0 +1,12 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: a stack with no provision bounds in the Composition.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: newstack--unknown-stack
+spec:
+  repos:
+    - name: newstack
+      provision:
+        - name: x
+          buckets:
+            - { alias: newstack-x, maxSizeMi: 64 }

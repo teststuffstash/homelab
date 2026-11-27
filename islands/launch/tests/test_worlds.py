@@ -62,11 +62,11 @@ def test_error_world_bites_on_a_wrong_code_or_status() -> None:
     assert validate(wrong_status) != []
 
 
-def test_supplier_bound_part_is_still_unsatisfiable() -> None:
-    """Tripwire for the supplier defect worlds.py corrects: when this fails the schema is fixed."""
+def test_supplier_bound_part_requires_only_what_it_declares() -> None:
+    """The supplier's bound part is satisfiable: `rail_choice` is required beside `session`, not in it."""
     part = supplier_schema()["post"]["dispatch_bound"]
-    assert "rail_choice" in part["properties"]["session"]["required"]
-    assert "rail_choice" not in part["properties"]["session"]["properties"]
+    assert "rail_choice" in part["required"]
+    assert "rail_choice" not in part["properties"]["session"]["required"]
     jsonschema.Draft202012Validator.check_schema(supplier_schema())
 
 

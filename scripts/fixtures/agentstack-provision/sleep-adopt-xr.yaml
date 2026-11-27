@@ -1,0 +1,55 @@
+# agentstack-provision-test fixture: the sleep stack's three legacy Workspaces (ADR-169), see
+# oracle-adopt-xr.yaml for the contract. sleep-tracking's keys were imported, so their secrets were
+# never in state and the entry writes no key outputs.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: sleep--sleep-adopt
+spec:
+  repos:
+    - name: sleep-tracking
+      provision:
+        - name: specs
+          secretName: sleep-specs-garage-conn
+          adopt: { workspace: sleep-specs-garage, mode: manage }
+          buckets:
+            - { alias: sleep-specs, maxSizeMi: 1024, website: true, idOutput: bucket_id }
+          keys:
+            - name: specs_writer
+              garageName: sleep-specs-writer
+              idOutput: specs_s3_access_key_id
+              secretOutput: specs_s3_secret_key
+              grants: [{ bucket: sleep-specs, access: rw, tfName: writer }]
+            - name: specs_reader
+              garageName: sleep-specs-reader
+              outputs: false
+              grants: [{ bucket: sleep-specs, access: ro, tfName: reader }]
+        - name: garage
+          secretName: sleep-tracking-garage-conn
+          adopt: { workspace: sleep-tracking-garage, mode: manage }
+          buckets:
+            - { alias: sleep-band, maxSizeMi: 5120, idOutput: sleep_band_bucket_id }
+            - { alias: sleep-db, maxSizeMi: 2048, idOutput: sleep_db_bucket_id }
+          keys:
+            - { name: band_writer, garageName: sleep-band-writer, outputs: false, grants: [{ bucket: sleep-band, access: rw, tfName: band_writer_write }] }
+            - { name: ingester, garageName: sleep-ingester, outputs: false, grants: [{ bucket: sleep-band, access: ro, tfName: ingester_read }] }
+            - { name: ingester_rw, garageName: sleep-ingester-rw, outputs: false, grants: [{ bucket: sleep-db, access: rw, tfName: ingester_rw_readwrite }] }
+    - name: snore-recorder
+      provision:
+        - name: garage
+          secretName: snore-recorder-garage-conn
+          adopt: { workspace: snore-recorder-garage, mode: manage }
+          buckets:
+            - { alias: sleep-snore, maxSizeMi: 5120, idOutput: bucket_id }
+          keys:
+            - name: snore_writer
+              garageName: sleep-snore-writer
+              idOutput: snore_s3_access_key_id
+              secretOutput: snore_s3_secret_key
+              grants: [{ bucket: sleep-snore, access: wo, tfName: writer }]
+          externalGrants:
+            - { bucket: sleep-snore, accessKeyId: GK000000000000000000000001, access: ro, tfName: ingester_read }
+          infisical:
+            publish:
+              - { name: SNORE_S3_ACCESS_KEY_ID, keyId: snore_writer, tfName: snore_akid }
+              - { name: SNORE_S3_SECRET_KEY, keySecret: snore_writer, tfName: snore_sk }

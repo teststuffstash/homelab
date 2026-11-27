@@ -33,8 +33,10 @@ skips and takes).
 
 Every policy world also carries the `tiers` block of the deployed policy (`score: intelligence`,
 bands 0.9 / 0.75 / 0.5, cap 3 — [GW-MODEL-TIERS](../endpoints/catalog.md#gw-model-tiers)) so one
-loader shape holds everywhere, but its LISTS stay the fixture ids above: the derivation applies to
-the deployed policy only ⚖.
+loader shape holds everywhere, but its LISTS stay the fixture ids above and order nothing on the priced
+rails: each policy world's store starts with the derivation the fixture seeds — the fixture ids above, stood in
+for the gateway's derivation on every rail (`opencode`, `openrouter`, and the declared `anthropic` / `codex`
+candidates) — and a row's `derivation` / `store_state` cell overrides it ⚖.
 
 ## Where worlds come from
 
@@ -202,9 +204,46 @@ builds the snapshot, and every cell enters as `candidate`.
 | `rankings-undated` | ranking rows without `date` | parse-failed |
 | `benchmarks-empty` | an empty AA list | implausible (no candidate) |
 | `benchmarks-no-family` | the AA list without the `nvidia/nemotron-3-ultra-550b-a55b` family row | a `:free` id whose family does not bench is no candidate |
+| `ranking-without-one` | both rankings without the `xiaomi/mimo-v2.5` rows (`UNRANKED_ID`): a benched id outside the ranking — the fixtures are not edited, the fake filters | the benched-set rows (7 candidates of 12 ranked, 8 benched) |
+| `benchmarks-malformed` | the AA answer with `data` an object, not a list (rankings as usual) | the benched set stands on a parse failure |
 | `endpoints_behaviour[model]` = `endpoints-503` / `endpoints-malformed` | 503 / a row without the fields the parser reads, for that model | the unreadable-candidate rows |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime` | the fixture with its first endpoint's `uptime_last_1d` set to `null` (what the vendor answers for a fresh or idle endpoint — read live 2026-10-20 under `anthropic/claude-opus-5`) | the no-uptime row |
 | `endpoints_behaviour[model]` = `endpoints-null-uptime@<tag>` | the same, on the endpoint whose `tag` is named (`endpoints-null-uptime@inference-net/fp8`: the one M endpoint every harness could otherwise pin) | the floors-verdict rows (`pinnable` / `floor`) |
+
+## The tier derivation world
+
+[GW-MODEL-TIERS §The derivation at a refresh](../endpoints/catalog.md#the-derivation-at-a-refresh) runs
+over the store's evidence. No existing world carries both the Go catalog's snapshots and the benched rows
+a ⚖ choice, so the world is composed two ways, and each row says which:
+
+- **Real legs** — the `policy-default` world's seeded Go catalog (`catalog-ok` + `docs-ok`, T0 =
+  Fri 2027-01-15 08:00:00Z) plus the [openrouter-catalog world](#the-openrouter-catalog-world)'s fake MCP
+  and endpoints, refreshed through `app.state.orcatalog.refresh()` / `app.state.catalog.refresh_source()`:
+  the trigger, the failed-input and the restart rows. With the fixtures' benched rows only `claude/opus`
+  and `opencode-go/deepseek-v4.1-flash` have a score on a rail the policy declares, and no cell has passed
+  the canary (every openrouter price null).
+- **A hand-written openrouter view** — the derivation's `or_view` input replaced by a fixed document,
+  the Go catalog still the real seeded snapshots: benched set `deepseek/deepseek-v4-flash` 50,
+  `deepseek/deepseek-v4.1-flash` 40, `z-ai/glm-5.3-flash` 30, the aliases `claude/fxa` … `claude/fxd`
+  20 / 40 / 60 / 80 (`anthropic/claude-fx<a-d>-1.0`) — no row for `claude/fxe` — and one selected
+  endpoint per openrouter model (`deepseek/deepseek-v4-flash` out $0.3/M, `deepseek/deepseek-v4.1-flash`
+  $0.2, `z-ai/glm-5.3-flash` $0.1; uptime 100, no rides). The legs' own refresh hook is the call under
+  test (`on_refresh`), the leg's fetch is not. The derivation rows' policy lists are edits to
+  `policy-default`: `rails.openrouter.models` heavy `deepseek/deepseek-v4.1-flash`, standard
+  `deepseek/deepseek-v4.1-flash, deepseek/deepseek-v4-flash`, light `deepseek/deepseek-v4-flash,
+  deepseek/deepseek-v4.1-flash`; for the subscription row and the manual rows `rails.anthropic.models`
+  light `claude/fxa, claude/fxb`, standard `claude/fxc`, heavy `claude/fxd` (the manual rows add
+  `claude/fxe`).
+
+The manual file is a tmp file the settings' `benchmarks_manual_path` names (`GATEWAY_BENCHMARKS_MANUAL`).
+
+The rulings rows ([GW-MODEL-TIERS §The rulings](../endpoints/catalog.md#the-rulings)) run one good refresh
+of the hand-written view with `rails.anthropic.models` naming the four aliases and three more openrouter
+models beside the three above: `z-ai/glm-5.2` (benched, coding 70, no `intelligence`; out $0.05/M),
+`fx/unbenched` (no benched row; out $0.01/M) and `fx/unpriced` (benched, intelligence 49; no selected
+endpoint). The evidence-age rows ([§The evidence age](../endpoints/catalog.md#the-evidence-age)) set the
+view's `sources.benchmarks.as_of` (or drop it) and its `fetched_at`; their failing refresh is the real
+OpenRouter leg against the fake MCP answering 503.
 
 ## The fake TokenReview (`StaticTokenReviews`)
 

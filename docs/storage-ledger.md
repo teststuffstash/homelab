@@ -233,6 +233,14 @@ per pool VM, `argocd/resources/node-fstrim/`, with the reclaim pushed to the pus
 alerts on the belt itself (below). It went in at 78.72% and took the pool to **62.99%** on its
 first run: wk-02 returned 236 GiB, wk-01 76 GiB, cp-01 and wk-03 36 GiB each. Metering the *pool*
 is still open — nothing outside pve can see it.
+
+**Metal (FU-093).** Metal nodes were left out of the CronJob by design. nx-01 joined on 2026-11-23
+(`fstrim-nx-01`, twice daily, #3708): its EPHEMERAL BC711 had **zero discards in 44 days of uptime**
+and stalled in flash GC under ARC-runner load — `NodeDiskIOSaturation` daily for 14 days. One trim
+took busy write latency from 614 ms to 103 ms and busy throughput from 79 to 376 MB/s. The other
+metal SSDs also showed zero discards since boot on 2026-11-22 (wk-metal-02 sda, wk-metal-03 sda,
+m70s nvme0n1/nvme1n1, hp-01 nvme1n1 and sda/sdb, wk-metal-04 sdb–e). The rule: a node joins when
+its own disk shows the signature (high `aqu` with zero discards), one CronJob each, not blanket.
 Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
 to 80 (LVM warned it was disabled; it is a belt that can only consume free VG extents, not
 capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:

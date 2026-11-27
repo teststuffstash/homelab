@@ -65,6 +65,7 @@ MCP_URL = "https://mcp.openrouter.ai/mcp"
 USER_AGENT = f"agent-gateway/{__version__} (openrouter-catalog)"
 FETCH_TIMEOUT_S = 30.0
 MIN_KEPT_SHARE = 0.5  # ⚖ the Go catalog's plausibility rule, kept
+PENDING_RETRY_S = 60.0  # ⚖ while no derivation exists, a failed refresh retries on this short wait, not refresh_s (GW-SESSIONS-ADMIT)
 DAY_S = 86400.0
 _STAMP = re.compile(r"-\d{8}(?=:|$)")  # a dated permaslug → the model id (the old proxy's _CAP_ID_RE)
 _VARIANT = re.compile(r":[a-z0-9-]+$")
@@ -138,7 +139,8 @@ def latest_week(rows: list, top_n: int) -> dict[str, int]:
 
 
 def benched(rows: list) -> dict[str, dict]:
-    """`{model id: {intelligence, coding, agentic}}` from the AA benchmark rows."""
+    """`{model id: {intelligence, coding, agentic}}` from the AA benchmark rows — EVERY row, ranked or
+    not (the snapshot keeps the whole set; a null index stays null)."""
     if not isinstance(rows, list):
         raise ParseError("benchmarks: `data` is not a list")
     out: dict[str, dict] = {}
@@ -176,6 +178,8 @@ class OpenRouterCatalog:
         self.mcp_url = mcp_url
         self.clock = clock
         self.refresh_s = refresh_s
+        self.on_refresh = None  # called after every good refresh (GW-MODEL-TIERS: the derivation runs)
+        self.derivation_pending = None  # () -> bool: no derivation is stored yet — a restart refreshes at once instead of serving the snapshot (GW-SESSIONS-ADMIT)
         rail = policy.rails.get("openrouter")
         self.catalog = rail.catalog if rail else None
         self.canary = rail.canary if rail else None
@@ -206,6 +210,11 @@ class OpenRouterCatalog:
             outcome = "fetch-failed"
         self.refreshes[outcome] += 1
         self.last_outcome = outcome
+        if outcome == "ok" and self.on_refresh is not None:
+            try:
+                self.on_refresh()
+            except Exception:  # noqa: BLE001 — a hook never fails the refresh
+                log.exception("orcatalog: the post-refresh hook raised")
         return outcome
 
     async def _refresh(self, now: float) -> str:
@@ -267,7 +276,7 @@ class OpenRouterCatalog:
         sources = {"ranking": {"slices": list(cat.ranking_slices), "top_n": cat.ranking_top_n, "ranked": len(ranked)},
                    "benchmarks": {"source": "artificial-analysis", "as_of": (bench_doc.get("meta") or {}).get("as_of"), "rows": len(aa)},
                    "candidates": len(candidates), "endpoint_failures": failures}
-        self.store.snapshot_save(SNAPSHOT_SOURCE, now, {"models": models, "sources": sources})
+        self.store.snapshot_save(SNAPSHOT_SOURCE, now, {"models": models, "sources": sources, "benchmarks": aa})
         self.sources = sources
         self.snapshot.reload()
         entrants = self.store.cells_sync([(mid, e["slug"]) for mid, m in models.items() for e in m["endpoints"]], now)
@@ -286,6 +295,8 @@ class OpenRouterCatalog:
         row = self.store.snapshot_load(SNAPSHOT_SOURCE)
         if row is None or self.refresh_s <= 0:
             return 0.0
+        if self.derivation_pending is not None and self.derivation_pending():
+            return 0.0
         fetched_at = row[0]
         delay = fetched_at + self.refresh_s - now
         if delay <= 0:
@@ -300,11 +311,19 @@ class OpenRouterCatalog:
         if delay > 0:
             await asyncio.sleep(delay)
         while True:
+            outcome = "fetch-failed"
             try:
-                await self.refresh()
+                outcome = await self.refresh()
             except Exception:  # noqa: BLE001
                 log.exception("orcatalog: refresh raised — retrying on the next tick")
-            await asyncio.sleep(self.refresh_s)
+            pending = self.derivation_pending is not None and self.derivation_pending()
+            if outcome != "ok" and pending and self.on_refresh is not None:
+                try:  # a failed refresh still derives from the STORED snapshots (the last good one stands when it cannot)
+                    self.on_refresh()
+                except Exception:  # noqa: BLE001 — a hook never fails the loop
+                    log.exception("orcatalog: the post-refresh hook raised")
+                pending = self.derivation_pending()
+            await asyncio.sleep(min(self.refresh_s, PENDING_RETRY_S) if pending else self.refresh_s)
 
     def retry_at(self, now: float, fallback_s: float) -> float:
         """The next scheduled refresh: `refresh_s` after this process's last attempt — or, before it
@@ -458,6 +477,7 @@ class OpenRouterCatalog:
             "models_count": len(models), "last_outcome": self.last_outcome, "last_attempt_at": iso(self.last_attempt),
             "refresh_s": self.refresh_s, "sources": self.sources, "endpoint_failures": self.endpoint_failures,
             "models": models, "cells": counts, "canary": self.budget(now),
+            "benchmarks": dict(sorted((body.get("benchmarks") or {}).items())),
         }
 
     def render(self) -> list[str]:

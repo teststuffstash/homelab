@@ -39,13 +39,10 @@ pytestmark = rule("GW-MODEL-RESOLVE")
 # service-only checkout): the deployed policy.json and the fleet's model table.
 DEPLOYED_POLICY = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "policy.json"
 MODEL_CLASSES = ISLAND.parent / "argocd" / "resources" / "openrouter-proxy" / "model-classes.json"
-# ⚖ (operator, 2026-10-17): the opencode rail's ids are checked against the Go catalog, not
-# model-classes.json — that table is the old proxy's, and a Go id added there is a new models key in
-# the live router. Since the lists are DERIVED (GW-MODEL-TIERS, 2026-10-18) the catalog read is the
-# committed tier evidence: benchmarks.json's opencode rows are the live `GET /catalog/opencode`
-# answer (the leg's own parser in the running gateway) filtered to listed models with a monthly limit
-# — the candidate set every deployed Go id is drawn from.
-BENCHMARKS = ISLAND.parent / "argocd" / "resources" / "agent-gateway" / "benchmarks.json"
+# ⚖ (operator, 2026-10-17): no opencode, openrouter or codex id is checked against model-classes.json —
+# that table is the old proxy's. Since homelab#3309 no tier snapshot is committed either: the admission
+# walks the gateway's runtime derivation (GW-MODEL-TIERS), the priced rails' lists order nothing and
+# leave the deployed policy post-launch, and the codex ids ARE that rail's candidate set.
 
 # (rail, the session's policy model) → the admission that lands there, and the dialect path it rides.
 SESSIONS = {
@@ -182,17 +179,13 @@ DEPLOYED_ROWS = [  # description | policy_document | shape? | unknown_ids? | ope
 ]
 
 
-@pytest.mark.skipif(not (DEPLOYED_POLICY.exists() and BENCHMARKS.exists()), reason="deploy manifests absent (service-only checkout)")
+@pytest.mark.skipif(not DEPLOYED_POLICY.exists(), reason="deploy manifests absent (service-only checkout)")
 @pytest.mark.parametrize(("policy_document", "expected_shape", "expected_unknown_ids", "expected_opencode_max_sessions"),
                          [r[1:] for r in DEPLOYED_ROWS], ids=[r[0] for r in DEPLOYED_ROWS])
 def test_deployed_policy_loads(policy, policy_document, expected_shape, expected_unknown_ids, expected_opencode_max_sessions):
     world(note="against the deployed policy (the configMapGenerator source)")
-    with given(f"the committed tier evidence {BENCHMARKS.relative_to(ISLAND.parent)} — the gateway's own catalog reads: the opencode "
-                                                                 "candidates (listed, with a monthly limit under the plan), the openrouter candidates (ranked ∩ benched), "
-                                                                 "the codex candidates (the enrolled account's); GW-MODEL-TIERS"):
-        bench = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
-        candidates = {rail: set(bench["rails"][rail]) for rail in ("opencode", "openrouter", "codex")}
-        attach_json("tier-evidence candidates per rail", {"snapshot_at": bench["snapshot_at"], **{r: sorted(c) for r, c in candidates.items()}})
+    with given("the worlds' rails and roles, and model-classes.json's anthropic spellings (the opencode, openrouter and codex ids "
+               "have no committed candidate set to check against — GW-MODEL-TIERS derives the walked lists at runtime)"):
         rails_world = Policy.load(CODEX_POLICY)  # the policy-codex world: policy-default's rails + codex (lit in the deployed policy 2026-10-22)
         known_spellings = None
         concurrency = None
@@ -212,11 +205,10 @@ def test_deployed_policy_loads(policy, policy_document, expected_shape, expected
     want = {"rails": sorted(rails_world.rails), "roles": sorted(policy.roles), "tiers": {r: ["heavy", "light", "standard"] for r in deployed.rails}}
     then_eq("expected_shape", "the worlds' shape" if shape == want else "differs", expected_shape,
             claim=f"shape? = {expected_shape}: policy-codex's rails {want['rails']}, policy-default's roles, every rail's tiers light/standard/heavy")
-    unknown = {rail: sorted(ids_of(rail) - candidates[rail]) for rail in candidates}
+    unknown: dict[str, list[str]] = {}
     if known_spellings is not None:
-        others = set().union(*(ids_of(r) for r in deployed.rails if r not in candidates))
-        unknown["anthropic (model-classes.json spelling)"] = sorted(others - known_spellings)
-    with then(f"unknown_ids? = {expected_unknown_ids} — every deployed id is a candidate row of the tier evidence for its rail ⚖ (anthropic: spelled as model-classes.json)",
+        unknown["anthropic (model-classes.json spelling)"] = sorted(ids_of("anthropic") - known_spellings)
+    with then(f"unknown_ids? = {expected_unknown_ids} — every deployed anthropic id is spelled as model-classes.json ⚖",
               expected_unknown_ids={"expected": expected_unknown_ids, "actual": ", ".join(f"{r}: {u}" for r, u in unknown.items() if u) or NONE},
               checked={r: sorted(ids_of(r)) for r in deployed.rails}):
         assert not any(unknown.values()), unknown

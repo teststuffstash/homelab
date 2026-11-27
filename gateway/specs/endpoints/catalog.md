@@ -21,8 +21,8 @@ what its two reads say ([GW-CATALOG-GO-PARSE](#gw-catalog-go-parse)); **the Open
 the registry the [endpoint snapshot](../glossary.md#endpoint-snapshot) is read into
 ([GW-CATALOG-OR](#gw-catalog-or)) and the budget-capped entry [canary](../glossary.md#canary) a cell
 passes to enter the order ([GW-CATALOG-OR-CANARY](#gw-catalog-or-canary); operator rulings
-2026-10-19, homelab#2742); **the tier evidence** — the deployed policy's per-(rail, tier) model
-lists, derived from benchmark evidence and never hand-picked
+2026-10-19, homelab#2742); **the tier evidence** — the per-(rail, tier) model lists the admission
+walks, derived by the gateway from the benchmark evidence in its own store and never hand-picked
 ([GW-MODEL-TIERS](#gw-model-tiers), the [tier evidence](../glossary.md#tier-evidence)), and the
 admission's choice between a model's [twin](../glossary.md#twin) cells on two rails
 ([GW-RAIL-CHOICE](#gw-rail-choice)).
@@ -31,8 +31,8 @@ admission's choice between a model's [twin](../glossary.md#twin) cells on two ra
 
 **[`catalog.schema.json`](catalog.schema.json)** holds the two views' shapes (`output`,
 `openrouter_output`), the normalised snapshots the store keeps (`$defs.config_snapshot`,
-`$defs.docs_snapshot`, `$defs.openrouter_snapshot`), the tier-evidence snapshot
-(`$defs.benchmarks_snapshot`) and the policy blocks the legs read (`$defs.tiers_block`,
+`$defs.docs_snapshot`, `$defs.openrouter_snapshot`), the tier evidence's
+candidate row (`$defs.candidate_row`) and the policy blocks the legs read (`$defs.tiers_block`,
 `$defs.catalog_block`, `$defs.canary_block`). The metric families are declared in
 [metrics.schema.json](metrics.schema.json) with the other families. No error codes: both views
 answer 200 (no snapshot = empty rows, never an error) and carry no credential, like `/metrics`.
@@ -43,7 +43,7 @@ answer 200 (no snapshot = empty rows, never an error) and carry no credential, l
 | [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse) | `output` (the view, its model rows), `$defs.config_snapshot.models[].dialect`, `$defs.docs_snapshot` (`plans`, `plan_fees`, `peak_*`, `window_shares`); the policy's `rails.opencode.plan` and the vendor facts a policy may no longer hold | — (the loader refuses a policy without a plan, or carrying a vendor fact) | v0 — split from GW-CATALOG-GO 2026-11-06 ⚖: what the two reads SAY (the dialect, the limits, the fees, the cost rows, the view's shape) and the policy's plan declaration |
 | [GW-CATALOG-OR](#gw-catalog-or) | `openrouter_output`, `$defs.openrouter_snapshot`, `$defs.catalog_block`; metrics `families.gateway_openrouter_catalog_*` | — | v0 — the registry (ranking ∩ benched → endpoints per candidate, the persisted snapshot, the view with its `pinnable` / `floor` verdict per harness — homelab#2791, the families, the stale alert) |
 | [GW-CATALOG-OR-CANARY](#gw-catalog-or-canary) | `$defs.canary_block`, `$defs.cell_state`, `openrouter_output.canary`, `openrouter_output.models[].endpoints[].state`; sessions.schema.json `post.input.canary` + the defer reasons `canary-budget`, `canary-not-due`; metrics `families.gateway_openrouter_cells`, `gateway_canary_*` | — (`not-in-catalog` / `canary-not-due` / `canary-budget` are defers, never HTTP errors) | v0 — split from GW-CATALOG-OR 2026-11-06 ⚖: the entry canary and its cap; the canary RIDE's launcher is the jail's `gateway/scripts/canary-entrants.sh` (`⚑ gap` rows below: no in-cluster trigger, the Go rail's canary); a 429'd canary is NO verdict — the cell backs off exponentially, the admission is not consumed, the walk moves on (operator ruling 2026-10-22, homelab#2775 closed) |
-| [GW-MODEL-TIERS](#gw-model-tiers) | `$defs.benchmarks_snapshot` (the committed `argocd/resources/agent-gateway/benchmarks.json`), `$defs.tiers_block` (the policy's `tiers`, incl. `cost`), `$defs.manual_benchmarks` (the committed `benchmarks-manual.json`), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; `tiers check` exits 1 on a drifted list; `tiers snapshot` exits 2 on a malformed manual benchmark file) | v0 — the derivation by COST PER CLEAN RIDE (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the committed snapshot and its staleness alert, the equality check with undecided tiers (homelab#2743); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
+| [GW-MODEL-TIERS](#gw-model-tiers) | `tiers_output` (`GET /catalog/tiers`, the runtime derivation — [§The derivation at a refresh](#the-derivation-at-a-refresh)), `$defs.derived_tier`, `$defs.candidate_row` (the evidence the derivation assembles from the store), `$defs.tiers_block` (the policy's `tiers`, incl. `cost` — the only numbers git keeps), `$defs.manual_benchmarks` (the optional `GATEWAY_BENCHMARKS_MANUAL` file), `$defs.price_basis`, `$defs.rides`; `output.pricing` (the Go price on `GET /catalog/opencode`); metrics `families.gateway_tier_evidence_age_seconds` | — (the loader refuses a malformed `tiers` block; the derivation refuses a malformed manual benchmark file whole and runs without it) | v0 — the derivation by COST PER CLEAN RIDE, run by the gateway at each good catalog refresh over its own store and shown on `GET /catalog/tiers` (homelab#3307), the lists the admission walks (homelab#3308) (the openrouter model's selected endpoint, the Go plan's discounted price, the cell's clean-ride rate), the evidence age and its staleness alert, undecided tiers keeping their last derived list; no committed snapshot (homelab#3309); `⚑ gap (2026-10-18, PR #2716 → work #2977)`: no price for the subscription rail (score ascending is the proxy), the coding/agentic axes unused, Go-only id spellings unbenched; `⚑ gap (2026-10-20, homelab#2743)`: the strike overhead unmeasured (the "⚑ gap" rows below) |
 | [GW-RAIL-CHOICE](#gw-rail-choice) | sessions.schema.json `$defs.rail_choice` (the dispatch answer's `rail_choice`); metrics `families.gateway_rail_choice_total`; `$defs.rides` (the cell's clean-ride evidence the choice reads) | — | v0 — split from GW-MODEL-TIERS 2026-11-06 ⚖: the admission's rail choice between a model's twin cells on two rails (homelab#2743); `⚑ gap (2026-10-20, homelab#2743)`: the Go rail's quantization undeclared, the Go cell's clean-rate prior (the "⚑ gap" row below) |
 
 ## Flow overview
@@ -59,10 +59,9 @@ flowchart LR
   OS --> CN["entry canary\n(one pinned ride per cell)"]
   CN --> EL["eligible / excluded\n(429: backs off)"]
   EL --> OV["GET /catalog/openrouter\n(pinnable, selected)"]
-  GV --> BJ["benchmarks.json\n(AA rows + both views)"]
-  OV --> BJ
-  BJ --> DV["derive: bands of the rail's best,\ncheapest per clean ride"]
-  DV --> PL["the deployed tier lists\n(check / apply)"]
+  GV --> DV["derive at each good refresh:\nbands of the rail's best,\ncheapest per clean ride"]
+  OV --> DV
+  DV --> PL["the derivation (the store)\nGET /catalog/tiers"]
   PL --> AD["admission: a twin on two rails\n→ the rail choice"]
   click MD href "#gw-catalog-go" "GW-CATALOG-GO — the config source" _self
   click GP href "#gw-catalog-go" "GW-CATALOG-GO — the docs source" _self
@@ -75,9 +74,8 @@ flowchart LR
   click CN href "#gw-catalog-or-canary" "GW-CATALOG-OR-CANARY — the entry canary" _self
   click EL href "#a-429d-canary-is-no-verdict" "GW-CATALOG-OR-CANARY — the verdict and the backoff" _self
   click OV href "#the-floors-verdict-on-the-view" "GW-CATALOG-OR — pinnable and selected" _self
-  click BJ href "#gw-model-tiers" "GW-MODEL-TIERS — the snapshot" _self
   click DV href "#the-bands-on-a-hand-written-rail" "GW-MODEL-TIERS — the derivation" _self
-  click PL href "#the-deployed-policy" "GW-MODEL-TIERS — the deployed policy" _self
+  click PL href "#the-derivation-at-a-refresh" "GW-MODEL-TIERS — the derivation at a refresh" _self
   click AD href "#gw-rail-choice" "GW-RAIL-CHOICE — the rail choice" _self
 ```
 
@@ -85,8 +83,8 @@ The two Go reads land as the config and docs snapshots the Go view serves
 ([GW-CATALOG-GO](#gw-catalog-go), [GW-CATALOG-GO-PARSE](#gw-catalog-go-parse)); the OpenRouter
 registry is built from the weekly ranking ∩ the AA-benched set, each candidate's endpoints read into
 the snapshot as `candidate` cells ([GW-CATALOG-OR](#gw-catalog-or)), which the entry canary admits
-to `eligible` one clean ride at a time ([GW-CATALOG-OR-CANARY](#gw-catalog-or-canary)); the two
-views and the AA rows are cut into the committed benchmark snapshot the tier lists derive from
+to `eligible` one clean ride at a time ([GW-CATALOG-OR-CANARY](#gw-catalog-or-canary)); at each good
+refresh the gateway derives the tier lists from the two views and the benched rows in its own store
 ([GW-MODEL-TIERS](#gw-model-tiers)), and when a tier names one model on two rails the admission
 chooses the rail by cost per clean ride ([GW-RAIL-CHOICE](#gw-rail-choice)).
 
@@ -226,7 +224,9 @@ five + X`); `unlisted?` = ids either read carries that the listing lacks.
 #### Which rows the merged listing holds
 
 Rows run with no last good snapshot. Legend: `config-disables` = `deepseek-v4-pro: {disabled: true}`;
-`config-adds` = a console-only `deepseek-v4-flash` as a full row (cost, both limits, family, tools); `config-adds-bare` =
+`config-adds` = a console-only `deepseek-v4-flash` whose override carries `family` `deepseek-flash`,
+`capabilities.tools` true, a cost row 0.14 / 0.28 / 0.028 / — (input / output / cache read / cache write),
+`limit.context` 1000000 and `limit.output` 384000; `config-adds-bare` =
 `deepseek-v4-flash: {disabled: false}`; `catalog-google` = models.dev lists `gemini-4-argon` on
 `@ai-sdk/google`; `config-adds-gemini` = a complete console override for that dropped id.
 
@@ -630,6 +630,15 @@ good snapshot kept on any failure and persisted in the store, shown on `/metrics
   fails is `fetch-failed`, one that
   answers a shape the leg cannot read is `parse-failed`; a fresh snapshot with no model, or fewer
   than half the last good one's, is `implausible` — the last good snapshot stands.
+- **The whole benched set is kept** ⚖ (the runtime-tiers Goal, [#3305](https://github.com/teststuffstash/homelab/issues/3305)):
+  the snapshot carries every benched row the answer holds — ranked or not, the candidates' or not —
+  as `benchmarks`, per id its `intelligence`, `coding`, `agentic` (an index the feed does not give
+  stays `null`, never 0), keyed as the candidates are; `GET /catalog/openrouter` serves it. The
+  candidate set (ranked ∩ benched) is unchanged by it. ⚖ On the existing view, not a view of its
+  own (`GET /catalog/benchmarks` rejected): one snapshot, one refresh, one failure rule — the set
+  rides the last good snapshot and survives a restart with it. It is the evidence the tier
+  derivation of the next children reads for all rails (the `anthropic/…` and `openai/…` ids their
+  candidates join).
 
 **The floors' verdict on the view** ⚖ (operator ruling 2026-10-21, homelab#2775 — a bug, not a
 design question: the first canary admission of 2026-10-20 went to `deepseek-v4.1-flash@open-inference`,
@@ -658,7 +667,8 @@ serves `/v1/models/<id>/endpoints` for `deepseek/deepseek-v4.1-flash` (**M**) an
 `z-ai/glm-5.3-flash` (**G**) and 404 for the other six. T0 = the test clock. The account key is
 the fixture Secret `agent-egress/router-account-key`. Legend, every table below: `mcp_answer` = what the
 fake MCP answers (`ok`, `503`, `down` = a connect failure, `malformed` = a tool result that is not
-JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`); `endpoints` = the endpoints route's behaviour per
+JSON, `rankings-undated`, `benchmarks-empty`, `benchmarks-no-family`, `ranking-without-one` = the
+ranking served without one benched id, `benchmarks-malformed` = a benchmarks answer whose `data` is not a list); `endpoints` = the endpoints route's behaviour per
 model (`ok`; `endpoints-503 for G`; `endpoints-null-uptime for G` = G's first endpoint's
 `uptime_last_1d` null; `endpoints-null-uptime@<provider>/<quantization> for M` = M's endpoint on
 that provider at that quantization, `uptime_last_1d` null); `last_good` = the models in the snapshot before the refresh (`none`, `2`);
@@ -710,6 +720,33 @@ Legend: **the `other` row** is the rankings' `other` permaslug in both slices' l
 | description | rankings | benchmarks | candidates? | other_read? |
 |---|---|---|---|---|
 | the `other` bucket is never ranked and never a candidate ⚖ | the `other` row in both slices | ok | 8 (13 ranked, 8 benched) | absent |
+
+#### The benched set is kept whole
+
+Legend: `candidates?` = as in §A; `benchmarks?` = the view's `benchmarks` object. The unranked id is
+`xiaomi/mimo-v2.5`, which `ranking-without-one` leaves out of both slices (it has no endpoint
+fixture, so no model row changes). The null row is a recorded one: `deepseek/deepseek-v4.1-flash`
+carries `coding` and `agentic` as null in the fixture.
+
+| description | mcp_answer | candidates? | benchmarks? |
+|---|---|---|---|
+| every benched row is kept, ranked or not ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | 8 ids, the unranked one among them |
+| a benched row outside the ranking is served with its three indices ⚖ | ok, the ranking served without one benched id | 7 (12 ranked, 8 benched) | the unranked id: its `intelligence`, `coding`, `agentic` as the recorded answer gives them |
+| an index the feed does not give stays null, never 0 ⚖ | ok | 8 (13 ranked, 8 benched) | a recorded row with a null index: that index null, the others as given |
+| a row is keyed as the candidates are — the stamp stripped, a `:variant` under its family ⚖ | ok | 8 (13 ranked, 8 benched) | no dated permaslug and no `:variant` among the keys |
+
+#### A failed read keeps the last good benched set
+
+| description | last_good | mcp_answer | outcome? | benchmarks? |
+|---|---|---|---|---|
+| an MCP error keeps the last good set | fetched T0, 8 ids | 503 | fetch-failed | the 8 ids of T0 |
+| a benchmarks answer the leg cannot read is a parse failure, the set stands | fetched T0, 8 ids | benchmarks-malformed | parse-failed | the 8 ids of T0 |
+
+#### The benched set is kept across a restart
+
+| description | last_good | mcp_answer | benchmarks? |
+|---|---|---|---|
+| the set survives a restart | fetched T0, 8 ids | none (restart at T0 + 3600 s) | the 8 ids of T0 |
 
 #### A failed read keeps the last good (OpenRouter)
 
@@ -764,8 +801,8 @@ Legend: `refreshes` = the refreshes before the read, in order; `read_at` = when 
 
 #### The view's shape (OpenRouter)
 
-Legend: `shape?` = `exactly the schema's required keys` when the view's keys, each model row's,
-each endpoint row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
+Legend: `shape?` = `exactly the schema's required keys` when the view's keys (`benchmarks` among
+them), each model row's, each endpoint row's, each benchmarks row's and `canary`'s equal the `required` sets of `openrouter_output`; else the
 difference.
 
 | description | mcp_answer | shape? |
@@ -824,7 +861,7 @@ None.
 routing, exactly as before this leg — never refused for lack of a canary). A cell becomes
 `eligible` when ONE [canary](../glossary.md#canary) ride completes a tool-call loop through the
 gateway on exactly that cell: a session admitted by `POST /sessions` with **`canary: {model,
-provider}`** (the policy's `canary.role` — `prober` — on rail openrouter, the harness the cell
+provider}`** (the policy's `canary.role` — `prober` — on rail openrouter; a `canary` body from any other role is a `400 malformed-body`, the harness the cell
 serves — `canary.harness`, `opencode` — unless the body names another the rail speaks), pinned to
 that provider with fallbacks off and **no failover**, whose outcome is the verdict: `clean` →
 `eligible`; any strike (the consumer's class, or the gateway's own transport class) → `excluded`
@@ -836,8 +873,10 @@ entry gate the policy's lists are derived from). A `canary` body from any role b
 the policy's is a 400 `malformed-body` — the admission's own check, before any of the cell's. The
 checks, in order: the cell is in the snapshot
 (`not-in-catalog`, `retry_after_s` = the next refresh), it is a candidate (`canary-not-due` —
-already eligible (`retry_after_s` = the next refresh), or excluded inside its cooldown
-(`retry_after_s` = the cooldown's end)), the budget, then the rail's slot count and credential as any admission.
+already eligible, or excluded inside its cooldown: `retry_after_s` = the cooldown's end, and for an
+already-eligible cell, which has no cooldown, the seconds to the next catalog refresh — 21600 at T0
+in the rows below, the refresh interval), the
+budget, then the rail's slot count and credential as any admission.
 
 **Who rides the canaries** is the jail's `gateway/scripts/canary-entrants.sh`: it reads the view,
 launches one prober ride per candidate cell through `agents/agent-session.sh`'s
@@ -1022,37 +1061,34 @@ the `== skipped` banner section, each cell with its floor; `throttled?` = the `=
 
 ## The tier evidence — the derivation and the rail choice (`GW-MODEL-TIERS`, `GW-RAIL-CHOICE`)
 
-The third leg: the deployed policy's tier lists are the output of a derivation over benchmark
-evidence, ordered by cost per clean ride; and when a tier names one model on two rails, the
+The third leg: the tier lists the admission walks are the output of a derivation the gateway runs
+over the benchmark evidence in its own store, ordered by cost per clean ride; and when a tier names one model on two rails, the
 admission chooses the rail by the same unit.
 
 ```mermaid
 flowchart LR
-  AA["AA capability rows\n(the old proxy's weekly pull)"] --> BJ["benchmarks.json\n(benchmarks-snapshot.sh)"]
-  MB["manual benchmark rows\n(only ids the feed lacks)"] --> BJ
-  GV["GET /catalog/opencode\n(the Go price)"] --> BJ
-  OV["GET /catalog/openrouter\n(selected endpoint's price, rides)"] --> BJ
-  BJ --> J["join_aa_id\n(a rule, never a table)"]
+  AA["AA rows\n(the OpenRouter leg's benched set)"] --> J["join_aa_id\n(a rule, never a table)"]
+  MB["manual benchmark rows\n(only ids the feed lacks)"] --> J
+  GV["GET /catalog/opencode\n(the Go price)"] --> C
+  OV["GET /catalog/openrouter\n(selected endpoint's price, rides)"] --> C
   J --> C["cost per clean ride\n= p × T ÷ r + o × (1 ÷ r − 1)"]
-  C --> D["derive: bands of the rail's top,\ncheapest first, cap"]
-  D --> K{"check: lists == derivation?\nundecided tiers stand"}
-  K -->|drift| F["the suite fails;\napply rewrites"]
-  K -->|equal| L["the deployed lists"]
-  BJ --> AGE["gateway_tier_evidence_age_seconds\n→ TierEvidenceStale"]
+  C --> D["derive at each good refresh:\nbands of the rail's top,\ncheapest first, cap"]
+  D -->|a tier with no\npriced candidate| F["undecided: the last\nderived list stands"]
+  D --> L["the derivation (the store)\nGET /catalog/tiers"]
+  F --> L
+  L --> AGE["gateway_tier_evidence_age_seconds\n→ TierEvidenceStale"]
   L --> AD["admission: a tier names\na twin on two rails?"]
   AD -->|yes| RC["rail choice: the cheaper twin\ncell per clean ride walks first"]
   AD -->|no| RO["the role's rail order"]
-  click AA href "#the-rulings" "The rulings" _self
+  click AA href "#the-benched-set-is-kept-whole" "GW-CATALOG-OR — the benched set" _self
   click MB href "#manual-benchmark-rows" "Manual benchmark rows" _self
   click GV href "#the-go-price" "The Go price" _self
   click OV href "#the-rulings" "The rulings — the candidates per rail" _self
-  click BJ href "#the-snapshots-shape" "The snapshot's shape" _self
   click J href "#the-id-join-go-ids" "The id join" _self
   click C href "#cost-per-clean-ride" "Cost per clean ride" _self
   click D href "#the-bands-on-a-hand-written-rail" "The bands, on a hand-written rail" _self
-  click K href "#the-deployed-policy" "The deployed policy" _self
   click F href "#empty-and-undecided-tiers" "Empty and undecided tiers" _self
-  click L href "#the-deployed-policy" "The deployed policy" _self
+  click L href "#the-derivation-at-a-refresh" "The derivation at a refresh" _self
   click AGE href "#the-evidence-age" "The evidence age" _self
   click AD href "#the-twin-rule" "The twin rule" _self
   click RC href "#the-rail-choice" "The rail choice" _self
@@ -1061,68 +1097,67 @@ flowchart LR
 
 ### GW-MODEL-TIERS
 
-*The deployed policy's `rails.<rail>.models.{light,standard,heavy}` lists are the output of a
-derivation over benchmark evidence, not a hand-picked set* — the
+*The per-(rail, tier) model lists the admission walks are the output of a derivation over
+benchmark evidence, not a hand-picked set* — the
 [tier evidence](../glossary.md#tier-evidence) (operator rulings 2026-10-18, FU-270) — *and the
 unit every cell is ordered and chosen by is its* [cost per clean ride](../glossary.md#cost-per-clean-ride)
 *, never a per-token price* (operator ruling 2026-10-19, homelab#2718; built as homelab#2743: on
 OpenRouter the headline price is a 1/price² lottery over 20+ providers and a failed ride bills a
-reviewer round + a coordinator re-entry on top; on the Go rail one flat fee buys every model). Three
-parts, each a reviewable file in git:
+reviewer round + a coordinator re-entry on top; on the Go rail one flat fee buys every model). The
+gateway derives the lists itself, at each good catalog refresh, from evidence in its own store
+(the Goal [homelab#3305](https://github.com/teststuffstash/homelab/issues/3305), operator ruling
+2026-11-12); nothing re-cuts a committed snapshot. Three parts, each with one home:
 
-- **The snapshot** — `argocd/resources/agent-gateway/benchmarks.json`
-  (`$defs.benchmarks_snapshot`): per rail, every **candidate** policy id with its Artificial
-  Analysis row (joined by the rule below), its **price** — the openrouter model's SELECTED
-  endpoint's output/input price (`GET /catalog/openrouter` `selected`: after the floors and the
-  entry canary, [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto);
-  **null until a cell passed the canary — never the headline**), the Go model's
-  [Go price](../glossary.md#go-price) (`GET /catalog/opencode` `pricing`) — its clean-ride
-  evidence (`rides`: the cell's clean and judged rides from the outcome store, and the prior) and
-  its Go monthly limit. Written by `scripts/benchmarks-snapshot.sh` from three reads: the AA
-  capability rows (⚖ the gateway itself never calls AA: the rows are the OLD proxy's weekly pull,
-  `_capability_tick` → its router store's `capability(model, source, intelligence, coding, agentic,
-  updated_ts)`, read out of that pod) and the gateway's own two catalog views. The snapshot
-  rides beside the policy in the deploy (`GATEWAY_BENCHMARKS`): its age is
-  `gateway_tier_evidence_age_seconds`, and **`TierEvidenceStale`** fires past ⚖ 7 days (the AA
-  pull behind it is weekly; a comparison on a month-old price is a wrong answer with a confident
-  face — the 10-18 snapshot read $0.144/M against a live $0.080/M a day later), or when no
-  snapshot is mounted (`argocd/resources/agent-gateway/prometheusrule.yaml`, fixture
-  `tier-evidence.promtool-test`).
-- **The manual benchmark rows** ⚖ — `argocd/resources/agent-gateway/benchmarks-manual.json`
-  (`$defs.manual_benchmarks`; operator ruling 2026-11-11): hand-entered Artificial Analysis scores
-  for a model the feed has not caught up with (the weekly pull lags a release). `tiers snapshot
-  --manual` reads it (`benchmarks-snapshot.sh` passes the committed file; the gateway never mounts
-  it). **A manual row scores ONLY an id the feed does not carry**: the moment the feed has the id
-  the feed's scores stand and the row is reported **retired** (`sources.capability.manual.retired`,
-  and the run says to delete it) — the file cannot shadow real evidence. A snapshot row scored
-  from one says so: `score_source: manual` with `score_source_url` and `score_read_at` (optional
-  row keys, absent on a feed-scored row). The join stays the rule below: a manual id is one more
-  AA id it runs over, never a policy-id → row pair. The file is strict — every row carries exactly
-  the row keys: a `vendor/model` id no other row repeats, at least one score (each a number in
-  [0, 100] or null), its https source url, the day it was read (`YYYY-MM-DD`) and a non-empty
-  note; an unknown key at either
-  level, or a row short of that, and the whole file is refused and nothing is written
-  ([§Manual benchmark rows](#manual-benchmark-rows)).
-- **The rules** — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
+- **The rules** (git) — the policy's top-level `tiers` block (`$defs.tiers_block`), which the loader
   validates: `score` (one of `intelligence` | `coding` | `agentic`), `bands` (every tier, a
   fraction in (0, 1], `heavy ≥ standard ≥ light`), `cap` (a positive integer), and **`cost`** —
   the cost-per-clean-ride terms (`ride_tokens_out_m`, `strike_overhead_usd`, `min_rides`;
   [§Cost per clean ride](#cost-per-clean-ride)); the `cost` block is required, `ride_tokens_out_m` a
   positive number, `min_rides` a positive integer. Unknown keys refuse the load like every other
-  policy block. The fixture worlds carry the same block so one loader shape holds everywhere.
-  The block itself is optional ⚖: a policy without `tiers` loads with no rules (`Policy.tiers`
-  None), and `tiers check` refuses to run, naming `tiers`.
-- **The derivation + check** — `agent_gateway.tiers` (`derive`, `join_aa_id`, `same_model`,
-  `cost_per_clean_ride`, `check`, `undecided`, `apply_text`; CLI `devbox run tiers -- snapshot |
-  derive | check | apply`). The deployed lists EQUAL the derivation, order included — a hand edit
-  of a list fails the check and with it the suite; `apply` rewrites exactly the decided tiers'
-  lists in the file's own layout. ⚖ A tier whose derivation is **empty** — no benched, priced
-  candidate reaches its band (the openrouter rail before its first eligible cell) — is
-  **undecided**: the deployed list stands, `check` names it apart and never as a mismatch,
-  `apply` refuses to write it. ⚖ A benched candidate with **no value on the score axis** — the feed
-  scores a row on some axes and not others — is in no pool, so in no tier and never a rail's top;
-  `unscored` names every such id per rail, and `check` and `derive` print them: out of the pool,
-  never out of sight.
+  policy block. The fixture worlds carry the same block so one loader shape holds everywhere. These
+  numbers are all git keeps of the tier evidence. The block itself is optional ⚖: a policy without
+  `tiers` loads with no rules (`Policy.tiers` None), and the gateway then derives nothing.
+- **The evidence** (the store) — per rail, every **candidate** policy id
+  ([§The rulings](#the-rulings)) with its Artificial Analysis row — the benched set the OpenRouter
+  leg keeps ([GW-CATALOG-OR §The benched set is kept whole](#the-benched-set-is-kept-whole)), joined
+  by the rule below — its **price** — the openrouter model's SELECTED endpoint's output/input price
+  (`GET /catalog/openrouter` `selected`: after the floors and the entry canary,
+  [§Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto); **null until a
+  cell passed the canary — never the headline**), the Go model's
+  [Go price](../glossary.md#go-price) (`GET /catalog/opencode` `pricing`) — its clean-ride
+  evidence (`rides`: the cell's clean and judged rides from the outcome store, and the prior) and
+  its Go monthly limit (`$defs.candidate_row`). The derivation's age is
+  `gateway_tier_evidence_age_seconds` ([§The evidence age](#the-evidence-age)), and
+  **`TierEvidenceStale`** fires past ⚖ 7 days (a comparison on a month-old price is a wrong answer
+  with a confident face — the 10-18 snapshot read $0.144/M against a live $0.080/M a day later), or
+  when the gateway serves with no derivation (`argocd/resources/agent-gateway/prometheusrule.yaml`,
+  fixture `tier-evidence.promtool-test`).
+- **The manual benchmark rows** ⚖ — the optional file `GATEWAY_BENCHMARKS_MANUAL` names
+  (`$defs.manual_benchmarks`; operator ruling 2026-11-11; the committed
+  `argocd/resources/agent-gateway/benchmarks-manual.json` is the deploy's copy — unverified that the
+  deploy mounts it: the Deployment sets no `GATEWAY_BENCHMARKS_MANUAL` today, so no manual row
+  scores in production until it does): hand-entered Artificial Analysis scores for a model the feed
+  has not caught up with (the feed lags a release). **A manual row scores ONLY an id the feed does
+  not carry**: the moment the feed has the id the feed's scores stand and the row is reported
+  **retired** (the view's `manual.retired`) — the file cannot shadow real evidence. A candidate row
+  scored from one says so: `score_source: manual` with `score_source_url` and `score_read_at`
+  (optional row keys, absent on a feed-scored row). The join stays the rule below: a manual id is
+  one more AA id it runs over, never a policy-id → row pair. The file is strict — every row carries exactly
+  the row keys: a `vendor/model` id no other row repeats, at least one score (each a number in
+  [0, 100] or null), its https source url, the day it was read (`YYYY-MM-DD`) and a non-empty
+  note; an unknown key at either level, or a row short of that, and the whole file is refused and
+  the derivation runs without it ([§Manual benchmark rows](#manual-benchmark-rows),
+  [§The manual rows on the derivation](#the-manual-rows-on-the-derivation)).
+- **The derivation** (the store, on `GET /catalog/tiers`) — `agent_gateway.tiers` (`derive`,
+  `join_aa_id`, `same_model`, `cost_per_clean_ride`, `undecided`, `unscored`), run by the gateway
+  at each good catalog refresh ([§The derivation at a refresh](#the-derivation-at-a-refresh)); the
+  last good derivation is kept and is the list the admission walks. A list is ordered by cost per
+  clean ride; ties break by input price, then score descending, then id. ⚖ A tier whose derivation is
+  **empty** — no benched, priced candidate reaches its band (the openrouter rail before its first
+  eligible cell) — is **undecided**: its last derived list stands and the view names it. ⚖ A
+  benched candidate with **no value on the score axis** — the feed scores a row on some axes and
+  not others — is in no pool, so in no tier and never a rail's top; `unscored` names every such id
+  per rail on the view: out of the pool, never out of sight.
 
 **Cost per clean ride** ⚖. For a cell with price `p` ($ per 1M output tokens), clean-ride rate `r`
 and the policy's `tiers.cost` (`T` M output tokens a ride spends, `o` $ a failed ride costs on top
@@ -1148,15 +1183,15 @@ Go page's Plan table ([GW-CATALOG-GO-PARSE](#gw-catalog-go-parse), never a polic
 the draw is the gateway's own ledger at the catalog's list rates, the window draw's arithmetic
 ([GW-SESSIONS-CAPACITY](sessions.md#gw-sessions-capacity)); the model's
 windows stay the gate — a window at its threshold holds the cell whatever its price. Shown on
-`GET /catalog/opencode` `pricing` (`output.pricing`), read by the snapshot and the rail choice.
+`GET /catalog/opencode` `pricing` (`output.pricing`), read by the derivation and the rail choice.
 
 **World:** the hand-written cells and rails each table names (no gateway, no upstream) for the
 arithmetic; [`policy-default` · `openrouter-endpoints`](../worlds/README.md#the-openrouter-endpoints-world)
 with the Go catalog (`catalog-ok` + `docs-ok`, plan `go`: fee $10/month; `deepseek-v4.1-flash`
 $80/month at list 0.15 in / 0.60 out; `claude-haiku-5-5` $15 at 0.10 / 0.50;
 `longcat-2.5-preview-free` unlimited; T0 = Fri 2027-01-15 08:00:00Z) for the Go price; the
-committed `argocd/resources/agent-gateway/benchmarks.json` + the deployed `policy.json` for the
-rulings and the deployed policy (those rows are skipped when the deploy manifests are absent).
+[tier derivation's world](../worlds/README.md#the-tier-derivation-world) for the rulings and the
+evidence age.
 
 #### Cost per clean ride
 
@@ -1230,14 +1265,12 @@ benched candidate with no `intelligence` (coding 70) · out 0.01 / in 0.01, the 
 #### Empty and undecided tiers
 
 Legend: `rail` = `fx-empty` (`fx/none` only, unbenched) or `fx-unpriced` (`fx/a` 50, benched, no
-price); the policy under check lists the rail's one candidate in every tier; `derived?` = the three
-derived lists; `undecided?` = `undecided()`; `check?` = `check()`'s mismatches; `apply?` = what
-`apply_text` does with the derivation.
+price); `derived?` = the three derived lists; `undecided?` = `undecided()`.
 
-| description | rail | derived? | undecided? | check? | apply? |
-|---|---|---|---|---|---|
-| no benched candidate: empty lists, which apply refuses to write | fx-empty | [] · [] · [] | light, standard, heavy | {} | refuses, naming fx-empty.light |
-| a tier with no priced candidate is undecided: check passes it, apply refuses it ⚖ | fx-unpriced | [] · [] · [] | light, standard, heavy | {} | refuses, naming fx-unpriced.light |
+| description | rail | derived? | undecided? |
+|---|---|---|---|
+| no benched candidate: empty lists, every tier undecided | fx-empty | [] · [] · [] | light, standard, heavy |
+| a tier with no priced candidate is undecided ⚖ | fx-unpriced | [] · [] · [] | light, standard, heavy |
 
 #### The id join — Go ids
 
@@ -1266,11 +1299,11 @@ unbenched. Legend: `aa_ids` = the AA ids present; `joins?` = the row joined (`no
 
 #### Manual benchmark rows
 
-Legend: `feed` = the capability rows the snapshot is cut from (`id = intelligence`); `manual` = the
+Legend: `feed` = the benched rows the candidate rows are assembled from (`id = intelligence`); `manual` = the
 manual file's rows (`id = intelligence`, each read at `https://bench.example/fx` on `2027-01-10`;
 `none` = no file); `policy_id` = the one anthropic candidate; `aa_id?` / `intelligence?` = its
-snapshot row; `score_source?` = `manual · <score_source_url> · <score_read_at>` when the row carries
-the three keys, `feed` when it carries none of them; `retired?` = `sources.capability.manual.retired`
+candidate row; `score_source?` = `manual · <score_source_url> · <score_read_at>` when the row carries
+the three keys, `feed` when it carries none of them; `retired?` = `tiers_output` `manual.retired`
 (`none` = empty, or no file).
 
 | description | feed | manual | policy_id | aa_id? | intelligence? | score_source? | retired? |
@@ -1328,13 +1361,17 @@ unchanged; `x = v` sets, `x dropped` deletes); `load?` = the policy load's answe
 
 #### Without a block
 
-| description | tiers | load? | check? |
+Legend: `derived?` = the derivation's `derived_at` after a good refresh over a benched set (`none` =
+no derivation).
+
+| description | tiers | load? | derived? |
 |---|---|---|---|
-| no block: the policy loads with no rules, and the check refuses to run ⚖ | absent | loads; Policy.tiers None | raises naming tiers |
+| no block: the policy loads with no rules, and the gateway derives nothing ⚖ | absent | loads; Policy.tiers None | none |
 
 #### The rulings
 
-Each ruling binds on the committed snapshot + the deployed policy. **The candidates per rail** ⚖:
+Each ruling binds on a derivation the gateway computed from the fixture evidence of the
+[tier derivation's world](../worlds/README.md#the-tier-derivation-world). **The candidates per rail** ⚖:
 opencode = the Go catalog's `listed` models with a limit under the deployed plan (`opencode-go/<id>`)
 **minus any model a subscription rail already serves** — a Go id whose [twin](../glossary.md#twin) is
 an anthropic alias's or a codex id's AA row (operator ruling 2026-11-01: Go is the cheaper door to
@@ -1342,13 +1379,12 @@ the priced catalog with the plan's spend limits built in, never a second door to
 subscription already pays for) — each at the Go price (`promise` / `measured` / `unlimited`, or
 unpriced before the fee is read); openrouter = the OpenRouter catalog's `vendor/model` ids
 ([GW-CATALOG-OR](#gw-catalog-or)) at the SELECTED endpoint's price (basis `endpoint`, with the
-provider) or unpriced — never the headline, never the old proxy's table; anthropic = the policy's
-`claude/` aliases (an argument of the snapshot script, never code), unpriced; codex = the
-`codex/<id>` ids the snapshot script is handed (`CODEX_CANDIDATES` — the ENROLLED account's model
-evidence: its catalog plus one completed turn per id, never a bundled catalog; 2026-10-29 the newest
-of each family, [the spike §Account model evidence](../../../docs/spikes/codex-subscription-rail.md#account-model-evidence--2026-10-29-homelab3016)),
-unpriced, joined to the AA row by tail (`codex/gpt-6-astra` ↔ `openai/gpt-6-astra`); a codex key on
-no list is unbenched or below every band. **The score axis** ⚖ is `intelligence` (operator ruling
+provider) or unpriced — never the headline, never the old proxy's table; anthropic and codex ⚖ =
+the ids of the policy's `rails.<rail>.models` lists (the gateway adds no upstream read on a
+subscription credential; the codex candidate rule — the ENROLLED account's model evidence, 2026-10-29
+the newest of each family, [the spike §Account model evidence](../../../docs/spikes/codex-subscription-rail.md#account-model-evidence--2026-10-29-homelab3016)
+— stays #3145's), unpriced, a codex id joined to the AA row by tail (`codex/gpt-6-astra` ↔
+`openai/gpt-6-astra`). **The score axis** ⚖ is `intelligence` (operator ruling
 2026-10-18) and stays the knob whatever the feed covers: the feed does not score every row on it.
 Read on the 2026-11-08 pull (the snapshot of 2026-11-11): 46 of the 54 benched candidate rows carry
 `intelligence`; 8 carry `coding` and `agentic` only — opencode `glm-5.2`, `kimi-k2.7-code`,
@@ -1358,49 +1394,172 @@ model with a newer generation in the feed that kept its score (`glm-5.3`, `kimi-
 `qwen3.8`, `deepseek-v4.1-flash`). Of the feed's 353 rows that pull refreshed 169: 118 came back
 with no `intelligence`, and every candidate row that kept one changed it (`z-ai/glm-5.3` 44.8 →
 31.7) while `coding` / `agentic` mostly stood — the shape of an index re-based on the newer models
-(unverified — nobody read the vendor's note). Those
-8 are in no pool until the feed scores them again. Legend: `invariant` = the
-predicate evaluated over the deployed files; `knob?` = the deployed value the ruling rests on;
-`violations?` = the ids, rows or lists that break the invariant (`none`).
+(unverified — nobody read the vendor's note). Such rows are in no pool until the feed scores them
+again.
+
+Legend: the evidence is the [tier derivation's world](../worlds/README.md#the-tier-derivation-world)'s
+benched set and openrouter view (`V4`, `V41`, `GLM`, the aliases `FXA` … `FXD` declared in the
+policy's anthropic lists) plus three openrouter models: `z-ai/glm-5.2` (benched with coding 70 and no
+`intelligence`, out $0.05/M — the cheapest on the rail), `fx/unbenched` (no benched row, out
+$0.01/M) and `fx/unpriced` (intelligence 49, no selected endpoint); the policy-default `tiers`
+block; one good refresh at T0. `invariant` = the predicate evaluated over the derivation
+(`GET /catalog/tiers`) and the evidence it was derived from; `knob?` = the value the ruling rests
+on; `violations?` = the ids or lists that break the invariant (`none`).
 
 | description | invariant | knob? | violations? |
 |---|---|---|---|
-| the score is the Artificial Analysis intelligence index ⚖ | every id of a derived or decided deployed list carries `intelligence`; a benched row without it is in no pool and is named by `unscored` (exactly those rows, never dropped unseen); at least one benched row lacks `coding` (the other axes are loadable, unused — the gap row) | tiers.score: intelligence | none |
-| a tier is a band of the rail's best ⚖ | within a rail, every id of a decided deployed list scores ≥ its band × the rail's top score (a model can sit in several tiers) | tiers.bands: heavy 0.9, standard 0.75, light 0.5 | none |
-| each list is cheapest per clean ride first, capped at 3 ⚖ | every decided priced-rail list has ≤ cap ids with non-decreasing cost per clean ride (`row_cost` under the deployed `tiers.cost`; ties by input price, score descending, id) | tiers.cap: 3 | none |
-| the subscription rail has no price: score ascending is its cost proxy ⚖ | every anthropic and codex row is unpriced (one flat subscription — the ChatGPT one since 2026-10-22, FU-270) and each of their deployed lists is strictly score-ascending | PRICELESS_RAILS: anthropic, codex | none |
-| the candidates per rail ⚖ | per rail the snapshot's candidate keys and prices are the sources' (opencode = the Go catalog's listed models at the Go price, minus a subscription rail's twins; openrouter = the OpenRouter catalog's ids at the SELECTED endpoint's price or unpriced; anthropic = the deployed `claude/` aliases, unpriced; codex = the enrolled account's ids, unpriced, every deployed codex id among them) | sources.capability.source: artificial-analysis | none |
-| the join to the AA row is a rule, not a table ⚖ | every snapshot row's `aa_id` is what `join_aa_id` returns over the snapshot's AA ids (no row is a hand-written pair) | the rule | none |
-| unbenched never tiers ⚖ | no id in a decided deployed list has a null `aa_id`, nor a null `out_price` on a priced rail (the free `beam-free` and `longcat-2.5-preview-free` stay out; every openrouter model until a cell passed the entry canary) | derive | none |
+| the score is the Artificial Analysis intelligence index ⚖ | every id of a derived list carries `intelligence`; a benched row without it is in no list and is named by `unscored` | tiers.score: intelligence | none |
+| a tier is a band of the rail's best ⚖ | within a rail, every id of a derived list scores ≥ its band × the rail's top score | tiers.bands | none |
+| each list is cheapest per clean ride first, capped ⚖ | every priced-rail list has ≤ cap ids with non-decreasing cost per clean ride | tiers.cap | none |
+| the subscription rail has no price: score ascending is its cost proxy ⚖ | every anthropic and codex row is unpriced and each of their lists is strictly score-ascending | PRICELESS_RAILS | none |
+| the candidates per rail ⚖ | every id of a derived list is a candidate of its rail's source: openrouter = the OpenRouter view's ids priced at the selected endpoint; anthropic and codex = the policy's ids; opencode = the Go catalog's listed ids at the Go price, none a subscription rail's twin | the sources | none |
+| the join to the AA row is a rule, not a table ⚖ | every evidence row's `aa_id` is what `join_aa_id` returns over the store's benched ids | the rule | none |
+| unbenched never tiers ⚖ | no id in a derived list has a null `aa_id`, nor a null price on a priced rail | derive | none |
 
 #### The deployed policy
 
-Legend: `policy` = the deployed `policy.json` or the `policy-default` world; `snapshot` = the
-committed `benchmarks.json`, as is or `with every openrouter price nulled` (every openrouter tier
-undecided); `edit` = a change to the policy before the check; `mismatches?` = `check()`;
-`undecided?` = `undecided()`; `undecided_empty?` = undecided tiers whose deployed list is empty.
-
-| description | policy | snapshot | edit | mismatches? | undecided? | undecided_empty? |
-|---|---|---|---|---|---|---|
-| the deployed tier lists equal the derivation ⚖ | deployed | committed | none | {} | none | none |
-| a hand edit of a list fails the check | deployed | committed | rails.anthropic.models.heavy reversed | anthropic.heavy | none | none |
-| the fixture worlds carry the block, not the derivation ⚖ | policy-default | committed | none | non-empty (its lists are fixture ids) | none | none |
-| an undecided tier keeps its deployed list ⚖ | deployed | with every openrouter price nulled | none | {} | openrouter: light, standard, heavy | none |
+Removed (homelab#3309): the rows "the deployed tier lists equal the derivation", "a hand edit of a
+list fails the check", "the fixture worlds carry the block, not the derivation" and "an undecided
+tier keeps its deployed list" bound on the committed `benchmarks.json` and the deployed
+`policy.json`; no list is committed for the admission any more, and an undecided tier keeps its last
+derived list ([§The derivation at a refresh](#the-derivation-at-a-refresh)).
 
 #### The snapshot's shape
 
-| description | snapshot | shape? |
-|---|---|---|
-| the snapshot is the schema's shape | committed | the schema's required keys, plus only its optional ones |
+Removed (homelab#3309): the row "the snapshot is the schema's shape" bound on the committed
+`benchmarks.json` and `$defs.benchmarks_snapshot`, both gone; the view's shape is
+[§The view's shape (tiers)](#the-views-shape-tiers).
 
 #### The evidence age
 
-Legend: `mounted` = what `GATEWAY_BENCHMARKS` names; `age?` = `gateway_tier_evidence_age_seconds`.
+`gateway_tier_evidence_age_seconds` is seconds since the benched set's `as_of` behind the
+derivation the admission walks ⚖ (the OpenRouter snapshot's `fetched_at` when the feed names no
+`as_of` ⚖); with no derivation there is no series, and a kept derivation keeps ageing while
+refreshes fail — so `TierEvidenceStale` reads a derivation nobody refreshed. Legend: `store_state` = the
+derivation held when `/metrics` is read (`as of` = its benched set's `as_of`; `fetched at` = the
+OpenRouter snapshot's `fetched_at` when the benched set carries no `as_of`); `refreshes failing` =
+the OpenRouter leg's refresh answered 503 at the read time; `age?` = the gauge (`absent` = no
+series).
 
-| description | mounted | age? |
+| description | store_state | read_at | age? |
+|---|---|---|---|
+| age is seconds since the walked derivation's benched `as_of` ⚖ | a derivation whose benched set is as of T0 − 600 s | T0 | 600 |
+| no derivation, no series | empty store | T0 | absent |
+| a kept derivation ages while refreshes fail | a derivation as of T0, refreshes failing | T0 + 43200 s | 43200 |
+| a benched set with no `as_of` ages from the OpenRouter snapshot's fetch ⚖ | a derivation with no `as_of`, fetched at T0 − 600 s | T0 | 600 |
+
+#### The derivation at a refresh
+
+**The gateway derives the lists itself** ⚖ (the Goal [homelab#3305](https://github.com/teststuffstash/homelab/issues/3305),
+operator ruling 2026-11-12: "I am also leaning towards runtime"). After every good refresh of either
+catalog leg the derivation runs, with `agent_gateway.tiers`' own `derive`, `join_aa_id`,
+`cost_per_clean_ride`, `undecided` and `unscored` — no rule of it changes, only where its inputs come
+from and where its output goes. Its inputs are the gateway's own store: the benched rows
+(`GET /catalog/openrouter` `benchmarks`), the Go price (`GET /catalog/opencode` `pricing`), the
+openrouter models' selected endpoints and rides, the manual benchmark rows when a file is mounted, and
+the policy's `tiers` block. **The candidates per rail** ⚖ are [§The rulings](#the-rulings)' for
+`opencode` and `openrouter` (from the two catalogs); for `anthropic` and `codex` they are the ids of
+the policy's `rails.<rail>.models` lists — the gateway adds no upstream read on a subscription
+credential. **A rail whose input is absent is held** ⚖: `opencode` while no Go catalog snapshot
+exists, and any rail the policy does not declare, is absent from the derivation and the view; the
+other rails derive. **When no derivation can run** — no benched rows, no `tiers` block, no OpenRouter
+leg — the last good derivation stands. **An undecided tier keeps its last derived list** ⚖ and is
+named `undecided`; with none yet its list is empty. The last good derivation is stored
+(`catalog_snapshots`, source `tier-derivation`) and a restart serves it. **The manual rows keep
+their rule** ⚖ ([§Manual benchmark rows](#manual-benchmark-rows)): the optional file
+`GATEWAY_BENCHMARKS_MANUAL` names — unset or absent, no manual rows — scores only an id the feed lacks;
+a row the feed carries is reported `retired` on the view; a file `parse_manual` refuses is refused
+whole, the derivation runs without it, and the view carries the reason.
+
+**The admission walks the derivation** ⚖ ([GW-SESSIONS-ADMIT §Where a tier's list comes from](sessions.md#where-a-tiers-list-comes-from)):
+`GET /catalog/tiers` (`tiers_output`) shows the derivation, and `equals_walked` says per tier whether
+it is the same ids in the same order as the list the admission walks — true wherever the rail is derived,
+because the walk reads the derivation; the policy's `rails.<rail>.models` lists order nothing.
+
+**World:** `policy-default` · `openrouter-endpoints` with the Go catalog (`catalog-ok` + `docs-ok`),
+the [tier derivation's world](../worlds/README.md#the-tier-derivation-world) (a hand-written benched
+set and openrouter view, the real Go catalog snapshots), and for the refresh, failure and restart
+rows the real `openrouter-catalog` fakes; T0 = Fri 2027-01-15 08:00:00Z.
+
+#### The refresh runs the derivation
+
+Legend: `store_before` = what the store holds before the refresh (`the Go catalog (the world's) at T0,
+no derivation` = the `catalog-ok` + `docs-ok` snapshots, no OpenRouter snapshot yet; `the openrouter leg
+refreshed at T0` = a good refresh of the `openrouter-catalog` world at T0, which derived); `refresh` =
+the leg and source whose good refresh lands; `derived_at?` = the view's `derived_at`.
+
+| description | store_before | refresh | derived_at? |
+|---|---|---|---|
+| a good openrouter refresh derives ⚖ | the Go catalog (the world's) at T0, no derivation | openrouter leg ok at T0 + 21600 s | T0 + 21600 s |
+| a good Go refresh derives too ⚖ | the openrouter leg refreshed at T0 | Go leg docs source ok at T0 + 21600 s | T0 + 21600 s |
+
+#### The derivation at a refresh
+
+Legend (the [tier derivation's world](../worlds/README.md#the-tier-derivation-world)): the benched set
+`V4` = `deepseek/deepseek-v4-flash` (intelligence 50, out $0.3/M), `V41` = `deepseek/deepseek-v4.1-flash`
+(40, $0.2), `GLM` = `z-ai/glm-5.3-flash` (30, $0.1), each one selected endpoint, uptime 100; the
+anthropic aliases `FXA` … `FXD` = `claude/fxa` … `claude/fxd` (20, 40, 60, 80). The policy's lists
+(they order nothing since the cut-over; the table's legend only): `openrouter` heavy `V41`, standard `V41, V4`, light `V4, V41`; with four aliases
+declared (`store_before`) `anthropic` light `FXA, FXB`, standard `FXC`, heavy `FXD`. `refresh` = the
+leg's good refresh at T0 + 21600 s over the store after the change it names (`ok` = no change;
+`GLM intelligence 30 → 48`; `every openrouter price null`; `GLM intelligence null` = its row keeps
+coding 70); `rail` = the rail the expected cells read; `lists?` = the rail's derived list per tier;
+`undecided?` / `unscored?` / `equals_walked?` as the view says them.
+
+| description | store_before | refresh | rail | derived_at? | lists? | undecided? | unscored? | equals_walked? |
+|---|---|---|---|---|---|---|---|---|
+| a good refresh derives every rail's tiers ⚖ | catalogs and benched rows at T0, no derivation | ok | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | none | none | heavy true · standard true · light true |
+| the feed moves, the lists move with no commit ⚖ | a derivation at T0 | GLM intelligence 30 → 48 | openrouter | T0 + 21600 s | heavy GLM, V4 · standard GLM, V41, V4 · light GLM, V41, V4 | none | none | heavy true · standard true · light true |
+| a tier with no priced candidate is undecided and keeps its last derived list ⚖ | a derivation at T0: heavy V4 · standard V41, V4 · light GLM, V41, V4 | every openrouter price null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light GLM, V41, V4 | heavy, standard, light | none | heavy true · standard true · light true |
+| a benched candidate with no value on the score axis is in no list and is named ⚖ | catalogs at T0 | GLM intelligence null | openrouter | T0 + 21600 s | heavy V4 · standard V41, V4 · light V41, V4 | none | GLM | heavy true · standard true · light true |
+| a subscription rail's candidates are the policy's ids ⚖ | policy rails.anthropic.models naming four aliases | ok | anthropic | T0 + 21600 s | heavy FXD · standard FXC, FXD · light FXB, FXC, FXD | none | none | heavy true · standard true · light true |
+
+#### The walked list is the derived one
+
+| description | store_state | equals_walked? |
 |---|---|---|
-| age is seconds since snapshot_at ⚖ | a file with snapshot_at T0 − 600 s | 600 |
-| no snapshot mounted, no series | a missing file | absent |
+| after the cut-over every tier equals what the admission walks ⚖ | a derivation at T0 | true on every tier |
+
+#### What a failed input leaves
+
+Legend: `store_before` = the store before the refresh (`a derivation at T0` = a good `openrouter-catalog`
+refresh at T0; `benched rows present, no Go catalog` = the same world with no Go catalog snapshot;
+`empty store` = no OpenRouter snapshot); `refresh` = the OpenRouter leg's refresh (`ok`;
+`fetch-failed` = the MCP answers 503) at T0 + 21600 s, or, for the restart, none — a new gateway on
+the same store at T0 + 3600 s; `lists?` = the view's rails (`none` = no rail; `the T0 lists` = the
+rails as the derivation at T0 served them; `opencode: none; the other rails derived` = no `opencode`
+rail, the `anthropic` and `openrouter` rails present).
+
+| description | store_before | refresh | derived_at? | lists? |
+|---|---|---|---|---|
+| no benched rows, no derivation | empty store | openrouter leg fetch-failed | none | none |
+| a failed refresh keeps the last good derivation | a derivation at T0 | openrouter leg fetch-failed at T0 + 21600 s | T0 | the T0 lists |
+| one rail's input missing holds that rail only ⚖ | benched rows present, no Go catalog | ok | T0 + 21600 s | opencode: none; the other rails derived |
+| the derivation survives a restart | a derivation at T0 | none (restart at T0 + 3600 s) | T0 | the T0 lists |
+
+#### The manual rows on the derivation
+
+Legend: `file` = the file `GATEWAY_BENCHMARKS_MANUAL` names (`none` = unset); `manual_row` = its one
+row — `FXE = 90` is `{id: anthropic/claude-fxe-1.0, intelligence: 90, source_url: https://bench.example/fx,
+read_at: 2027-01-10, note: fx}`, `FXD = 95` the same for `anthropic/claude-fxd-1.0` (a row the feed
+carries), `no source` a row without its `source_url`; the policy declares the alias `claude/fxe`
+beside `FXA` … `FXD`, and the feed has no row for it; `anthropic_heavy?` = the anthropic rail's
+derived heavy list with the score behind each id; `manual?` = the view's `manual` (`used` · `retired`
+· `refused`, `none` = empty).
+
+| description | file | manual_row | anthropic_heavy? | manual? |
+|---|---|---|---|---|
+| the derivation scores a manual row for an alias the feed lacks ⚖ | a file | FXE = 90 | claude/fxe 90 | used anthropic/claude-fxe-1.0 · retired none · refused none |
+| a row the feed carries is reported retired and does not score ⚖ | a file | FXD = 95 | claude/fxd 80 | used none · retired anthropic/claude-fxd-1.0 · refused none |
+| no file, no manual rows | none | FXE = 90 | claude/fxd 80 | used none · retired none · refused none |
+| a malformed file is refused whole and the derivation runs without it ⚖ | a file | no source | claude/fxd 80 | used none · retired none · refused naming source_url |
+
+#### The view's shape (tiers)
+
+| description | state | shape? |
+|---|---|---|
+| the view's shape is the schema's | a derivation at T0 | exactly the schema's required keys |
+| no derivation is an empty view, never an error | empty store | `derived_at` null, no rails |
 
 #### Named gaps — the tier evidence
 
@@ -1408,7 +1567,6 @@ Legend: `mounted` = what `GATEWAY_BENCHMARKS` names; `age?` = `gateway_tier_evid
 |---|---|---|---|
 | ⚑ gap: no price for the subscription rail | the `anthropic` and `codex` rails | score ascending as the cost proxy | a subscription's marginal cost per model is not a per-token price and the subscription's fee buys no listed allowance to divide (the Go rail's derivation needs one); the gateway has no ledger for it (the cost ledger is a gap on [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)) |
 | ⚑ gap: coding / agentic unused | `tiers.score: coding` | loads and derives — but most new rows carry null there (the ruling) | AA's task indices have no coverage on the newest models; revisit when they do. Since the 2026-11-08 pull the hole runs both ways: a previous-generation row carries `coding` / `agentic` and no `intelligence`, and so tiers nowhere (8 benched candidates, the ruling) — no single axis covers every benched row, and nothing combines them |
-| ⚑ gap: the snapshot is hand-refreshed | a stale `snapshot_at` | `TierEvidenceStale` names it; nothing re-cuts it | no schedule runs `benchmarks-snapshot.sh`: the re-cut is a jail verb and a PR (the alert is the belt, the operator the hands) |
 | ⚑ gap: a Go-only id spelling joins nothing | `gemini-4-argon-contributor`, `muse-spark-1.3-contributor`, `hy3`, `hy4-preview`, `qwen3.8-flash`, `space-bunny` | unbenched (9 of 29 listed Go models) | the vendor's `-contributor` / `-preview` suffixes and bare family ids have no AA spelling; a per-id alias would be a table, which the ruling forbids |
 | ⚑ gap: the strike overhead is unmeasured | a failed ride | `tiers.cost.strike_overhead_usd` 0: the order is price over clean rate | the reviewer round + the coordinator re-entry a failed ride costs ride the subscription (no per-token price) — the term has a home and no measurement |
 
@@ -1482,20 +1640,18 @@ trimmed to the ineligible endpoints` = `openrouter-endpoints-ineligible`; `every
 = the production state of 2026-10-20); `tier` = the worker's tier (`standard` names MG and
 `deepseek/deepseek-v4-flash` — no twin); `rail_choice?` = the answer's `{rail} over {over}:
 {reason}` (`null` = no twin; `none` = a defer); `counted?` = the `gateway_rail_choice_total{model=M,…}`
-series after (`none` = no series).
+series after (`none` = no series); `reason?` / `retry_after_s?` = the defer's `reason` and
+`retry_after_s` (`—` = a dispatch, which carries neither).
 
-| description | arrange | tier | decision? | rail? | model? | rail_choice? | counted? |
-|---|---|---|---|---|---|---|---|
-| Go wins with free headroom and an equal clean rate ⚖ | nothing | light | dispatch | opencode | MG | opencode over openrouter: price | rail="opencode",reason="price" 1 |
-| openrouter wins when Go's window is near its share ⚖ | the Go window near its share | light | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 |
-| openrouter wins when Go's clean rate is lower ⚖ | six judged Go rides on MG, one clean | light | dispatch | openrouter | M | openrouter over opencode: clean-rate | rail="openrouter",reason="clean-rate" 1 |
-| no eligible openrouter endpoint: Go ⚖ | the snapshot trimmed to the ineligible endpoints | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 |
-| no openrouter cell has passed the entry canary yet: Go ⚖ | every cell of M candidate | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 |
-| both twins held: no choice, the walk defers with the hold that lifts first ⚖ | the Go window near its share; the snapshot trimmed to the ineligible endpoints; the task's earlier ride struck no-verdict on deepseek/deepseek-v4-flash | light | defer | none | none | none | none |
-| no twin at the tier: the role's order, no choice | nothing | standard | dispatch | opencode | MG | null | none |
-
-The defer of the both-held row carries `reason: no-eligible-provider`, `retry_after_s: 60` — the
-hold that lifts first (unverified — expected, no row).
+| description | arrange | tier | decision? | rail? | model? | rail_choice? | counted? | reason? | retry_after_s? |
+|---|---|---|---|---|---|---|---|---|---|
+| Go wins with free headroom and an equal clean rate ⚖ | nothing | light | dispatch | opencode | MG | opencode over openrouter: price | rail="opencode",reason="price" 1 | — | — |
+| openrouter wins when Go's window is near its share ⚖ | the Go window near its share | light | dispatch | openrouter | M | openrouter over opencode: headroom | rail="openrouter",reason="headroom" 1 | — | — |
+| openrouter wins when Go's clean rate is lower ⚖ | six judged Go rides on MG, one clean | light | dispatch | openrouter | M | openrouter over opencode: clean-rate | rail="openrouter",reason="clean-rate" 1 | — | — |
+| no eligible openrouter endpoint: Go ⚖ | the snapshot trimmed to the ineligible endpoints | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 | — | — |
+| no openrouter cell has passed the entry canary yet: Go ⚖ | every cell of M candidate | light | dispatch | opencode | MG | opencode over openrouter: no-eligible-endpoint | rail="opencode",reason="no-eligible-endpoint" 1 | — | — |
+| both twins held: no choice, the walk defers with the hold that lifts first ⚖ | the Go window near its share; the snapshot trimmed to the ineligible endpoints; the task's earlier ride struck no-verdict on deepseek/deepseek-v4-flash | light | defer | none | none | none | none | no-eligible-provider | 60 |
+| no twin at the tier: the role's order, no choice | nothing | standard | dispatch | opencode | MG | null | none | — | — |
 
 #### The choice survives a failover
 
