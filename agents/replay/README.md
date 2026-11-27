@@ -670,6 +670,7 @@ is stale, so it cannot drift the way the prose register did.
 | `unowned-pr-backstop/deps-review-unarmed-fresh` | actions | - | `agents/coordinator-scan.sh` | - |
 | `unowned-pr-backstop/deps-review-unarmed-old` | actions | - | `agents/coordinator-scan.sh` | - |
 | `updater` | table | - | `-` | MP-T02 |
+| `worker-bash-timeout/worker-bash-timeout` | suite | - | `-` | - |
 | `workflow-pin-revert-candidate` | actions | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-coupling` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |
 | `workflow-pin-revert-exonerate` | table | - | `agents/coordinator/deploy-revert-argo.yaml` | - |

@@ -1,0 +1,15 @@
+# The worker pod env raises Claude Code's shell-command cap above a repo's pre-PR gate.
+#
+# CONDITION UNDER REPLAY. pr-open (the ground rules' one way to open a PR) runs the repo's gate
+# in the foreground; oracle-fleet's takes 20–30 min. Claude Code's Bash cap defaults to 2 min
+# and maxes at 10 min, so without the env pair the gate is killed with its shell.
+#
+# mode: suite — a STATIC property of the launcher's pod env, not an action stream. The suite
+# reads the pair OUT of agents/agent-session.sh at run time (never a transcription, #166) and
+# asserts presence, a value above the gate and below the pod deadline, and unconditional
+# placement in the always-rendered env list.
+name: worker-bash-timeout
+mode: suite
+entrypoint: agents/replay/fixtures/worker-bash-timeout/worker-bash-timeout/suite.sh
+requires:
+  - grep
