@@ -1,0 +1,131 @@
+# Behaviour fixture for the `agent-gateway-go-usage` alerts (prometheusrule.yaml beside this file).
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service — read off the live gateway_sessions_active series, 2026-10-17), plus the family's own
+# `outcome`. The family is hand-driven here; its values are the gateway's own rows in
+# gateway/specs/endpoints/sessions.md §Go account headroom (one increment per poll, by outcome; every
+# outcome renders from 0 once headroom is configured; absent while the policy omits the block).
+# The deployed poll_interval_s is the policy's; these fixtures poll twice a minute.
+rule_files:
+  - go-usage.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ P1 — HEALTHY: two accepted polls a minute, nothing else ═════════════════════════════════
+  - interval: 1m
+    name: P1 healthy — accepted polls keep both alerts quiet
+    input_series:
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="accepted"}'
+        values: "0+2x60"
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="upstream-http-error"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: GoUsagePollStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: GoUsagePollSilent
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: GoUsagePollSilent
+        exp_alerts: []
+
+  # ══ P2 — STALE: the polls run, every one answered 500 ════════════════════════════════════════
+  # increase(accepted) is 0 and increase(all) > 0 from the second sample on; for: 5m → firing from
+  # ~6m. Silent never: polls are running.
+  - interval: 1m
+    name: P2 stale — polls run but none is accepted
+    input_series:
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="accepted"}'
+        values: "0x60"
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="upstream-http-error"}'
+        values: "0+2x60"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: GoUsagePollStale
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: GoUsagePollStale
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "The gateway's Go usage poll has accepted nothing for 15 m — the opencode rail is deferring (quota-stale; quota-unknown if no reading was ever accepted)"
+              description: "gateway_opencode_usage_poll_total counts polls but none ended accepted in 15 m, so the Go usage reading is past rails.opencode.headroom.max_age_s, or was never taken, and every admission on the opencode rail answers quota-stale or quota-unknown (the reading fails closed: gateway/specs/endpoints/sessions.md §Go account headroom). Check: (1) sum by (outcome) (increase(gateway_opencode_usage_poll_total[15m])) names the outcome — upstream-auth = the vendor answers 401 or 403 on the usage path (the Go key rejected, or the vendor's edge refusing the request), upstream-http-error = another status that is not 200, credential-unresolved = the Go key mount is empty (Secret opencode-go-key, optional in deployment.yaml), quota-invalid = the answer no longer carries the three windows rolling / weekly / monthly with a future reset, upstream-content-type = a 200 that is not JSON, upstream-unreachable / upstream-timeout = the network; (2) kubectl -n agent-egress logs deploy/agent-gateway | grep \"opencode usage poll\". Clears on the next accepted poll."
+      - eval_time: 40m
+        alertname: GoUsagePollSilent
+        exp_alerts: []
+
+  # ══ P3 — SILENT: the rail is declared (the family renders 0) but no poll ever runs ══════════
+  # The condition holds from the first sample; for: 15m → firing from 15m. Stale never: no polls.
+  - interval: 1m
+    name: P3 silent — a declared rail whose poll is dark
+    input_series:
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="accepted"}'
+        values: "0x60"
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="upstream-http-error"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: GoUsagePollSilent
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GoUsagePollSilent
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: "The policy carries the Go headroom block but the Go usage poll has not run for 15 m — the opencode rail sits on quota-unknown"
+              description: "gateway_opencode_usage_poll_total renders (the policy carries rails.opencode.headroom) but no poll ran in 15 m. The poll runs only with OPENCODE_USAGE_URL set in argocd/resources/agent-gateway/deployment.yaml: kubectl -n agent-egress get deploy agent-gateway -o yaml | grep -A1 OPENCODE_USAGE_URL shows whether it is, and kubectl -n agent-egress logs deploy/agent-gateway | grep \"opencode usage poll\" shows whether the schedule runs. Until a poll is accepted every admission on the opencode rail defers quota-unknown."
+      - eval_time: 40m
+        alertname: GoUsagePollStale
+        exp_alerts: []
+
+  # ══ P4 — UNDECLARED: the family is absent (today's deployed policy) — nothing can fire ═══════
+  - interval: 1m
+    name: P4 undeclared rail — an absent family fires nothing
+    input_series:
+      - series: 'gateway_sessions_active{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: GoUsagePollSilent
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: GoUsagePollStale
+        exp_alerts: []
+
+  # ══ P5 — HEALTHY THEN 500: accepted polls stop, errors continue ════════════════════════════
+  # The last accepted poll is the sample at 20m; with max_age_s 900 the rail defers quota-stale
+  # from 35m. The alert condition holds from 34m and fires from 39m, about 5m after deferral.
+  - interval: 1m
+    name: P5 healthy then upstream errors
+    input_series:
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="accepted"}'
+        values: "0+1x20 20x40"
+      - series: 'gateway_opencode_usage_poll_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",outcome="upstream-http-error"}'
+        values: "0x20 1+1x39"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: GoUsagePollStale
+        exp_alerts: []
+      - eval_time: 41m
+        alertname: GoUsagePollStale
+        exp_alerts:
+          - exp_labels:
+              rail: opencode
+              severity: warning
+              triage: now
+            exp_annotations:
+              summary: "The gateway's Go usage poll has accepted nothing for 15 m — the opencode rail is deferring (quota-stale; quota-unknown if no reading was ever accepted)"
+              description: "gateway_opencode_usage_poll_total counts polls but none ended accepted in 15 m, so the Go usage reading is past rails.opencode.headroom.max_age_s, or was never taken, and every admission on the opencode rail answers quota-stale or quota-unknown (the reading fails closed: gateway/specs/endpoints/sessions.md §Go account headroom). Check: (1) sum by (outcome) (increase(gateway_opencode_usage_poll_total[15m])) names the outcome — upstream-auth = the vendor answers 401 or 403 on the usage path (the Go key rejected, or the vendor's edge refusing the request), upstream-http-error = another status that is not 200, credential-unresolved = the Go key mount is empty (Secret opencode-go-key, optional in deployment.yaml), quota-invalid = the answer no longer carries the three windows rolling / weekly / monthly with a future reset, upstream-content-type = a 200 that is not JSON, upstream-unreachable / upstream-timeout = the network; (2) kubectl -n agent-egress logs deploy/agent-gateway | grep \"opencode usage poll\". Clears on the next accepted poll."
+      - eval_time: 45m
+        alertname: GoUsagePollSilent
+        exp_alerts: []

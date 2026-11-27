@@ -1,0 +1,37 @@
+# The `agent-gateway-go-usage` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file go-usage.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml because
+# manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions), so a stale
+# copy reds instead of passing vacuously. RE-COPY AFTER EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-go-usage","rules":[.spec.groups[] | select(.name == "agent-gateway-go-usage") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-go-usage
+    rules:
+      - alert: GoUsagePollStale
+        expr: |
+          (sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway",outcome="accepted"}[15m])) == 0)
+          and
+          (sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway"}[15m])) > 0)
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
+          rail: opencode
+        annotations:
+          summary: 'The gateway''s Go usage poll has accepted nothing for 15 m — the opencode rail is deferring (quota-stale; quota-unknown if no reading was ever accepted)'
+          description: 'gateway_opencode_usage_poll_total counts polls but none ended accepted in 15 m, so the Go usage reading is past rails.opencode.headroom.max_age_s, or was never taken, and every admission on the opencode rail answers quota-stale or quota-unknown (the reading fails closed: gateway/specs/endpoints/sessions.md §Go account headroom). Check: (1) sum by (outcome) (increase(gateway_opencode_usage_poll_total[15m])) names the outcome — upstream-auth = the vendor answers 401 or 403 on the usage path (the Go key rejected, or the vendor''s edge refusing the request), upstream-http-error = another status that is not 200, credential-unresolved = the Go key mount is empty (Secret opencode-go-key, optional in deployment.yaml), quota-invalid = the answer no longer carries the three windows rolling / weekly / monthly with a future reset, upstream-content-type = a 200 that is not JSON, upstream-unreachable / upstream-timeout = the network; (2) kubectl -n agent-egress logs deploy/agent-gateway | grep "opencode usage poll". Clears on the next accepted poll.'
+      - alert: GoUsagePollSilent
+        expr: |
+          sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway"}[15m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          triage: dig
+          rail: opencode
+        annotations:
+          summary: 'The policy carries the Go headroom block but the Go usage poll has not run for 15 m — the opencode rail sits on quota-unknown'
+          description: 'gateway_opencode_usage_poll_total renders (the policy carries rails.opencode.headroom) but no poll ran in 15 m. The poll runs only with OPENCODE_USAGE_URL set in argocd/resources/agent-gateway/deployment.yaml: kubectl -n agent-egress get deploy agent-gateway -o yaml | grep -A1 OPENCODE_USAGE_URL shows whether it is, and kubectl -n agent-egress logs deploy/agent-gateway | grep "opencode usage poll" shows whether the schedule runs. Until a poll is accepted every admission on the opencode rail defers quota-unknown.'

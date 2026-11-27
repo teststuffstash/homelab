@@ -1228,6 +1228,38 @@
       }
     },
     {
+      "id": 37,
+      "type": "timeseries",
+      "title": "Go usage polls per hour by outcome",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 147
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (increase(gateway_opencode_usage_poll_total{job=\"agent-gateway\"}[1h]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
       "id": 170,
       "type": "row",
       "title": "Store",
@@ -1235,7 +1267,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 147
+        "y": 155
       },
       "collapsed": false,
       "panels": []
@@ -1252,7 +1284,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 148
+        "y": 156
       },
       "targets": [
         {
