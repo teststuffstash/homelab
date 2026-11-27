@@ -27,11 +27,17 @@ dig for days by being listed). Write the marker only when the cause is known; th
     fixtures are the entries). Operator: the migration doc stays public; the schema is reshaped AFTER the migration.
     The bot's two unverified points are the observe step's to prove (external-name reuses the legacy state; a
     `global_alias` change updates in place). #3828 (a sentinel tool error prints its cause) merged 11:04Z.
+  - **Goal #3803 assembly #3821 MERGED 2026-11-27 13:39Z** (the seat merged master into the goal branch — FU-327 is
+    the stall's class). The switch is on: first Go usage poll `accepted` at 13:40Z on the image before the counter.
+    NEXT: the pin PR #3829 (`2026.11.27-g492d65dddc6a`) lands, then the Goal's acceptance 4 read
+    (`gateway_opencode_usage_poll_total{outcome="accepted"}` increasing, the three `rail="opencode"` utilization
+    series = vendor % / 100, neither `GoUsagePoll*` alert, a Go-rail `POST /sessions` dispatches). Verdict: operator's.
+  - #3810 (the specs reviewer rings `/coordinate` after CHANGES_REQUESTED, #3809) merged 13:22Z on the operator's word.
   - `/workspace/teststuff` (operator's checkout): 5 unpushed commits that conflict with Forgejo main on LOG.md/STATE.md
     (the second jail pushed 8dfe0f9 on top of remote main, 11-22). The `pull --rebase` is the operator's.
   - #3563's experiment bound is 2026-11-27T13:14Z: exactly ONE verdict comment, a second run writes nothing (bullet below).
   - Scan/launch Goals #3656 and #3480 are assembled and on master (#3796, #3793), open post-launch: the verdicts are the operator's.
-  - Gateway intake inputs filed by the seat: #3764 (the Go usage reading — now Goal #3803, assembly #3821 armed); the
+  - Gateway intake inputs filed by the seat: #3764 (the Go usage reading — now Goal #3803, bullet below); the
     fact on #3538. Scan intake: #3826 (five unscoped merged-PR lookups). Unrouted: #3825 (episodic dig alerts).
   - Not filed, the operator has the options: a read door per island for intake's credentialed reads; the
     reviewer-comment route for unchanged-row findings. The 11-25 specs sweep's advisory list and two judgment rows
