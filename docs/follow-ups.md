@@ -199,8 +199,7 @@ six OVERSIZE items pointer-ized into
       **Next:** (1) OPERATOR RULING — the BACKUP has no route to the firmware mirror (only the CARP master has WAN), so
       ROADMAP step 4's "update the BACKUP first" cannot fetch: each node updates while MASTER / a low-priority gateway via the
       peer's LAN address (seat's pick) / offline package copy; (2) then the attended window 26.7.5 → 26.7.9_3 (reboot), which
-      should clear 17 of the drill's 22 rows; (3) wire `opnsense-users-self-test` into `ci.yaml` (operator-direct) and rule
-      on CI for `scripts/opnsense-drill.sh` (#2493); (4) #3539's first live PASS carry. Relates FU-013, FU-298.
+      should clear 17 of the drill's 22 rows; (3) rule on CI for `scripts/opnsense-drill.sh` (#2493; `opnsense-users-self-test` is in `ci.yaml` since 2026-11-27); (4) #3539's first live PASS carry. Relates FU-013, FU-298.
 - [ ] **FU-309** — **Nothing moves displaced pods back after a maintenance window.** 2026-10-09 DIMM
       window: wk-04's pods (grafana, unifi, openrouter-proxy, registry, mcr mirror, …) rescheduled onto
       wk-01/wk-02 and stayed — both at ~99 % of 3900 m CPU requests while wk-04 sat at ~20 % of 15900 m;

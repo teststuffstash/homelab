@@ -139,7 +139,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   started on the box 11-19 at wind-down and NOT read — expect ~17 (the dnsmasq rows gone, the rest wait on the firmware).
   #3539 (content-keyed test-VM verdict) MERGED 11-19 05:47Z — the first bot update of an open router PR should
   post "PASS carried from"; unproven live. Also unproven live from #3528: the hourly re-read of a drifted group and the
-  7-day re-post. SEAT, operator-direct: `opnsense-users-self-test` into `.github/workflows/ci.yaml`. JAIL: the running
+  7-day re-post. JAIL: the running
   image has no `ssh` (the Dockerfile lists openssh-client — rebuild the container); `~/.ssh/known_hosts` starts empty.
 
 - **⚑ PICKUP (2026-11-20 — scan island Goal #3490 on master, built overnight by seat subagents; TICK-LOG 11-19/20).**

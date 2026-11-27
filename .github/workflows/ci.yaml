@@ -205,6 +205,12 @@ jobs:
         if: steps.diff.outputs.runner-maint-self-test != 'false'
         run: devbox run runner-maint-self-test
 
+      # scripts/opnsense-api-users.sh's storage contract: a minted key reaches the wallet even when the
+      # play fails after the mint (a key is shown once). Stubbed play + keepassxc-cli — no router needed.
+      - name: opnsense-users self-test (devbox run opnsense-users-self-test)
+        if: steps.diff.outputs.opnsense-users-self-test != 'false'
+        run: devbox run opnsense-users-self-test
+
       # pr-wait is the seat's and every subagent's PR-cycle primitive (jail-subagent-card); its typed
       # exits are what a caller acts on, so a regression there is a silent stall. The 2026-10-04
       # additions — several PRs in one call, exit 6 on a merge conflict — are pinned with a gh stub.

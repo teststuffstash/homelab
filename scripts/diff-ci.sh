@@ -85,7 +85,7 @@ MAP=(
   # row renders every input at the worktree. Its ci.yaml step lands operator-direct (pin-only-guarded).
   "xr-render:$XR_RENDER_PATHS"
   "argo-lint:^agents/coordinator/"
-  # the users role's key plan (one pair on every router node) — its ci.yaml step lands operator-direct
+  # the users role's key plan (one pair on every router node) — ci.yaml step landed operator-direct 2026-11-27
   "opnsense-users-self-test:^(ansible/roles/opnsense-users/|scripts/opnsense-api-users)"
   "router-self-test:^argocd/resources/openrouter-proxy/"
   "proxy-self-test:^argocd/resources/openrouter-proxy/"
