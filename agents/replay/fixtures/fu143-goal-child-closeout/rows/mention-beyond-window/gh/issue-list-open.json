@@ -1,0 +1,15 @@
+[
+  {
+    "number": 100,
+    "title": "goal child",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/review"
+      }
+    ],
+    "body": "---\nTouches: agents/coordinator-scan.sh\nBase: goal/x\nClass: fix\n---\n\n## Why\n\nA goal child in agent/review whose PR sat in review for days, then merged into its goal base (homelab#3309).\n"
+  }
+]

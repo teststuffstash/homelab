@@ -2,8 +2,9 @@
 
 A **world** is a named fixture state: expected behaviour is a function of (launcher, world). The
 launcher's worlds are the replay harness's ([`agents/replay/README.md` §The cleanup contract](../../../../agents/replay/README.md)),
-named here so a row can say which one it runs in. This directory holds no world files of its own:
-each world lives where its fixture family keeps it, and this page is the index.
+named here so a row can say which one it runs in. Apart from the gateway seam, whose files live in
+[`gateway/`](gateway/), this directory holds no world files of its own: each world lives where its
+fixture family keeps it, and this page is the index.
 
 A launcher world has up to three halves, and a row names the halves its case varies:
 
@@ -32,8 +33,8 @@ A launcher world has up to three halves, and a row names the halves its case var
 | world | what it fixes |
 |---|---|
 | `launcher-vars` | no recorded API state — the row's whole condition is in `rows/<id>/vars.sh` and the `env` column. The default world of every gateway-seam and outcome row. |
-| `stack-platform` | `launcher-vars` with the `stacks.json` row `{"name": "platform"}` and `AGENT_GATEWAY=sessions` — the one stack the gateway admits |
-| `stack-other` | `launcher-vars` with a non-platform stack row — the old path |
+| `stack-platform` | [`stacks/stack-platform.json`](stacks/stack-platform.json): the `platform` row of `agents/stacks.json` recorded whole, with the commit it was read at, and `AGENT_GATEWAY=sessions` — the one stack the gateway admits |
+| `stack-other` | `launcher-vars` with a non-platform stack row — the old path; the island builds no case in it (Goal #3480 pin 6) |
 
 ## The gateway seam
 
@@ -45,8 +46,8 @@ A launcher world has up to three halves, and a row names the halves its case var
 | `gw-error` | a non-200 (503 `tokenreview-transient`), or no answer (unreachable) |
 | `gw-outcome-strike` | `POST /sessions/{id}/outcome` answers 200 with `strike: {class, scope}` |
 
-The seam's answers are hand-written, not recorded from a live gateway: they are the launcher's
-reading of the supplier's schema, not the supplier's proof (⚑ gap — one seam answer, the
-`gateway-admit` row `bound-dispatch`, sends `tier: strong`, a value
-[`sessions.schema.json`](../../../../gateway/specs/endpoints/sessions.schema.json) `$defs.tier`
-does not admit; nothing validates seam requests against the supplier schema).
+The seam's answers are hand-written, not recorded from a live gateway, and each file's `body` is
+validated in the gate against the supplier's schema
+([`sessions.schema.json`](../../../../gateway/specs/endpoints/sessions.schema.json)): `post.dispatch_bound`,
+`post.dispatch`, `post.defer`, and the error envelope of `errors.tokenreview-transient`. Requests will be
+validated by the cases #3484 builds.

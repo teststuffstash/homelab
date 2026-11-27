@@ -10,7 +10,9 @@
     "/properties/unit": ["SCAN-WAKE-FASTPATH", "SCAN-CLAUSE-QUEUED", "SCAN-CLAUSE-PR", "SCAN-CLAUSE-GOAL"],
     "/properties/clause": ["SCAN-CLAUSE-OWNERSHIP", "SCAN-CLAUSE-PR", "SCAN-CLAUSE-PHANTOM", "SCAN-LANE-WALK"],
     "/properties/lane": ["SCAN-LANE-WALK"],
-    "/properties/hold": ["SCAN-HOLD-STRUCTURAL", "SCAN-HOLD-TRANSIENT", "SCAN-CLAUSE-QUEUED"]
+    "/properties/hold": ["SCAN-HOLD-STRUCTURAL", "SCAN-HOLD-TRANSIENT", "SCAN-CLAUSE-QUEUED"],
+    "/properties/open_pr_list": ["SCAN-CLAUSE-GOAL"],
+    "/properties/issue_comments_read": ["SCAN-CLAUSE-GOAL"]
   },
   "properties": {
     "doorbell": {
@@ -74,6 +76,30 @@
         },
         "item": {"type": "string", "pattern": "^(issue|pr)-[0-9]+$"},
         "label_written": {"const": false}
+      }
+    },
+    "open_pr_list": {
+      "description": "`gh pr list --repo <slug> --state open --limit 100 --json …`, as the trigger (b) hold reads it (SCAN-CLAUSE-GOAL): the assembly pull request of a Goal is found among these. An answer lacking one of these fields is unreadable.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "headRefName", "body"],
+        "properties": {
+          "number": {"type": "integer"},
+          "headRefName": {"type": "string"},
+          "body": {"type": "string"}
+        }
+      }
+    },
+    "issue_comments_read": {
+      "description": "`gh api repos/<slug>/issues/<n>/comments?per_page=100`, as the trigger (b) hold reads the comments of an assembly pull request (SCAN-CLAUSE-GOAL). A comment lacking `body` leaves the read unreadable.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["body"],
+        "properties": {
+          "body": {"type": "string"}
+        }
       }
     }
   }

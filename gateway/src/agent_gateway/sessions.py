@@ -271,6 +271,14 @@ class SessionService:
         self.outcomes = Outcomes(store, metrics, policy.outcome_window_s, clock)  # GW-SESSIONS-OUTCOME
         self.providers: EndpointSnapshot | None = None  # GW-RAIL-OPENROUTER: the endpoint snapshot (app.py hands it in)
         self.orcatalog = None  # an orcatalog.OpenRouterCatalog: the cells' entry states + the canary gate (app.py hands it in)
+        self.tier_derivation = None  # a tierview.TierDerivation: the lists the walk reads (GW-SESSIONS-ADMIT; app.py hands it in)
+
+    def tier_models(self, rail: str, tier: str) -> tuple[str, ...] | None:
+        """The ordered list the walk reads for (rail, tier) — the DERIVED one (GW-SESSIONS-ADMIT §Where a tier's
+        list comes from), never the policy's. None = the rail has no derivation (held `tiers-underived`); an
+        empty tuple = derived, but this tier has no list there (the rail is passed over for the tier)."""
+        td = self.tier_derivation
+        return td.walk(rail, tier) if td is not None else None
 
     def eligible_cells(self, model: str, now: float) -> set[str] | None:
         """The providers the catalog admitted on `model` (GW-CATALOG-OR: a clean canary) — None when no
@@ -345,7 +353,7 @@ class SessionService:
             # dialect overall (the Go rail serves both) while this tier's cells speak another.
             # A rail the policy does not declare skips this check and falls to the role's list
             # below (role-rail-denied): it holds no cell to speak anything.
-            cells = self.policy.rails[adm.rail_override].models.get(adm.tier) or ()
+            cells = self.tier_models(adm.rail_override, adm.tier) or ()
             if cells and not any(self._cell_speaks(adm.rail_override, m, adm.harness) for m in cells):
                 return error(400, "harness-rail-mismatch",
                              f"harness {adm.harness} speaks {HARNESS_DIALECT[adm.harness]}; no cell of "
@@ -364,9 +372,10 @@ class SessionService:
             # its tier list holds a cell the harness speaks (a Go cell's dialect is its model's,
             # GW-CATALOG-GO); a rail none of whose cells speak it is passed over, never silently
             # ridden onto a cell that cannot.
+            # (a rail with no derivation stays a candidate: the walk holds it `tiers-underived`.)
             candidates = [r for r in adm.role.rails
-                          if any(self._cell_speaks(r, m, adm.harness)
-                                 for m in (self.policy.rails[r].models.get(adm.tier) or ()))]
+                          if self.tier_models(r, adm.tier) is None
+                          or any(self._cell_speaks(r, m, adm.harness) for m in self.tier_models(r, adm.tier))]
             if not candidates:
                 return self._defer(adm, "role-rail-denied", f"no rail allowed for role {adm.role.name} serves harness {adm.harness}")
         else:
@@ -402,7 +411,7 @@ class SessionService:
         choice = None if strongest else self.rail_choice(
             adm, [r for r in candidates
                   if any(self._for_cell(adm, r, m).harness not in struck_harnesses
-                         for m in (self.policy.rails[r].models.get(adm.tier) or ()))],
+                         for m in (self.tier_models(r, adm.tier) or ()))],
             struck_models, struck_cells, now)
         promoted: dict[str, str] = {}
         answer_choice: dict | None = None
@@ -415,7 +424,13 @@ class SessionService:
                      choice["reason"], choice["detail"])
         for rail in candidates:
             rp = self.policy.rails[rail]
-            models = rp.models.get(adm.tier)
+            models = self.tier_models(rail, adm.tier)
+            if models is None:
+                # ⚖ GW-SESSIONS-ADMIT: no derivation for the rail = held, the walk moves to the next rail
+                log.info("session: rail %s has no tier derivation — held for %ds", rail, self.policy.defer_retry_s)
+                capacity_blocked.append((rail, "tiers-underived", now + self.policy.defer_retry_s,
+                                         f"{rail} has no tier derivation yet"))
+                continue
             if not models:
                 log.info("session: rail %s has no model for tier %s — skipped", rail, adm.tier)
                 continue
@@ -582,8 +597,8 @@ class SessionService:
         pair = None
         for i, a in enumerate(candidates):
             for b in candidates[i + 1:]:
-                for ma in self.policy.rails[a].models.get(adm.tier) or ():
-                    for mb in self.policy.rails[b].models.get(adm.tier) or ():
+                for ma in self.tier_models(a, adm.tier) or ():
+                    for mb in self.tier_models(b, adm.tier) or ():
                         if same_model(ma, mb):
                             pair = (a, ma, b, mb)
                             break

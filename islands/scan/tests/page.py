@@ -16,7 +16,8 @@ Table = tuple[str, list[str], list[list[str]]]
 
 
 def cells(line: str) -> list[str]:
-    return [c.strip() for c in line.strip().strip("|").split("|")]
+    """The cells of a table row; an escaped pipe (`\\|`) is a pipe inside a cell, not a separator."""
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", line.strip().removeprefix("|").removesuffix("|"))]
 
 
 def tables(page: Path) -> list[Table]:

@@ -1,22 +1,24 @@
 """Tier evidence (GW-MODEL-TIERS, specs/endpoints/catalog.md).
 
-The DEPLOYED policy's per-(rail, tier) model lists are derived from benchmark evidence, never
-hand-picked (operator rulings 2026-10-18, FU-270). The evidence is a committed snapshot
-(`argocd/resources/agent-gateway/benchmarks.json`, written by `scripts/benchmarks-snapshot.sh`):
-per rail, every CANDIDATE policy id with its Artificial Analysis row (joined by rule, below), its
-output/input price and its Go monthly limit. The rules — the score axis, the tier bands as
-fractions of the rail's top score, the cap — are the policy's `tiers` block (`config.TiersPolicy`).
+The per-(rail, tier) model lists the admission walks are derived from benchmark evidence, never
+hand-picked (operator rulings 2026-10-18, FU-270). The gateway runs the derivation ITSELF at every
+good catalog refresh over the evidence in its own store (`tierview.TierDerivation`, the Goal
+homelab#3305): `build_snapshot` assembles the candidate rows — per rail, every CANDIDATE policy id
+with its Artificial Analysis row (joined by rule, below), its output/input price and its Go monthly
+limit — and `derive` runs the rules over them. The rules — the score axis, the tier bands as
+fractions of the rail's top score, the cap, the cost terms — are the policy's `tiers` block
+(`config.TiersPolicy`); git keeps only those numbers.
 
 - `join_aa_id`: a policy id → its AA id, by RULE: the part after the vendor `/` with `-N-N` ↔
   `-N.N` version normalisation, a `:variant` suffix dropped, the vendor kept when the id carries
   one; a `claude/<alias>` joins the NEWEST `anthropic/claude-<alias>-<version>` row. No match, or
   more than one, = unbenched.
 - `parse_manual` / `build_snapshot(manual=…)`: the MANUAL benchmark rows (operator ruling
-  2026-11-11) — a committed, hand-entered file (`benchmarks-manual.json` beside the snapshot) for
-  a model the feed has not caught up with. A manual row scores ONLY an id the feed does not carry:
-  the moment the feed has the id the feed wins and the row is reported `retired`. A snapshot row
-  scored from one says so (`score_source: "manual"` + the url and the date read). The join rule
-  is unchanged — a manual id is one more AA id it runs over.
+  2026-11-11) — a hand-entered file (`GATEWAY_BENCHMARKS_MANUAL`) for a model the feed has not
+  caught up with. A manual row scores ONLY an id the feed does not carry: the moment the feed has
+  the id the feed wins and the row is reported `retired`. A candidate row scored from one says so
+  (`score_source: "manual"` + the url and the date read). The join rule is unchanged — a manual id
+  is one more AA id it runs over.
 - `derive`: per rail, a benched candidate is in a tier when its score ≥ band × the rail's top
   score; each list is ordered cheapest-first by COST PER CLEAN RIDE (`cost_per_clean_ride`:
   the row's price × a ride's output tokens ÷ its clean-ride rate, plus the strike overhead per
@@ -26,26 +28,22 @@ fractions of the rail's top score, the cap — are the policy's `tiers` block (`
   axis (`unscored` names them — the feed scores a row on some axes and not others) never tiers. A row's price is the SELECTED
   endpoint's on the openrouter rail (null until a cell passed the entry canary) and the plan's
   discounted list price on the Go rail (`capacity.go_pricing`).
-- `check`: the deployed lists EQUAL the derivation, order included — a hand edit fails; a tier
-  whose derivation is EMPTY (no priced candidate yet) is `undecided` — reported apart, never a
-  mismatch: the deployed list stands until evidence exists, and `apply` refuses to write it.
+- `undecided`: a tier whose derivation is EMPTY (no priced candidate yet) — the runtime derivation
+  keeps its last derived list for it.
 - `same_model`: the twin rule the admission's rail choice reads — two policy ids name one
   model when their tails match after the rail prefix, a `:variant` and the vendor are stripped
   (`opencode-go/<id>` ↔ `<vendor>/<id>`); an alias twins nothing.
-- `apply_text`: rewrites only the rails' `models` blocks in the policy file's own layout.
 
 Stdlib only; nothing here names a model id (GW-MODEL-RESOLVE: ids live in policy files).
 """
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from pathlib import Path
 
-from .config import RAIL_PREFIX, TIERS, CostPolicy, TiersPolicy, tiers_policy
+from .config import RAIL_PREFIX, TIERS, CostPolicy, TiersPolicy
 
 AA_SOURCE = "artificial-analysis"
 ALIAS_PREFIX = RAIL_PREFIX["anthropic"]  # `claude/<alias>`: the subscription rail's family aliases
@@ -222,94 +220,17 @@ def derive(benchmarks: dict, tiers: TiersPolicy) -> dict[str, dict[str, list[str
 
 def unscored(benchmarks: dict, tiers: TiersPolicy) -> dict[str, list[str]]:
     """`{rail: [policy ids]}` that join an AA row carrying no value on the score axis: benched, yet
-    in no pool and so in no tier. Reported by `check` and `derive` — out of the pool, never out of sight."""
+    in no pool and so in no tier. Named on `GET /catalog/tiers` — out of the pool, never out of sight."""
     out = {rail: sorted(pid for pid, r in rows.items() if r.get("aa_id") and not isinstance(r.get(tiers.score), (int, float)))
            for rail, rows in benchmarks["rails"].items()}
     return {rail: ids for rail, ids in out.items() if ids}
 
 
-def _lists(models) -> dict[str, list[str]]:
-    out = {}
-    for tier, ids in (models or {}).items():
-        if not tier.startswith("_"):
-            out[tier] = [ids] if isinstance(ids, str) else list(ids or [])
-    return out
-
-
-def check(policy: dict, benchmarks: dict) -> dict[str, dict[str, dict]]:
-    """Mismatches `{rail: {tier: {expected, actual}}}` between the derivation and the policy's
-    `rails.<rail>.models` (order included); `{}` = the lists ARE the derivation. A tier whose
-    derivation is empty is not a mismatch: it is `undecided` (below) — the deployed list stands."""
-    tiers = tiers_policy(policy.get("tiers"))
-    if tiers is None:
-        raise ValueError("policy: no `tiers` block — the derivation has no rules to run under")
-    mismatches: dict[str, dict[str, dict]] = {}
-    rails = policy.get("rails") or {}
-    for rail, lists in derive(benchmarks, tiers).items():
-        actual = _lists((rails.get(rail) or {}).get("models")) if rail in rails else None
-        for tier, expected in lists.items():
-            if not expected:
-                continue
-            got = None if actual is None else actual.get(tier)
-            if got != expected:
-                mismatches.setdefault(rail, {})[tier] = {"expected": expected, "actual": got}
-    return mismatches
-
-
 def undecided(benchmarks: dict, tiers: TiersPolicy) -> dict[str, list[str]]:
     """`{rail: [tiers]}` whose derivation is empty — no benched, priced candidate reaches the band
-    (the openrouter rail before its first eligible cell): the deployed list stands, apply refuses."""
+    (the openrouter rail before its first eligible cell): the runtime derivation keeps its last list."""
     return {rail: [t for t, ids in lists.items() if not ids] for rail, lists in derive(benchmarks, tiers).items()
             if any(not ids for ids in lists.values())}
-
-
-def tier_evidence_age(path: str | Path, now: float) -> float | None:
-    """Seconds since the mounted snapshot's `snapshot_at` (the `gateway_tier_evidence_age_seconds`
-    gauge); None when no readable snapshot is mounted — no series, and the alert's absent() half."""
-    try:
-        doc = json.loads(Path(path).read_text(encoding="utf-8"))
-        at = datetime.fromisoformat(str(doc["snapshot_at"]).replace("Z", "+00:00")).timestamp()
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    return max(0.0, now - at)
-
-
-_MODELS_BLOCK = re.compile(r'("models"\s*:\s*\{)(?P<body>[^{}]*)(\})')
-
-
-def apply_text(text: str, lists: dict[str, dict[str, list[str]]]) -> str:
-    """The policy file with each named rail's `models` block rewritten to `lists[rail]`, every
-    other byte untouched (the file's own indent and key alignment are kept). Refuses an empty
-    list (the loader would refuse it) and a result that does not re-parse to the intended document."""
-    want = json.loads(text)
-    for rail, tiers in lists.items():
-        for tier, ids in tiers.items():
-            if not ids:
-                raise ValueError(f"{rail}.{tier}: the derivation is empty — no priced, benched candidate reaches the band; "
-                                 "the tier is undecided and the deployed list stands (apply never writes an empty list)")
-        if rail not in (want.get("rails") or {}):
-            raise ValueError(f"rails.{rail} is not in the policy")
-        kept = _lists((want["rails"][rail]).get("models"))  # an undecided tier of this rail keeps its deployed list
-        want["rails"][rail]["models"] = {**kept, **{tier: list(ids) for tier, ids in tiers.items()}}
-    out = text
-    for rail in lists:
-        start = re.search(r'^\s*"' + re.escape(rail) + r'"\s*:\s*\{', out, re.M)
-        if not start:
-            raise ValueError(f"rails.{rail}: block not found in the policy text")
-        m = _MODELS_BLOCK.search(out, start.end())
-        if not m:
-            raise ValueError(f"rails.{rail}.models: block not found in the policy text")
-        indent = re.search(r"\n([ \t]*)\S", m.group("body"))
-        pad = indent.group(1) if indent else "        "
-        close = re.search(r"\n([ \t]*)$", m.group("body"))
-        merged = want["rails"][rail]["models"]
-        width = max(len(f'"{t}":') for t in merged)
-        lines = [f'{pad}{(chr(34) + t + chr(34) + ":").ljust(width)} {json.dumps(list(ids))}' for t, ids in merged.items()]
-        body = "\n" + ",\n".join(lines) + "\n" + (close.group(1) if close else "")
-        out = out[:m.start("body")] + body + out[m.end("body"):]
-    if json.loads(out) != want:
-        raise ValueError("apply: the rewritten text does not parse to the intended policy — nothing written")
-    return out
 
 
 def _iso(ts: float) -> str:
@@ -318,8 +239,8 @@ def _iso(ts: float) -> str:
 
 def build_snapshot(*, capability: list, go_catalog: dict, openrouter_catalog: dict, anthropic_aliases: list[str],
                    snapshot_at: str, codex_candidates: list[str] = (), manual: dict | None = None) -> dict:
-    """The benchmarks snapshot from its three inputs (the shape: catalog.schema.json
-    `$defs.benchmarks_snapshot`). Candidates: the Go catalog's listed models with a monthly limit
+    """The candidate rows the derivation runs over, from the store's evidence (`tierview` hands in the
+    benched rows as capability rows and the two catalog views; each row is `$defs.candidate_row`). Candidates: the Go catalog's listed models with a monthly limit
     under the deployed plan (`opencode-go/<id>`) minus any model a subscription rail already serves
     (its twin is a subscription candidate's AA row — Go is the cheaper door to the priced catalog,
     never a second door to a model the subscription pays for; operator ruling 2026-11-01), priced

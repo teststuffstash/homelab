@@ -525,6 +525,7 @@ is stale, so it cannot drift the way the prose register did.
 | `review-flip-belt/probe-fail` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-flip-belt/review-flip-belt` | actions | - | `agents/coordinator-scan.sh` | MP-T14 |
 | `review-only-label-combinations` | table | - | `agents/coordinator-scan.sh` | IL-T27 |
+| `review-phantom-belt-goal-child` | actions | - | `agents/coordinator-scan.sh` | - |
 | `review-phantom-belt` | actions | - | `agents/coordinator-scan.sh` | IL-T27 |
 | `review-pick/behind-cr-no-content-held` | actions | - | `agents/review-reflex.sh` | MP-T03 |
 | `review-pick/behind-cr-remote-merge-held` | actions | - | `agents/review-reflex.sh` | - |

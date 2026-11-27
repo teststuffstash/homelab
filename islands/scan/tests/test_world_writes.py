@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator
 
 from .world import WORLDS, parse_provenance
 
-RECORDED = ["pr-handoff", "pr-board"]
+RECORDED = ["pr-handoff", "pr-board", "goal-checkpoint"]
 
 
 def answers() -> list:

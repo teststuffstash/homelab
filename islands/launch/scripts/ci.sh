@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # THE gate for the launch island: `devbox run -- bash islands/launch/scripts/ci.sh` (diff-ci's
 # `-- bash islands/launch/scripts/ci.sh` row reaches it). It enters the island's OWN devbox the way
-# the root `gateway-ci` task enters gateway/'s, then: uv sync --frozen → ruff → pytest (raw Allure
+# the root `gateway-ci` task enters gateway/'s, then: uv sync --frozen → ruff (src, tests) → pytest (raw Allure
 # results in allure-results/, local only). Never writes under agents/ (the replay runs from a copy).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,7 +18,7 @@ echo "== uv sync --frozen"
 uv sync --frozen --quiet
 
 echo "== ruff check"
-uv run --frozen ruff check tests
+uv run --frozen ruff check src tests
 
 echo "== pytest"
 uv run --frozen pytest -q

@@ -27,6 +27,12 @@
 #   blocked-no-marker  agent/blocked child, NO blocked-on marker (its own closeout parked it) →
 #                      HELD — no predicate to resolve is not "resolved" (FU-290, the goal-child
 #                      twin of oracle-fleet#798)
+#   beyond-window      the merged PR into the goal base is older than the repo's 41 newest
+#                      merged PRs → closeout (the read is scoped to the base, homelab#3309)
+#   own-branch-unlinked the child's own branch merged into the base, uncited → HELD + reported
+#   full-page          a full page of merged PRs into the base, none links it → reported
+#   mention-beyond-window a goal-base PR only mentions it, older than the repo's newest 40 →
+#                      HELD, reported, recorded in goalheld_nums (the belt excludes that set)
 name: fu143-goal-child-closeout
 mode: table
 source: agents/coordinator-scan.sh

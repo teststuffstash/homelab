@@ -444,7 +444,10 @@ with its expected output. The body carries no rows table.
 The bullets that name rows (`Touches` naming the `rule(…)` test file, "you state the rows",
 "quote before you author", "read every row the body touches", the `⚑ gap` flag) bind a `spec`
 body; every other bullet binds both — "never fence the touched requirement" included, which also
-puts the `rule(…)` test file into the `Touches` of an `edit` body on a spec page.
+puts the `rule(…)` test file into the `Touches` of an `edit` body on a spec page. "Read every row
+the body touches" also binds an `edit` body whose `Touches` holds a spec page or a spec schema: it
+gives reading (c), and a row left undecided becomes an acceptance line (the exact replacement) with
+that row's test file in `Touches`.
 
 - The machine block goes through `python3 agents/issue_body.py set … < body > final` and the
   gate `python3 agents/issue_body.py json < final` (exit 2 ⇒ fix, never post) — README §Authoring
@@ -485,17 +488,28 @@ puts the `rule(…)` test file into the `Touches` of an `edit` body on a spec pa
   patch names ignored, its input cells and the requirement prose must decide every expected cell.
   Where they do not, `## Spec changes` carries the missing input column or prose clause, and the
   body does not call that row unchanged.
-- **Read every row the body touches, without its description.** Before a `spec` body is written,
+- **Read every row the body touches, without its description.** Before a `spec` body is written — or an `edit` body whose `Touches` holds a spec page or a spec
+  schema —
   give the reading of "Quote before you author" (description covered, fixture and patch names
   ignored, the row's input cells and the requirement prose must decide every expected cell) to:
   (a) each row the body authors; (b) each existing row whose expected cell the body changes;
-  (c) every other row already on a requirement the body adds rows or prose to, at the base. The
-  requirement prose is the text of the requirement's own section on the page, nothing the
-  section points at: a value only another file holds (a world file, a fixture) decides nothing
-  until the body writes it. For (a) and (b), a deciding input that is in neither is written
-  into the body: the missing input column or prose clause. For (c), a row the new rows or prose
-  leave undecided is named in the body with the same edit, and that row's file is in
-  `Touches`.
+  (c) every other row, at the base, on a requirement the PR will touch as the specs reviewer counts it
+  (the pinned `touched-rules`, by its sources — the tool `allure_behavior_snippets/touched_rules.py`, at the version the island's specs README pins, e.g. `gateway/specs/README.md` §Rules):
+  a requirement whose section the body adds or edits rows or prose in; EVERY requirement of a page
+  when the body edits anything above that page's first requirement heading — an index row, its
+  Status cell or `⚑ gap` flag, the interface table, the intro; every requirement a `*.schema.json`
+  lists under `x-requirements` when the body edits that file; every requirement whose section links
+  a glossary term the body edits. When that is more than one requirement, the reading is a
+  subagent's (§What you read — gathering), briefed with the sections and this reading, returning
+  the rows it leaves undecided. The requirement prose is the text of the requirement's own section
+  on the page, nothing the section points at: a value only another file holds (a world file, a
+  fixture) decides nothing until the body writes it. For (a) and (b), a deciding input that is in
+  neither is written into the body: the missing input column or prose clause. For (c), a row left
+  undecided is named in the body with the same edit, and that row's file is in `Touches`. A body
+  that asks for none of those edits on a page reads nothing more of it. Reading (c) is a read the
+  sitting makes in addition to what the facts file's `## Sources` row for the spec page names: a
+  row that bounds that read ("the requirement section + the page's index row, nothing more")
+  bounds the gathering for the ruling, and does not rule this reading out.
 - **An exception names the universal it breaks.** When a row adds an exception to a universal
   sentence elsewhere (a sibling's Deliverable, requirement prose, a glossary row), the body names
   that sentence's edit and its file is in `Touches`.
