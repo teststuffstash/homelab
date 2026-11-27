@@ -18,12 +18,13 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-27 — the 11-25 list worked off; TICK-LOG 11-27).**
-  - **#3784 (Goal #3305 assembly): master merged into the goal branch 09:1xZ (`ff06aa36d`), gateway `ci` green locally,
-    the calls are a comment on the PR.** NEXT: read the bot verdict, fix findings on the goal branch (a scratch clone —
-    workers cannot push `goal/**`); the codeowner read is the operator's. After the merge and deploy: read
+  - **#3784 (Goal #3305 assembly) MERGED 2026-11-27 09:28Z** after the seat's merge of master into the goal branch
+    (`ff06aa36d`); both bots approved, `gateway/**` has no codeowner so no human read gated it. The specs reviewer
+    noted (not blocking) that the new prose "ordered by cost per clean ride" is wrong for a priceless rail (score
+    ascending) — catalog rows r53.6/r66.5/r69.3; gateway intake's. NEXT: after the image auto-bump deploys it, read
     `gateway_tier_evidence_age_seconds` + `TierEvidenceStale` together (the gauge now reads the derivation's age;
     `argocd/resources/agent-gateway/` still mounts the snapshot — the Goal's post-launch edit), then drop the
-    `dig-explained` line above.
+    `dig-explained` line above. Goal #3305's verdict is the operator's.
   - **PR #3782 (UNARMED, operator reads it; ADR-169)** — `repos[].provision[]`; FU-326 tracks it with the AppProject
     `default` path and the `REGISTRY_PUSH_TOKEN` narrowing.
   - `/workspace/teststuff` (operator's checkout): 5 unpushed commits that conflict with Forgejo main on LOG.md/STATE.md
