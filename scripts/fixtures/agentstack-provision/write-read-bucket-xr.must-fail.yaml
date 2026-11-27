@@ -1,0 +1,14 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: a write grant on a readBuckets entry (read-only by contract).
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle--write-read-bucket
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: x
+          readBuckets:
+            - { alias: ert-snapshots }
+          keys:
+            - { name: w, grants: [{ bucket: ert-snapshots, access: rw }] }

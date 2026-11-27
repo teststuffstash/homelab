@@ -35,9 +35,6 @@
       "wire-quarry": [
         "uv run --frozen python scripts/wire-quarry.py \"$@\""
       ],
-      "tiers": [
-        "uv run --frozen python scripts/tiers.py \"$@\""
-      ],
       "specs-build": [
         "bash scripts/specs-build.sh"
       ],

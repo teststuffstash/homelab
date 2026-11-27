@@ -346,8 +346,9 @@ name regardless of the session's model: claude-code makes small calls on the hai
 session's family **and** `claude/haiku` (seat ruling, 2026-10-16); the key lives in policy because
 no model id lives in code, and a rail that declares none (the Go rail today) keeps the exact check.
 An absent `model` is filled with the wire id. The dispatch answer's `model` is the policy id — the
-first id of `rails.<rail>.models.<tier>` (an ordered list; a bare string is one item) when nothing
-is struck or cooled ([tier](../glossary.md#tier)). The ADR-096 ladder — classes, label tiers — is
+first id of the rail's derived list for the tier (the rail's last good derivation,
+[GW-MODEL-TIERS](catalog.md#gw-model-tiers)) when nothing is struck or cooled
+([tier](../glossary.md#tier)). The ADR-096 ladder — classes, label tiers — is
 a gap ([below](#gaps-the-adr-096-ladder)); strikes and cooldowns are
 [GW-SESSIONS-ADMIT](sessions.md#gw-sessions-admit)'s, and the provider pin is
 [GW-RAIL-OPENROUTER §Selection](openai-chat.md#selection--the-gateways-own-evidence-never-exacto)'s
@@ -360,14 +361,13 @@ shape — the [`policy-codex`](../worlds/README.md#policy-worlds) world's rails 
 plus `codex`, the rail lit 2026-10-22, FU-270), `policy-default`'s roles, every rail's tiers
 `light` / `standard` / `heavy` — and every id it names is **known** ⚖: every anthropic model and
 side-model id is a `models.*.ids` value of `model-classes.json` (the `claude/<alias>` spelling the
-subscription rail resolves); every opencode, openrouter and codex id is a candidate row of its rail
-in the committed [tier evidence](../glossary.md#tier-evidence)
-`argocd/resources/agent-gateway/benchmarks.json` ([GW-MODEL-TIERS](catalog.md#gw-model-tiers)) —
-the gateway's own `GET /catalog/opencode` read (listed models with a monthly limit under the plan),
-its `GET /catalog/openrouter` read (ranked ∩ benched, [GW-CATALOG-OR](catalog.md#gw-catalog-or)),
-the enrolled account's codex evidence — never `model-classes.json`, the old proxy's table, which
-carries no Go or codex id (operator, 2026-10-17; the derivation drew `z-ai/glm-5.3-flash` the
-moment its first cell passed the canary, an id that table never held). The opencode rail's
+subscription rail resolves); ⚖ no opencode, openrouter or codex id is checked against
+`model-classes.json`, the old proxy's table, which carries no Go or codex id (operator, 2026-10-17),
+nor against a committed candidate set — none is committed since homelab#3309: the admission walks
+the [tier evidence](../glossary.md#tier-evidence)'s runtime derivation
+([GW-MODEL-TIERS](catalog.md#gw-model-tiers)), whose candidates are the gateway's own catalog reads
+on the priced rails and the policy's ids on `codex`; the priced rails' lists order nothing and leave
+the deployed policy in the Goal's post-launch step ([homelab#3305](https://github.com/teststuffstash/homelab/issues/3305)). The opencode rail's
 `max_sessions` is `model-classes.json`'s `rails.opencode-go.concurrency`.
 
 **World: [`policy-default`](../worlds/README.md#policy-worlds)**, every fake upstream at
@@ -442,8 +442,7 @@ bytes` = identical).
 
 Legend: `policy_document` = the deployed document, relative to the repo root; `shape?` = its
 rails, roles and tiers against the worlds' (`the worlds' shape` as the prose above states it);
-`unknown_ids?` = the deployed ids that are no candidate row of their rail's tier evidence, or, on
-the anthropic rail, not spelled as `model-classes.json` (`(none)`); `opencode_max_sessions?` =
+`unknown_ids?` = the deployed anthropic ids not spelled as `model-classes.json` (`(none)`); `opencode_max_sessions?` =
 `rails.opencode.max_sessions`, which equals `model-classes.json`'s `rails.opencode-go.concurrency`.
 
 | description | policy_document | shape? | unknown_ids? | opencode_max_sessions? |

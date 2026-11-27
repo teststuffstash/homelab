@@ -717,6 +717,9 @@ class Policy:
                         or any(not isinstance(m, str) or not m for m in ids) or len(set(ids)) != len(ids)):
                     raise PolicyError(f"policy: rails.{name}.models.{tier} must name a model (or a non-empty list of distinct models) for a known tier")
                 models[tier] = tuple(ids)
+            if name in ("anthropic", "codex") and not models:
+                # the subscription rails' lists DECLARE the candidates the derivation orders (GW-SESSIONS-ADMIT)
+                raise PolicyError(f"policy: rails.{name}.models is required — the candidates the tier derivation orders")
             side = r.get("side_models") or []
             if not isinstance(side, list) or any(not isinstance(m, str) or not m for m in side):
                 raise PolicyError(f"policy: rails.{name}.side_models must be a list of model ids")
@@ -812,9 +815,9 @@ class Settings:
     codex_capture_task_prefix: str = ""
     codex_capture_max_bytes: int = 262144
     codex_capture_retention_days: float = 7.0
-    # GW-MODEL-TIERS: the committed tier-evidence snapshot, mounted beside the policy; its age is a gauge
-    # (`gateway_tier_evidence_age_seconds`) so a stale comparison basis alerts. Absent file = no series.
-    benchmarks_path: str = "/etc/agent-gateway/benchmarks.json"
+    # GW-MODEL-TIERS §The derivation at a refresh: the OPTIONAL manual benchmark rows (a file the feed has not
+    # caught up with); unset or no file = no manual rows. Mounting one is a deploy step, not a default.
+    benchmarks_manual_path: str = ""
     # GW-HEALTH §The answer names the running release: read once, at start, from GATEWAY_RELEASE.
     release: str = RELEASE_UNKNOWN
     # GW-WIRE-RECORD: the byte bound of one kept vendor answer (an over-bound answer is cut and marked incomplete).
@@ -853,7 +856,7 @@ class Settings:
             codex_capture_retention_days=float(e.get("CODEX_CAPTURE_RETENTION_DAYS", "7")),
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
-            benchmarks_path=e.get("GATEWAY_BENCHMARKS", "/etc/agent-gateway/benchmarks.json"),
+            benchmarks_manual_path=e.get("GATEWAY_BENCHMARKS_MANUAL", "").strip(),
             release=release_of(e.get("GATEWAY_RELEASE")),
             wire_max_bytes=int(e.get("GATEWAY_WIRE_MAX_BYTES", "1048576")),
             wire_path=e.get("GATEWAY_WIRE", "").strip(),

@@ -1,0 +1,34 @@
+# agentstack-provision-test fixture: the circles stack's three legacy Workspaces (ADR-169), see
+# oracle-adopt-xr.yaml for the contract.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: circles--circles-adopt
+spec:
+  repos:
+    - name: circles
+      provision:
+        - name: auth
+          secretName: circles-auth
+          adopt: { workspace: circles-auth-secrets, mode: manage }
+          passwords:
+            - { name: encryption_key, length: 48, stable: true }
+            - { name: static_api_key, length: 48 }
+            - { name: oidc_client_secret, length: 48, generation: "1" }
+            - { name: cookie_secret, length: 32 }
+        - name: source
+          secretName: circles-source-s3
+          adopt: { workspace: circles-source-garage, mode: manage }
+          buckets:
+            - { alias: circles-source, maxSizeMi: 64, tfName: source, output: bucket }
+          keys:
+            - { name: writer, garageName: circles-source-writer, grants: [{ bucket: circles-source, access: rw, tfName: source_writer_rw }] }
+            - { name: reader, garageName: circles-source-reader, grants: [{ bucket: circles-source, access: ro, tfName: source_reader_read }] }
+        - name: specs
+          secretName: circles-specs-s3
+          adopt: { workspace: circles-specs-garage, mode: manage }
+          buckets:
+            - { alias: circles-specs, maxSizeMi: 1024, website: true, tfName: specs, output: bucket }
+          keys:
+            - { name: writer, garageName: circles-specs-writer, grants: [{ bucket: circles-specs, access: rw, tfName: specs_writer_rw }] }
+            - { name: reader, garageName: circles-specs-reader, grants: [{ bucket: circles-specs, access: ro, tfName: specs_reader_read }] }

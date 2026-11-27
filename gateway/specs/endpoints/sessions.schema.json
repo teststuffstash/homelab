@@ -341,7 +341,8 @@
         "model",
         "env_keys",
         "pull_url",
-        "context_tokens"
+        "context_tokens",
+        "rail_choice"
       ],
       "description": "the answer to a body carrying `bind`: no token, no env values \u2014 the bound pod pulls them",
       "properties": {
@@ -353,9 +354,8 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "expires_at",
-        "rail_choice"
-      ],
+            "expires_at"
+          ],
           "properties": {
             "id": {
               "$ref": "#/$defs/session_id"
@@ -423,6 +423,7 @@
             "credential-unresolved",
             "credential-rejected",
             "cells-exhausted",
+            "tiers-underived",
             "no-eligible-provider",
             "canary-budget",
             "canary-not-due",
@@ -430,7 +431,7 @@
             "quota-stale",
             "quota-limited"
           ],
-          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; not-in-catalog = the Go model is not listed by the Go catalog, or has no monthly limit under the policy's plan (GW-CATALOG-GO) \u2014 refused, never priced at a fallback, polled until the next catalog refresh; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) \u2014 an operator act, polled at defer_retry_s (GW-SESSIONS-CAPACITY); quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
+          "description": "rail-capacity = every slot taken; rail-window = a window utilization or Go window draw at its threshold; rail-latched = an upstream 429 latch on an account-scope rail; cell-cooled = the tier model's (rail, model) cell cooled by an upstream 429 until its reset; not-in-catalog = the Go model is not listed by the Go catalog, or has no monthly limit under the policy's plan (GW-CATALOG-GO) \u2014 refused, never priced at a fallback, polled until the next catalog refresh; credential-rejected = the stack's credential for every remaining rail was rejected upstream (401/403 credential reason) \u2014 an operator act, polled at defer_retry_s (GW-SESSIONS-CAPACITY); tiers-underived = the rail holds no tier derivation yet (GW-SESSIONS-ADMIT) \u2014 held, polled at defer_retry_s; quota-* = the codex rail's headroom verdicts (GW-CODEX-HEADROOM, openai-responses.md); the reason and retry_after_s name the blocked rail that frees first",
           "x-requirements": [
             "GW-SESSIONS-RETRY",
             "GW-SESSIONS-CAPACITY",

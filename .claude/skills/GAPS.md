@@ -201,6 +201,10 @@ bounded build); handoff-G4 waits on claude-jail#11.
 - [x] second-jail-G3 — invoked mid-session after an unpushed primary-seat commit; nothing handed it
       over (2026-10-13). **promoted→** "Invoked mid-session?" block: list prior writes/commits,
       finish under the old role or hand to the primary, then the rules start (2026-10-26).
+- [ ] second-jail-G4 — rule 3 says "open a PR, let the bot review" and not "arm it at open": #3684 was
+      opened unarmed to hold the merge behind a maintenance window, and no review came for 25 min
+      (2026-11-22; the reflex reads armed PRs only). Improvised: open the window first (a lease the
+      background watch renews), then arm. One sighting.
 
 ## seat-review
 

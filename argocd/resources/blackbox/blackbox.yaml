@@ -35,13 +35,15 @@ data:
           validate_answer_rrs:
             fail_if_not_matches_regexp:
               - ".*"
-      # MCP gateway aliveness: a JSON-RPC initialize POST. 401 is a PASS — it proves the gateway
-      # PROCESS answered (auth-gate before the stdio child); the outage signature was 5xx/503
-      # from HAProxy over dead children. The child-exercising tools/call check is the PROBER
-      # (FU-102), which carries credentials; this belt deliberately carries none.
+      # MCP gateway handshake: a JSON-RPC initialize POST that must come back 200 with a result.
+      # It sends NO `Origin`: the probe is a native client, and the gateway lets an Origin-less
+      # request through but 403s an Origin missing from its allowlist (SRV-HTTP-ORIGIN, the
+      # DNS-rebinding guard). Until 2026-11-27 the probe sent one, got 403 every run, and passed
+      # only because 403 was in valid_status_codes (oracle-fleet#1133). The child-exercising
+      # tools/call check is the PROBER (FU-102), which carries credentials; this one carries none.
       # `X-Oracle-Origin: homelab` marks it as OURS: the target is the LAN route, which never
       # crosses the Cloudflare edge that stamps our traffic (docs/cloudflare.md §origin mark), and
-      # the oracle gateway counts an unstamped request as a stranger's (oracle-fleet#1133). The
+      # the oracle gateway counts an unstamped request as a stranger's. The
       # module's one consumer is the oracle AgentStack's `slo:` — a second consumer needs its own.
       mcp_post:
         prober: http
@@ -51,10 +53,12 @@ data:
           method: POST
           headers:
             Content-Type: application/json
-            Origin: https://mcp.oracle.teststuff.net
+            Accept: application/json, text/event-stream
             X-Oracle-Origin: homelab
           body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"blackbox-fu099","version":"1.0"}}}'
-          valid_status_codes: [200, 400, 401, 403, 406]
+          valid_status_codes: [200]
+          fail_if_body_not_matches_regexp:
+            - '"protocolVersion"'
       # Cert expiry of every LAN HTTPS name the router's ACME client owns (the 18 names of
       # ansible/group_vars/opnsense.yml `acme_cert_specs`, probed by the Probe `lan-certs`). A TLS
       # handshake only, verification off on purpose: HAProxy's answer code is `lan-fronts`' probe,
