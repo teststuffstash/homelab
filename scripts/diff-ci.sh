@@ -55,7 +55,7 @@ GATEWAY_PATHS='^(gateway/|argocd/resources/agent-gateway/policy\.json$|argocd/re
 PUBLICROUTE_PATHS='^(argocd/resources/publicroute/|argocd/resources/crossplane/(providerconfig|functions)\.yaml$|argocd/platform/crossplane\.yaml$|scripts/publicroute-tf-validate\.sh$|scripts/xr-render-lib\.sh$|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
 # xr-render (G4 class gate): every XRD/Composition + the committed XRs/claims it discovers + the two
 # cluster pins it renders with + the tool itself. Claims outside these dirs are the master-push net's.
-XR_RENDER_PATHS='^(argocd/resources/(agentstack|publicroute|crossplane)/|argocd/platform/crossplane\.yaml$|agents/fixer/.*agentstack\.yaml$|scripts/xr-render|scripts/fixtures/publicroute/|devbox\.(json|lock)$)'
+XR_RENDER_PATHS='^(argocd/resources/(agentstack|publicroute|crossplane)/|argocd/platform/crossplane\.yaml$|agents/fixer/.*agentstack\.yaml$|scripts/xr-render|scripts/fixtures/(publicroute|agentstack-provision)/|devbox\.(json|lock)$)'
 # the management box's policy + its readers (ADR-131): the stage-1 fixtures + the fail-closed reads
 MGMT_PATHS='^(policy/mgmt/|mgmt/scripts/mgmt-[a-z-]*\.sh$|mgmt/scripts/mgmt-root-env/|scripts/iac-sentinel\.sh$|scripts/maintenance-window\.sh$|devbox\.(json|lock)$)'
 
@@ -171,6 +171,11 @@ MAP=(
   "jail-cluster-self-test:^(scripts/jail-cluster|scripts/fixtures/jail-cluster/|argocd/resources/jail-clusters/)"
   # the ESO tenancy guards' decision table (ADR-168): kyverno over the policy file, no cluster.
   "-- bash scripts/eso-guard-test.sh:^(scripts/eso-guard-test\.sh$|scripts/fixtures/eso-guard/|argocd/resources/extras/eso-guard\.yaml$)"
+  # AgentStack repos[].provision (ADR-169): fixtures render through the pinned pipeline, the rendered
+  # Terraform parses, every adoption is equivalent to the legacy module it takes over, the guards refuse.
+  # Fetches the engine/function binaries through the LAN mirrors like xr-render (seconds once cached).
+  # No ci.yaml step yet (ci.yaml is pin-only-guarded; operator-direct).
+  "-- bash scripts/agentstack-provision-test.sh:^(argocd/resources/(agentstack|crossplane)/|argocd/platform/crossplane\.yaml$|scripts/(agentstack-provision-test\.sh|provision-adopt-check\.py|xr-render-lib\.sh)$|scripts/fixtures/agentstack-provision/|devbox\.(json|lock)$)"
   # the self-test's only inputs are scripts/pr-wait.sh + scripts/pr-wait-test.sh (2026-10-04)
   "pr-wait-test:^scripts/pr-wait"
   # The launch island's gate (islands/launch/scripts/ci.sh: uv sync, ruff, the 12 gateway-admit replay rows
