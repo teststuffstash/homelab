@@ -95,7 +95,7 @@ reads with `increase()` or `== 0` render every label value from `0` on a fresh p
 the credential and session families, every `(route, reason)` on the control-plane family), so a
 flat series reads as "no such event" and an absent one as "never scraped"; the codex rail's two
 families render only while the policy declares that rail, and the Go usage poll's one only while the policy carries `rails.opencode.headroom`
-([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom)). The codex rail's `gateway_sessions_active{rail="codex"}`
+([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom); [GW-SESSIONS-CAPACITY §Go account headroom](sessions.md#go-account-headroom)). The codex rail's `gateway_sessions_active{rail="codex"}`
 renders `0` even where no policy declares it — the rail ships dark ⚖. Values owned by another
 requirement (the Go and OpenRouter catalogs, the canary, the codex headroom, the rail choice) are
 rows there; this page proves the families' shape and the counters the gateway alone drives.
