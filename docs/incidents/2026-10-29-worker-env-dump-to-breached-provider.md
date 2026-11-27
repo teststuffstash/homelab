@@ -1,6 +1,8 @@
 # 2026-10-29 — A worker printed its env into a prompt; the provider that served it was breached
 
-**Status: OPEN — the exposed key rotates in this PR** (§Fixes). Dated by first symptom (the ride);
+**Status: CLOSED with a residual — the exposed key is rotated (#3684, 2026-11-22) and the new key
+uploads (ride `issue-3408/worker-r2-20261125T235900Z` is in the bucket); the class is open.**
+Tracked by: FU-325 (the belt, then the boundary). Dated by first symptom (the ride);
 the signal arrived 2026-11-22 as a vendor notice. Trigger class: **silent failure** — no belt of
 ours saw a credential enter a prompt; an email from OpenRouter did.
 
@@ -81,5 +83,5 @@ fine: the key was documented as harmless ("all it can do is append exhaust"), wh
 reach and says nothing about it being read by a third party; and the brief's "check the
 environment first" habit is exactly what a model does with `printenv`.
 
-**Residual.** Minted by the primary seat from the second-jail handoff of 2026-11-22: the scanner
-belt, the boundary rollout, and this rotation's verification. This file owns the story.
+**Residual.** FU-325, minted by the primary seat from the second-jail handoff of 2026-11-22: the scanner
+belt and the boundary rollout. The rotation is verified (Status). This file owns the story.

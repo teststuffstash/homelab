@@ -15885,3 +15885,31 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - Scan chain (Goal #3656): #3657 and #3658 closed `agent/done` (PRs #3779, #3783 merged into the goal branch); #3659 riding (`agent-homelab-issue-3659-r1`). Launch chain (Goal #3480): #3483 and #3484 done (#3778, #3785 merged).
 - #3770 proven live: the scan closed #3309 at 21:14Z; assembly PR #3784 opened 21:21Z, armed. It is DIRTY (goal branch 384 behind master, 13 hunks in 7 `gateway/**` files); the checkpoint parked it `blocked-on: human`. Trial merge in a scratch clone → `catalog.md` GW-MODEL-TIERS needs rulings, not a mechanical merge → aborted, nothing pushed; analysis posted on #3784.
 - #3485 r1: the coordinator wrapped the dispatch in `timeout 590` and killed the client → EXIT trap released session `15202be4…` 22:14:38Z → pod's env pull 401 `session-released` 22:15:16Z, exit 97, harness never started. Scan tick 22:20Z: HELD ("worker terminal, no open PR, no merged PR cites it … close it or re-queue it by hand"). No PR, no branch → `gh issue edit 3485 --remove-label agent/in-progress --add-label agent/queued` + a comment naming the cause. The only help given. Nothing else changed; no further check scheduled.
+
+
+## 2026-11-22 ~20:30–21:52Z — second jail: GMI Cloud breach notice → incident + writer-key rotation (filed 11-27 from `seat/20261122-2145-…`)
+
+- OpenRouter notice: provider GMI Cloud breached (request content read Oct 21–22, Oct 27 → Nov 17). Our books: gateway `requests.provider='gmicloud'` 455 + old-proxy `generations` 53 = 508 requests, 4 rides (#2981 r1, circles#135 r1, #3011 r1, #3016 r1). Transcripts scanned: only #3016 r1 ran `printenv` → the Garage transcripts writer key (write-only, LAN endpoint), an expired session token. No GitHub token, no OpenRouter key.
+- PR #3684 (admin-merged 21:35Z on the operator's word, `df6d6880b`): incident `docs/incidents/2026-10-29-worker-env-dump-to-breached-provider.md` + the rotation (`garage_key.writer` → `writer_r2`). Window `seat-1795381457-1244`; old key gone from Garage, 13 ESO mirrors force-synced to the new id by 21:48Z.
+- The credential-boundary design moved to the private repo on the operator's ruling (teststuff `docs/homelab-security-review-2026-10/credential-boundary-design.md`, Forgejo main 8dfe0f9). Correction recorded there: `/git-token` has required auth since 2026-07-26.
+- Mis-step: #3684 opened unarmed → no review for 25 min (GAPS second-jail-G4).
+
+## 2026-11-22 21:40Z → 11-23 20:10Z — second jail: nx-01 `NodeDiskIOSaturation` = no TRIM (filed 11-27 from `seat/20261123-2010-…`)
+
+- Dig: SK hynix BC711 (EPHEMERAL `/var`), healthy, zero discards in 44 d; fired daily for 14 d under ARC-runner load. Window `nx-01-1795383835-9828`: one `fstrim -v /var` (14 s). Busy write latency 614 → 103 ms, busy throughput 79 → 376 MB/s; alert 2.5 min in the next 22 h.
+- PR #3708 merged `2aec8133a`: twice-daily `fstrim-nx-01` CronJob (one evidence-based metal exception); bot round 1 fixed the pve-only alert descriptions. Detail → `docs/storage-ledger.md` §Metal (FU-093).
+
+## 2026-11-23..25 — second jail: ESO tenancy guard, intake transcript read path, intake session env (filed 11-27 from `seat/20261125-2000-…`)
+
+- #3724 merged: per-stack intake transcript read path (bucket `intake-transcripts-<repo>`, writer/reader keys, conditioned ESO mirror, redacted stack copy). One hand-submitted oracle sitting `island-intake-tp5ts` (operator: once; the stack-seat trigger is ON HOLD — "hold until I see how often I need it").
+- #3768 + #3769 merged (ADR-168): `eso-infisical-guard` + `eso-clusterstore-scoped`. Hole proven first as oracle-workbench (an ExternalSecret for a platform key reached SecretSynced; deleted); after the merge refused per clause, 118/118 ExternalSecrets Ready, 4/4 AgentStacks Synced.
+- #3765 merged: intake author/repair sessions run with the transcripts writer keys unset — hygiene, not a boundary (one uid).
+- Cloudflare GraphQL buckets for oracle's "other" clients; oracle-fleet#1115's external POST share is inflated by the blackbox `slo-oracle` probe — reported to the operator, never posted.
+
+## 2026-11-27 ~08:55–09:40Z — pickup of the 11-25 overnight list (seat, attended)
+
+- Both chains finished on their own: Goal #3656 assembled (#3796) and Goal #3480 assembled (#3793), every child `agent/done` (the hand re-queue of #3485 went through).
+- #3784 (Goal #3305 assembly, DIRTY, `blocked-on: human`): merged `origin/master` into `goal/3305-runtime-tiers` in a scratch clone (`ff06aa36d`), 13 hunks; `devbox run ci` in `gateway/` green (1367 passed, spec gates 0 not passed). `catalog.md` calls: the Goal's rewrite, with master's three additions the code still enforces carried (required `cost` block, optional `tiers` block, manual-file row keys); snapshot/`tiers` verb prose retired. Calls listed in a comment on the PR; pushed; pr-wait in the background.
+- A `gh … --body "$(cat <<EOF …)"` through `devbox run --` had its backticks evaluated by dash (every one "not found"; nothing ran). Comment repaired with `-F body=@file`. Bodies go by file under `devbox run`.
+- Three second-jail handoffs filed (entries above): FU-325 (credential boundary + leak belt; the intake uid split folded in), FU-326 (stack tenancy: #3782 migration, AppProject `default`, `REGISTRY_PUSH_TOKEN`), FU-093 extended + ledger §Metal, GAPS second-jail-G4, memory `going-public`, incident 2026-10-29 closed with residual (r2 key upload seen: `issue-3408/worker-r2-20261125T235900Z`). Dropped: the "master CI covering #3684" pickup (master `ci` green at `73087ffea`); the oracle-fleet#1115 comment (issue closed 11-25 with Goal #1116; oracle fixed the probe itself, oracle-fleet#1133 → #3823).
+- Filed for island intake: #3825 (dig-routed alerts in short daily episodes never become issues), #3826 (five unscoped merged-PR lookups in `coordinator-scan.sh` — one more than the four counted on 11-25).
