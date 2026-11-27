@@ -56,7 +56,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   10. Second sweep running (framing signal): FU-298 (file upstream or accept the workaround as permanent), FU-280 (accept),
       FU-293 (ADR-142 re-read overdue since 10-28), FU-318 (land or drop #2798's workflow).
   OPEN, no ruling needed: #3704 kyverno 1.20 rejects the legacy `policy/iac` PolicyException (policy/** → seat/operator-direct);
-  oracle's first full-walk sitting OOMKilled 11-23 07:09Z at the 1Gi limit #3609 set (untracked — raise the limit or split);
+  intake sitting OOM: one kill in a week (oracle 11-23), agent-loop peaked 977 MiB 11-26 — #3832 raises 1Gi → 2Gi;
   snippets#36 re-armed by Renovate despite the py3.15 park (`ArmedBehindNoApprovalStranded`); openrouter-operator#110/#111
   (bullet below). Docs-comb judgment calls (PR reports #3719–#3722): codex column in `gateway/specs/access.md` + its
   10-15 stamp; ROADMAP's done three-CP-promotion section; ARCHITECTURE "OPNsense firewall as code" planned → partial?;
