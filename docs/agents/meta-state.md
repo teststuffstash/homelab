@@ -13,23 +13,20 @@ list every wind-down writes — does NOT count (#2526, 2026-10-12: `RegistryMirr
 dig for days by being listed). Write the marker only when the cause is known; the reason rides into the dig's record.
 
 
-dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-runtime-tiers`, not master; rule, metric and `benchmarks.json` stay stale until Goal #3305 assembles (board-sweep 2026-11-23).
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
 - **⚑ PICKUP (2026-11-27 — the 11-25 list worked off; TICK-LOG 11-27).**
-  - **#3784 (Goal #3305 assembly) MERGED 2026-11-27 09:28Z** after the seat's merge of master into the goal branch
-    (`ff06aa36d`); both bots approved, `gateway/**` has no codeowner so no human read gated it. The specs reviewer
-    noted (not blocking) that the new prose "ordered by cost per clean ride" is wrong for a priceless rail (score
-    ascending) — catalog rows r53.6/r66.5/r69.3; gateway intake's. NEXT: after the image auto-bump deploys it, read
-    `gateway_tier_evidence_age_seconds` + `TierEvidenceStale` together (the gauge now reads the derivation's age;
-    `argocd/resources/agent-gateway/` still mounts the snapshot — the Goal's post-launch edit), then drop the
-    `dig-explained` line above. Goal #3305's verdict is the operator's.
+  - **Goal #3305 is live (2026-11-27):** #3784 merged 09:28Z, deployed as `2026.11.27-ge1cae356dd7c` (#3827). Read at
+    11:30Z: `gateway_tier_evidence_age_seconds` = 41333 (the derivation's age, ~11.5 h), `TierEvidenceStale` not firing.
+    Left: the Goal's post-launch edit (`argocd/resources/agent-gateway/` still mounts the snapshot and its comments,
+    the policy's priced-rail lists); the specs reviewer's non-blocking note (catalog r53.6/r66.5/r69.3: "ordered by
+    cost per clean ride" is wrong for a priceless rail) — both gateway intake's. The Goal's verdict is the operator's.
   - **PR #3782 (ADR-169, `repos[].provision[]`) MERGED 2026-11-27 ~10:00Z** (seat security review + fixes; operator
     armed it). NEXT (FU-326): migration step 1 = stack PRs adding the entries with `adopt … mode: observe` (the
     fixtures are the entries). Operator: the migration doc stays public; the schema is reshaped AFTER the migration.
     The bot's two unverified points are the observe step's to prove (external-name reuses the legacy state; a
-    `global_alias` change updates in place). #3828 (sentinel tool error prints its cause) armed, CI was slow.
+    `global_alias` change updates in place). #3828 (a sentinel tool error prints its cause) merged 11:04Z.
   - `/workspace/teststuff` (operator's checkout): 5 unpushed commits that conflict with Forgejo main on LOG.md/STATE.md
     (the second jail pushed 8dfe0f9 on top of remote main, 11-22). The `pull --rebase` is the operator's.
   - #3563's experiment bound is 2026-11-27T13:14Z: exactly ONE verdict comment, a second run writes nothing (bullet below).
