@@ -2,7 +2,7 @@
 apiVersion: platform.teststuff.net/v1alpha1
 kind: AgentStack
 metadata:
-  name: oracle
+  name: oracle--foreign-namespace
 spec:
   repos:
     - name: agent-coordinator

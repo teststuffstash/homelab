@@ -5,7 +5,7 @@
 apiVersion: platform.teststuff.net/v1alpha1
 kind: AgentStack
 metadata:
-  name: oracle
+  name: oracle--oracle-adopt
 spec:
   repos:
     - name: oracle-fleet

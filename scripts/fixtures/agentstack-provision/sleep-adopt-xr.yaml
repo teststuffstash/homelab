@@ -4,7 +4,7 @@
 apiVersion: platform.teststuff.net/v1alpha1
 kind: AgentStack
 metadata:
-  name: sleep
+  name: sleep--sleep-adopt
 spec:
   repos:
     - name: sleep-tracking

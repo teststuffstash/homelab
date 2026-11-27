@@ -27,11 +27,17 @@ done
 work="$(mktemp -d)"; trap 'xr_stop; rm -rf "$work"' EXIT
 xr_start "$ROOT" "$work/xr" || exit 1
 fail() { echo "agentstack-provision-test: FAIL — $*" >&2; exit 1; }
+# A fixture's metadata.name is `<stack>--<case>`: the tree holds many fixtures per stack, and the
+# iac-sentinel's kyverno pass indexes every k8s doc in a PR tree by kind/name — two AgentStacks
+# named `oracle` panic it. The Composition keys its bounds on the XR name, so the render gets
+# a copy with the `--<case>` suffix cut.
+stack_named() { yq '.metadata.name |= sub("--.*$"; "")' "$1" > "$2"; }
 
 rendered=0 adopted=0
 for xr in "$FIX"/*-xr.yaml; do
   name="$(basename "$xr" -xr.yaml)"; out="$work/$name.yaml"
-  xr_render "$xr" "$COMPOSITION" "$XRD" "$out" || { cat "$out.err" >&2; fail "fixture '$name' did not render"; }
+  stack_named "$xr" "$work/$name.in.yaml"
+  xr_render "$work/$name.in.yaml" "$COMPOSITION" "$XRD" "$out" || { cat "$out.err" >&2; fail "fixture '$name' did not render"; }
   wss="$(yq -N -r 'select(.kind == "Workspace" and (.metadata.name | test("\\."))) | .metadata.name' "$out")"
   [ -n "$wss" ] || fail "fixture '$name' rendered no provision Workspace"
   for ws in $wss; do
@@ -70,7 +76,8 @@ done
 guarded=0
 for xr in "$FIX"/*-xr.must-fail.yaml; do
   name="$(basename "$xr" -xr.must-fail.yaml)"; out="$work/$name.yaml"
-  if xr_render "$xr" "$COMPOSITION" "$XRD" "$out"; then fail "fixture '$name' was expected to FAIL rendering (a provision guard), but rendered"; fi
+  stack_named "$xr" "$work/$name.in.yaml"
+  if xr_render "$work/$name.in.yaml" "$COMPOSITION" "$XRD" "$out"; then fail "fixture '$name' was expected to FAIL rendering (a provision guard), but rendered"; fi
   grep -q 'AgentStack [^ ]* repo [^ ]* provision [^ ]*:' "$out.err" \
     || { cat "$out.err" >&2; fail "fixture '$name' failed for a reason other than a provision guard"; }
   echo "  ok  $name (refused: $(grep -o 'error calling fail: .*' "$out.err" | head -1 | sed 's/^error calling fail: AgentStack //' | cut -c1-120))"
