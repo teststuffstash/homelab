@@ -75,6 +75,11 @@ spec:
                   name: opencode-go-key
                   key: api-key
                   optional: true
+            # GW-SESSIONS-CAPACITY §Go account headroom: the vendor's account usage reading, polled
+            # with the key above every rails.opencode.headroom.poll_interval_s. Unset under that
+            # policy block = every opencode admission defers quota-unknown.
+            - name: OPENCODE_USAGE_URL
+              value: https://opencode.ai/zen/go/v1/usage
           ports:
             - name: http
               containerPort: 8080
