@@ -503,9 +503,9 @@ spec:
               LAUNCH
               exec devbox run --config islands/intake -- bash /tmp/island-intake-launch.sh
           resources:
-            # 1Gi: measured in the pod on the first sitting under this image (2026-11-20, the gateway
-            # island, dry-run, 21 min with two lens runs): 360 MiB peak working set, and clone +
-            # `devbox install` done 14 s after the container started (the island devbox adds two
-            # packages to what the image pre-bakes; the pull-through nix cache serves them).
+            # 2Gi: a week of live sittings (2026-11-20..27, ~70 pods): one OOMKilled at 1Gi (oracle's
+            # first full walk, 11-23), three more peaked at 800-980 MiB (agent-loop, retro, gateway);
+            # the median sitting stays under 400 MiB. The limit is ~2x the worst observed peak.
+            # The clone + `devbox install` is not the load (done 14 s after start, 2026-11-20 probe).
             requests: { cpu: "100m", memory: "384Mi" }
-            limits: { memory: "1Gi" }
+            limits: { memory: "2Gi" }
