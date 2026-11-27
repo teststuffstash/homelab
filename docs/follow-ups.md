@@ -437,7 +437,7 @@ six OVERSIZE items pointer-ized into
       regex-pin automerge lane alone and reads 0.21.0 (jail 0.18.3). **Next:** a Renovate rule grouping/excluding devbox
       (upgrades = ONE change: ARC ARG + jail ENV + host + lock); the box closure overrides `devbox`, then drop
       the exclusion; agent-base's base tag. **Since ~11-23** agent-runtime's `unit` job is red: `devbox-install-action`
-      resolves `latest` (0.23.0) beside a cached 0.22.0, two binaries → `mv` fails; pin `devbox-version:` (operator path).
+      resolves `latest` (0.23.0) beside a cached 0.22.0, two binaries → `mv` fails; pin `devbox-version:` (operator path). ADR-129, FU-237.
 - [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
       template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
       <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
