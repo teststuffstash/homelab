@@ -58,7 +58,8 @@ dig for days by being listed). Write the marker only when the cause is known; th
       FU-293 (ADR-142 re-read overdue since 10-28), FU-318 (land or drop #2798's workflow).
   OPEN, no ruling needed: #3704 kyverno 1.20 rejects the legacy `policy/iac` PolicyException (policy/** → seat/operator-direct);
   intake sitting OOM: one kill in a week (oracle 11-23), agent-loop peaked 977 MiB 11-26 — #3832 raises 1Gi → 2Gi;
-  snippets#36 re-armed by Renovate despite the py3.15 park (`ArmedBehindNoApprovalStranded`); openrouter-operator#110/#111
+  allure-behavior-snippets#36 (`tests/Dockerfile` 3.13 → 3.15): the py3.15 park was LIFTED 10-28 (oracle-fleet#883), the
+  10-31 disarm cited it stale; the real block is `zstandard` with no 3.15 musl wheel (build-base, or a `-slim` stage); openrouter-operator#110/#111
   (bullet below). Docs-comb judgment calls (PR reports #3719–#3722): codex column in `gateway/specs/access.md` + its
   10-15 stamp; ROADMAP's done three-CP-promotion section; ARCHITECTURE "OPNsense firewall as code" planned → partial?;
   CONTEXT.md rebuild-over-HA wording; claim `extraSpecs` `tests:` for scan/launch/retro; facts files call Goal admission
@@ -231,10 +232,6 @@ dig for days by being listed). Write the marker only when the cause is known; th
   `20261113-1746-oracle-stack-intake-island-wiring.md`: A1.2–A1.4 done (#3378); OPERATOR rulings owed before any build — (1) wire
   `--island oracle` now, and with which research egress; (2) Experiment authoring in the shared `islands/intake/rules/intake.md` or oracle-only;
   (3) oracle adopts the platform review-repair stage (#3381) or gets its own `issue-review` sitting. Partial result not yet written back.
-- **⚑ PICKUP (2026-11-13 — CI wait; TICK-LOG 11-13 evening).** On/after **2026-11-21**: re-run the burst-pickup table
-  (`docs/spikes/ci-runtime-2026-11.md` §What waiting on CI costs) — PR job pickup should flatten toward ~3 s after #3348
-  (`minRunners` 3, live); if not, raise again or read the listener. Delete this bullet after the readout.
-
 - **⚑ PICKUP (2026-11-08 — oracle-fleet spec-process mount; operator ruling owed).** oracle-fleet#1026 made `scripts/lib/snippets.sh` set
   `SNIPPETS_RELEASE=<url>` and `SNIPPETS_WHEEL="file://…"`, so `sp_pin_version` (`agents/agent-session.sh`) parses nothing from it (checked against master 11-08; the gateway's still
   parses, #3228 kept the line). Oracle rides reaching `specs/` should be unmounted since 11-08 12:45Z; NOT confirmed in logs (the launcher's mount lines are not in the oracle Loki tenants).
@@ -317,7 +314,7 @@ dig for days by being listed). Write the marker only when the cause is known; th
   Separately, the registry exposes no scraped metric, so push throughput has no belt. The OPNsense firmware
   daily-check belt (official path, no Renovate). The reviewer exit-contract keys a merge head differently from the
   reviewer's standing-aside (false NO TERMINAL).
-- **⚑ HYGIENE (11-16):** stale agent branches (homelab 11 `agent/*`, agent-runtime 1, circles 4): delete or resume. Zombie runs
+- **⚑ HYGIENE (11-16):** Zombie runs
   32217689970 + 34748702282 (still `queued`): operator UI or ignore. Phantom closes: oracle-fleet #25 #24 #22 #7 (`agent/review`),
   sleep-tracking#7 (`agent/blocked`) — relabel. sleep-iac's inert `:dependencyDashboard`; agent-runtime `deps-pin-guard.sh`
   pre-#83 (unverified). #1988 closes when its base-image half has its own home.

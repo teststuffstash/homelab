@@ -15921,3 +15921,28 @@ updates or reverts as much as possible — mechanical revert or a responder."
 - #3821 (Goal #3803 assembly): specs CHANGES_REQUESTED ×4, the last three findings on rules the diff never touched (rows master gained in #3784; the branch was 17 behind). Merged `origin/master` into `goal/3803-go-usage-live` in a scratch clone (`6fae61f4`, clean), pushed. The updater moved the head again (`7fc08b1b`); the specs tick re-admitted the PR on a body edit (13:20Z), approved; merged 13:39Z. The class → FU-327 (operator: document it, the agent-loop island has no sitting yet).
 - Post-merge read: agent-gateway Synced on `492d65dd`, `OPENCODE_USAGE_URL` set, `opencode usage poll: accepted` at 13:40:02Z on image `2026.11.27-ge1cae356dd7c` (no counter family yet). Pin PR #3829 opened 13:40Z by the image workflow.
 - #3810 (#3809, the specs reviewer's doorbell): read the diff, recommended; the session had no corpus load, so the approval waited for the operator's "merge" — approved, the updater refreshed it, merged 13:22Z.
+
+## 2026-11-27 ~20:30–22:30Z — intake OOM, meta-state maintenance sweep (seat, attended)
+
+- Intake sitting OOM: one `OOMKilled` in 8 d (oracle/oracle-fleet, the 11-23 run; positive control for the empty 7-day query), peaks 977 MiB (agent-loop 11-26), 826 (retro), 819/760 (gateway); the load is the sitting, not `devbox install`. #3832 merged 21:06Z: limit 1Gi → 2Gi; the live CronWorkflow read back 2Gi after the sync. First draft failed the island harness ("a stack name in the manifest" — the comment said "oracle").
+- Meta-state pruned against live state: Crossplane belt fired on its positive control; #1101 closed; host-key class already pinned (`machines/hypervisor_known_hosts`; the `mgmt-*` scripts are gone); `VersionSet*` inactive ≥3 d; `meta-throughput.sh` counts ride evidence (not intake writes — the line was wrong); access cell + `docs/intake/retro.md` already fixed. Goal #3803 acceptance 4: 3 of 4 legs read, a Go-rail `POST /sessions` dispatch still unseen. #3563's verdict waits on the 11-28 05:00Z experiments run (the 11-27 run was before the bound).
+- `opnsense-users-self-test` into `ci.yaml`, operator-direct on the operator's order (10/10 locally).
+- Stale `agent/*` branches deleted on the operator's order (all ≥1 month, no open PR, issue closed or work merged). Restore = `gh api -X POST repos/teststuffstash/<repo>/git/refs -f ref=refs/heads/<branch> -f sha=<sha>`:
+  - homelab agent/20260824-104524 d216d0dc47d3b6cf104dce1b2ff1ff19edeb3e52
+  - homelab agent/20260824-132129 7ffa161011a338db638f67c1318d0ed2ee2ac6d2
+  - homelab agent/20260825-171429 583da6d3d4eb35cff0e6257de63fd1afc39fd2df
+  - homelab agent/20260830-233803 075badf128c07f91f09d0fc615303ea25faaa5de
+  - homelab agent/20260901-165514 5cd8b2a22cb626a35b3aa3a1210e461ae2793362
+  - homelab agent/20260914-103937 b32c5857c430e3b5a924291b6ee6dd5140bbb1bf
+  - homelab agent/20260919-223248 d489982c526f3ec4eee5226be54567d464e45955
+  - homelab agent/20260920-015943 d9f09639e70079d6d05af0d4bdcae55a189f639e
+  - homelab agent/20261006-062134 de4a235d63571346550bcb445a97b491c0fad721
+  - homelab agent/20261006-075343 c267a03dc6f80da157b16c84635aa4c65cfc82ec
+  - homelab agent/20261014-211127 b40d8d66ab93e000defcdf67385aaffe1bcdb0eb
+  - circles agent/20260805-130300 9d6bbf09364bd60867d7dea53cf0f80901352b76
+  - circles agent/20260807-050449 fee929198900723cf629d8fdf39ab916f86fb136
+  - circles agent/20260807-191202 1f3f436c6731503c51ff7575413744a61dfc3716
+  - circles agent/20261028-165648 6f6ddfa55a34f9ffc0c0b18199eab6a151836c5f
+  - agent-runtime agent/20260831-081656 7dfbc3c9c36a6a37cfb20062ec8e3971eea35454
+- CI burst-pickup readout (subagent): PR p90 3.3 s over 468 runs, the tail is the `maxRunners` 8 ceiling → spike doc block, meta-state bullet dropped. Stale help text `github-exporter.py:351` "arc maxRunners=4" (live 8), not fixed.
+- Python 3.15 audit (subagent, read-only): every in-cluster Python pod and every stack Dockerfile is on 3.15; no Renovate rule parks Python (rule 11 dockerfile minor = automerge + `platformAutomerge`, rule 16 disables devbox/nix); the 10-18 park (oracle-fleet#883) was lifted 10-28. Mixed versions: sleep-tracking (image 3.15, devbox/ruff 3.11), openrouter-operator (`requires-python`/ruff 3.14), allure tests image 3.13, homelab root devbox 3.14.10 + forensics pod 3.14-slim + node-maintenance 3.13. Report to the operator; nothing changed.

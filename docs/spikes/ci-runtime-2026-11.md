@@ -82,6 +82,21 @@ The "before" window is 11-02 → 11-14, because retention no longer reaches the 
 All PR runs: p90 56 s → 3 s (416 → 411 runs). Push-run pickup stayed at a 3 s median. No further
 change is needed; the remaining tail is a few 2-ahead bursts.
 
+**Readout 2026-11-27: still flat.** Same method as 11-21 ("just ahead" = homelab CI runs created in
+the 2 min before). Window 11-21 → 11-27, 468 PR runs (`minRunners` 3 / `maxRunners` 8 live).
+
+| jobs just ahead | 11-14 → 11-21: n / median / p90 | 11-21 → 11-27: n / median / p90 |
+|---|---|---|
+| 0 | 253 / 3 s / 3 s | 254 / 2 s / 3 s |
+| 1 | 116 / 2 s / 15 s | 105 / 2 s / 4 s |
+| 2 | 33 / 3 s / 44 s | 56 / 2 s / 12 s |
+| 3+ | 9 / 3 s / 32 s | 53 / 3 s / 36 s |
+
+All PR runs: p90 3.3 s; push runs 3 s median. Bursts grew (3+ bucket 9 → 53), and the residual tail
+(17 runs > 30 s, in 7 clock-hours) is the `maxRunners` 8 ceiling, not the idle buffer: the listener
+logged `assigned job` 8–9 against `decision=8` in those windows. No change needed; revisit
+`maxRunners` only if the 3+ tail keeps growing.
+
 ## What could be dropped from a run (runner-min / 30 d)
 
 1. **The full master-push run on a squash merge whose tree a green PR run already tested: up to
