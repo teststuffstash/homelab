@@ -5,8 +5,8 @@ schema: metrics.schema.json
 ---
 # GET /metrics — the `gateway_*` families, with bounded labels only
 
-The evidence surface the alert belts read. Thirty-nine families in the schema (the codex rail's
-two render only while the policy declares that rail), Prometheus text format, no auth (in-cluster,
+The evidence surface the alert belts read. Forty-one families in the schema (the codex rail's
+two render only while the policy declares that rail, the Go usage poll's one only while the policy carries `rails.opencode.headroom`), Prometheus text format, no auth (in-cluster,
 scraped by the ServiceMonitor). **Every label value is drawn from a bounded set** declared in the
 schema — a [bounded label](../glossary.md#bounded-label): never a task key, a session id, or a model
 string outside the policy's set — so cardinality is a property of the policy, not of traffic. The one
@@ -32,6 +32,8 @@ the process is down.
 | [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter) (owned there) | `families.gateway_provider_requests_total`, `families.gateway_provider_failovers_total` | — | linked — the provider axis: attempts per cell and failovers; their values are rows there and below |
 | [GW-CATALOG-OR](catalog.md#gw-catalog-or) (owned there) | `families.gateway_openrouter_catalog_*`, `families.gateway_openrouter_cells`, `families.gateway_canary_*` | — | linked — the OpenRouter catalog's freshness and refresh outcomes, the cells by entry state, the canary meter and verdicts; their values are rows there |
 | [GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the codex rail the two gauges come from an ACCEPTED headroom report, not from headers; their values are rows there |
+| [GW-SESSIONS-CAPACITY §Go account headroom](sessions.md#go-account-headroom) (owned there) | `families.gateway_subscription_utilization`, `families.gateway_subscription_reset_seconds` | — | linked — on the opencode rail the two gauges come from an ACCEPTED Go usage reading; their values are rows there |
+| [GW-SESSIONS-CAPACITY §Go account headroom](sessions.md#go-account-headroom) (owned there) | `families.gateway_opencode_usage_poll_total` | — | linked — the gateway's own Go usage poll by outcome, every outcome from 0 under a policy with the headroom block; its values are rows there |
 | [GW-CODEX-HEADROOM §Poll](openai-responses.md#poll) (owned there) | `families.gateway_codex_usage_poll_total` | — | linked — the gateway's own usage poll by outcome, every outcome from 0; its values are rows there |
 | [GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers) (owned there) | `families.gateway_codex_upstream_headroom_total` | — | linked — the relayed answers' headroom-header reads by outcome, every outcome from 0; its values are rows there |
 | [GW-WIRE-PROBE](wire.md#gw-wire-probe) (owned there) | `families.gateway_wire_probe_total` | — | linked — the declared probes by source and outcome; `source` only takes names the declarations file declares; its values are rows there |
@@ -92,7 +94,7 @@ two values. The families an alert
 reads with `increase()` or `== 0` render every label value from `0` on a fresh process (`rail` on
 the credential and session families, every `(route, reason)` on the control-plane family), so a
 flat series reads as "no such event" and an absent one as "never scraped"; the codex rail's two
-families render only while the policy declares that rail
+families render only while the policy declares that rail, and the Go usage poll's one only while the policy carries `rails.opencode.headroom`
 ([GW-CODEX-HEADROOM](openai-responses.md#gw-codex-headroom)). The codex rail's `gateway_sessions_active{rail="codex"}`
 renders `0` even where no policy declares it — the rail ships dark ⚖. Values owned by another
 requirement (the Go and OpenRouter catalogs, the canary, the codex headroom, the rail choice) are
@@ -132,6 +134,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_strikes_total` | `class`, `source` | strikes written to the store ([GW-SESSIONS-OUTCOME](sessions.md#gw-sessions-outcome)): `class` a strike class of the one vocabulary, `source` `outcome` (the consumer) or `gateway` (a transport fact) |
 | `gateway_sessions_reaped_total` | `rail` | sessions released because their pod was gone ([GW-SESSIONS-LIVENESS](sessions.md#gw-sessions-liveness)); every rail renders from 0 |
 | `gateway_codex_usage_poll_total` | `outcome` | the codex rail's usage polls by outcome ([GW-CODEX-HEADROOM §Poll](openai-responses.md#poll)): `accepted` = the headroom took the report; the rest name why it did not. The family exists only while the policy declares the codex rail, then every outcome renders from 0 ⚖ — the alerts read `increase()` (an undeclared rail has no series, so `CodexUsagePollSilent` cannot fire on it) |
+| `gateway_opencode_usage_poll_total` | `outcome` | the Go rail's usage polls by outcome ([GW-SESSIONS-CAPACITY §Go account headroom](sessions.md#go-account-headroom)): `accepted` = the headroom took the reading; the rest name why it did not. The family exists only while the policy carries `rails.opencode.headroom`, then every outcome renders from 0 ⚖ |
 | `gateway_codex_upstream_headroom_total` | `outcome` | the codex rail's relayed answers read for their `x-codex-*` headroom headers ([GW-CODEX-HEADROOM §Upstream headers](openai-responses.md#upstream-headers)): `accepted` = the headroom took the report, `absent` = no window header on the answer, the rest name the refusal. Declared-gated and rendered from 0 exactly like the poll family ⚖ |
 | `gateway_wire_probe_total` | `source`, `outcome` | the declared wire probes ([GW-WIRE-PROBE](wire.md#gw-wire-probe)): `ok` = an answer recorded, `no-credential` = the rail's lifecycle gave none so nothing was fetched, `fetch-failed` = a non-200 or an unreachable upstream; `source` is a name the declarations file declares. With no declarations the family has HELP and TYPE and no series ⚖ |
 | `gateway_credential_probes_total` | `rail`, `outcome` | re-verifications of a rejected credential ([§Capacity](sessions.md#gw-sessions-capacity)): `cleared` (a 2xx), `rejected` (a credential verdict again), `inconclusive` (no verdict) |
@@ -152,8 +155,8 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 |---|---|---|---|
 | `gateway_sessions_active` | gauge | `rail` | sessions neither released nor expired, per rail — the admission counter |
 | `gateway_upstream_seconds` | histogram | `rail`, `traffic` | upstream round-trip, first byte to last |
-| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)) |
-| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at` |
+| `gateway_subscription_utilization` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-utilization` (0–1) on the subscription rail — capacity, not dollars ⚖; on the codex rail the last ACCEPTED headroom report's `used_percent` / 100 ([GW-CODEX-HEADROOM §Gauges](openai-responses.md#gauges)); on the opencode rail the last ACCEPTED Go usage reading's `percent` / 100, on the windows `rolling`, `weekly`, `monthly` ([GW-SESSIONS-CAPACITY §Go account headroom](sessions.md#go-account-headroom)) |
+| `gateway_subscription_reset_seconds` | gauge | `rail`, `window` | last-seen `anthropic-ratelimit-unified-<window>-reset` (unix seconds); on the codex rail the accepted report's `resets_at`; on the opencode rail the accepted reading's `resetsAt` |
 | `gateway_cells_cooled` | gauge | `rail` | (rail, model, provider) cells an upstream 429 cooled, until their reset — admission skips them ([§Capacity](sessions.md#gw-sessions-capacity)); counted per rail (`model` is no label on this gauge); every rail renders from 0 |
 | `gateway_credentials_rejected` | gauge | `rail` | rail credentials an upstream 401/403 rejected, until a 2xx on them or a new value — the alert hook for a dead key; every rail renders from 0 ⚖ |
 | `gateway_go_catalog_age_seconds` | gauge | `source` | seconds since the source's last good snapshot was fetched — absent until one exists ([GW-CATALOG-GO](catalog.md#gw-catalog-go)) |
@@ -299,7 +302,7 @@ display name the snapshot lacks (`the answer names Sail Research`).
 
 Legend (above); `family` = the family whose series are read (`any` = every family); `label` = the
 label read on them; `values_within?` = the set every value seen lies within (⊆, and at least one
-value is seen) — a regular expression where the set is a pattern.
+value is seen) — a regular expression where the set is a pattern; the `window` vocabulary is `5h`, `7d` (the header rails and the codex profile), `rolling`, `weekly`, `monthly` (the Go usage reading's names) and `other`.
 
 | description | world | event | family | label | values_within? |
 |---|---|---|---|---|---|
@@ -311,7 +314,7 @@ value is seen) — a regular expression where the set is a pattern.
 | status is a numeric HTTP status | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_total` | `status` | `^[1-5][0-9][0-9]$` |
 | class is one of the four usage classes | `policy-default · upstream-ok` | `every family driven` | `gateway_tokens_total` | `class` | `in, cache_read, cache_write, out` |
 | traffic is real, synthetic or none | `policy-default · upstream-ok` | `every family driven` | `gateway_requests_total` | `traffic` | `real, synthetic, none` |
-| window is 5h or 7d | `policy-default · upstream-ok` | `every family driven` | `gateway_subscription_utilization` | `window` | `5h, 7d, other` |
+| window is a subscription window name | `policy-default · upstream-ok` | `every family driven` | `gateway_subscription_utilization` | `window` | `5h, 7d, rolling, weekly, monthly, other` |
 
 #### Labels are bounded: credentials, the control plane, the catalog
 
@@ -367,13 +370,13 @@ unknown stack name the drive used, as substrings of the exposition; `found?` = t
 
 #### Every family is declared
 
-Legend: `families` = the families to find — `the schema's, less the codex rail's` = every key of
-`metrics.schema.json` `families` except `gateway_codex_*` (rendered only for a declared codex rail);
+Legend: `families` = the families to find — `the schema's, less the codex rail's and the Go usage poll's` = every key of
+`metrics.schema.json` `families` except `gateway_codex_*` (rendered only for a declared codex rail) and `gateway_opencode_usage_poll_total` (rendered only under a policy with `rails.opencode.headroom`);
 `undeclared?` = those with no `# HELP` or no `# TYPE` line on a fresh gateway (`none`).
 
 | description | world | families | undeclared? |
 |---|---|---|---|
-| every family renders HELP and TYPE, zeros included | `policy-default` | `the schema's, less the codex rail's` | `none` |
+| every family renders HELP and TYPE, zeros included | `policy-default` | `the schema's, less the codex rail's and the Go usage poll's` | `none` |
 
 > Tombstones (removed by PR #3184; one cycle): ~~tokens are counted by class~~ → the four class rows
 > of [Tokens and upstream time](#tokens-and-upstream-time-are-observed-per-rail); ~~the subscription

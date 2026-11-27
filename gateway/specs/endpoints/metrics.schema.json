@@ -67,9 +67,12 @@
       "enum": [
         "5h",
         "7d",
+        "rolling",
+        "weekly",
+        "monthly",
         "other"
       ],
-      "description": "the subscription windows; `other` = a codex headroom profile minute outside the vocabulary (GW-CODEX-HEADROOM §Gauges)"
+      "description": "the subscription windows: `5h`, `7d` (the header rails and the codex profile); `rolling`, `weekly`, `monthly` = the Go usage reading's vendor-named windows (GW-SESSIONS-CAPACITY §Go account headroom); `other` = a codex headroom profile minute outside the vocabulary (GW-CODEX-HEADROOM §Gauges)"
     },
     "outcome": {
       "enum": [
@@ -301,7 +304,8 @@
       },
       "x-requirements": [
         "GW-METRICS",
-        "GW-CODEX-HEADROOM"
+        "GW-CODEX-HEADROOM",
+        "GW-SESSIONS-CAPACITY"
       ]
     },
     "gateway_subscription_reset_seconds": {
@@ -316,7 +320,8 @@
       },
       "x-requirements": [
         "GW-METRICS",
-        "GW-CODEX-HEADROOM"
+        "GW-CODEX-HEADROOM",
+        "GW-SESSIONS-CAPACITY"
       ]
     },
     "gateway_credential_resolve_total": {
@@ -474,6 +479,29 @@
       "x-requirements": [
         "GW-METRICS",
         "GW-CODEX-HEADROOM"
+      ]
+    },
+    "gateway_opencode_usage_poll_total": {
+      "type": "counter",
+      "labels": {
+        "outcome": {
+          "enum": [
+            "accepted",
+            "quota-invalid",
+            "quota-time-invalid",
+            "quota-out-of-order",
+            "credential-unresolved",
+            "upstream-auth",
+            "upstream-http-error",
+            "upstream-content-type",
+            "upstream-unreachable",
+            "upstream-timeout"
+          ]
+        }
+      },
+      "x-requirements": [
+        "GW-METRICS",
+        "GW-SESSIONS-CAPACITY"
       ]
     },
     "gateway_codex_upstream_headroom_total": {
