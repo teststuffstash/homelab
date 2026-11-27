@@ -168,7 +168,7 @@ class Metrics:
             self._rail_choices[key] = self._rail_choices.get(key, 0) + 1
 
     def bind_tier_evidence(self, age: Callable[[], float | None]) -> None:
-        """GW-MODEL-TIERS: seconds since the mounted tier-evidence snapshot's `snapshot_at` (None = none mounted)."""
+        """GW-MODEL-TIERS: seconds since the walked tier derivation's benched `as_of` (None = no derivation)."""
         self._tier_evidence_age = age
 
     def failover(self, model: str, frm: str, to: str) -> None:
@@ -366,7 +366,7 @@ class Metrics:
                       "# TYPE gateway_rail_choice_total counter"]
             for (model, rail, reason), n in sorted(self._rail_choices.items()):
                 lines.append(f"gateway_rail_choice_total{_fmt_labels({'model': model, 'rail': rail, 'reason': reason})} {n}")
-            lines += ["# HELP gateway_tier_evidence_age_seconds Seconds since the mounted tier-evidence snapshot's snapshot_at (absent: none mounted) (GW-MODEL-TIERS).",
+            lines += ["# HELP gateway_tier_evidence_age_seconds Seconds since the benched set's as_of behind the walked tier derivation (absent: no derivation) (GW-MODEL-TIERS).",
                       "# TYPE gateway_tier_evidence_age_seconds gauge"]
             age = self._tier_evidence_age()
             if age is not None:

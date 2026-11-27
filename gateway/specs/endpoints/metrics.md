@@ -166,7 +166,7 @@ transient credential); `series` = the sample line read from `GET /metrics`; `val
 | `gateway_openrouter_cells` | gauge | `state` | (model, provider) cells of the catalog by entry state — `candidate`, `eligible`, `excluded`; a provider's service tiers are one cell |
 | `gateway_canary_spend_usd` | gauge | — | metered canary spend over the trailing day at the cell's endpoint price |
 | `gateway_canary_budget_exhausted` | gauge | — | 1 while the canary cap (per refresh or per day) is spent and candidate cells wait — `GatewayCanaryBudgetExhausted` reads it |
-| `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the mounted tier-evidence snapshot's `snapshot_at` (`GATEWAY_BENCHMARKS`) — absent when none is mounted; `TierEvidenceStale` reads it |
+| `gateway_tier_evidence_age_seconds` | gauge | — | seconds since the benched set's `as_of` behind the walked tier derivation ([GW-MODEL-TIERS §The evidence age](catalog.md#the-evidence-age)) — absent while there is no derivation; `TierEvidenceStale` reads it |
 | `gateway_build_info` | gauge | `release` | 1 for the release the process started as (the value [`/healthz`](health.md#gw-health) answers) — set once, for the process's life |
 | `gateway_db_mode` | gauge | `mode` | 1 for the [store mode](../glossary.md#store-mode) the gateway opened at start (`pvc`, `memory`), 0 for the other — set once, for the process's life; `GatewayStoreMemoryMode` reads it |
 

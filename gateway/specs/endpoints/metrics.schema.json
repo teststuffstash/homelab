@@ -759,7 +759,7 @@
     "gateway_tier_evidence_age_seconds": {
       "type": "gauge",
       "labels": {},
-      "description": "seconds since the mounted tier-evidence snapshot's snapshot_at; absent when none is mounted — TierEvidenceStale reads it (GW-MODEL-TIERS)",
+      "description": "seconds since the benched set's as_of behind the walked tier derivation (the OpenRouter snapshot's fetched_at when the feed names none); absent while there is no derivation — TierEvidenceStale reads it (GW-MODEL-TIERS)",
       "x-requirements": [
         "GW-METRICS",
         "GW-MODEL-TIERS"

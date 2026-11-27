@@ -29,6 +29,7 @@ ENDPOINT_FIXTURES = {"deepseek/deepseek-v4.1-flash": "deepseek-v4.1-flash.json",
 # ranked (the latest week, both slices) ∩ AA-benched, in the fixtures: the eight below — two with endpoint fixtures
 BENCHED_RANKED = ("anthropic/claude-opus-5.5", "deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k3",
                   "xiaomi/mimo-v2.5", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash", "nvidia/nemotron-3-ultra-550b-a55b:free")
+UNRANKED_ID = "xiaomi/mimo-v2.5"  # `ranking-without-one` serves the ranking without it: benched, never ranked
 NEMOTRON_FREE_FAMILY = "nvidia/nemotron-3-ultra-550b-a55b-"  # the `:free` id's family row in benchmarks-aa.json (a hand-built row, see the world README)
 
 
@@ -38,7 +39,9 @@ def fixture(name: str) -> dict:
 
 class FakeMcp:
     """`mcp` = ok | 503 | down (the transport) | malformed (a tool result that is not JSON) |
-    rankings-undated (rows without `date`) | benchmarks-empty | benchmarks-no-family (the `:free` id's family row withheld)."""
+    rankings-undated (rows without `date`) | benchmarks-empty | benchmarks-no-family (the `:free` id's family row withheld) |
+    ranking-without-one (the ranking served without UNRANKED_ID: a benched id outside the ranking) |
+    benchmarks-malformed (a `list-benchmarks` answer whose `data` is not a list; the rankings answer as usual)."""
 
     def __init__(self):
         self.mcp = "ok"
@@ -68,11 +71,15 @@ class FakeMcp:
         if tool == "list-daily-model-rankings":
             name = "rankings-programming.json" if args.get("category") == "programming" else "rankings-tool_calling.json"
             doc = fixture(name)
+            if self.mcp == "ranking-without-one":
+                doc = {"data": [r for r in doc["data"] if not r["model_permaslug"].startswith(f"{UNRANKED_ID}-")], "meta": doc["meta"]}
             if self.mcp == "rankings-undated":
                 doc = {"data": [{k: v for k, v in r.items() if k != "date"} for r in doc["data"]], "meta": doc["meta"]}
             return _tool(body, json.dumps(doc))
         if tool == "list-benchmarks":
             doc = fixture("benchmarks-aa.json")
+            if self.mcp == "benchmarks-malformed":
+                doc = {"data": {"not": "a list"}, "meta": doc["meta"]}
             if self.mcp == "benchmarks-empty":
                 doc = {"data": [], "meta": doc["meta"]}
             if self.mcp == "benchmarks-no-family":  # the nemotron:free family does not bench (GW-CATALOG-OR `:free` row)
