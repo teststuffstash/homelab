@@ -153,11 +153,13 @@ six OVERSIZE items pointer-ized into
       `OPENROUTER_API_KEY` branch, the worker sidecar, the loop roles, the lint.
 - [ ] **FU-326** — **A stack repo can still reach platform credentials and cluster scope through ArgoCD (beside ADR-168).**
       Found by the #3768 security review, 2026-11-25. Mechanism, inventory and the six-step migration:
-      `docs/stack-workspace-migration.md` on PR #3782 (ADR-169, `repos[].provision[]`; additive, unarmed). Its last
-      section names the wider path: Applications in AppProject `default`. Smaller, same family: oracle-fleet's
-      Infisical allowlist carries the platform `REGISTRY_PUSH_TOKEN` (needs a stack-scoped push identity first, then
-      drop the key from `eso-guard.yaml`). **Next:** the operator reads #3782; then the migration steps, and the
-      interim admission guard for project `default` (Warn/Audit first) the doc lists as an option.
+      `docs/stack-workspace-migration.md` (on PR #3782, ADR-169, `repos[].provision[]`; armed
+      2026-11-27 after the seat's review — findings in a comment there). Open beside the migration: Applications in
+      AppProject `default`; the provision bounds are keyed on an AgentStack name the stack itself writes; no per-stack
+      storage ceiling; no gate keeps a platform bucket out of a stack's alias prefix; oracle-fleet's Infisical
+      allowlist carries the platform `REGISTRY_PUSH_TOKEN`. **Next:** the migration steps (stack PRs, observe first);
+      then the interim guard for project `default` (Warn/Audit first). After the last row (operator, 2026-11-27):
+      reshape the schema into small namespaced claim kinds and drop the adoption-only fields.
 - [ ] **FU-317** — **apiserver audit logs never leave the CPs.** Talos writes `kube-apiserver` audit
       logs on each control plane, but nothing ships them to Loki — so "who wrote this RBAC/Secret" has no
       answer off-node (found by the Kargo RBAC hardening, homelab#2798: a denied escalation is visible only

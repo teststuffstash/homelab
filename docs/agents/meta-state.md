@@ -25,8 +25,10 @@ dig-explained: TierEvidenceStale — the re-cut (#3590) merged into `goal/3305-r
     `gateway_tier_evidence_age_seconds` + `TierEvidenceStale` together (the gauge now reads the derivation's age;
     `argocd/resources/agent-gateway/` still mounts the snapshot — the Goal's post-launch edit), then drop the
     `dig-explained` line above. Goal #3305's verdict is the operator's.
-  - **PR #3782 (UNARMED, operator reads it; ADR-169)** — `repos[].provision[]`; FU-326 tracks it with the AppProject
-    `default` path and the `REGISTRY_PUSH_TOKEN` narrowing.
+  - **PR #3782 (ADR-169, `repos[].provision[]`) ARMED 2026-11-27 on the operator's word** after the seat's security
+    review (comment on the PR; three fixes pushed, master merged in). pr-wait was running; read the verdict, fix in the
+    PR. Then FU-326: migration step 1 is stack PRs (observe mode). Operator: the migration doc stays public; the schema
+    is reshaped AFTER the migration.
   - `/workspace/teststuff` (operator's checkout): 5 unpushed commits that conflict with Forgejo main on LOG.md/STATE.md
     (the second jail pushed 8dfe0f9 on top of remote main, 11-22). The `pull --rebase` is the operator's.
   - #3563's experiment bound is 2026-11-27T13:14Z: exactly ONE verdict comment, a second run writes nothing (bullet below).
