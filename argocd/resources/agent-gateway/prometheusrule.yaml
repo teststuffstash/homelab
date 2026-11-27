@@ -227,6 +227,38 @@ spec:
           annotations:
             summary: 'The codex rail is declared but its usage poll has not run for 15 m — the rail sits on quota-unknown'
             description: 'gateway_codex_usage_poll_total renders (the policy declares the codex rail) but no poll ran in 15 m. The poll runs only with CODEX_USAGE_URL set AND a credential backend (CODEX_UPSTREAM + CODEX_SEED_FILE with a mounted seed — ESO Secret agent-egress/codex-seed): kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll dark" names which is missing; a live schedule that died logs "codex usage poll: one pass failed". Until a poll is accepted every codex admission defers quota-unknown.'
+    # ── The Go rail's account usage poll ──
+    # The gateway polls Go account usage and retains the last accepted reading for headroom.
+    # gateway_opencode_usage_poll_total is absent without rails.opencode.headroom, so neither
+    # alert fires before the block is configured. Behaviour fixture: go-usage.promtool-{rules,test}.
+    #   GoUsagePollStale  — polls run but none was accepted for 15 m; the rail is deferring.
+    #   GoUsagePollSilent — the block is configured but no poll ran for 15 m.
+    - name: agent-gateway-go-usage
+      rules:
+        - alert: GoUsagePollStale
+          expr: |
+            (sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway",outcome="accepted"}[15m])) == 0)
+            and
+            (sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway"}[15m])) > 0)
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+            rail: opencode
+          annotations:
+            summary: 'The gateway''s Go usage poll has accepted nothing for 15 m — the opencode rail is deferring (quota-stale; quota-unknown if no reading was ever accepted)'
+            description: 'gateway_opencode_usage_poll_total counts polls but none ended accepted in 15 m, so the Go usage reading is past rails.opencode.headroom.max_age_s, or was never taken, and every admission on the opencode rail answers quota-stale or quota-unknown (the reading fails closed: gateway/specs/endpoints/sessions.md §Go account headroom). Check: (1) sum by (outcome) (increase(gateway_opencode_usage_poll_total[15m])) names the outcome — upstream-auth = the vendor answers 401 or 403 on the usage path (the Go key rejected, or the vendor''s edge refusing the request), upstream-http-error = another status that is not 200, credential-unresolved = the Go key mount is empty (Secret opencode-go-key, optional in deployment.yaml), quota-invalid = the answer no longer carries the three windows rolling / weekly / monthly with a future reset, upstream-content-type = a 200 that is not JSON, upstream-unreachable / upstream-timeout = the network; (2) kubectl -n agent-egress logs deploy/agent-gateway | grep "opencode usage poll". Clears on the next accepted poll.'
+        - alert: GoUsagePollSilent
+          expr: |
+            sum(increase(gateway_opencode_usage_poll_total{job="agent-gateway"}[15m])) == 0
+          for: 15m
+          labels:
+            severity: warning
+            triage: dig
+            rail: opencode
+          annotations:
+            summary: 'The policy carries the Go headroom block but the Go usage poll has not run for 15 m — the opencode rail sits on quota-unknown'
+            description: 'gateway_opencode_usage_poll_total renders (the policy carries rails.opencode.headroom) but no poll ran in 15 m. The poll runs only with OPENCODE_USAGE_URL set in argocd/resources/agent-gateway/deployment.yaml: kubectl -n agent-egress get deploy agent-gateway -o yaml | grep -A1 OPENCODE_USAGE_URL shows whether it is, and kubectl -n agent-egress logs deploy/agent-gateway | grep "opencode usage poll" shows whether the schedule runs. Until a poll is accepted every admission on the opencode rail defers quota-unknown.'
     # ── The gateway's own request outcomes (GW-METRICS, gateway/specs/endpoints/metrics.md) ──
     # Every other rule here reads catalog, credential or store state; these two read what the gateway
     # does to its callers. Behaviour fixture: requests.promtool-{rules,test}.
