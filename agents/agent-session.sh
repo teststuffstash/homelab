@@ -3225,6 +3225,16 @@ ${DIND_CONTAINER}
       image: ${IMAGE}
       args: ${ARGS}
       env:
+        # Claude Code's shell-command cap (default 2 min, max 10 min) is below a repo's pre-PR
+        # gate (oracle-fleet's runs 20–30 min), so a foreground pr-open — the ground rules' one
+        # way to open a PR — was killed mid-gate together with its shell, and a worker that
+        # started the gate with nohup … & inside a capped call lost it the same way. One cap
+        # above any gate: the pod's activeDeadlineSeconds still bounds a hung command. Other
+        # harnesses ignore these.
+        - name: BASH_DEFAULT_TIMEOUT_MS
+          value: "3600000"
+        - name: BASH_MAX_TIMEOUT_MS
+          value: "3600000"
         # devbox self-update phone-home (releases.jetify.com) is DENIED by the egress CNP —
         # correctly, but 3 drops/min per ride kept AgentWorkerEgressDropped warm (2026-07-21).
         # Disable the check instead of widening policy for telemetry. 2026-07-22: the update-check
