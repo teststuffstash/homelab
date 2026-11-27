@@ -35,7 +35,7 @@ truth.
 | **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs; **backed up by default** (WAL + daily base backup, 14 d, ADR-147) | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; consumer card [`docs/postgres.md`](docs/postgres.md) |
 | **Infisical** | 🟢 LIVE | Secrets manager (the source ESO reads) | `infisical.teststuff.net` · VIP `192.168.40.18` · in-cluster | ADR-062; `devbox run infisical-secret`, [`docs/secrets.md`](docs/secrets.md) |
 | **External Secrets Operator** | 🟢 LIVE | Syncs Infisical → native k8s Secrets | in-cluster (`ClusterSecretStore` `infisical`) | ADR-062; [`docs/secrets.md`](docs/secrets.md) |
-| **Crossplane (+ provider-terraform)** | 🟢 LIVE | Reconciles app-owned resources (Garage buckets/keys) from `Workspace` CRs | in-cluster | ADR-076; [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md) |
+| **Crossplane (+ provider-terraform)** | 🟢 LIVE | Reconciles app-owned resources (Garage buckets/keys, generated passwords) from `Workspace` CRs — for a STACK only the ones the AgentStack Composition renders from `repos[].provision` (ADR-169); stack-authored Workspaces are legacy, being migrated | in-cluster | ADR-076/169; [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md); [`docs/stack-workspace-migration.md`](docs/stack-workspace-migration.md) |
 | **CI runner — ephemeral** | 🟢 LIVE | Self-hosted GitHub Actions runners (ARC, ephemeral laptop tier) | org scaleset · in-cluster (`arc-systems`/`arc-runners`) | `runs-on: homelab-ephemeral`; a **public** repo needs runner-group "Allow public repositories" → [`docs/github-setup.md`](docs/github-setup.md), [`docs/github-runner-bootstrap.md`](docs/github-runner-bootstrap.md) |
 | **CI runner — Forgejo Actions** | 🟢 LIVE | Tier-B `act_runner` (two replicas + a DinD sidecar) for Forgejo-only repos — the operator's `rasmus/*` site builds above | ns `forgejo-runner` | `runs-on: docker` (job in `node:22-bookworm` via DinD) or `native`; `tofu/forgejo-runner.tf`; [`docs/ci.md`](docs/ci.md) §Tier B |
 | **CI runner — Proxmox VM** | 🟢 LIVE | Real-kernel runner for image builds (arm64 emulation, k3d/Docker) | `ci-runner-01` @ 192.168.2.55 (pve) · `ci-runner-02` @ 192.168.2.66 (nx-02, FU-266) | `runs-on: [self-hosted, proxmox-vm]`; ADR-082 — builds needing Docker/binfmt |
@@ -60,14 +60,16 @@ truth.
 
 ## Consuming a LIVE service
 
-- **Object storage (Garage):** your app **owns its buckets** — declare them in your repo's `infra/`
-  and consume the key. Full recipe: [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md).
+- **Object storage (Garage):** your app **owns its buckets** — declare them as a `repos[].provision`
+  entry on your stack's AgentStack (ADR-169; never a `Workspace` of your own) and consume the key from
+  the connection Secret in your namespace. Generated passwords come the same way. Full recipe:
+  [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md#buckets-keys-and-passwords-reposprovision-adr-169).
   Reach data at `https://s3.teststuff.net` (region `garage`, path-style) with your key.
 - **Storage (Longhorn):** request a PVC with `storageClassName: longhorn` (small, replicated),
   `longhorn-bulk` (large volumes: S3 data, backups, datasets) or `longhorn-fast` (SCRATCH: single-node replica-1 on nx-01's 7600p since 2026-09-24 — intent is disk-write-heavy pods (CI builds), NEVER load-bearing data/metadata; FU-159 ruling 2026-08-11; one replica-1 class too many beside `longhorn-scratch`, FU-234).
   **Your cap comes from your stack's AgentStack claim** (`spec.repos[].storage`, ADR-089) — an
   over-cap PVC fails at creation with a quota error; ask for a bigger grant via the claim, checked
-  against the advertised tier ceilings above. Buckets: state `max_size` on every `garage_bucket`.
+  against the advertised tier ceilings above. Buckets: `maxSizeMi` on every `repos[].provision` bucket.
 - **Secrets (Infisical → ESO):** put the value in Infisical (`devbox run infisical-secret K=V`) and
   pull it into your namespace with an `ExternalSecret` against the `infisical` `ClusterSecretStore`.
   Full recipe: [`docs/secrets.md`](docs/secrets.md). Never commit secret values (repos are public).

@@ -555,6 +555,264 @@ spec:
                               a stack's facts stay in the stack). No leading/trailing slash, no
                               dot-led segment. Its required parts: islands/intake/README.md
                               §Stack islands.
+                      provision:
+                        type: array
+                        maxItems: 16
+                        description: >-
+                          Platform-held provisioning (ADR-169): Garage buckets + keys, generated
+                          passwords and their Infisical publication, which a stack used to get by
+                          authoring a tf.upbound.io Workspace itself. Each entry renders ONE
+                          Workspace (`<repo>.<name>`) whose Terraform the Composition writes from
+                          these fields, so a stack chooses names, sizes and grants, never code.
+                          The connection Secret lands in ns <repo>. The Composition holds the
+                          per-stack bounds (bucket alias prefixes, adoptable legacy Workspaces,
+                          publishable Infisical keys, namespaces); an entry outside them fails the
+                          render with the reason. Removing a WHOLE entry orphans what it made (no
+                          Delete in the management policies). Removing one bucket, key, grant or
+                          password from an entry that stays is an ordinary apply: Terraform
+                          destroys it.
+                          Guide: docs/patterns/app-owned-resources.md.
+                        items:
+                          type: object
+                          required: [name]
+                          properties:
+                            name:
+                              type: string
+                              pattern: '^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$'
+                              description: Entry name, unique per repo. The Workspace is `<repo>.<name>`.
+                            secretName:
+                              type: string
+                              pattern: '^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$'
+                              description: >-
+                                Connection Secret name in ns <repo> (every output below is one key).
+                                Omit = the entry name.
+                            adopt:
+                              type: object
+                              required: [workspace, mode]
+                              description: >-
+                                Take over a LEGACY stack-authored Workspace's Terraform state instead
+                                of creating anew (the migration path: docs/stack-workspace-migration.md). The rendered Workspace runs in that state, so the fields
+                                below must describe exactly what the legacy module declares, with the
+                                legacy Terraform names in `tfName`. Allowed only for a Workspace on
+                                the Composition's list for this stack.
+                              properties:
+                                workspace:
+                                  type: string
+                                  pattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+                                  description: The legacy Workspace's name (its Terraform workspace).
+                                mode:
+                                  type: string
+                                  enum: [observe, manage]
+                                  description: >-
+                                    observe = management policy Observe only and no connection Secret:
+                                    the Workspace plans against the legacy state and turns Ready only
+                                    when that plan is empty. Never writes state or infrastructure.
+                                    manage = the normal policy (no Delete) plus the connection Secret.
+                            buckets:
+                              type: array
+                              maxItems: 8
+                              items:
+                                type: object
+                                required: [alias, maxSizeMi]
+                                properties:
+                                  alias:
+                                    type: string
+                                    pattern: '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
+                                    description: Garage global alias. Must be inside the stack's alias space.
+                                  maxSizeMi:
+                                    type: integer
+                                    minimum: 1
+                                    maximum: 1048576
+                                    description: Quota in MiB (ADR-089 quota-as-contract; the pool math is docs/storage-ledger.md).
+                                  website:
+                                    type: boolean
+                                    description: Serve the bucket on the Garage web endpoint (index.html). Omit = dark.
+                                  tfName:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: >-
+                                      Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                      a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                                  output:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: Connection-Secret key carrying the alias. Omit = none.
+                                  idOutput:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: Connection-Secret key carrying the Garage bucket id. Omit = none.
+                            readBuckets:
+                              type: array
+                              maxItems: 8
+                              description: >-
+                                Buckets of the stack's alias space this entry does not create but grants
+                                READ on (looked up by alias, never planned here).
+                              items:
+                                type: object
+                                required: [alias]
+                                properties:
+                                  alias:
+                                    type: string
+                                    pattern: '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
+                                  tfName:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: >-
+                                      Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                      a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                                  output:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: Connection-Secret key carrying the alias. Omit = none.
+                            keys:
+                              type: array
+                              maxItems: 8
+                              items:
+                                type: object
+                                required: [name, grants]
+                                properties:
+                                  name:
+                                    type: string
+                                    pattern: '^[a-z][a-z0-9_]{0,40}$'
+                                  garageName:
+                                    type: string
+                                    pattern: '^[a-z0-9][a-z0-9-]{0,62}$'
+                                    description: The key's Garage name. Omit = `<alias of the first grant>-<name>`.
+                                  tfName:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: >-
+                                      Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                      a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                                  outputs:
+                                    type: boolean
+                                    description: Write the key id + secret to the connection Secret. Omit = true.
+                                  idOutput:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: Omit = `<name>_access_key_id`.
+                                  secretOutput:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: Omit = `<name>_secret_access_key`.
+                                  grants:
+                                    type: array
+                                    minItems: 1
+                                    maxItems: 8
+                                    items:
+                                      type: object
+                                      required: [bucket, access]
+                                      properties:
+                                        bucket:
+                                          type: string
+                                          pattern: '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
+                                          description: An alias of this entry's buckets or readBuckets (readBuckets admit `ro` only).
+                                        access:
+                                          type: string
+                                          enum: [rw, ro, wo]
+                                        tfName:
+                                          type: string
+                                          pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                          description: >-
+                                            Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                            a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                            externalGrants:
+                              type: array
+                              maxItems: 8
+                              description: >-
+                                Grants on one of THIS entry's buckets to a key made elsewhere (by id),
+                                e.g. a sibling repo's reader. Only ever widens access to the stack's own bucket.
+                              items:
+                                type: object
+                                required: [bucket, accessKeyId, access]
+                                properties:
+                                  bucket:
+                                    type: string
+                                    pattern: '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'
+                                  accessKeyId:
+                                    type: string
+                                    pattern: '^GK[0-9a-f]{24}$'
+                                  access:
+                                    type: string
+                                    enum: [rw, ro, wo]
+                                  tfName:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: >-
+                                      Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                      a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                            passwords:
+                              type: array
+                              maxItems: 8
+                              items:
+                                type: object
+                                required: [name, length]
+                                properties:
+                                  name:
+                                    type: string
+                                    pattern: '^[a-z][a-z0-9_]{0,40}$'
+                                  length:
+                                    type: integer
+                                    minimum: 16
+                                    maximum: 128
+                                  stable:
+                                    type: boolean
+                                    description: >-
+                                      Never replaced (prevent_destroy, no rotation keeper) — e.g. a data
+                                      encryption key. Omit = rotatable by `generation`.
+                                  generation:
+                                    type: string
+                                    pattern: '^[0-9]{1,6}$'
+                                    description: Bump to rotate (ignored when stable). Omit = "1".
+                                  tfName:
+                                    type: string
+                                    pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                    description: >-
+                                      Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                      a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                                  outputs:
+                                    type: boolean
+                                    description: Write it to the connection Secret under `name`. Omit = true.
+                            infisical:
+                              type: object
+                              required: [publish]
+                              description: >-
+                                Publish values into the homelab Infisical project (env prod, path /; the
+                                project is the Composition's, not a field) for consumers outside the
+                                cluster or behind an ExternalSecret. Only key names on the Composition's
+                                list for this stack (the ADR-168 allowlist's write-side twin).
+                              properties:
+                                publish:
+                                  type: array
+                                  minItems: 1
+                                  maxItems: 8
+                                  items:
+                                    type: object
+                                    required: [name]
+                                    description: Exactly one of password / keyId / keySecret names the value.
+                                    properties:
+                                      name:
+                                        type: string
+                                        pattern: '^[A-Z][A-Z0-9_]{0,127}$'
+                                      password:
+                                        type: string
+                                        pattern: '^[a-z][a-z0-9_]{0,40}$'
+                                      keyId:
+                                        type: string
+                                        pattern: '^[a-z][a-z0-9_]{0,40}$'
+                                      keySecret:
+                                        type: string
+                                        pattern: '^[a-z][a-z0-9_]{0,40}$'
+                                      tfName:
+                                        type: string
+                                        pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                        description: >-
+                                          Terraform resource name. Omit = derived (alias/name with `-` → `_`;
+                                          a grant: `<key>_<bucket>`). Set it only to match a legacy module (adopt).
+                                      output:
+                                        type: string
+                                        pattern: '^[a-z_][a-z0-9_]{0,62}$'
+                                        description: Connection-Secret key carrying the published NAME. Omit = none.
                       extraSpecs:
                         type: array
                         maxItems: 16

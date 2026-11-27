@@ -149,6 +149,12 @@ through ClusterSecretStores whose `conditions` admit one namespace each (no stor
 writer's Secret). Per-repo because Garage grants are per bucket — the canonical `agent-transcripts` reader would
 open every stack's transcripts.
 
+**Buckets, keys and passwords for a stack repo: `repos[].provision`** (ADR-169). Each entry renders one
+Workspace `<repo>.<name>` from the Composition's fixed Terraform — Garage buckets/keys/grants, generated
+passwords, optional Infisical publication — inside per-stack bounds the Composition holds; the stack never
+authors a Workspace. Fields, bounds, example: [patterns/app-owned-resources.md](../patterns/app-owned-resources.md#buckets-keys-and-passwords-reposprovision-adr-169);
+the legacy Workspaces' move: [stack-workspace-migration.md](../stack-workspace-migration.md).
+
 **Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
 has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
 evidence bucket all belong to it), and each further root is listed here — homelab lists

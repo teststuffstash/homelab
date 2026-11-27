@@ -1,0 +1,12 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: a bucket alias outside the stack's alias space (a platform bucket name).
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle--foreign-alias
+spec:
+  repos:
+    - name: oracle-fleet
+      provision:
+        - name: x
+          buckets:
+            - { alias: loki, maxSizeMi: 64 }

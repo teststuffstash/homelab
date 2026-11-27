@@ -1,0 +1,12 @@
+# agentstack-provision-test NEGATIVE fixture — must FAIL to render: a repo namespace that is not the stack's (the Secret would land in a platform namespace).
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: oracle--foreign-namespace
+spec:
+  repos:
+    - name: agent-coordinator
+      provision:
+        - name: x
+          buckets:
+            - { alias: oracle-x, maxSizeMi: 64 }
