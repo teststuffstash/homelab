@@ -391,6 +391,9 @@ Legend: `families` = the families to find — `the schema's, less the codex rail
 > writer~~ → the `class` and `source` rows; ~~no task label, ever~~ (one row, two claims) → the two
 > rows above.
 
+> Tombstone (removed by PR #3819; one cycle): ~~window is 5h or 7d~~ → window is a subscription window name
+> (the bound widened by the Go usage reading's `rolling` / `weekly` / `monthly`).
+
 #### The running release is an info series
 
 The release is read once at start ([GW-HEALTH](health.md#gw-health)) and rendered as an info series, so
