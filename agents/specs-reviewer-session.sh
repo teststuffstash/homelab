@@ -151,6 +151,21 @@ gw_outcome() {
   jq -r '.strike.class // empty' <<< "$r" 2>/dev/null || true
 }
 PUSHGATEWAY="${PUSHGATEWAY:-}"                           # empty = log-only
+# The coordinator's doorbell (docs/agents/workflow.md §Triggers: every actor that causes a
+# scan-actionable transition rings /coordinate at the moment it acts). A CHANGES_REQUESTED verdict
+# is one — round N+1 on a fix PR, the goal checkpoint on an assembly PR (the scan's assembly-cr
+# trigger). Repo-dumb payload: the switchboard resolves repo → {stack, loop_ns}. Best-effort — a
+# missed ring is the coordinate cron's case, never a failed tick.
+AGENT_LOOP_WEBHOOK="${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}"
+ring_coordinate() {   # <repo>
+  local body="{\"repo\":\"$1\"}"
+  if curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$body" "${AGENT_LOOP_WEBHOOK}/coordinate" >/dev/null 2>&1; then
+    log "coordinator doorbell rung (/coordinate ${body})"
+  else
+    log "coordinator doorbell NOT rung for $1 (${AGENT_LOOP_WEBHOOK} unreachable) — the coordinate cron picks it up"
+  fi
+  return 0
+}
 LENS_BASE="${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
 SPECS_PATH_RE='(^|/)specs/'
 # ── the pinned process (ADR-156): briefs + RULES/CONVENTIONS + touched-rules + the pack builder
@@ -508,6 +523,11 @@ self_test() {
     "$(curl() { printf '%s' '{"id":"s1","strike":null,"refuted":0,"replay":false}'; }; GATEWAY_TOKEN_FILE=/nonexistent gw_outcome s1 clean rc=0 2>/dev/null)"
   check "outcome report: a failed POST is non-fatal and counts nothing" "" \
     "$(curl() { return 22; }; GATEWAY_TOKEN_FILE=/nonexistent gw_outcome s1 timeout rc=124 2>/dev/null)"
+  check "coordinate ring: one POST to /coordinate, repo-dumb body" 'http://bell.invalid/coordinate {"repo":"homelab"}' \
+    "$(t="$(mktemp)"; curl() { local a p="" b="" u=""; for a in "$@"; do [ "$p" = "-d" ] && b="$a"; u="$a"; p="$a"; done; printf '%s %s' "$u" "$b" > "$t"; }; AGENT_LOOP_WEBHOOK=http://bell.invalid ring_coordinate homelab >/dev/null 2>&1; cat "$t"; rm -f "$t")"
+  check "coordinate ring: an unreachable webhook is logged and never fails the tick" "0 1" \
+    "$(curl() { return 7; }; rc=0; out="$(AGENT_LOOP_WEBHOOK=http://bell.invalid ring_coordinate homelab 2>&1)" || rc=$?; printf '%s %s' "$rc" "$(grep -c 'NOT rung' <<< "$out")")"
+  check "coordinate ring: wired to the CHANGES_REQUESTED verdict, once" 1 "$(grep -c 'N_RC=$((N_RC+1)); ring_coordinate "$repo"; fi$' "$0")"
   check "env key guard rejects a shell-hostile key" 1 "$(valid_env_key 'FOO=bar; rm' && echo 0 || echo 1)"
   check "env key guard accepts ANTHROPIC_MODEL" 0 "$(valid_env_key 'ANTHROPIC_MODEL' && echo 0 || echo 1)"
   # GW-SESSIONS-AUTH: gw_curl carries the projected token as the caller header, read from the file
@@ -1730,7 +1750,7 @@ else
     local rs=0; review_submit "$repo" "$num" "$kind" "$WORK/review-$num.md" "$head" || rs=$?
     case "$rs" in
       0) log "[$repo#$num] ${verdict} submitted, pinned to ${head:0:8}"
-         if [ "$kind" = approve ]; then N_APPROVE=$((N_APPROVE+1)); else N_RC=$((N_RC+1)); fi
+         if [ "$kind" = approve ]; then N_APPROVE=$((N_APPROVE+1)); else N_RC=$((N_RC+1)); ring_coordinate "$repo"; fi
          POSTED="$POSTED $repo#$num";;
       3) return 0;;   # head moved — no verdict on this head; the next tick reads the new one
       *) log "[$repo#$num] review submit FAILED"; return 1;;
