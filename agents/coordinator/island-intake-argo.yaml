@@ -503,7 +503,7 @@ spec:
               LAUNCH
               exec devbox run --config islands/intake -- bash /tmp/island-intake-launch.sh
           resources:
-            # 2Gi: a week of live sittings (2026-11-20..27, ~70 pods): one OOMKilled at 1Gi (oracle's
+            # 2Gi: a week of live sittings (2026-11-20..27, ~70 pods): one OOMKilled at 1Gi (a stack's
             # first full walk, 11-23), three more peaked at 800-980 MiB (agent-loop, retro, gateway);
             # the median sitting stays under 400 MiB. The limit is ~2x the worst observed peak.
             # The clone + `devbox install` is not the load (done 14 s after start, 2026-11-20 probe).
