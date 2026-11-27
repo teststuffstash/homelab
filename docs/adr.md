@@ -3211,4 +3211,5 @@ claim already lives in AgentStack and #3724 set that shape); a least-privilege P
 `secrets` cluster-wide and whose ProviderConfig carries the Garage admin, Infisical writer and
 Cloudflare-proxy providers — it bypasses ADR-168 (found by the #3768 review, 2026-11-25).
 **Consequences:** a stack's new bucket is a claim edit; a new alias prefix, adoption or Infisical key is a
-line in the Composition (platform PR). Removing an entry orphans (no Delete); deleting data is an operator act.
+line in the Composition (platform PR). Removing a whole entry orphans (no Delete);
+removing one item from an entry that stays destroys that item (an ordinary apply). The Infisical project is the Composition's constant.

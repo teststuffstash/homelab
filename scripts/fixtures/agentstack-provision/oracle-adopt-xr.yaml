@@ -57,7 +57,6 @@ spec:
           passwords:
             - { name: feedback_applier, length: 32, generation: "1", outputs: false }
           infisical:
-            projectId: 00000000-0000-4000-8000-000000000000
             publish:
               - { name: ORACLE_FEEDBACK_PG_APPLIER_PASSWORD, password: feedback_applier, tfName: feedback_applier_password, output: published_key }
         - name: feedback-ro
@@ -65,6 +64,5 @@ spec:
           passwords:
             - { name: feedback_ro, length: 32, outputs: false }
           infisical:
-            projectId: 00000000-0000-4000-8000-000000000000
             publish:
               - { name: ORACLE_FEEDBACK_PG_RO_PASSWORD, password: feedback_ro, tfName: feedback_ro_password, output: published_key }

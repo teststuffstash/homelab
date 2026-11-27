@@ -1,6 +1,6 @@
 # The live legacy module of Workspace snore-recorder-garage (2026-11-25); comments and import blocks dropped,
 # ids replaced by placeholders. The adopting repos[].provision entry must reproduce it exactly.
-# vars: infisical_project_id=00000000-0000-4000-8000-000000000000 ingester_access_key_id=GK000000000000000000000001
+# vars: infisical_project_id=8cf9ec95-d357-4fc4-95ac-7185cb22736c ingester_access_key_id=GK000000000000000000000001
 variable "ingester_access_key_id" { type = string }
 variable "infisical_project_id" { type = string }
 resource "garage_bucket" "sleep_snore" {

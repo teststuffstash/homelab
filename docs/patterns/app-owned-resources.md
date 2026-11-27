@@ -56,8 +56,7 @@ repos:
           - { bucket: oracle-fleet-cache, accessKeyId: GK…, access: ro }
         passwords:
           - { name: token, length: 40 }   # rotate: generation: "2"; never replace: stable: true
-        infisical:                        # only names on your stack's list in the Composition
-          projectId: <homelab Infisical project id>
+        infisical:                        # the homelab project; only names on your stack's list in the Composition
           publish:
             - { name: ORACLE_…, password: token }   # or keyId: / keySecret: <key name>
 ```
@@ -66,9 +65,13 @@ The bounds, held per stack in the Composition's `$provisionTenancy` (a platform 
 bucket aliases inside the stack's prefixes (`oracle-`, `circles-`, `sleep-`) or its named legacy
 aliases; Secrets only into the stack's namespaces; Infisical writes only to listed key names;
 `adopt` only of the stack's own legacy Workspaces. An entry outside them fails the AgentStack render
-with the reason (nothing existing changes; the XR parks until the claim is fixed). Removing an entry
-**orphans** what it made (management policies carry no Delete); deleting a bucket or key is an
-operator act. `kubectl explain agentstacks.spec.repos.provision --recursive` documents every field.
+with the reason (nothing existing changes; the XR parks until the claim is fixed). Removing a WHOLE
+entry **orphans** what it made (management policies carry no Delete): the bucket, its keys and
+passwords stay, and the keys stay valid until an operator deletes them. Removing one bucket, key,
+grant or password from an entry that stays is an ordinary apply, and Terraform **destroys** it —
+that is how a key is revoked or a grant withdrawn. `stable: true` protects a password only while
+its line is there. (Garage refuses to delete a bucket that holds objects, per its admin API; not
+tried here.) `kubectl explain agentstacks.spec.repos.provision --recursive` documents every field.
 
 `adopt: {workspace, mode}` takes over a legacy Workspace's Terraform state (the migration; `tfName`
 and the output overrides exist only so an entry can match a legacy module exactly).

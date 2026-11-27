@@ -50,7 +50,6 @@ spec:
           externalGrants:
             - { bucket: sleep-snore, accessKeyId: GK000000000000000000000001, access: ro, tfName: ingester_read }
           infisical:
-            projectId: 00000000-0000-4000-8000-000000000000
             publish:
               - { name: SNORE_S3_ACCESS_KEY_ID, keyId: snore_writer, tfName: snore_akid }
               - { name: SNORE_S3_SECRET_KEY, keySecret: snore_writer, tfName: snore_sk }

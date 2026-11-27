@@ -567,8 +567,10 @@ spec:
                           The connection Secret lands in ns <repo>. The Composition holds the
                           per-stack bounds (bucket alias prefixes, adoptable legacy Workspaces,
                           publishable Infisical keys, namespaces); an entry outside them fails the
-                          render with the reason. Removing an entry ORPHANS what it made (no
-                          Delete in the management policies); deleting data is an operator act.
+                          render with the reason. Removing a WHOLE entry orphans what it made (no
+                          Delete in the management policies). Removing one bucket, key, grant or
+                          password from an entry that stays is an ordinary apply: Terraform
+                          destroys it.
                           Guide: docs/patterns/app-owned-resources.md.
                         items:
                           type: object
@@ -589,8 +591,7 @@ spec:
                               required: [workspace, mode]
                               description: >-
                                 Take over a LEGACY stack-authored Workspace's Terraform state instead
-                                of creating anew (the migration path: docs/patterns/app-owned-resources.md
-                                §Migration). The rendered Workspace runs in that state, so the fields
+                                of creating anew (the migration path: docs/stack-workspace-migration.md). The rendered Workspace runs in that state, so the fields
                                 below must describe exactly what the legacy module declares, with the
                                 legacy Terraform names in `tfName`. Allowed only for a Workspace on
                                 the Composition's list for this stack.
@@ -774,15 +775,13 @@ spec:
                                     description: Write it to the connection Secret under `name`. Omit = true.
                             infisical:
                               type: object
-                              required: [projectId, publish]
+                              required: [publish]
                               description: >-
-                                Publish values into Infisical (env prod, path /) for consumers outside the
+                                Publish values into the homelab Infisical project (env prod, path /; the
+                                project is the Composition's, not a field) for consumers outside the
                                 cluster or behind an ExternalSecret. Only key names on the Composition's
                                 list for this stack (the ADR-168 allowlist's write-side twin).
                               properties:
-                                projectId:
-                                  type: string
-                                  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                                 publish:
                                   type: array
                                   minItems: 1

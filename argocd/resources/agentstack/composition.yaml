@@ -97,6 +97,9 @@ spec:
                     "aliases" (list)
                     "adopt" (list "sleep-specs-garage" "sleep-tracking-garage" "snore-recorder-garage")
                     "infisical" (list "SNORE_S3_ACCESS_KEY_ID" "SNORE_S3_SECRET_KEY")) }}
+            {{- /* The one Infisical project provision entries publish into (homelab, env prod, path /):
+                 a platform constant, never a stack field — the allowlist above names keys of THIS project. */}}
+            {{- $provisionInfisicalProject := "8cf9ec95-d357-4fc4-95ac-7185cb22736c" }}
             {{- $adoptSeen := dict }}{{- /* one adopter per legacy state, across all repos of the XR */}}
             {{- $profileFQDNs := dict
                   "python" (list "pypi.org" "files.pythonhosted.org")
@@ -2449,7 +2452,7 @@ spec:
                     name         = "{{ $pub.name }}"
                     value        = {{ $val }}
                     env_slug     = "prod"
-                    workspace_id = "{{ $inf.projectId }}"
+                    workspace_id = "{{ $provisionInfisicalProject }}"
                     folder_path  = "/"
                   }
                   {{- end }}

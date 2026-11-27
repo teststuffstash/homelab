@@ -11,6 +11,5 @@ spec:
           passwords:
             - { name: p, length: 32 }
           infisical:
-            projectId: 00000000-0000-4000-8000-000000000000
             publish:
               - { name: COORDINATOR_CLAUDE_OAUTH_TOKEN, password: p }
