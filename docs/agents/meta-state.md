@@ -16,6 +16,15 @@ dig for days by being listed). Write the marker only when the cause is known; th
 
 ## Live state (pruned 2026-10-24 — every bullet re-verified against GitHub/the cluster/the box that day; history is TICK-LOG's; the forward plan is the ROADMAP work map)
 
+- **⚑ PICKUP (2026-11-28 — Python 3.15 platform catch-up; TICK-LOG 11-27 late).** Merged: allure#36, openrouter-operator#123
+  + #124 (pin guard admits a whole-set Python move), homelab#3833 (root devbox + pods + `python-set.py` check). NEXT:
+  - agent-runtime#196 (agent-base → 3.15): if merged — `build-image` publishes, the agent-base deploy pin lands in homelab,
+    then read the first worker ride's `agent-finalize` on the new image (bookkeeping lines, no traceback).
+  - OPERATOR: close agent-runtime#195 (auto-rollback of a digest bump; the 11-25 `build-image` failure was a nix
+    download timeout, not the bump). agent-runtime `unit` red since devbox 0.23.0 → FU-240 (`devbox-version:` pin,
+    guarded `ci.yaml`). `ci.yaml:734` comment says gateway runs "python 3.13" (operator-direct).
+  - Unverified on 3.15: `devbox run esphome-flash` (its venv rebuilds on the root python). `ansible/controller-env`
+    python313 lags ansible-core's 3.14 (router-class change, not a platform pin).
 - **⚑ PICKUP (2026-11-27 — the 11-25 list worked off; TICK-LOG 11-27).**
   - **Goal #3305 is live (2026-11-27):** #3784 merged 09:28Z, deployed as `2026.11.27-ge1cae356dd7c` (#3827). Read at
     11:30Z: `gateway_tier_evidence_age_seconds` = 41333 (the derivation's age, ~11.5 h), `TierEvidenceStale` not firing.
