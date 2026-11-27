@@ -389,7 +389,9 @@ evaluate() {
         # "violation" with rule `?` and no detail, which reads as a policy verdict and is
         # permanent instead of self-healing.
         log "[$repo#$pr@$ref] kyverno TOOL ERROR (rc=$krc, no fail-summary) — probe failed, not a finding:"
-        head -8 <<< "$kout" | sed 's/^/    /'
+        # the CLI's deprecation warnings come first (one per policy file) and filled all eight
+        # lines, hiding the cause — #3782's was a panic on two fixture XRs with one name
+        grep -v ' is deprecated and will be removed ' <<< "$kout" | head -8 | sed 's/^/    /'
         metric "iac_sentinel_probe_failed{repo=\"$repo\",pr=\"$pr\"} 1"
         KYVERNO_TOOL_ERROR=1
       else
