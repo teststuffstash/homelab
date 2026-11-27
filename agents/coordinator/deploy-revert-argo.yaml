@@ -233,7 +233,7 @@ spec:
           # armed): empty on every report-only exit, which skips the `judge` step
           - { name: judged, valueFrom: { path: /tmp/judged.json, default: "" } }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
@@ -355,7 +355,7 @@ spec:
                 echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0
               fi
               OFFENDING="$(printf '%s\n' "$DIFF" | grep -E '^[-+][^-+]' \
-                | grep -Ev '^[-+][[:space:]]*image:[[:space:]]*ghcr\.io/teststuffstash/[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$' || true)"
+                | grep -Ev '^[-+][[:space:]]*image:[[:space:]]*(ghcr\.io/teststuffstash|registry\.teststuff\.net)/[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$' || true)"
               if [ -n "$OFFENDING" ]; then
                 echo "→ $SLUG#$PRNUM is NOT a first-party pin bump — outside the reversible class (IAC-G09), report-only:"
                 printf '%s\n' "$OFFENDING" | head -20
@@ -432,7 +432,7 @@ spec:
         labels: { app: deploy-revert-workflow }
       serviceAccountName: outcome-judge
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: JUDGED, value: "{{inputs.parameters.judged}}" }
@@ -609,7 +609,7 @@ spec:
       metadata:
         labels: { app: workflow-pin-revert-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
@@ -1043,7 +1043,7 @@ spec:
       metadata:
         labels: { app: tofu-image-revert-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
@@ -1287,7 +1287,7 @@ spec:
       metadata:
         labels: { app: tofu-provider-revert-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }

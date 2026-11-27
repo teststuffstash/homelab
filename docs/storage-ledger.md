@@ -714,6 +714,9 @@ rather than for buying more drives.
   because the historical failure was not a trim that broke, it was a reclaim path with no owner.
   ⚠ What this does NOT do: watch the pool — that is the pool meter below (built 2026-09-04, after
   the fourth fill); these alerts prove the mechanism runs, the meter says whether it suffices.
+  ⚠ **One metal member since 2026-11-23: nx-01's EPHEMERAL** (BC711) — not pool reclaim but write
+  latency: untrimmed for 44 days under ARC churn it hit flash-GC steady state (`NodeDiskIOSaturation`
+  daily, ~1 s writes); one trim restored it. Evidence + scope rule: the `fstrim.yaml` header.
   ⚠ Nor does it reach **ci-runner-01** — same pool, not a k8s node; it is an ordinary Linux guest
   and its own `fstrim.timer` is the cover. Unverified, and worth a look.
 - **Second layer — in-volume reclaim, BUILT 2026-10-30** (FU-093 (a)): the weekly Longhorn
@@ -813,7 +816,9 @@ rather than for buying more drives.
   (oracle-iac#563, sleep-iac#85, circles-iac#78; homelab#1321): a Completed ride keeps its 20Gi
   for 30–60 min until the scan janitor's grace (FU-116) releases it, so ×3 was a per-HOUR cap on
   finished rides, not a concurrency cap. Headroom at the raise: 216 + 237 GiB free on the two
-  bulk disks, scratch replica-1.
+  bulk disks, scratch replica-1. The platform's own namespace followed in 2026-11: `homelab` 40Gi → 100Gi
+  (homelab#3563) — its cap was sized for two rides while the scan lets three run, and a finished pod
+  kept one of the two volumes for up to 2 h.
 
 ## Requirements — what is NEEDED, not what exists (2026-09-04)
 
@@ -833,7 +838,7 @@ for this document: keep stating the need and its evidence here, and let the supp
 | requirement | size | why (evidence) | class | pointer |
 |---|---|---|---|---|
 | **pve thin pool honest** — promised ≤ pool, or the pool grows | today **488 GB promised on a 353.84 GB pool** (`lvs`: <353.84g after the 09-03 +1 GB extend) (wk-02 240, ci-runner-01 80, wk-01 80, cp-01 40, wk-03 40, LXC 8 — 408 only while ci-runner-01 was destroyed, 09-03/04); a second NVMe on pve's free x16 slot extends the pool (cheapest — see §hypervisor), a 1 TB NVMe replaces the 500 GB, or wk-02's 240 GB disk leaves the pool | four 100 % fills in a month, the fourth took the control plane down 8 min; twice-daily fstrim + the meter are belts, not capacity | need | FU-093, ADR-114 (new box, not more disks in pve) |
-| **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 3 stacks = 300Gi worst case, replica-1 on 453 GiB free | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
+| **bulk scratch for 5 concurrent docker rides per stack** | 100Gi × 4 namespaces (the three stacks + `homelab`, homelab#3563) = 400Gi worst case, replica-1 on the four bulk disks: 714 GiB available, 420 GiB of it above Longhorn's 25 % floor (read 2026-11-20) | 60Gi wedged the fourth dispatch inside an hour (homelab#1321) | need | #1321 (done 2026-09-04) |
 | **a third PHYSICAL zone for Garage rf=3** — **MET 2026-09-07** (`m70s`; all six Garage volumes on `longhorn-local-xfs` across wk-metal-01 / wk-metal-04 / m70s, nothing of Garage on the pool) | residual **want**: a *dedicated* data disk in m70s — garage-1 shares the OEM Micron 2300 with Talos + the image store (kubelet imageGC 60/50 is the belt); supply side = the same NVMe lot as the SA400 demote | ADR-114's redundancy story used to end on a VM that pauses when the pool fills; meta rode rf=1 on wk-02 from 08-25 to 09-07 | need → met | FU-137, ADR-114 |
 | **Longhorn in-volume reclaim** | ~41 GiB one-off on wk-02 (Prometheus 12, loki 10, garage-meta 8), then the volumes' own churn | node fstrim cannot reach blocks inside replica sparse files; measured 2026-09-04 | want → built 2026-10-30 | §Second layer above |
 | **registry mirrors never wipe** | grow the PVC (ghcr 100Gi at ~19 G actual) whenever `RegistryMirrorWipedRepeatedly` fires — never lower the threshold | a wipe costs a day of slow builds (homelab#116) | want | §mirrors above |

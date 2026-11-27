@@ -181,7 +181,7 @@ spec:
       metadata:
         labels: { app: fix-debounce-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }

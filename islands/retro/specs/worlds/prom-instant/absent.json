@@ -1,0 +1,14 @@
+{
+  "surface": "prometheus",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/query",
+    "query": {
+      "query": "max(retro_island_no_such_gauge) > bool 604800"
+    }
+  },
+  "recorded_at": "2026-11-16T18:06:19Z",
+  "recorded_by": "island intake, curl from the intake pod (#3487)",
+  "status": 200,
+  "body": "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":[]}}"
+}

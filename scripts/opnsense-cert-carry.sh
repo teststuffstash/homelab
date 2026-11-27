@@ -33,9 +33,17 @@
 #   POST acmeclient/certificates/update/<uuid>  {"certificate":{…}} (plain setBase; the status fields are model fields)
 #   POST haproxy/service/reconfigure
 #
-# Creds: the wallet pair opnsense-api-{key,secret} (prod's, carried to both nodes) — OPN_API_KEY /
-# OPN_API_SECRET pre-set win. A target with its own creds (the test VM): OPN_BACKUP_API_KEY /
-# OPN_BACKUP_API_SECRET, or OPN_BACKUP_KEY_ENTRY / OPN_BACKUP_SECRET_ENTRY naming wallet entries.
+# Creds: the `automation` API user (FU-013; the pair is carried to both nodes) — a pre-set OPN_API_KEY /
+# OPN_API_SECRET wins (the management box: /var/lib/mgmt/env, which holds no wallet), else the wallet
+# entries opnsense-automation-api-{key,secret}. Its trust access is `page-system-certmanager` in
+# ansible/group_vars/opnsense.yml → opnsense_api_users (a 403 on trust/cert/search = that privilege not
+# applied yet: scripts/opnsense-api-users.sh). Root's pair only by the explicit opt-in OPN_AS_ROOT=1
+# (reads the wallet's opnsense-api-{key,secret}, ignores a pre-set pair — scripts/opnsense-playbook.sh's
+# rule; a jail act, the box holds no root pair). A target with its own creds (the test VM):
+# OPN_BACKUP_API_KEY / OPN_BACKUP_API_SECRET, or OPN_BACKUP_KEY_ENTRY / OPN_BACKUP_SECRET_ENTRY naming
+# wallet entries — NOT on the box, whose env file uses OPN_BACKUP_API_* for the backup-puller pair
+# (mgmt/scripts/mgmt-cert-carry.sh unsets them). The nightly box run: mgmt-cert-carry.timer, which
+# resolves <master>/<backup> from the pair's LIVE CARP state (docs/management-box.md §Router certificate carry).
 # The trust search carries private keys: it lives in a 0700 workdir and is shredded on exit.
 #
 # Exit: 0 done (or nothing to do) · 1 fatal (guard, API error) · 2 usage · 3 done with warnings.
@@ -77,8 +85,10 @@ WORK="$(mktemp -d)"; chmod 700 "$WORK"
 cleanup() { find "$WORK" -type f -exec shred -u {} + 2>/dev/null || true; rm -rf "$WORK"; }
 trap cleanup EXIT
 umask 077
-MK="${OPN_API_KEY:-$(kp opnsense-api-key)}"; MS="${OPN_API_SECRET:-$(kp opnsense-api-secret)}"
-[ -n "$MK" ] && [ -n "$MS" ] || die "empty OPNsense API creds (wallet entry opnsense-api-key/-secret, or OPN_API_KEY/OPN_API_SECRET)"
+if [ "${OPN_AS_ROOT:-0}" = 1 ]; then ENTRY=opnsense-api; unset OPN_API_KEY OPN_API_SECRET; log "as ROOT (OPN_AS_ROOT=1)"
+else ENTRY=opnsense-automation-api; fi
+MK="${OPN_API_KEY:-$(kp "$ENTRY-key")}"; MS="${OPN_API_SECRET:-$(kp "$ENTRY-secret")}"
+[ -n "$MK" ] && [ -n "$MS" ] || die "empty OPNsense API creds (wallet entries $ENTRY-key/-secret, or OPN_API_KEY/OPN_API_SECRET)"
 BK="${OPN_BACKUP_API_KEY:-}"; BS="${OPN_BACKUP_API_SECRET:-}"
 if [ -z "$BK" ] && [ -n "${OPN_BACKUP_KEY_ENTRY:-}" ]; then BK="$(kp "$OPN_BACKUP_KEY_ENTRY")"; BS="$(kp "${OPN_BACKUP_SECRET_ENTRY:?set OPN_BACKUP_SECRET_ENTRY with OPN_BACKUP_KEY_ENTRY}")"; fi
 printf 'user = "%s:%s"\n' "$MK" "$MS" > "$WORK/m.curl"

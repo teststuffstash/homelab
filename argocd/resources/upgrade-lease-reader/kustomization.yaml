@@ -24,5 +24,5 @@ configMapGenerator:
 # agents/coordinator/kustomization.yaml pins today; the deploy-pin job does not know this file, and a
 # stable tool image makes the drift harmless.
 images:
-  - name: ghcr.io/teststuffstash/agent-coordinator
+  - name: registry.teststuff.net/agent-coordinator
     newTag: 2026.10.10-gd303a3b5bd8d

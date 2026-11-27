@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "issues/remove-label 200 — extracted from github/rest-api-description@c9c95fe34ced05fe076001f5c55704742bc8e7f8 descriptions-next/api.github.com/api.github.com.2022-11-28.json; 1 `allOf` + `type: [null]` node(s) read as `anyOf [<ref>, null]` (NULLABLE_REF)",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/label"
+  },
+  "$defs": {
+    "label": {
+      "title": "Label",
+      "description": "Color-coded labels help you categorize and filter your issues (just like labels in Gmail).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the label.",
+          "type": "integer",
+          "format": "int64",
+          "examples": [
+            208045946
+          ]
+        },
+        "node_id": {
+          "type": "string",
+          "examples": [
+            "MDU6TGFiZWwyMDgwNDU5NDY="
+          ]
+        },
+        "url": {
+          "description": "URL for the label",
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/repositories/42/labels/bug"
+          ]
+        },
+        "name": {
+          "description": "The name of the label.",
+          "type": "string",
+          "examples": [
+            "bug"
+          ]
+        },
+        "description": {
+          "description": "Optional description of the label, such as its purpose.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "examples": [
+            "Something isn't working"
+          ]
+        },
+        "color": {
+          "description": "6-character hex code, without the leading #, identifying the color",
+          "type": "string",
+          "examples": [
+            "FFFFFF"
+          ]
+        },
+        "default": {
+          "description": "Whether this label comes by default in a new repository.",
+          "type": "boolean",
+          "examples": [
+            true
+          ]
+        },
+        "archived_at": {
+          "description": "Timestamp indicating when the label was archived, or `null` if it has not been archived.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "examples": [
+            "2023-01-01T12:00:00Z"
+          ]
+        },
+        "archived_by": {
+          "description": "The user who archived the label, or `null` if it has not been archived.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/simple-user"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "node_id",
+        "url",
+        "name",
+        "description",
+        "color",
+        "default",
+        "archived_at",
+        "archived_by"
+      ]
+    },
+    "simple-user": {
+      "title": "Simple User",
+      "description": "A GitHub user.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "login": {
+          "type": "string",
+          "examples": [
+            "octocat"
+          ]
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "examples": [
+            1
+          ]
+        },
+        "node_id": {
+          "type": "string",
+          "examples": [
+            "MDQ6VXNlcjE="
+          ]
+        },
+        "avatar_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://github.com/images/error/octocat_happy.gif"
+          ]
+        },
+        "gravatar_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "examples": [
+            "41d064eb2195891e12d0413f63227ea7"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat"
+          ]
+        },
+        "html_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://github.com/octocat"
+          ]
+        },
+        "followers_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat/followers"
+          ]
+        },
+        "following_url": {
+          "type": "string",
+          "examples": [
+            "https://api.github.com/users/octocat/following{/other_user}"
+          ]
+        },
+        "gists_url": {
+          "type": "string",
+          "examples": [
+            "https://api.github.com/users/octocat/gists{/gist_id}"
+          ]
+        },
+        "starred_url": {
+          "type": "string",
+          "examples": [
+            "https://api.github.com/users/octocat/starred{/owner}{/repo}"
+          ]
+        },
+        "subscriptions_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat/subscriptions"
+          ]
+        },
+        "organizations_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat/orgs"
+          ]
+        },
+        "repos_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat/repos"
+          ]
+        },
+        "events_url": {
+          "type": "string",
+          "examples": [
+            "https://api.github.com/users/octocat/events{/privacy}"
+          ]
+        },
+        "received_events_url": {
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://api.github.com/users/octocat/received_events"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "examples": [
+            "User"
+          ]
+        },
+        "site_admin": {
+          "type": "boolean"
+        },
+        "starred_at": {
+          "type": "string",
+          "examples": [
+            "\"2020-07-09T00:17:55Z\""
+          ]
+        },
+        "user_view_type": {
+          "type": "string",
+          "examples": [
+            "public"
+          ]
+        }
+      },
+      "required": [
+        "avatar_url",
+        "events_url",
+        "followers_url",
+        "following_url",
+        "gists_url",
+        "gravatar_id",
+        "html_url",
+        "id",
+        "node_id",
+        "login",
+        "organizations_url",
+        "received_events_url",
+        "repos_url",
+        "site_admin",
+        "starred_url",
+        "subscriptions_url",
+        "type",
+        "url"
+      ]
+    }
+  }
+}

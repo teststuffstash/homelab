@@ -1,0 +1,31 @@
+---
+# One unissued cert (`acme_cert`, a certificates/search row), included per cert from main.yml's
+# FU-078 block: sign it, then poll THAT row to statusCode 200 before the loop moves on.
+- name: "Sign {{ acme_cert.name }} (POST certificates/sign/<uuid>)"
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: "sign/{{ acme_cert.uuid }}"
+    action: post
+  when: not ansible_check_mode
+
+# check mode: raw skips a POST, so a poll would only time out — report the would-be sign instead
+- name: "Would sign {{ acme_cert.name }} (check mode)"
+  ansible.builtin.debug:
+    msg: "would sign {{ acme_cert.name }} ({{ acme_cert.uuid }}, statusCode {{ acme_cert.statusCode }})"
+  changed_when: true
+  when: ansible_check_mode
+
+- name: "Poll {{ acme_cert.name }} until statusCode 200 (LE issuance)"
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: search
+  register: acme_poll
+  until: >-
+    (acme_poll.response.rows | default([])
+     | selectattr('uuid', 'eq', acme_cert.uuid) | map(attribute='statusCode') | map('string')
+     | first | default('')) == '200'
+  retries: 24
+  delay: 5
+  when: not ansible_check_mode

@@ -1,0 +1,17 @@
+# Replay comparison rulings for the `major-handoff` family (agents/replay/fixtures/major-handoff/, read-only) — tests/compare.py.
+# One line per row whose old-member stream differs from the new component's (or that is not liftable):
+#   <row id> | spec|old|new | <one line of reason>
+# spec = the page is wrong (fix the page) · old = the old member is wrong (the page says so) ·
+# new = the component is wrong (fix it). A ruling for a row that does not differ fails the suite.
+handoff | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+packaging-only-arms | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+app-moves-parks | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+merge-commit-not-content | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+merge-remote-not-content | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+merge-pr-not-content | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+bot-suffix-normalized | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+suffixed-headings | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+approved-without-headings | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+approval-stale | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+end-state-not-proven | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)
+handoff-graphql-drained | old | the old member tells a merge by its title and makes no parents read; the page reads parents (glossary.md merge commit)

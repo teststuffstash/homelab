@@ -40,12 +40,18 @@ context-prefetch	context-prefetch
 context-prefetch/ci-red	context-prefetch
 context-prefetch/ci-red-unreadable	context-prefetch
 context-prefetch/fix-round	context-prefetch
+context-prefetch/fix-round-cm-forbidden	context-prefetch
+context-prefetch/fix-round-cm-live-pod	context-prefetch
+context-prefetch/fix-round-cm-stale-failed-pod	context-prefetch
+context-prefetch/fix-round-cm-stale-no-owner	context-prefetch
+context-prefetch/fix-round-cm-stale-no-pod	context-prefetch
 context-prefetch/fix-round-unreadable	context-prefetch
 context-prefetch/untrusted-comments	context-prefetch
 coordinator-pick-rail-anthropic	coordinator-pick-rail
 coordinator-pick-rail-both	coordinator-pick-rail
 coordinator-pick-rail-go	coordinator-pick-rail
 coordinator-pick-rail-go-goal-lane	coordinator-pick-rail
+dead-ride-record	dead-ride-record
 depends-on-retired-format	depends-on-retired-format
 deploy-revert-candidate	deploy-revert-candidate
 deploy-revert-judge	deploy-revert-judge
@@ -136,6 +142,7 @@ retro-series-identity/series	retro-series-identity
 review-flip-belt	review-flip-belt
 review-flip-belt-probe-fail	review-flip-belt
 review-phantom-belt	review-phantom-belt
+review-phantom-belt-goal-child	review-phantom-belt
 reviewer-currency-behind-skips	reviewer-currency
 reviewer-currency-current-proceeds	reviewer-currency
 reviewer-currency-probe-fail-proceeds	reviewer-currency
@@ -164,6 +171,7 @@ slo-teeth	slo-teeth
 sprout-report-skips-buckets	sprout-report-skips-buckets
 sprout-report-unbound	sprout-report-unbound
 state-fp	state-fp
+strike-comment-post	strike-comment-post
 strike-quota-classifier	strike-quota-classifier
 touches-check-predicate	touches-check-predicate
 unblocked-unlabeled-blocker-open	unblocked-unlabeled

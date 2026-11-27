@@ -27,7 +27,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: presync
-          image: ghcr.io/teststuffstash/agent-coordinator
+          image: registry.teststuff.net/agent-coordinator
           command: ["bash", "/scripts/presync.sh"]
           env:
             - { name: APP, value: kube-prometheus-stack }

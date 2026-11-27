@@ -160,7 +160,7 @@ hardware register.
 | Laptops | **control planes** — low idle draw, small SSD, no other job | ✅ `wk-metal-02` (X250) is a control plane since 2026-09-22 (ADR-133); the third CP went to a VM (cp-02 on nx-02), so `wk-metal-03` (X260) stays a ride node. ⚠ `wk-metal-01` (X240) is also a laptop but cannot move: it is a Garage zone + the bulk MX500 |
 | The **gaming PC** | **rides / ARC / inference**, tainted | ⬜ not in the fleet — it is in `machines.yaml` neither as a node nor as a box, so whether the direction means an existing machine joining the cluster or one to acquire is an **operator question**; the ledger row carries the envelope either way |
 | SFFs (`m70s`, + one more) | `std` + Garage zones, spread equally | ⚠ partly: `thinkcentre` left 2026-09-12 and `hp-01` retires when the next SFF carries `std` — but **two of the three Garage zones are not SFFs** (`wk-metal-01` a laptop, `wk-metal-04` a desktop), which under these same classes means both zones eventually move. Unsequenced |
-| [The management box](docs/management-box.md) (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage (ADR-129) | ✅ live since 2026-09-13 — main's state + applies, the fleet Talos rollout, helm applies (`docs/management-box.md` §MB1); its test surface is the main root's raw-k8s residue, kept in tofu for it (operator, 2026-09-13). Renovate rides through it for provider pins and the argo-cd / argocd-apps and longhorn patch/minor chart bumps (`docs/dependency-upgrades.md` classes 4–5); class 6 stays human-proposed (G-D); the third control plane (ADR-133) and the CARP router pair (ADR-144) it was to operate on are live. Still ahead: the ArgoCD migration of that residue |
+| [The management box](docs/management-box.md) (`thinkcentre`) | R12 out-of-band applier — no workloads, no storage (ADR-129) | ✅ live since 2026-09-13 — main's state + applies, the fleet Talos rollout, helm applies (`docs/management-box.md` §MB1); its test surface is the main root's raw-k8s residue, kept in tofu for it (operator, 2026-09-13). Renovate rides through it for provider pins and the argo-cd / argocd-apps and longhorn patch/minor chart bumps (`docs/dependency-upgrades.md` classes 4–5); class 6 stays human-proposed (G-D); the third control plane (ADR-133) and the CARP router pair (ADR-144) it was to operate on are live. |
 
 ⚠ **The three-CP promotion is not free, and its bill is the ride pool, not a hypervisor.** Counted
 from live labels, 2026-09-12 (`kubectl get nodes -L homelab.io/ephemeral,homelab.io/kata`) — not
@@ -215,14 +215,15 @@ then moved past itself):
 its `coordinate-<stack>` / `review-<stack>` CronWorkflows in its own namespace with zero
 cross-boundary secrets (AgentStack claim, ADR-085); dispatch is **item-scoped** — a deterministic
 scan emits work units and the LLM judges one item (ADR-094); Argo Workflows + Events is the
-orchestration engine (ADR-093); model and budget decisions are moving into the egress proxy as a
-router (ADR-096). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
+orchestration engine (ADR-093); model and budget decisions moved into the egress path — the ADR-096
+router in the old proxy, now being replaced by the agent-gateway island (ADR-139, `gateway/`). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
 responder, researcher, infra-fixer, prober
 ([`docs/agents/roles.md`](docs/agents/roles.md)).
 
 **Identity/secrets** reuse existing primitives (Infisical+ESO, Cilium FQDN policy, the
-`homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **CI runners are
-Tofu-defined Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC (ADR-082).
+`homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **System-test gates
+run on Tofu-defined Proxmox VM runners** (ephemeral k3d), not privileged in-cluster ARC (ADR-082);
+ARC carries the unprivileged jobs.
 
 ## Programs in flight
 
@@ -301,8 +302,11 @@ Order, lowest blast first; each step is a lease-wrapped box run and a capability
 1. **Test surfaces post a verdict.** ✅ box-posted 2026-10-26: `mgmt-router-verdict` runs the test-VM
    harness on router-path PR heads (PR code sandboxed) and posts `opnsense-test-vm` on EVERY head (n/a
    success otherwise) — `docs/management-box.md` §MB3 "The router surface". ✅ REQUIRED 2026-10-27 (spike
-   D8, ruled "once box-posted" — #2957 applied; the n/a success rides the in-cluster iac-sentinel run, #2970). **Next:** a firmware currency belt: the box reads `firmware/status` per node
-   and on the test VM (the `check_substrate` pattern, FU-254) — the class-14 detector gap.
+   D8, ruled "once box-posted" — #2957 applied; the n/a success rides the in-cluster iac-sentinel run, #2970). ✅ **built 2026-11-17:** the firmware currency belt — the box's
+   belt runs each node's own `firmware/check` daily, reads `firmware/status` per node and on the test VM
+   (`check_firmware`, the `check_substrate` pattern) → `MgmtRouterFirmwareBehind` / `MgmtRouterFirmwareUnread`
+   (docs/management-box.md §MB2). **Next:** prove it live (the dedicated `firmware` API user minted and
+   its pair on the box, Behind firing on the offer prod has carried since 2026-10-11), then step 4.
 2. **Matchbox, box-applied** — near-zero cone, the first ansible applier: shadow (`--check` diff)
    first, then on. Rides FU-297 until it outgrows it. ✅ **2026-10-26** — built (#2941, `apply_ansible`
    in the policy, `mgmt/scripts/mgmt-ansible.sh`, `MgmtAnsibleApplyStopped`), shadow tick on #2948, `on`

@@ -1,5 +1,9 @@
 # CloudNativePG operator — the Postgres control plane. Wave 0: nothing here depends
 # on it yet, but the Postgres Cluster (wave 1) needs its CRDs Established first.
+# Two replicas, one per node (ADR-140 shape): every replica serves the cnpg.io admission webhooks
+# (failurePolicy Fail) and the --leader-elect leader reconciles, so a lone pod restarting rejects
+# every Cluster/Backup/Pooler write. The chart has no PDB value — the budget is the second source
+# (argocd/resources/cnpg-operator/).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -9,18 +13,31 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
-  source:
-    repoURL: https://cloudnative-pg.github.io/charts
-    chart: cloudnative-pg
-    targetRevision: 0.29.1
-    helm:
-      valuesObject:
-        crds:
-          create: true
-        # FU-082: the operator reconciles every CNPG cluster — shouldn't be OOM-first. ~72Mi steady.
-        resources:
-          requests: { cpu: "50m", memory: "128Mi" }
-          limits: { memory: "256Mi" }
+  sources:
+    - repoURL: https://cloudnative-pg.github.io/charts
+      chart: cloudnative-pg
+      targetRevision: 0.29.2
+      helm:
+        valuesObject:
+          crds:
+            create: true
+          replicaCount: 2
+          # Selector = the chart's Deployment selector labels.
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: cloudnative-pg
+                      app.kubernetes.io/instance: cnpg-operator
+                  topologyKey: kubernetes.io/hostname
+          # FU-082: the operator reconciles every CNPG cluster — shouldn't be OOM-first. ~72Mi steady.
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { memory: "256Mi" }
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      path: argocd/resources/cnpg-operator
   destination:
     server: https://kubernetes.default.svc
     namespace: cnpg-system

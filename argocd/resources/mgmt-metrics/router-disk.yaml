@@ -1,0 +1,56 @@
+# The router ROOT-FILESYSTEM belt. mgmt/scripts/mgmt-probe.sh check_firmware's node loop (every
+# 15 min) also reads `diagnostics/system/system_disk` on each CARP node and the test VM, as the same
+# `firmware` API user (its `page-system-login-logout` grant), and writes mgmt_router_disk_* to the
+# belt's textfile (job mgmt-node). Born from docs/incidents/2026-11-20-nx-02-boot-disk.md: a node's
+# 8 GB disk filled with 30 days of logs, Unbound could not start after a cold boot, and the LAN had
+# no DNS when that node took `.1` — with nothing alerting. role="node" = the production pair; the
+# test VM (role="test") is published but alerts nothing.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mgmt-router-disk
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: mgmt-router-disk
+      rules:
+        # Under 20 % of the root filesystem available on a production node. avail is df's (outside
+        # UFS's reserve — negative past 100 %), so this fires with the reserve still unspent. The
+        # disk is sized for 30 days of logs at the measured rate (tofu/opnsense-router.tf), so a node
+        # reaching this is a log rate or a retention that changed, or a disk that never grew.
+        - alert: MgmtRouterDiskLow
+          expr: |
+            mgmt_router_disk_avail_bytes{role="node"} / mgmt_router_disk_size_bytes{role="node"} < 0.20
+          for: 30m
+          # triage none: the act is on the router (its disk or its logs), no cluster state explains it
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "Router {{ $labels.node }} root filesystem has {{ $value | humanizePercentage }} available"
+            description: >-
+              The management box's belt reads under 20 % of {{ $labels.node }}'s root filesystem
+              available (mgmt_router_disk_avail_bytes / mgmt_router_disk_size_bytes). A full root
+              stops services from starting — Unbound did, after a cold boot, and the LAN lost DNS
+              when that node took `.1` (docs/incidents/2026-11-20-nx-02-boot-disk.md). What fills it
+              is usually /var/log/filter and /var/log/haproxy (`du -sh /var/log/*` on the node). The
+              disk is sized for 30 days of logs: grow `size` in tofu/opnsense-router.tf, then
+              `growfs -y /dev/ufs/OPNsense_Nano` on the node (docs/router-move.md §Disk size).
+        # No usable disk reading for a production node: the GET failed or was refused (a 403 = the
+        # box's `firmware` user lacks page-system-login-logout), or the answer had no `/` row. A box
+        # that publishes no router series at all is MgmtRouterFirmwareUnread's no-series arm — the
+        # same check skipped, so one alert speaks for it.
+        - alert: MgmtRouterDiskUnread
+          expr: |
+            mgmt_router_disk_read_ok{role="node"} == 0
+          for: 6h
+          # triage none: the cause is in the box's belt journal (curl/HTTP status), no cluster state explains it
+          labels: { severity: warning, triage: none }
+          annotations:
+            summary: "No root-filesystem reading for router {{ $labels.node }} for 6 hours"
+            description: >-
+              The management box's belt has no usable `diagnostics/system/system_disk` reading for
+              {{ $labels.node }}, so MgmtRouterDiskLow cannot speak for it. Why is in the belt journal
+              on the box: `journalctl -u mgmt-belt | grep disk:`. A 403 means the box's
+              OPN_FIRMWARE_API_* pair's user lacks page-system-login-logout (opnsense_api_users in
+              ansible/group_vars/opnsense.yml, converged by scripts/opnsense-api-users.sh).
+              docs/management-box.md §MB2.

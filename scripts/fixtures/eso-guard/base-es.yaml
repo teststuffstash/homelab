@@ -1,0 +1,13 @@
+# Base ExternalSecret for cases.tsv: a stack namespace reading one key on its own allowlist.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: case
+  namespace: oracle-fleet
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target: { name: case }
+  data:
+    - secretKey: token
+      remoteRef: { key: ORACLE_GHCR_PULL_TOKEN }

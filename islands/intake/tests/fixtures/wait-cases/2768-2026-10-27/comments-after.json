@@ -1,0 +1,49 @@
+[
+ {
+  "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6829957677",
+  "html_url": "https://github.com/teststuffstash/homelab/issues/2768#issuecomment-6829957677",
+  "issue_url": "https://api.github.com/repos/teststuffstash/homelab/issues/2768",
+  "id": 6829957677,
+  "node_id": "IC_kwDODboMws8AAAABlxjiLQ",
+  "user": {
+   "login": "RasmusSoot",
+   "id": 1532090,
+   "node_id": "MDQ6VXNlcjE1MzIwOTA=",
+   "avatar_url": "https://avatars.githubusercontent.com/u/1532090?v=4",
+   "gravatar_id": "",
+   "url": "https://api.github.com/users/RasmusSoot",
+   "html_url": "https://github.com/RasmusSoot",
+   "followers_url": "https://api.github.com/users/RasmusSoot/followers",
+   "following_url": "https://api.github.com/users/RasmusSoot/following{/other_user}",
+   "gists_url": "https://api.github.com/users/RasmusSoot/gists{/gist_id}",
+   "starred_url": "https://api.github.com/users/RasmusSoot/starred{/owner}{/repo}",
+   "subscriptions_url": "https://api.github.com/users/RasmusSoot/subscriptions",
+   "organizations_url": "https://api.github.com/users/RasmusSoot/orgs",
+   "repos_url": "https://api.github.com/users/RasmusSoot/repos",
+   "events_url": "https://api.github.com/users/RasmusSoot/events{/privacy}",
+   "received_events_url": "https://api.github.com/users/RasmusSoot/received_events",
+   "type": "User",
+   "user_view_type": "public",
+   "site_admin": false
+  },
+  "created_at": "2026-11-12T16:49:05Z",
+  "updated_at": "2026-11-12T16:49:05Z",
+  "body": "**Ruling (operator, 2026-11-12): option (a) — the rail serving an id is not an allowance.**\n\nA rail-served id the catalog does not list stays unlisted and inadmissible: an admission naming one keeps deferring `not-in-catalog` (ruling 4 stands: never a fallback price, and a pay-as-you-go row is not a Go price). The rail's `/zen/go/v1/models` answer stays unread: no third read, no `served` flag, no reference price. This holds for all three classes of the 2026-10-20 investigation (A deprecated-but-served, C1/C2 pay-as-you-go without a Go row, C3 no vendor row).\n\nChecked today against the 2026-11-11 snapshot: none of the eight is a tier loss (`qwen3.8-max` is the listed successor of `qwen3.7-max`; `omen-alpha` still has no models.dev row under any provider).\n\nWhat closes this issue: GW-CATALOG-GO's `⚑ gap: a rail-served id the catalog does not list` row becomes the ruled behaviour, and the dated `⚑ gap (2026-10-20, PR #2766 → work #2768)` clause in the index row is trimmed. The sibling `⚑ gap: listed is not alive` stays standing, with the shadow cells and the 4xx/5xx belts as the liveness signal. The seat carries the spec PR.",
+  "author_association": "MEMBER",
+  "pin": null,
+  "reactions": {
+   "url": "https://api.github.com/repos/teststuffstash/homelab/issues/comments/6829957677/reactions",
+   "total_count": 0,
+   "+1": 0,
+   "-1": 0,
+   "laugh": 0,
+   "hooray": 0,
+   "confused": 0,
+   "heart": 0,
+   "rocket": 0,
+   "eyes": 0
+  },
+  "performed_via_github_app": null,
+  "minimized": null
+ }
+]

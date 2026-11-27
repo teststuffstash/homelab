@@ -1,0 +1,45 @@
+# The `agent-gateway-kpi` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file kpi.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-kpi","rules":[.spec.groups[] | select(.name == "agent-gateway-kpi") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-kpi
+    rules:
+      - record: gateway:real_requests_success:ratio_7d
+        expr: |
+          1 - (
+            (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[7d])) or vector(0))
+            /
+            (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real"}[7d])) >= 200)
+          )
+      - record: gateway:sessions_dispatched:ratio_7d
+        expr: |
+          (sum(increase(gateway_sessions_total{job="agent-gateway",role!="prober",decision="dispatch"}[7d])) or vector(0))
+          /
+          (sum(increase(gateway_sessions_total{job="agent-gateway",role!="prober"}[7d])) >= 50)
+      - alert: GatewayRequestSuccessBelowTarget
+        expr: |
+          gateway:real_requests_success:ratio_7d < 0.99
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The gateway answered less than 99 % of its real requests without a 5xx over the last 7 days — below its KPI target
+          description: 'gateway:real_requests_success:ratio_7d is {{ $value | humanizePercentage }} (target: at least 99 %; at least 200 real requests in the 7 d). Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[7d])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) whether GatewayErrorShare fired in the window (the same share over 30 m, above 20 %); (3) gateway_build_info names the release that was serving. The KPI and its target are named in gateway/README.md §KPIs.'
+      - alert: GatewayDispatchShareBelowTarget
+        expr: |
+          gateway:sessions_dispatched:ratio_7d < 0.9
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The gateway dispatched less than 90 % of the sessions it was asked for over the last 7 days — below its KPI target
+          description: 'gateway:sessions_dispatched:ratio_7d is {{ $value | humanizePercentage }} (target: at least 90 %; at least 50 session requests in the 7 d, the prober''s left out). Check: (1) sum by (role, stack) (increase(gateway_sessions_total{job="agent-gateway",decision="defer"}[7d])) names who was deferred; (2) gateway_subscription_utilization and gateway_cells_cooled name the rail that was full or cooled; (3) the policy''s rails for that role in argocd/resources/agent-gateway/policy.json. A defer is the gateway''s designed answer when every listed rail is held; this alert is about the share, not one defer. The KPI and its target are named in gateway/README.md §KPIs.'

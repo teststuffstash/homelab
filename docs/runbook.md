@@ -90,8 +90,8 @@ curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
 #    2026-10-17 — the models list authenticates a bearer when one is sent):
 curl -s -o /dev/null -w '%{http_code}\n' https://opencode.ai/zen/go/v1/models \
   -H "Authorization: Bearer $($W opencode-go-api-key -a Password)"
-# 2. wallet → Infisical (no `$` in the value — scripts/infisical-secret.sh header)
-devbox run infisical-secret OPENCODE_GO_API_KEY="$($W opencode-go-api-key -a Password)"
+# 2. wallet → Infisical (value on stdin: `$` survives, the script reads it back — its header)
+$W opencode-go-api-key -a Password | devbox run infisical-secret OPENCODE_GO_API_KEY=-
 # 3. Infisical → the k8s Secret now, not at the 1h refresh
 $K annotate externalsecret opencode-go-key force-sync=$(date +%s) --overwrite
 $K get externalsecret opencode-go-key   # SecretSynced / Ready=True
@@ -334,6 +334,16 @@ bash scripts/opnsense-api-users.sh                  # users + one key each (idem
 K="devbox run -- kubectl --kubeconfig tofu/kubeconfig -n opnsense-config-backup"
 $K annotate externalsecret opnsense-backup-puller force-sync=$(date +%s) --overwrite
 ```
+
+**One user = one key pair on every router node.** The CARP nodes share no config, and each node's
+`add_api_key` would generate its own secret — so the play mints a missing key ONCE (on the first node
+in inventory order), installs that same stored line on the other node (`auth/user/set`, the user
+model's `apikeys` setter), and proves the minted secret authenticates on both. It refuses before any
+write when the nodes hold different keys, one node holds two, or a node's key is not the wallet's
+(`--check` prints the per-node plan: `opnsense-pve: … firmware install (from opnsense-nx02)`).
+Mechanism + tests: [`opn_user_keys.py`](../ansible/roles/opnsense-users/filter_plugins/opn_user_keys.py)
+(`devbox run opnsense-users-self-test`). **Rotate** a key by deleting it on EVERY node
+(`GET auth/user/search_api_key` → `POST auth/user/del_api_key/<id>`), then re-run.
 
 The mint is itself a root-key write, so the next backup run reports it as `OpnsenseConfigUnattributedRevision` (`user "…" created`, `add_api_key`, a privilege change). Every playbook and API script runs as `automation` since 2026-10-26, so they no longer do — a root revision outside a users run is a click (or a firmware/plugin act: those are root by design).
 Then set `suspend: false` in `cronjob.yaml` (its own PR), and once ArgoCD has synced run it once
@@ -717,8 +727,8 @@ unexplained key is a STOP before the window.
 A replace is now always **deliberate**. Since FU-306 (2026-10-14) an edit to
 `tofu/templates/ci-runner-cloud-init.yaml.tftpl` re-renders the snippet and replaces **no** VM —
 both VMs ignore `initialization[0].user_data_file_id` (`tofu/ci-runner.tf`) — so the new snippet
-lands at the next attended recreate and a replace must be planned with `-replace`. The box refuses
-a replace to a human apply. Do one VM per plan, through `scripts/runner-maintenance.sh`
+lands at the next recreate (the box's own since 2026-11-14, below) and a hand replace must be planned
+with `-replace`. The box refuses a replace to a human apply. By hand, do one VM per plan, through `scripts/runner-maintenance.sh`
 ([`management-box.md`](management-box.md) §Non-Talos VMs: the runner verb):
 
 1. Plan the one VM with `-replace` — for ci-runner-02:
@@ -737,6 +747,12 @@ a replace to a human apply. Do one VM per plan, through `scripts/runner-maintena
    in place; `runner-maint -- silence-close <vm>` expires them once you have finished by hand.
 3. The other VM the same way, then a full `mgmt-tf -- plan` of master applied by its id, which
    stamps the apply loop's baseline (a scoped apply does not).
+
+The box runs steps 1–3 itself, one VM per tick, while `apply_vm_recreate.main`
+is `on` (since 2026-11-14 — the capability ledger row) ([`management-box.md`](management-box.md) §Non-Talos VMs: the
+runner verb). It scopes with `-target` so the other VM's snippet stays pending; the unscoped
+`-replace` plan above re-creates both snippets, so after it the box no longer sees the other VM's
+pending seed — finish both by hand.
 
 By hand: `runner-maint -- drain|undrain|verify|silence-close <vm>`. Exits: 0 ok, 1 failed after acting,
 2 refused with nothing touched, 3 refused before a window.
@@ -870,6 +886,11 @@ per-class verbs; the steps below are what it does, for reading — not for typin
    `nx-02-bmc-password` once it exists), then runs each verb's `up`/`undrain`/`check`+`leave`.
 5. **Post:** `devbox run nodes` all Ready · Longhorn degraded count returns to 0 (replica
    re-sync is normal for ~minutes) · new kernel active (`uname -r`).
+
+⚠ **A host whose root went read-only defeats the verb**: `qm shutdown` writes a task log under
+`/var/log/pve/tasks` first and fails, so `down` stops at its first guest. The hand path used on
+2026-11-21 (QMP `system_powerdown` per VM, the per-class verbs, `carp-maintenance enter`, sysrq reboot)
+is in [`incidents/2026-11-20-nx-02-boot-disk.md`](incidents/2026-11-20-nx-02-boot-disk.md) §Recovery.
 
 ## Power-loss / ghost-node recovery
 

@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/pulls/3301/files --paginate
+CALL gh pr view 3301 --repo teststuffstash/homelab --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments,commits
+OUT ORPHAN [homelab] ⏳ ASSEMBLY PR #3301 ci-red DEBOUNCED — the same settled red since the last goal-checkpoint emit for goal #3118 (`state-fp:assembly-ci-red:275c4e614d6a`). That ride owns it (a fix child on the goal, or a re-run of an environmental red); a new head or a check settling red again re-arms the trigger.
+OUT REACHED: end
+RC 0

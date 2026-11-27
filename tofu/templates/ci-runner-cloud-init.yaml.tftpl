@@ -189,6 +189,16 @@ write_files:
 runcmd:
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now prometheus-node-exporter
+  # Which seed this VM booted: sha256 of the user-data it was handed, as a textfile metric. The
+  # management box publishes the sha the main tofu state holds for this VM; MgmtRunnerSeedDrift
+  # fires when they part — a snippet re-created without the VM recreate (docs/management-box.md
+  # §Non-Talos VMs). runcmd is per-instance, and the instance's user-data never changes under it.
+  - |
+    d=/var/lib/prometheus/node-exporter
+    mkdir -p "$d"
+    sha=$(sha256sum /var/lib/cloud/instance/user-data.txt | cut -d' ' -f1)
+    [ -n "$sha" ] && printf 'ci_runner_seed_info{vm="${name}",sha256="%s"} 1\n' "$sha" > "$d/ci-runner-seed.prom.tmp" \
+      && mv "$d/ci-runner-seed.prom.tmp" "$d/ci-runner-seed.prom"
   - sysctl --system
   # Persistent journal so a first-boot kernel panic is debuggable next time (it wasn't).
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald

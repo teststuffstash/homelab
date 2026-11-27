@@ -30,6 +30,10 @@
 #                                                workflow identity + workflowtaskresults RBAC so the
 #                                                stack's WorkflowTemplates/CronWorkflows run in-ns
 #                                                (first: oracle-fleet ingestion). Artifact repo later.
+#  10. intake-transcripts-<repo>               — repos[].intake: the stack island's own read path to its
+#                                                intake sittings — per-repo bucket, write-only key in
+#                                                agent-coordinator, read-only mirror in-ns through a
+#                                                namespace-conditioned ClusterSecretStore.
 # Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
@@ -107,6 +111,7 @@ spec:
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
                   (dict "name" "task/goal" "color" "5319e7" "description" "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)")
+                  (dict "name" "experiment/open" "color" "c2e0c6" "description" "Closed fix with an undecided ## Experiment; the intake experiment read decides it and removes this")
                   (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. MIDPOINT: goal stays OPEN, shipping to production (ADR-102)")
                   (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
                   (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes it — closed successfully-refuted, descendants close with it (ADR-102)")
@@ -575,7 +580,7 @@ spec:
                         - name: crashnet
                           # The coordinator image (bash + jq + s5cmd), same pin as the loop
                           # CronWorkflows above — the deploy-pin sweep bumps them together.
-                          image: ghcr.io/teststuffstash/agent-coordinator:2026.11.12-g7b51771a868d
+                          image: registry.teststuff.net/agent-coordinator:2026.11.25-gcac2dc85aa38
                           command: ["bash", "-lc"]
                           args:
                             - |
@@ -788,7 +793,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.11.12-g7b51771a868d
+                      image: registry.teststuff.net/agent-coordinator:2026.11.25-gcac2dc85aa38
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -871,7 +876,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.11.12-g7b51771a868d
+                      image: registry.teststuff.net/agent-coordinator:2026.11.25-gcac2dc85aa38
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -947,7 +952,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.11.12-g7b51771a868d
+                      image: registry.teststuff.net/agent-coordinator:2026.11.25-gcac2dc85aa38
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -1191,7 +1196,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-base:2026.11.12-g195b3c38eeaf
+                      image: registry.teststuff.net/agent-base:2026.11.23-g64c93276451b.137
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -1671,6 +1676,10 @@ spec:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-readonly-git-store
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
+              # Only the repo's own namespace may use this store: without it any namespace that
+              # can create an ExternalSecret could mirror this repo's token (ADR-168).
+              conditions:
+                - namespaces: [{{ $r.name }}]
               provider:
                 kubernetes:
                   remoteNamespace: agent-coordinator
@@ -2017,6 +2026,262 @@ spec:
               # FU-080 cross-ns dispatch: the STACK loop (ns <stack>-agents) may launch workers
               # in this fixer ns — namespaced grants only, no cluster-scoped reach.
               - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $xr.metadata.name }}-agents }
+            {{- end }}
+            {{- if hasKey $r "intake" }}
+            ---
+            # repos[].intake: the stack island's OWN copy of its intake runs (receipt, logs, review
+            # notes, session JSONL), readable from ns {{ $r.name }} — the stack writes the intake facts
+            # and tunes them from what the sittings did. agent-transcripts stays the canonical copy and
+            # is not this path (Garage grants are per BUCKET, so per-stack read needs a per-stack
+            # bucket). Two keys, least-privilege per side, in two Secrets:
+            #   writer — WRITE-ONLY, Secret intake-transcripts-<repo> in agent-coordinator, loaded by
+            #            the island-intake sitting leaf by name (agents/coordinator/island-intake-argo.yaml),
+            #            which also checks the `stack` field against the island's stack half;
+            #   reader — READ-ONLY, copied into its OWN Secret intake-transcripts-<repo>.reader, and only
+            #            that one is mirrored into ns {{ $r.name }} — no store a stack can use reads the
+            #            Secret that holds the writer.
+            # Named by the repo: a namespace name, cluster-unique, and the repo half of the island; every
+            # derived name takes a `.` suffix (`.src`, `.reader`), which no repo/namespace name can hold, so
+            # no repo's resources can collide with another repo's. The
+            # namespace must exist (as for every per-repo resource here) — an absent one parks the XR.
+            apiVersion: tf.upbound.io/v1beta1
+            kind: Workspace
+            metadata:
+              # cluster-scoped CRD — the connection secret lands in agent-coordinator
+              name: intake-transcripts-{{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-ws
+            spec:
+              providerConfigRef:
+                name: default
+              forProvider:
+                source: Inline
+                module: |
+                  resource "garage_bucket" "intake" {
+                    global_alias = "intake-transcripts-{{ $r.name }}"
+                    max_size     = 2147483648 # 2Gi — ADR-089 quota-as-contract (~3 MB per sitting)
+                  }
+                  resource "garage_key" "writer" { name = "intake-transcripts-{{ $r.name }}-writer" }
+                  resource "garage_key" "reader" { name = "intake-transcripts-{{ $r.name }}-reader" }
+                  resource "garage_bucket_permission" "writer" {
+                    bucket_id     = garage_bucket.intake.id
+                    access_key_id = garage_key.writer.id
+                    read  = false
+                    write = true
+                    owner = false
+                  }
+                  resource "garage_bucket_permission" "reader" {
+                    bucket_id     = garage_bucket.intake.id
+                    access_key_id = garage_key.reader.id
+                    read  = true
+                    write = false
+                    owner = false
+                  }
+                  output "bucket" { value = garage_bucket.intake.global_alias }
+                  output "stack" { value = "{{ $xr.metadata.name }}" }
+                  output "writer_access_key_id" { value = garage_key.writer.id }
+                  output "writer_secret_access_key" {
+                    value     = garage_key.writer.secret_access_key
+                    sensitive = true
+                  }
+                  output "reader_access_key_id" { value = garage_key.reader.id }
+                  output "reader_secret_access_key" {
+                    value     = garage_key.reader.secret_access_key
+                    sensitive = true
+                  }
+              writeConnectionSecretToRef:
+                namespace: agent-coordinator
+                name: intake-transcripts-{{ $r.name }}
+            ---
+            # hop 1: agent-coordinator copies the reader half out of the Workspace Secret (only agent-coordinator may use this store).
+            # An SA reading EXACTLY one Secret by name (the readOnlyGrants shape above).
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}.src
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-src-sa
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}.src
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-src-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: ["secrets"]
+                resourceNames: ["intake-transcripts-{{ $r.name }}"]
+                verbs: ["get", "list", "watch"]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}.src
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-src-rb
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: eso-intake-transcripts-{{ $r.name }}.src }
+            subjects:
+              - { kind: ServiceAccount, name: eso-intake-transcripts-{{ $r.name }}.src, namespace: agent-coordinator }
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}.src-ssrr
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-src-ssrr
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: eso-transcripts-reader-ssrr }
+            subjects:
+              - { kind: ServiceAccount, name: eso-intake-transcripts-{{ $r.name }}.src, namespace: agent-coordinator }
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ClusterSecretStore
+            metadata:
+              name: intake-transcripts-{{ $r.name }}.src
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-src-store
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              conditions:
+                - namespaces: [agent-coordinator]
+              provider:
+                kubernetes:
+                  remoteNamespace: agent-coordinator
+                  server:
+                    caProvider:
+                      type: ConfigMap
+                      name: kube-root-ca.crt
+                      key: ca.crt
+                      namespace: agent-coordinator
+                  auth:
+                    serviceAccount:
+                      name: eso-intake-transcripts-{{ $r.name }}.src
+                      namespace: agent-coordinator
+            ---
+            # hop 2: the stack namespace mirrors the reader-only Secret (only ns {{ $r.name }} may use this store).
+            # An SA reading EXACTLY one Secret by name (the readOnlyGrants shape above).
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-sa
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: ["secrets"]
+                resourceNames: ["intake-transcripts-{{ $r.name }}.reader"]
+                verbs: ["get", "list", "watch"]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-rb
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: eso-intake-transcripts-{{ $r.name }} }
+            subjects:
+              - { kind: ServiceAccount, name: eso-intake-transcripts-{{ $r.name }}, namespace: agent-coordinator }
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: eso-intake-transcripts-{{ $r.name }}-ssrr
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-ssrr
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: eso-transcripts-reader-ssrr }
+            subjects:
+              - { kind: ServiceAccount, name: eso-intake-transcripts-{{ $r.name }}, namespace: agent-coordinator }
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ClusterSecretStore
+            metadata:
+              name: intake-transcripts-{{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-store
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              conditions:
+                - namespaces: [{{ $r.name }}]
+              provider:
+                kubernetes:
+                  remoteNamespace: agent-coordinator
+                  server:
+                    caProvider:
+                      type: ConfigMap
+                      name: kube-root-ca.crt
+                      key: ca.crt
+                      namespace: agent-coordinator
+                  auth:
+                    serviceAccount:
+                      name: eso-intake-transcripts-{{ $r.name }}
+                      namespace: agent-coordinator
+            ---
+            # Hop 1's copy: the reader-only Secret, in agent-coordinator.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: intake-transcripts-{{ $r.name }}.reader
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-reader-es
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: intake-transcripts-{{ $r.name }}.src, kind: ClusterSecretStore }
+              target:
+                name: intake-transcripts-{{ $r.name }}.reader
+                creationPolicy: Owner
+              data:
+                - secretKey: bucket
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}, property: bucket }
+                - secretKey: reader_access_key_id
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}, property: reader_access_key_id }
+                - secretKey: reader_secret_access_key
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}, property: reader_secret_access_key }
+            ---
+            # Hop 2's copy: the in-namespace READER Secret. Real Ready kept, so AgentStack READY ⇒ the
+            # reader Secret exists in ns {{ $r.name }}.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: intake-transcripts-s3
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-intake-ts-mirror
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: intake-transcripts-{{ $r.name }}, kind: ClusterSecretStore }
+              target:
+                name: intake-transcripts-s3
+                creationPolicy: Owner
+              # Explicit fields, never `dataFrom.extract`: the names below can only ever be reader fields.
+              data:
+                - secretKey: bucket
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}.reader, property: bucket }
+                - secretKey: reader_access_key_id
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}.reader, property: reader_access_key_id }
+                - secretKey: reader_secret_access_key
+                  remoteRef: { key: intake-transcripts-{{ $r.name }}.reader, property: reader_secret_access_key }
             {{- end }}
             {{- if and $r.argo (get $r.argo "enabled") }}
             ---

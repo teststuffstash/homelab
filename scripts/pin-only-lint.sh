@@ -322,7 +322,7 @@ for lf in $(grep -E '(^|/)devbox\.lock$' <<< "$all_changed" || true); do
 done
 added_locks="$(printf '%s\n' $added_locks | grep . | sort -u || true)"
 # (k): the ADDED agent-coordinator tags, one per line, from the two pin lines every deploy-pin writes.
-COORD_PIN_ADDED='^\+(AGENT_COORDINATOR_IMAGE=ghcr\.io/teststuffstash/agent-coordinator:|[[:space:]]*newTag:[[:space:]]*)([A-Za-z0-9._-]+)[[:space:]]*$'
+COORD_PIN_ADDED='^\+(AGENT_COORDINATOR_IMAGE=registry\.teststuff\.net/agent-coordinator:|[[:space:]]*newTag:[[:space:]]*)([A-Za-z0-9._-]+)[[:space:]]*$'
 coord_source() { sed -E 's/^.*-(g[0-9a-f]{7,})([^0-9a-f].*)?$/\1/'; }  # tag → its -g<hex> source (else the tag)
 added_coord=""
 for cf in $(grep -xE 'agents/images\.env|agents/coordinator/kustomization\.yaml' <<< "$all_changed" || true); do

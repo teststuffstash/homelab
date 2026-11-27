@@ -1,8 +1,8 @@
 """Hand-rolled Prometheus text exposition (GW-METRICS) — bounded label values only.
 
 Families: `gateway_sessions_active{rail}`, `gateway_sessions_total{rail,role,stack,decision}`,
-`gateway_requests_total{rail,dialect,status}`, `gateway_upstream_seconds{rail}` (histogram),
-`gateway_tokens_total{rail,class}`, `gateway_credential_resolve_total{rail,outcome}`,
+`gateway_requests_total{rail,dialect,status,traffic}`, `gateway_upstream_seconds{rail,traffic}` (histogram),
+`gateway_tokens_total{rail,class,traffic}`, `gateway_credential_resolve_total{rail,outcome}`,
 `gateway_upstream_auth_rejected_total{rail}` (every upstream 401/403 credential verdict, answered 424 `upstream-auth` —
 the rail's credential is bad; every rail renders from 0),
 `gateway_control_plane_unauthenticated_total{route,reason}` (GW-SESSIONS-AUTH — every control-plane
@@ -12,9 +12,10 @@ request without a valid caller token, admitted under `observe` or refused under 
 codex rail the last ACCEPTED headroom report's windows — GW-CODEX-HEADROOM §Gauges).
 `gateway_db_mode{mode}` (gauge — 1 for the store mode the gateway opened at start, 0 for the other; GW-METRICS).
 `gateway_cells_cooled{rail}` + `gateway_credentials_rejected{rail}` (gauges — the admission's transport
-facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason}` (a 2xx whose
+facts, sessions.md §Capacity) and `gateway_requests_incomplete_total{rail,dialect,reason,traffic}` (a 2xx whose
 body stopped before its end, GW-RAIL-*).
-A label value outside its declared set renders as `other` — a task key, a session id or a model
+`gateway_build_info{release}` (gauge — 1 for the release the process started as, GATEWAY_RELEASE or `unknown`).
+A label value outside its declared set renders as `other` (except `release`, fixed once at start) — a task key, a session id or a model
 string can never become a series (cardinality is a policy decision, not a request's).
 """
 
@@ -29,6 +30,7 @@ from .outcomes import OUTCOME_CLASSES  # the one vocabulary (GW-SESSIONS-OUTCOME
 
 OTHER = "other"
 DECISIONS = ("dispatch", "defer")
+TRAFFIC = ("real", "synthetic", "none")  # GW-METRICS §Real and synthetic traffic
 TOKEN_CLASSES = ("in", "cache_read", "cache_write", "out")
 CRED_OUTCOMES = ("resolved", "definitive", "transient")
 CP_ROUTES = ("admit", "lookup", "release", "outcome", "list")  # control.ROUTES (not imported: control imports this module)
@@ -84,13 +86,21 @@ def _fmt_labels(labels: dict[str, str]) -> str:
     return "{" + ",".join(f'{k}="{v}"' for k, v in labels.items()) + "}"
 
 
+def traffic_of(rail: str, role: str | None) -> str:
+    """GW-METRICS §Real and synthetic traffic: `none` when no live session owns the request (rail `none`, whatever
+    role an expired row had), `synthetic` for a `prober` session, `real` otherwise."""
+    if rail == "none":
+        return "none"
+    return "synthetic" if role == "prober" else "real"
+
+
 class Metrics:
     def __init__(self, stacks: Iterable[str]):
         self.stacks = tuple(stacks)
         self._lock = threading.Lock()
         self.sessions_total: dict[tuple[str, str, str, str], int] = {}
-        self.requests_total: dict[tuple[str, str, str], int] = {}
-        self.tokens_total: dict[tuple[str, str], int] = {}
+        self.requests_total: dict[tuple[str, str, str, str], int] = {}
+        self.tokens_total: dict[tuple[str, str, str], int] = {}
         self.cred_total: dict[tuple[str, str], int] = {}
         self.upstream_auth_total: dict[str, int] = {}
         self.poll_total: dict[str, int] = {}  # GW-CODEX-HEADROOM §Poll
@@ -99,10 +109,10 @@ class Metrics:
         self.cp_unauth_total: dict[tuple[str, str], int] = {}
         self.sub_util: dict[tuple[str, str], float] = {}
         self.sub_reset: dict[tuple[str, str], float] = {}
-        self.upstream_buckets: dict[str, list[int]] = {}
-        self.upstream_sum: dict[str, float] = {}
-        self.upstream_count: dict[str, int] = {}
-        self.incomplete_total: dict[tuple[str, str, str], int] = {}
+        self.upstream_buckets: dict[tuple[str, str], list[int]] = {}
+        self.upstream_sum: dict[tuple[str, str], float] = {}
+        self.upstream_count: dict[tuple[str, str], int] = {}
+        self.incomplete_total: dict[tuple[str, str, str, str], int] = {}
         self.strikes_total: dict[tuple[str, str], int] = {}
         self.probe_total: dict[tuple[str, str], int] = {}
         self.reaped_total: dict[str, int] = {}
@@ -120,7 +130,13 @@ class Metrics:
         # mounted tier-evidence snapshot's age (None = none mounted — no series).
         self._rail_choices: dict[tuple[str, str, str], int] = {}
         self._tier_evidence_age: Callable[[], float | None] = lambda: None
+        self._release = "unknown"  # GW-METRICS §gateway_build_info
         self._db_mode: Callable[[], str] = lambda: ""  # GW-METRICS §gateway_db_mode: the store mode the process opened at start
+
+    def bind_release(self, release: str) -> None:
+        """GW-METRICS §gateway_build_info: the release the process started as (config.release_of — already
+        tag-shaped or `unknown`, so no out-of-pattern value reaches the label)."""
+        self._release = release
 
     def bind_db_mode(self, mode: Callable[[], str]) -> None:
         """GW-METRICS §gateway_db_mode: the store mode (`pvc` or `memory`) the gateway opened at start."""
@@ -175,8 +191,8 @@ class Metrics:
         with self._lock:
             self.probe_total[key] = self.probe_total.get(key, 0) + 1
 
-    def request_incomplete(self, rail: str, dialect: str, reason: str) -> None:
-        key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS))
+    def request_incomplete(self, rail: str, dialect: str, reason: str, role: str | None = None) -> None:
+        key = (_bounded(rail, RAILS), _bounded(dialect, DIALECTS), _bounded(reason, INCOMPLETE_REASONS), traffic_of(rail, role))
         with self._lock:
             self.incomplete_total[key] = self.incomplete_total.get(key, 0) + 1
 
@@ -189,27 +205,30 @@ class Metrics:
         with self._lock:
             self.sessions_total[key] = self.sessions_total.get(key, 0) + 1
 
-    def request(self, rail: str, dialect: str, status: int, upstream_s: float | None = None) -> None:
+    def request(self, rail: str, dialect: str, status: int, upstream_s: float | None = None, *, role: str | None = None) -> None:
         r = _bounded(rail, RAILS + ("none",))  # `none`: refused before a session named a rail
-        key = (r, _bounded(dialect, DIALECTS), _status_class(status))
+        t = traffic_of(r, role)
+        key = (r, _bounded(dialect, DIALECTS), _status_class(status), t)
         with self._lock:
             self.requests_total[key] = self.requests_total.get(key, 0) + 1
             if upstream_s is not None:
-                b = self.upstream_buckets.setdefault(r, [0] * len(BUCKETS))
+                rt = (r, t)
+                b = self.upstream_buckets.setdefault(rt, [0] * len(BUCKETS))
                 for i, le in enumerate(BUCKETS):
                     if upstream_s <= le:
                         b[i] += 1
-                self.upstream_sum[r] = self.upstream_sum.get(r, 0.0) + upstream_s
-                self.upstream_count[r] = self.upstream_count.get(r, 0) + 1
+                self.upstream_sum[rt] = self.upstream_sum.get(rt, 0.0) + upstream_s
+                self.upstream_count[rt] = self.upstream_count.get(rt, 0) + 1
 
-    def tokens(self, rail: str, usage) -> None:
+    def tokens(self, rail: str, usage, role: str | None = None) -> None:
         r = _bounded(rail, RAILS)
+        t = traffic_of(r, role)
         counts = {"in": usage.tokens_in, "cache_read": usage.tokens_cache_read,
                   "cache_write": usage.tokens_cache_write, "out": usage.tokens_out}
         with self._lock:
             for cls, n in counts.items():
                 if n:
-                    self.tokens_total[(r, cls)] = self.tokens_total.get((r, cls), 0) + n
+                    self.tokens_total[(r, cls, t)] = self.tokens_total.get((r, cls, t), 0) + n
 
     def subscription_windows(self, rail: str, headers) -> None:
         """Last-seen 5h/7d utilization (0–1) + reset epoch from `anthropic-ratelimit-unified-<w>-*`;
@@ -285,20 +304,21 @@ class Metrics:
             lines += ["# HELP gateway_sessions_total POST /sessions decisions.", "# TYPE gateway_sessions_total counter"]
             for (rail, role, stack, decision), n in sorted(self.sessions_total.items()):
                 lines.append(f"gateway_sessions_total{_fmt_labels({'rail': rail, 'role': role, 'stack': stack, 'decision': decision})} {n}")
-            lines += ["# HELP gateway_requests_total Data-plane requests by rail, dialect and response status.", "# TYPE gateway_requests_total counter"]
-            for (rail, dialect, status), n in sorted(self.requests_total.items()):
-                lines.append(f"gateway_requests_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'status': status})} {n}")
+            lines += ["# HELP gateway_requests_total Data-plane requests by rail, dialect, response status and traffic class.", "# TYPE gateway_requests_total counter"]
+            for (rail, dialect, status, traffic), n in sorted(self.requests_total.items()):
+                lines.append(f"gateway_requests_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'status': status, 'traffic': traffic})} {n}")
             lines += ["# HELP gateway_upstream_seconds Upstream round-trip (first byte to last byte) per rail.", "# TYPE gateway_upstream_seconds histogram"]
-            for rail in sorted(self.upstream_buckets):
-                b = self.upstream_buckets[rail]
+            for rt in sorted(self.upstream_buckets):
+                rail, traffic = rt
+                b = self.upstream_buckets[rt]
                 for i, le in enumerate(BUCKETS):
-                    lines.append(f"gateway_upstream_seconds_bucket{_fmt_labels({'rail': rail, 'le': str(le)})} {b[i]}")
-                lines.append(f"gateway_upstream_seconds_bucket{_fmt_labels({'rail': rail, 'le': '+Inf'})} {self.upstream_count[rail]}")
-                lines.append(f"gateway_upstream_seconds_sum{_fmt_labels({'rail': rail})} {self.upstream_sum[rail]:.6f}")
-                lines.append(f"gateway_upstream_seconds_count{_fmt_labels({'rail': rail})} {self.upstream_count[rail]}")
+                    lines.append(f"gateway_upstream_seconds_bucket{_fmt_labels({'rail': rail, 'traffic': traffic, 'le': str(le)})} {b[i]}")
+                lines.append(f"gateway_upstream_seconds_bucket{_fmt_labels({'rail': rail, 'traffic': traffic, 'le': '+Inf'})} {self.upstream_count[rt]}")
+                lines.append(f"gateway_upstream_seconds_sum{_fmt_labels({'rail': rail, 'traffic': traffic})} {self.upstream_sum[rt]:.6f}")
+                lines.append(f"gateway_upstream_seconds_count{_fmt_labels({'rail': rail, 'traffic': traffic})} {self.upstream_count[rt]}")
             lines += ["# HELP gateway_tokens_total Tokens reported by upstream usage, by rail and class (in = uncached input).", "# TYPE gateway_tokens_total counter"]
-            for (rail, cls), n in sorted(self.tokens_total.items()):
-                lines.append(f"gateway_tokens_total{_fmt_labels({'rail': rail, 'class': cls})} {n}")
+            for (rail, cls, traffic), n in sorted(self.tokens_total.items()):
+                lines.append(f"gateway_tokens_total{_fmt_labels({'rail': rail, 'class': cls, 'traffic': traffic})} {n}")
             lines += ["# HELP gateway_subscription_utilization Last-seen subscription window utilization (0-1) per rail and window.", "# TYPE gateway_subscription_utilization gauge"]
             for (rail, w), v in sorted(self.sub_util.items()):
                 lines.append(f"gateway_subscription_utilization{_fmt_labels({'rail': rail, 'window': w})} {v:g}")
@@ -328,8 +348,8 @@ class Metrics:
                     lines.append(f"gateway_codex_upstream_headroom_total{_fmt_labels({'outcome': outcome})} {self.headroom_header_total.get(outcome, 0)}")
             lines += ["# HELP gateway_requests_incomplete_total 2xx answers whose body stopped before its end, by reason.",
                       "# TYPE gateway_requests_incomplete_total counter"]
-            for (rail, dialect, reason), n in sorted(self.incomplete_total.items()):
-                lines.append(f"gateway_requests_incomplete_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'reason': reason})} {n}")
+            for (rail, dialect, reason, traffic), n in sorted(self.incomplete_total.items()):
+                lines.append(f"gateway_requests_incomplete_total{_fmt_labels({'rail': rail, 'dialect': dialect, 'reason': reason, 'traffic': traffic})} {n}")
             lines += ["# HELP gateway_strikes_total Strikes written to the store, by class and source (outcome = the consumer, gateway = a transport fact).",
                       "# TYPE gateway_strikes_total counter"]
             for (klass, source), n in sorted(self.strikes_total.items()):
@@ -357,6 +377,9 @@ class Metrics:
             lines += ["# HELP gateway_db_mode The store mode the gateway opened at start: 1 for the active mode, 0 for the other (GW-METRICS).",
                       "# TYPE gateway_db_mode gauge"]
             lines += [f"gateway_db_mode{_fmt_labels({'mode': mode})} {1 if db_mode == mode else 0}" for mode in DB_MODES]
+            lines += ["# HELP gateway_build_info The release the process started as (the value /healthz answers): 1, set once (GW-METRICS).",
+                      "# TYPE gateway_build_info gauge",
+                      f"gateway_build_info{_fmt_labels({'release': self._release})} 1"]
             lines += ["# HELP gateway_sessions_reaped_total Sessions released because their pod was gone (GW-SESSIONS-LIVENESS).",
                       "# TYPE gateway_sessions_reaped_total counter"]
             lines += [f"gateway_sessions_reaped_total{_fmt_labels({'rail': rail})} {self.reaped_total.get(rail, 0)}" for rail in RAILS]

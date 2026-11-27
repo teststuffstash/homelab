@@ -1,0 +1,294 @@
+# island-rules-digest-argo — the weekly ISLAND RULES DIGEST (FU-320; docs/glossary.md "island rules
+# digest"): the operator's one review surface over the markdown a launcher hands a session as its
+# brief or rules. Those files are edited by the loop as well as by hand; nobody reviews each edit.
+# Once a week ONE session reads the week's change record + the diffs and writes ONE report — what a
+# session will now DO differently, the evidence each change cites, which changes widen what a loop
+# component may decide without the operator — delivered as ONE pull request. Merging it accepts the
+# week; undoing a change is reverting the commit the report names.
+#
+# Machinery inventory (the deep dig's shape, deep-dig-argo.yaml; the retro's delivery, retro-argo.yaml):
+#   predicate  = `agents/island_rules.py changes` — deterministic (ADR-094: the model never picks its
+#                inputs). The file set is DERIVED from the launchers, never listed (that script's
+#                header); the window is the 7 days before the run day, half-open, on master. No commit
+#                touched the set → NO session: a one-line `no rule files changed` record only.
+#   edge       = this CronWorkflow, Fridays 06:00Z — off the retro's Monday 05:00Z and the
+#                feedback-triage series' Wednesday 05:00Z slots, after the daily 03:30Z dig and 05:00Z
+#                island intake. No Sensor: a weekly read is never urgent.
+#   capacity   = ONE session per run on the subscription-capacity semaphore, on the LEAF (FU-198 — the
+#                retry wrapper holds no slot), activeDeadline 1 h. The model is the gateway's for role
+#                `retro` (the summarising role; agents/gateway-admit.sh's unbound lane shape) — the
+#                transition fallback resolves the same role through agents/resolve-model.sh.
+#   inputs     = the change record, `git diff` per changed file over the window, each commit's full
+#                message (the stated reason), and the island's own gauges read from Prometheus
+#                in-cluster (OPTIONAL: an absent gauge or an unreachable Prometheus is "not measured"
+#                in the report, never a failed run).
+#   brief      = docs/agents/retros/ISLAND-RULES-BRIEF.md (rules only).
+#   output     = the report between BEGIN/END-ISLAND-RULES-DIGEST markers, extracted by this shell
+#                (the session holds no write path), committed at
+#                docs/agents/retros/island-rules/<last day of the window>.md and opened as ONE PR with
+#                the retro harvest's identity and mechanics (coordinator-git, branch per week, an open
+#                PR on the branch is reused, a merged one is never pushed to again).
+#   capture    = record + inputs + brief + transcript + an A1 manifest under
+#                homelab/island-rules-<date>/digest-r1-<ts>/ in the agent-transcripts bucket.
+#   belts      = island_rules_digest_* gauges (job island_rules_digest) + IslandRulesDigestOverdue
+#                (argocd/resources/pushgateway/prometheusrule.yaml). last_success is pushed only when
+#                the week's outcome landed (a PR, or the no-change record).
+#   manual     = argo -n agent-coordinator submit --from cronworkflow/island-rules-digest
+#                [-p since=YYYY-MM-DD -p until=YYYY-MM-DD]
+# Harness: agents/island-rules-digest-test.sh (run by `devbox run deep-dig-test`, the dig's own gate).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: island-rules-digest
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "0 6 * * 5"
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 3600
+    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 259200 }
+    arguments:
+      parameters:
+        # Empty = the 7 days before the run day (UTC), half-open [since 00:00Z, until 00:00Z).
+        - { name: since, value: "" }
+        - { name: until, value: "" }
+    # homelab#103 / #867 soft spread + Longhorn-disk de-preference — the dig's.
+    podSpecPatch: |
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchExpressions:
+              - { key: workflows.argoproj.io/workflow, operator: Exists }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 10
+              preference:
+                matchExpressions:
+                  - key: node.longhorn.io/create-default-disk
+                    operator: NotIn
+                    values:
+                      - "true"
+    entrypoint: digest-retry
+    volumes:
+      - { name: work, emptyDir: {} }
+      # GW-SESSIONS-AUTH: this pod's projected ServiceAccount token for the gateway's caller check.
+      - name: gateway-token
+        projected:
+          sources:
+            - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
+    templates:
+      # The retry wrapper holds NO semaphore (FU-198): every attempt is a fresh `digest` node that
+      # acquires and releases the subscription slot, so no backoff holds the slot it waits for.
+      - name: digest-retry
+        steps:
+          - - name: digest
+              template: digest
+        retryStrategy:
+          limit: "2"
+          retryPolicy: OnFailure
+          backoff: { duration: "30m", factor: "2" }
+      - name: digest
+        metadata:
+          labels: { app: island-rules-digest-workflow }
+        synchronization:
+          semaphores:
+            - configMapKeyRef: { name: subscription-capacity, key: claude }
+        container:
+          image: registry.teststuff.net/agent-coordinator
+          env:
+            - { name: HOME, value: "/home/node" }
+            # FU-270: the agent-gateway admits the session (agents/gateway-admit.sh's unbound lane);
+            # the ANTHROPIC_* pair is the old-proxy path the transition fallback still uses.
+            - { name: AGENT_GATEWAY, value: "sessions" }
+            - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
+            - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
+            - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+            - { name: CLAUDE_CODE_ENABLE_TELEMETRY, value: "1" }
+            - { name: OTEL_METRICS_EXPORTER, value: "otlp" }
+            - { name: OTEL_LOGS_EXPORTER, value: "otlp" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: "http/protobuf" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.monitoring.svc.cluster.local:4318" }
+            - { name: OTEL_TRACES_EXPORTER, value: "none" }
+            - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=retro,lane=island-rules-digest,stack=platform" }
+            # The retro harvest's identity: the report PR is opened with coordinator-git.
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: AWS_REGION, value: "garage" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091" }
+            - { name: PROMETHEUS, value: "http://prometheus-operated.monitoring.svc.cluster.local:9090" }
+            # The island's own numbers (optional input): every series whose name matches.
+            - { name: ISLAND_GAUGE_RE, value: "island_intake_.+" }
+            - { name: REPORT_REPO, value: "teststuffstash/homelab" }
+            - { name: REPORT_DIR, value: "docs/agents/retros/island-rules" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: gateway-token, mountPath: /var/run/secrets/agent-gateway, readOnly: true }
+          command: [bash, -lc]
+          args:
+            - |
+              set -uo pipefail
+              TS_RUN="$(date -u +%Y%m%dT%H%M%SZ)"
+              UNTIL="{{workflow.parameters.until}}"; UNTIL="${UNTIL:-$(date -u +%Y-%m-%d)}"
+              SINCE="{{workflow.parameters.since}}"; SINCE="${SINCE:-$(date -u -d "$UNTIL -7 days" +%Y-%m-%d)}"
+              LASTDAY="$(date -u -d "$UNTIL -1 day" +%Y-%m-%d)"
+              PGW="${PUSHGATEWAY:-}"
+              # ── metrics: best-effort; last_success only when the week's outcome landed ──────────
+              _push() { # <probe_ok> <files_changed> <commits> <session_ran> <report_ok> <success:0|1>
+                [ -n "$PGW" ] || return 0
+                { printf '%s\n' \
+                    "# TYPE island_rules_digest_last_run_timestamp_seconds gauge" "island_rules_digest_last_run_timestamp_seconds $(date -u +%s)" \
+                    "# TYPE island_rules_digest_probe_ok gauge" "island_rules_digest_probe_ok $1" \
+                    "# TYPE island_rules_digest_files_changed gauge" "island_rules_digest_files_changed $2" \
+                    "# TYPE island_rules_digest_commits gauge" "island_rules_digest_commits $3" \
+                    "# TYPE island_rules_digest_session_ran gauge" "island_rules_digest_session_ran $4" \
+                    "# TYPE island_rules_digest_report_ok gauge" "island_rules_digest_report_ok $5"
+                  [ "$6" = 1 ] && printf '%s\n' "# TYPE island_rules_digest_last_success_timestamp_seconds gauge" \
+                    "island_rules_digest_last_success_timestamp_seconds $(date -u +%s)"; } \
+                  | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_rules_digest" >/dev/null 2>&1 \
+                  || echo "island-rules-digest: pushgateway unreachable — metrics stale, the outcome is unaffected"
+              }
+              # ── §A1 capture ────────────────────────────────────────────────────────────────────
+              TS_PREFIX="s3://${AGENT_TS_BUCKET}/homelab/island-rules-${LASTDAY}/digest-r1-${TS_RUN}"
+              _ts_put() { # <local> <remote-basename>
+                [ -s "$1" ] || return 0
+                [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 writer key — $2 not captured"; return 0; }
+                command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — $2 not captured"; return 0; }
+                AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" \
+                  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$1" "$TS_PREFIX/$2" >/dev/null 2>&1 \
+                  || echo "transcripts: upload FAILED for $2 (non-fatal)"
+              }
+
+              rm -rf /work/homelab /tmp/digest; mkdir -p /tmp/digest/diffs /tmp/digest/commits
+              # Preemptive-auth clone (homelab#1136 + the 2026-09-03 recurrence). FULL history, no blobs:
+              # the change record walks the window and reads each file's size at both ends.
+              _ah="http.extraHeader="; [ -n "${GH_TOKEN:-}" ] && _ah="http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+              git clone -c "$_ah" --filter=blob:none -b master https://github.com/teststuffstash/homelab.git /work/homelab \
+                || { _push 0 0 0 0 0 0; echo "island-rules-digest: clone failed"; exit 1; }
+              cd /work/homelab
+
+              # ── 1. THE CHANGE RECORD (deterministic; rule #6 — a failed read is exit 1, never "quiet")
+              if ! python3 agents/island_rules.py changes --since "$SINCE" --until "$UNTIL" --ref HEAD > /tmp/digest/changes.json 2>/tmp/digest/changes.err; then
+                cat /tmp/digest/changes.err; _push 0 0 0 0 0 0; echo "island-rules-digest: the change record failed — no session"; exit 1
+              fi
+              NFILES="$(jq -r '.counts.files_changed' /tmp/digest/changes.json)"; NCOMMITS="$(jq -r '.counts.commits' /tmp/digest/changes.json)"
+              _ts_put /tmp/digest/changes.json changes.json
+              if [ "${NCOMMITS:-0}" -eq 0 ]; then
+                jq -n --arg since "$SINCE" --arg until "$UNTIL" --argjson n "$(jq '.counts.files_in_set' /tmp/digest/changes.json)" \
+                  '{schema:"island-rules-record/v1", since:$since, until:$until, files_in_set:$n, outcome:"no rule files changed"}' > /tmp/digest/record.json
+                _ts_put /tmp/digest/record.json record.json
+                _push 1 0 0 0 0 1
+                echo "island-rules-digest: no rule files changed in [$SINCE, $UNTIL) — no session (record → $TS_PREFIX)"; exit 0
+              fi
+
+              # ── 2. THE INPUTS: per-file diff over the window, each commit's full message, the gauges ─
+              EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+              R0="$(jq -r '.window.rev_start // empty' /tmp/digest/changes.json)"; R0="${R0:-$EMPTY_TREE}"
+              R1="$(jq -r '.window.rev_end' /tmp/digest/changes.json)"
+              # a file moved inside the window is diffed across the rename (path_start, island_rules.py changes)
+              jq -r '.files[] | select(.commits | length > 0) | [.path, (.path_start // .path)] | @tsv' /tmp/digest/changes.json | while IFS=$'\t' read -r p ps; do
+                if [ "$ps" = "$p" ]; then git diff "$R0" "$R1" -- "$p"; else git diff -M "$R0" "$R1" -- "$ps" "$p"; fi \
+                  > "/tmp/digest/diffs/$(printf '%s' "$p" | tr '/' '_').diff"
+              done
+              jq -r '[.files[].commits[].sha] | unique | .[]' /tmp/digest/changes.json | while read -r s; do
+                git log -1 --format='%H%n%an <%ae>%n%cI%n%n%B' "$s" > "/tmp/digest/commits/$s.txt"
+              done
+              # Optional: an absent gauge / unreachable Prometheus is "not measured", never a failure.
+              if body="$(curl -sf --max-time 20 --get "${PROMETHEUS}/api/v1/query" --data-urlencode "query={__name__=~\"${ISLAND_GAUGE_RE}\"}")" \
+                 && [ "$(printf '%s' "$body" | jq -r '.data.result | length' 2>/dev/null || echo 0)" -gt 0 ]; then
+                printf '%s' "$body" | jq '{measured: true, series: [.data.result[] | {name: .metric.__name__, labels: (.metric | del(.__name__, .job, .instance, .endpoint, .namespace, .pod, .service, .container)), value: .value[1]}]}' > /tmp/digest/gauges.json
+              else
+                jq -n --arg re "$ISLAND_GAUGE_RE" '{measured: false, note: ("not measured: no series matching " + $re + " could be read from Prometheus")}' > /tmp/digest/gauges.json
+              fi
+              tar -C /tmp -czf /tmp/digest-inputs.tgz digest
+              _ts_put /tmp/digest-inputs.tgz inputs.tgz
+
+              # ── 3. ONE session: admitted by the agent-gateway as role retro (FU-270), else the old path
+              . agents/gateway-admit.sh
+              _gw=0; gw_admit_lane /tmp/gw-llm.env --stack platform --role retro --task "island-rules-$LASTDAY" || _gw=$?
+              case "$_gw" in
+                0) trap gw_release EXIT; rail="gateway:$GW_RAIL"; TS_MODEL="$GW_WIRE_MODEL";;
+                1) _push 1 "$NFILES" "$NCOMMITS" 0 0 0; echo "island-rules-digest: the gateway deferred [$GW_DEFER_REASON] — exit 1, Argo retries with backoff"; exit 1;;
+                *)
+              rail="$(SUBSCRIPTION_TIER=dispatch bash agents/subscription-latch.sh --pick-rail)" || rail=""
+              if [ -z "$rail" ]; then _push 1 "$NFILES" "$NCOMMITS" 0 0 0; echo "island-rules-digest: both rails latched — exit 1, Argo retries with backoff"; exit 1; fi
+              TS_MODEL="$(case "$rail" in opencode-go/*) echo "$rail";; *) _rm="$(bash agents/resolve-model.sh --role retro --fallback opus)"; eval "$(python3 agents/model_id.py --shell "$_rm")"; echo "${MODEL_MODEL:-$_rm}";; esac)";;
+              esac
+
+              {
+              cat docs/agents/retros/ISLAND-RULES-BRIEF.md
+              printf '\n## This run\n\nWindow: [%s 00:00Z, %s 00:00Z) on master. Your cwd is a clone of master at its end.\n' "$SINCE" "$UNTIL"
+              printf 'Inputs (read them all before writing):\n- /tmp/digest/changes.json — the change record (island-rules-changes/v1)\n'
+              printf -- '- /tmp/digest/diffs/<path with / as _>.diff — git diff of each changed file over the window\n'
+              printf -- '- /tmp/digest/commits/<sha>.txt — each commit'"'"'s full message (its stated reason)\n- /tmp/digest/gauges.json — the island gauges (measured: false = say "not measured")\n'
+              } > /tmp/digest/brief.md
+              _ts_put /tmp/digest/brief.md brief.md
+
+              : > /tmp/ts-mark; : > /tmp/digest/session.log
+              env "${GW_LLM_ENV[@]}" claude -p "$(cat /tmp/digest/brief.md)" --model "$TS_MODEL" --permission-mode bypassPermissions --max-turns 60 </dev/null 2>&1 \
+                | tee /tmp/digest/session.log \
+                || echo "WARN: the digest session failed — whatever it printed is still harvested" | tee -a /tmp/digest/session.log
+
+              # ── 4. HARVEST + CAPTURE: the report block, its floor, then the record ─────────────────
+              sed -n '/^BEGIN-ISLAND-RULES-DIGEST$/,/^END-ISLAND-RULES-DIGEST$/p' /tmp/digest/session.log | sed '1d;$d' > /tmp/digest/report.md
+              REPORT_OK=1
+              if [ "$(grep -c . /tmp/digest/report.md)" -lt 8 ] || ! grep -m1 . /tmp/digest/report.md | grep -q '^Verdict:'; then
+                REPORT_OK=0; echo "island-rules-digest: no report block (or it fails the floor: ≥ 8 lines, the first one 'Verdict:')"
+              fi
+              jq -n --arg role retro --arg lane island-rules-digest --arg project homelab --arg task "island-rules-$LASTDAY" \
+                    --arg model "$TS_MODEL" --arg rail "$rail" --arg pod "${HOSTNAME:-}" --arg ts "$TS_RUN" \
+                    --argjson files "$NFILES" --argjson commits "$NCOMMITS" --argjson ok "$REPORT_OK" \
+                    '{role:$role, lane:$lane, project:$project, task:$task, round:1, model:$model, rail:$rail,
+                      session_key:"coordinator-claude", pod:$pod, timestamp:$ts, files_changed:$files, commits:$commits, report_ok:$ok,
+                      files:["changes.json","inputs.tgz","brief.md","session.log","report.md"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/ts-manifest.json
+              _ts_put /tmp/digest/session.log session.log
+              _ts_put /tmp/digest/report.md report.md
+              _ts_put /tmp/ts-manifest.json manifest.json
+              { find "$HOME/.claude/projects" -name '*.jsonl' -newer /tmp/ts-mark 2>/dev/null || true; } | while read -r f; do _ts_put "$f" "$(basename "$f")"; done
+              if [ "$REPORT_OK" -ne 1 ]; then _push 1 "$NFILES" "$NCOMMITS" 1 0 0; exit 1; fi
+
+              # ── 5. DELIVERY: ONE PR per week — the retro harvest's identity and mechanics ──────────
+              BR="island-rules/${LASTDAY}"
+              REPORT="${REPORT_DIR}/${LASTDAY}.md"
+              git config user.name "island-rules-digest"; git config user.email "noreply@teststuff.net"
+              OPEN_PR=$(gh pr list --repo "$REPORT_REPO" --head "$BR" --state open --json url --jq '.[0].url // empty')
+              MERGED_PR=$(gh pr list --repo "$REPORT_REPO" --head "$BR" --state merged --json url --jq '.[0].url // empty')
+              if [ -z "$OPEN_PR" ] && [ -n "$MERGED_PR" ]; then
+                echo "island-rules-digest: this week's digest already merged ($MERGED_PR) — nothing pushed"; _push 1 "$NFILES" "$NCOMMITS" 1 1 1; exit 0
+              fi
+              if [ -n "$OPEN_PR" ]; then
+                git fetch -q origin "refs/pull/${OPEN_PR##*/}/head" && git checkout -q -B "$BR" FETCH_HEAD
+              else
+                git checkout -q -b "$BR"
+              fi
+              mkdir -p "$REPORT_DIR"; cp /tmp/digest/report.md "$REPORT"
+              git add "$REPORT"
+              git diff --cached --quiet || git commit -q -m "island rules digest: week ending ${LASTDAY} (${NCOMMITS} change(s), FU-320)"
+              VERDICT="$(grep -m1 '^Verdict:' "$REPORT")"
+              printf '%s\n\n%s\n\n%s\n' "$VERDICT" \
+                "The weekly island rules digest (agents/coordinator/island-rules-digest-argo.yaml): every change this week to the markdown a launcher hands a session as its brief or rules, read for what a session will now do differently. Merging this PR accepts the week. To undo one change, revert the commit the report names." \
+                "Inputs and transcript: ${TS_PREFIX}/" > /tmp/digest/pr-body.md
+              if ! git push -q origin "HEAD:$BR"; then _push 1 "$NFILES" "$NCOMMITS" 1 1 0; echo "island-rules-digest: push failed"; exit 1; fi
+              PR="$OPEN_PR"
+              [ -n "$PR" ] || PR=$(gh pr create --repo "$REPORT_REPO" --base master --head "$BR" \
+                --title "island rules digest: week ending ${LASTDAY} (${NCOMMITS} change(s))" --body-file /tmp/digest/pr-body.md) \
+                || { _push 1 "$NFILES" "$NCOMMITS" 1 1 0; echo "island-rules-digest: PR create failed"; exit 1; }
+              _push 1 "$NFILES" "$NCOMMITS" 1 1 1
+              echo "island-rules-digest: ${NCOMMITS} change(s) in ${NFILES} file(s) → ${PR} (record → $TS_PREFIX)"
+              exit 0
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "1Gi" }

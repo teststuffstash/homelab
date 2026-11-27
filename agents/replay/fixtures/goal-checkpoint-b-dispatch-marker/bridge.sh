@@ -6,10 +6,10 @@ uitem="issue-29"
 urepo="circles"
 assembly_cr_prs=""
 goal_ckpt_b_prs="circles:issue-29:845"
-# ── override pr_state_fp_pair ── return a known fingerprint. `09eb9ea954a4` is the hash the goal
+# ── override pr_state_fp_pair ── return a known fingerprint. `a04172e75052` is the hash the goal
 # family's `goal-checkpoint-b-held` row records, so the two fixtures name the same state.
 pr_state_fp_pair() {
-  printf '%s\n' '09eb9ea954a4|'
+  printf '%s\n' 'a04172e75052|'
   return 0
 }
 # ── override date ── deterministic timestamp.

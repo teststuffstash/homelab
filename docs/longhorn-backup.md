@@ -40,7 +40,9 @@ replica inside the same LXC.
 **Same failure domain, accepted for now.** nx-02 is one chassis with nx-01 (storage-ledger's
 "ONE failure domain" row), and it carries no Longhorn replica. So a disk or Longhorn failure on the
 std/bulk tiers cannot reach the target. Losing the nx-02 box loses only the backups, never the
-originals. The off-site copy is what closes the gap for a whole-site loss.
+originals — but a dead target stalls CNPG's WAL archiving, and unarchived WAL filled Postgres volumes
+on 2026-11-20 ([incident](incidents/2026-11-20-nx-02-boot-disk.md); `CNPGWALArchivingFailing` since #3625,
+[`postgres.md`](postgres.md) §Backups). The off-site copy is what closes the gap for a whole-site loss.
 
 ## Classes — which volumes are backed up
 

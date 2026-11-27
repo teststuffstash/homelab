@@ -49,7 +49,7 @@ spec:
             periodSeconds: 30
           resources:
             requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            limits: { memory: 512Mi }  # 128Mi OOM-looped from 2026-11-06 (23 kills by 11-16) at ~4.4k groups / 23k series — FU-182 owns the growth
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534

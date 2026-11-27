@@ -1,0 +1,15 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "metadata": {"name": "agent-homelab-issue-50-r2", "creationTimestamp": "2026-11-16T09:00:00Z", "labels": {"app": "agent-session", "project": "homelab"}},
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {"name": "agent", "state": {"running": {"startedAt": "2026-11-16T09:00:20Z"}}}
+        ]
+      }
+    }
+  ]
+}

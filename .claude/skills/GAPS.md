@@ -50,13 +50,14 @@ bounded build); handoff-G4 waits on claude-jail#11.
       2026-09-05 → 10-21 still sat in `inbox/` (6 of them long resolved) — the promoted step holds
       only when the skill is invoked on EVERY inbox file, not the ones the operator named; done by
       a fork that day.
-- [ ] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
+- [x] handoff-G4 — two shapes the protocol lacked, improvised the same way three times (2026-10-16,
       10-19, ~10-22): OUTBOUND mono→stack notices written to `<stack>/done/`, and a second jail's
       durable record (step 6 collides with second-jail rule 2). Operator 2026-10-26: expand the
       protocol for now; the direction is stack↔platform comms that need no live seat
       (`platform-request` label); "a useful antipattern to keep an eye on". The skill half landed
-      (step 6, mission line); the protocol half is claude-jail#11 (`tools/handoff.md`) — close
-      this entry when it merges.
+      (step 6, mission line); the protocol half is claude-jail#11 (`tools/handoff.md`), merged
+      2026-11-22. **promoted→** a second jail's durable records ride a typed one-time wind-down
+      handoff (`handoff/seat-records.md`, homelab#3673).
 
 ## meta-coordinate
 
@@ -166,7 +167,9 @@ bounded build); handoff-G4 waits on claude-jail#11.
       `UpgradeLeaseInFlight` (07:04Z) was read after `close` and got its outcome late (benign,
       info/triage none). Sighted 2026-10-28 (merge window #2916/#2915/#2911). Fix shape: the skill
       says to arm the watch as a line-streaming monitor (each line = a notification), not a
-      background task read only at exit.
+      background task read only at exit. Resight 2026-11-19 (FU-315 restart window): armed that way
+      (`maint watch … | grep --line-buffered`), the two EXPECTED lines arrived mid-window and were
+      claimed before `close` — the fix shape works; second date → promote into the skill text.
 
 ## opnsense-as-code
 
@@ -198,3 +201,13 @@ bounded build); handoff-G4 waits on claude-jail#11.
 - [x] second-jail-G3 — invoked mid-session after an unpushed primary-seat commit; nothing handed it
       over (2026-10-13). **promoted→** "Invoked mid-session?" block: list prior writes/commits,
       finish under the old role or hand to the primary, then the rules start (2026-10-26).
+
+## seat-review
+
+- [ ] seat-review-G1 — the red-by-design check (`pin-only-lint`) runs EARLY in `ci`, so every later
+      gate is skipped and the PR carries no evidence for them; the skill's Limits only say the
+      red-by-design check stays unrun. Improvised 2026-11-22 (#3652): a local `diff-ci` selects
+      everything once `ci.yaml` changes (incl. report-only WAN gates CI never runs: 18+ min, no end);
+      `gh workflow run CI --ref <branch>` (dispatch skips `pin-only-lint`) ran all gates in ~16 min
+      and caught a `github-apps-lint` defect the subagent's diff read missed. Skill should say:
+      dispatch CI on the branch, read the PR-only skipped steps against the diff, record both.

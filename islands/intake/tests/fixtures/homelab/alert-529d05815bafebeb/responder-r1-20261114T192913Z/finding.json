@@ -1,0 +1,24 @@
+{
+  "schema": "responder-finding/v1",
+  "ts": "2026-11-14T19:29:22Z",
+  "alertname": "KubePodNotReady",
+  "fingerprint": "529d05815bafebeb",
+  "subject": "workload:arc-runners/homelab-ephemeral-large-runner",
+  "verdict": "none",
+  "issue": "",
+  "route_repo": "teststuffstash/homelab",
+  "route_stack": "platform",
+  "self_referential": true,
+  "observation_window": "",
+  "model": "sonnet",
+  "rail": "gateway:anthropic",
+  "pod": "respond-6lnwp-respond-2919809895",
+  "remediation_would": [
+    {
+      "verb": "delete",
+      "target": "arc-runners/pod/homelab-ephemeral-large-runner-988rv",
+      "reason": "only if it stays Pending after memory frees up; deleting it lets ARC recreate it. This is low confidence, because the current cause is capacity, not a wedged pod.",
+      "raw": "delete arc-runners/pod/homelab-ephemeral-large-runner-988rv — only if it stays Pending after memory frees up; deleting it lets ARC recreate it. This is low confidence, because the current cause is capacity, not a wedged pod."
+    }
+  ]
+}

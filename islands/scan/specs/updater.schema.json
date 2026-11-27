@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/updater.schema.json",
+  "title": "update-pr-branch.sh — the PR fields one pass reads, the actions it emits",
+  "type": "object",
+  "x-requirements": {
+    "/properties/invocation": ["SCAN-UPDATER-PICK"],
+    "/properties/pr": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-CONFLICT", "SCAN-UPDATER-RENOVATE"],
+    "/properties/commit_probe": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-RENOVATE"],
+    "/properties/commit_review_probe": ["SCAN-UPDATER-UNSTRAND"],
+    "/properties/pull_commits_read": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND", "SCAN-UPDATER-RENOVATE"],
+    "/properties/check_runs_read": ["SCAN-UPDATER-RENOVATE"],
+    "/properties/ci_check_read": ["SCAN-UPDATER-PICK"],
+    "/properties/status_read": ["SCAN-UPDATER-RENOVATE"],
+    "/properties/action/oneOf/0": ["SCAN-UPDATER-PICK", "SCAN-UPDATER-UNSTRAND"],
+    "/properties/action/oneOf/1": ["SCAN-UPDATER-CONFLICT"],
+    "/properties/action/oneOf/2": ["SCAN-UPDATER-RENOVATE"]
+  },
+  "$defs": {
+    "reviewAuthor": {"type": ["object", "null"], "required": ["login"], "properties": {"login": {"type": "string"}}, "description": "null = a deleted account: no one's verdict"},
+    "reviews": {"type": "array", "items": {"type": "object", "required": ["author", "state", "submittedAt"], "properties": {"author": {"$ref": "#/$defs/reviewAuthor"}, "state": {"type": "string"}, "submittedAt": {"type": "string", "description": "a pending review (null) is visible only to its author, never to the pass's identity"}}}},
+    "commits": {"type": "array", "items": {"type": "object", "required": ["oid", "messageHeadline", "committedDate", "authors"], "properties": {"oid": {"type": "string"}, "messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}, "authors": {"type": "array", "items": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}}}}}}
+  },
+  "properties": {
+    "invocation": {
+      "type": "object",
+      "required": ["repo"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
+        "GH_TOKEN": {"description": "the homelab-merge App installation token (never a workflow GITHUB_TOKEN)"},
+        "UPDATER_LABEL_TOKEN": {"description": "coordinator-git — issues:write for leg 3"},
+        "UPDATER_MERGE_READY_ONLY": {"enum": ["0", "1"], "default": "1"},
+        "doorbell": {"type": "object", "properties": {"repo": {"type": "string"}}, "description": "POST /update-pr — scopes one repo; the */15 sweep covers stacks.json"}
+      }
+    },
+    "pr": {
+      "description": "The `gh pr list --json` fields one pass reads (no `commits` — the 500k-node cap); commits come from the per-candidate probe. Every field the pass reads is required: an entry lacking one, or holding null where the type allows none, makes the snapshot unreadable (exit 4, nothing written).",
+      "type": "object",
+      "required": ["number", "createdAt", "mergeStateStatus", "autoMergeRequest", "reviewDecision", "baseRefName", "labels", "headRefOid", "latestReviews", "reviews", "author"],
+      "properties": {
+        "number": {"type": "integer"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "mergeStateStatus": {"enum": ["BEHIND", "BLOCKED", "CLEAN", "DIRTY", "DRAFT", "HAS_HOOKS", "UNKNOWN", "UNSTABLE"]},
+        "autoMergeRequest": {"type": ["object", "null"], "description": "null = un-armed = not the updater's"},
+        "reviewDecision": {"enum": ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", ""]},
+        "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}},
+        "headRefOid": {"type": "string"},
+        "latestReviews": {"type": "array", "items": {"type": "object", "required": ["author", "state"], "properties": {"author": {"$ref": "#/$defs/reviewAuthor"}, "state": {"type": "string"}}}},
+        "reviews": {"$ref": "#/$defs/reviews"},
+        "author": {"type": ["object", "null"], "required": ["login"], "properties": {"login": {"type": "string"}}, "description": "null = a deleted account: not Renovate"},
+        "headRefName": {"type": "string"},
+        "baseRefName": {"type": "string"}
+      }
+    },
+    "commit_probe": {
+      "description": "The answer of `gh pr view <n> --repo <slug> --json commits` (field names as recorded in worlds/pr-board/). Lacking a field, the probe is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["commits"],
+      "properties": {"commits": {"$ref": "#/$defs/commits"}}
+    },
+    "commit_review_probe": {
+      "description": "The answer of `gh pr view <n> --repo <slug> --json commits,reviews` (leg 2). Lacking a field, the probe is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["commits", "reviews"],
+      "properties": {"commits": {"$ref": "#/$defs/commits"}, "reviews": {"$ref": "#/$defs/reviews"}}
+    },
+    "pull_commits_read": {
+      "description": "the raw answer of `gh api repos/<slug>/pulls/<n>/commits?per_page=100`: which commit of the PR view is a merge commit (two or more parents; glossary.md merge commit). Lacking a field, or an element for a commit of the view, the probe is unreadable and that PR holds.",
+      "type": "array",
+      "items": {"type": "object", "required": ["sha", "parents"], "properties": {"sha": {"type": "string"}, "parents": {"type": "array", "items": {"type": "object", "required": ["sha"], "properties": {"sha": {"type": "string"}}}}}}
+    },
+    "check_runs_read": {
+      "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/check-runs?per_page=100`. Lacking a field, the rollup is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["check_runs"],
+      "properties": {"check_runs": {"type": "array", "items": {"type": "object", "required": ["name", "status", "conclusion"], "properties": {"name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {"type": ["string", "null"], "description": "null while the run has not concluded: its status stands"}}}}}
+    },
+    "ci_check_read": {
+      "description": "The raw answer of the ci read and of the base ci read (`gh api repos/<slug>/commits/<ref>/check-runs?per_page=100`). Lacking a field, the read is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["check_runs"],
+      "properties": {"check_runs": {"type": "array", "items": {"type": "object", "required": ["name", "status", "conclusion", "started_at"], "properties": {"name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {"type": ["string", "null"]}, "started_at": {"type": ["string", "null"]}}}}}
+    },
+    "status_read": {
+      "description": "The raw answer of `gh api repos/<slug>/commits/<headRefOid>/status`. Lacking a field, the rollup is unreadable and that PR holds.",
+      "type": "object",
+      "required": ["statuses"],
+      "properties": {"statuses": {"type": "array", "items": {"type": "object", "required": ["context", "state"], "properties": {"context": {"type": "string"}, "state": {"type": "string"}}}}}
+    },
+    "action": {
+      "oneOf": [
+        {"type": "object", "required": ["update"], "properties": {"update": {"type": "object", "required": ["number", "expected_head_sha"], "properties": {"number": {"type": "integer"}, "expected_head_sha": {"type": "string"}, "leg": {"enum": ["1", "2"]}}}}},
+        {"type": "object", "required": ["label"], "properties": {"label": {"type": "object", "required": ["number", "op"], "properties": {"number": {"type": "integer"}, "name": {"const": "merge-conflict"}, "op": {"enum": ["add", "remove"]}}}}},
+        {"type": "object", "required": ["handback"], "properties": {"handback": {"type": "object", "required": ["number"], "properties": {"number": {"type": "integer"}, "how": {"const": "tick Renovate's rebase/retry checkbox"}}}}}
+      ]
+    }
+  }
+}

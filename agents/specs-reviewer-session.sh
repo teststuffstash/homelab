@@ -22,7 +22,9 @@
 # NON-MERGE commit, the reviewer-session.sh / review-reflex.sh grammar — an update-branch merge is
 # not new content):
 #   skip     — our own LIVE verdict (APPROVED/CHANGES_REQUESTED, never DISMISSED) at the content
-#              commit already exists; or no LIVE homelab-reviewer APPROVED at it (the operator's
+#              commit already exists — unless it is CHANGES_REQUESTED and the PR body was edited
+#              after it (the body-edit leg, review-reflex.sh's reviewable_again shape; lastEditedAt
+#              via agents/pr-last-edited.sh); or no LIVE homelab-reviewer APPROVED at it (the operator's
 #              "one old reviewer and THEN the new" — a ride is never spent on a PR the code reviewer
 #              bounced; a Renovate PR gets that approval from the renovate-approve reflex, so this
 #              holds for it too); or CI at head is not green; or label agent/error (touch nothing).
@@ -44,9 +46,12 @@
 #              retries (never poll in-process); `dispatch` = the returned `env` map is exported
 #              VERBATIM as the LLM env (GW-SESSIONS-ENV: nothing LLM-shaped is added) and the
 #              session is ALWAYS released (`DELETE /sessions/{id}`, trap). Inputs = the CONTEXT PACK
-#              (ADR-156), built BEFORE admission by the pinned allure-behavior-snippets wheel
+#              (ADR-156), ONE per touched spec root pair (touched_pairs: the claim's `specs` +
+#              `extraSpecs`; a PR touching several roots gets one pass per root, one per tick,
+#              each held as a SPECS ROOT REVIEW comment, and ONE verdict — aggregate_review),
+#              built BEFORE admission by the pinned allure-behavior-snippets wheel
 #              (`evidence-pack`, digest-checked): touched rules + their sections + the spec diff, the
-#              specs tree, the head's raw Allure results (the pack ci publishes to the bucket) with
+#              specs tree (the diff base: pack_diff_base), the head's raw Allure results (the pack ci publishes to the bucket) with
 #              evidence.json + digest.md + attachments, the base branch's evidence as baseline, the
 #              PR body, the closing issue's acceptance text, the previous review, and process/ (the
 #              pinned RULES, CONVENTIONS and briefs). When the pinned pack offers --mask-descriptions the pass is the
@@ -86,7 +91,7 @@
 # fidelity: a judged head is fetched by sha; the base is merge-base(origin/<base>, head); the PR
 # body is the edit current at the live review's time (`as_of` = the first own review AT that head,
 # else now); the prior review is the newest own LLM review before `as_of`; the baseline is the
-# newest base push run whose commit is an ancestor of the pack's base. Issue intent, the lens and
+# newest first-parent commit of the pack's base with a bucket pack. Issue intent, the lens and
 # the pinned wheel are TODAY's (stated in each record).
 #
 #   bash agents/specs-reviewer-session.sh              # one tick (the CronWorkflow's call)
@@ -98,6 +103,7 @@
 # `$`-prefixed numbers in heredocs, PR bodies via --body-file, `gh` has no --arg.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "${HERE}/pr-last-edited.sh"   # pr_last_edited_merge — the body-edit leg of the skip (own CHANGES_REQUESTED only)
 
 ORG="${ORG:-teststuffstash}"
 SPECS_REVIEW_REPOS="${SPECS_REVIEW_REPOS:-homelab}"      # the island repos; another island adds itself
@@ -154,14 +160,13 @@ SPECS_PATH_RE='(^|/)specs/'
 SNIPPETS_VERSION="0.6.9"   # bump TOGETHER with gateway/scripts/lib/snippets.sh (CI evidence)
 SNIPPETS_WHEEL="https://github.com/teststuffstash/allure-behavior-snippets/releases/download/v${SNIPPETS_VERSION}/allure_behavior_snippets-${SNIPPETS_VERSION}-py3-none-any.whl"
 SNIPPETS_SHA256="4ca24515835b0969a6b225eef6e48a2d6337ec984367e74b0b4a1dc9def6ef16"
-EVIDENCE_ARTIFACT="${EVIDENCE_ARTIFACT:-gateway-evidence}"   # the LEGACY ci run artifact (fallback only, see evidence_fetch)
 # The evidence packs live in OUR storage since 2026-10-21 (the Actions artifact held ~2.1 GB of the
 # org's 2 GB included storage — GithubStorageHeldHigh): CI writes evidence/<pr-N|branch>/<sha>.tar.gz
 # into the repo's specs bucket (gateway/scripts/evidence-publish.sh), read here ANONYMOUSLY through
 # Garage's web endpoint (Host = <bucket>.teststuff.net; the bucket is website-enabled, egress-cnp.yaml
 # already admits ns garage). No reader key, no GitHub API call.
 EVIDENCE_WEB="${EVIDENCE_WEB:-http://garage-s3.garage.svc.cluster.local:3902}"
-# evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: artifact only)
+# evidence_bucket <repo> → the website bucket its CI publishes packs to ("" = none: no evidence)
 evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; oracle-fleet) printf 'oracle-specs';; esac; }
 # pack_roots <repo> → "<specs-root> <tests-root>": where that repo's rules and their tests live.
 # The CLAIM's `repos[].specs` {root, tests} when the AgentStack read serves one — the same field
@@ -171,13 +176,20 @@ evidence_bucket() { case "$1" in homelab) printf 'gateway-specs';; oracle-fleet)
 # a cluster (the jail, --self-test, CI). ONE read per tick (CLAIMS_JSON; a pre-set value is the
 # self-test's seam); a failed read is said once, then the table answers — never a missing pack.
 CLAIMS_JSON="${CLAIMS_JSON:-}"       # "" = not read yet; "null" = read failed (fallback table in force)
-claim_specs() {  # <repo> → "<root> <tests>" from its claim, or "" (no claim / no field / malformed)
+# claims_load — the one read. The tick and the shadow run call it in the MAIN shell before any
+# `$( )` reader: an assignment inside a command substitution dies with the subshell, so a reader
+# that loaded lazily would re-read the cluster on every call.
+claims_load() {
   if [ -z "$CLAIMS_JSON" ]; then
     CLAIMS_JSON="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null)" || CLAIMS_JSON="null"
     [ -n "$CLAIMS_JSON" ] || CLAIMS_JSON="null"
     # stderr: pack_roots is read inside `$( )` — a log line on stdout would BECOME the roots.
     [ "$CLAIMS_JSON" != null ] || log "WARN agentstacks read failed (no kubectl, no RBAC, no cluster) — pack roots come from the per-repo fallback table this tick" >&2
   fi
+  return 0
+}
+claim_specs() {  # <repo> → "<root> <tests>" from its claim, or "" (no claim / no field / malformed)
+  claims_load
   jq -r --arg p "$1" '[.items[]?.spec.repos[]? | select(.name == $p) | .specs | select(type == "object")
     | select((.root|type) == "string" and (.tests|type) == "string" and (.root|length) > 0 and (.tests|length) > 0)
     | "\(.root) \(.tests)"] | first // empty' <<< "$CLAIMS_JSON" 2>/dev/null || true
@@ -186,10 +198,50 @@ pack_roots() {
   local c; c="$(claim_specs "$1")"
   if [ -n "$c" ]; then printf '%s' "$c"; else case "$1" in homelab) printf 'gateway/specs gateway/tests';; *) printf 'specs tests';; esac; fi
 }
+# claim_specs_extra <repo> → one "<root> <tests|->" line per well-formed item of the claim's
+# `repos[].extraSpecs` — the repo's FURTHER spec roots (a monorepo of islands: homelab's gateway
+# owns `specs`, each island adds its own). `tests` is optional there: "-" = the root declares no
+# tests root (and so no evidence pipeline). A malformed item is skipped, never fatal.
+claim_specs_extra() {
+  claims_load
+  jq -r --arg p "$1" '.items[]?.spec.repos[]? | select(.name == $p) | .extraSpecs | select(type == "array") | .[]
+    | select(type == "object") | select((.root|type) == "string" and (.root|length) > 0)
+    | select(.tests == null or ((.tests|type) == "string" and (.tests|length) > 0))
+    | "\(.root) \(.tests // "-")"' <<< "$CLAIMS_JSON" 2>/dev/null || true
+}
+# pack_root_pairs <repo> → every spec root pair of the repo, one "<root> <tests|->" line each:
+# pack_roots's pair FIRST (the repo's primary root — the one its evidence bucket belongs to), then
+# the claim's extraSpecs in claim order; a root named twice keeps its first line.
+pack_root_pairs() {
+  { local s t; read -r s t <<< "$(pack_roots "$1")"; printf '%s %s\n' "$s" "$t"; claim_specs_extra "$1"; } | awk 'NF == 2 && !seen[$1]++'
+}
+re_lit() { sed 's/[.]/\\./g' <<< "$1"; }   # a root as an ERE literal (roots admit `.`)
 # review_path_re <repo> → the file-list trigger for the LLM pass: a specs path, or the repo's
 # rule-test root (a changed test label reaches a rule without touching specs — touched-rules
-# decides inside the pass; zero touched rules = the mechanical approval after all)
-review_path_re() { local _s t; read -r _s t <<< "$(pack_roots "$1")"; printf '%s|^%s/' "$SPECS_PATH_RE" "$t"; }
+# decides inside the pass; zero touched rules = the mechanical approval after all), or any extra
+# root / its tests root (an extra root need not be named `specs`). One pair = the old expression.
+review_path_re() {
+  local _s t r x re; read -r _s t <<< "$(pack_roots "$1")"; re="$(printf '%s|^%s/' "$SPECS_PATH_RE" "$t")"
+  while read -r r x; do
+    [ -n "$r" ] || continue
+    re="${re}|^$(re_lit "$r")/"; [ "$x" = - ] || re="${re}|^$(re_lit "$x")/"
+  done < <(claim_specs_extra "$1")
+  printf '%s' "$re"
+}
+# touched_pairs <repo> <files (one per line)> → the root pairs whose root/ or tests/ holds a
+# changed file, in pack_root_pairs order; none → the primary pair alone (a stray `specs/` path
+# outside every root: the pack over the primary root finds no rule → the mechanical approval,
+# exactly the one-pair behaviour).
+touched_pairs() {
+  local r t hit=""
+  while read -r r t; do
+    [ -n "$r" ] || continue
+    if grep -qE "^$(re_lit "$r")/" <<< "$2" || { [ "$t" != - ] && grep -qE "^$(re_lit "$t")/" <<< "$2"; }; then
+      hit="${hit}${r} ${t}"$'\n'
+    fi
+  done < <(pack_root_pairs "$1")
+  if [ -n "$hit" ]; then printf '%s' "$hit"; else printf '%s\n' "$(pack_roots "$1")"; fi
+}
 PR_LIST_LIMIT="${PR_LIST_LIMIT:-40}"                     # review-reflex.sh's ceiling: the rollup fragment is deep
 LLM_TIMEOUT_S="${LLM_TIMEOUT_S:-600}"                    # the model's wall clock; < the 900 s pod deadline minus clone + submit
 # THE STAGED READ (the rows brief's check 10 as two passes of one session): pass 1 reads the pack's
@@ -200,20 +252,26 @@ LLM_TIMEOUT_S="${LLM_TIMEOUT_S:-600}"                    # the model's wall cloc
 SPECS_STAGED_READ="${SPECS_STAGED_READ:-1}"
 PASS1_TIMEOUT_S="${PASS1_TIMEOUT_S:-200}"                # pass 1's share; pass 2 gets what is left
 STAGED=0                                                 # set per pass by build_pack
+PACK_NOTE=""                                             # set per pass by build_pack: "" = the primary root
 
 log() { printf '%s specs-review: %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 # ── the shared grammar (review-reflex.sh / reviewer-session.sh exit contract) ────────────────────
 # One jq prelude every read below composes with. The content commit is the newest NON-MERGE commit
 # (merge classified by GitHub's default message shapes — gh exposes no .parents[]); a review is at
-# head when submitted at or after it (>=, the exit contract's filter); a bot login is matched with
-# the `[bot]` suffix stripped (REST says `x[bot]`, GraphQL says `x`).
+# head when submitted at or after it (>=, the exit contract's filter) AND filed on the content commit
+# or a later one (reviewed_current) — a review filed on an OLDER commit but submitted after a push
+# (homelab#3444: read 536ed6a0, submitted 19 s after 75aaa056 landed) is about a head nobody read;
+# a review with no commit field keeps the time test alone. A bot login is matched with the `[bot]`
+# suffix stripped (REST says `x[bot]`, GraphQL says `x`).
+# >>>REPLAY:specs-reviewable-again>>>
 JQ_PRELUDE='
   def is_merge: (.messageHeadline // "") | (startswith("Merge branch ") or startswith("Merge remote-tracking branch ") or startswith("Merge pull request "));
   def content_ts: ([ .commits[]? | select(is_merge | not) | .committedDate ] | max) // "";
   def content_sha: ([ .commits[]? | select(is_merge | not) ] | sort_by(.committedDate) | last | .oid) // "";
   def login_of: (.author.login // "") | sub("\\[bot\\]$"; "");
-  def live_verdicts($bot): content_ts as $h | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) ];
+  def reviewed_current($cs; $h): (.commit.oid // "") as $c | $c == "" or (([ $cs[] | select(.oid == $c) | .committedDate ] | max // "") >= $h);
+  def live_verdicts($bot): content_ts as $h | (.commits // []) as $cs | [ .reviews[]? | select(login_of == $bot) | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | select(.submittedAt >= $h) | select(reviewed_current($cs; $h)) ];
   def green:
     ([ .statusCheckRollup[]? | {n: (.name // .context // ""), c: (.conclusion // .state // "")} ]) as $c
     # A CANCELLED run counts only when NO other run of the same check concluded: concurrency
@@ -223,19 +281,41 @@ JQ_PRELUDE='
       and ([ $c | group_by(.n)[] | [ .[].c | select(. != "CANCELLED") ] as $k
              | select(($k | length) == 0 or ([ $k[] | select(. != "SUCCESS" and . != "NEUTRAL" and . != "SKIPPED") ] | length) > 0) ] | length) == 0;
   def has_label($l): ([ .labels[]?.name ] | index($l)) != null;
+  # THE BODY-EDIT LEG of reviewable_again (agents/review-reflex.sh: the code reviewer rule, same shape): a
+  # CHANGES_REQUESTED verdict is answered by a newer content commit OR a newer PR-body edit; an
+  # APPROVED one never re-opens on an edit. .lastEditedAt is merged in by agents/pr-last-edited.sh
+  # for the PRs under an own live CHANGES_REQUESTED ("" = never edited); ABSENT = not read (the
+  # read failed, or no own CHANGES_REQUESTED) — then nothing re-opens (the commit-time rule alone)
+  # and an earlier own CHANGES_REQUESTED is not judged a loop.
+  def own_live($me): live_verdicts($me) | sort_by(.submittedAt);
+  def own_reopened($me): (own_live($me) | last) as $n
+    | $n != null and $n.state == "CHANGES_REQUESTED" and ((.lastEditedAt // "") > $n.submittedAt);
+  # an own live verdict superseded at the same content commit WITHOUT an answering body edit — the
+  # dispatcher loop: an earlier APPROVED (never re-reviewed), or an earlier CHANGES_REQUESTED the
+  # body was not edited after (judged only when .lastEditedAt was read).
+  def own_unanswered($me): has("lastEditedAt") as $known | (.lastEditedAt // "") as $le
+    | [ own_live($me) | .[0:-1][] | select(.state == "APPROVED" or ($known and $le <= .submittedAt)) ];
 '
+
+# own_cr_numbers <prs-json-array> → the PR numbers under a live own CHANGES_REQUESTED at the content
+# commit: the only PRs whose body edit can re-open this reviewer (the set pr_last_edited_merge reads)
+own_cr_numbers() {
+  jq -r --arg me "$SPECS_REVIEWER_LOGIN" "$JQ_PRELUDE"'
+    .[]? | select(.isDraft | not) | select([ live_verdicts($me)[] | select(.state == "CHANGES_REQUESTED") ] | length > 0) | .number' <<< "$1"
+}
 
 # classify <pr-json> → one word: error-label | own-anomaly | own-at-head | partial-held | code-not-approved | ci-not-green | candidate
 classify() {
   jq -r --arg me "$SPECS_REVIEWER_LOGIN" --arg code "$CODE_REVIEWER_LOGIN" "$JQ_PRELUDE"'
     if has_label("agent/error") then "error-label"
-    elif (live_verdicts($me) | length) > 1 then "own-anomaly"
-    elif (live_verdicts($me) | length) == 1 then "own-at-head"
+    elif (own_unanswered($me) | length) > 0 then "own-anomaly"
+    elif (live_verdicts($me) | length) > 0 and (own_reopened($me) | not) then "own-at-head"
     elif (content_sha | .[0:8]) as $h | ([ .comments[]? | select(login_of == $me) | select(.body | contains("<!-- specs-review partial-read head=" + $h)) ] | length) > 0 then "partial-held"
     elif ([ live_verdicts($code)[] | select(.state == "APPROVED") ] | length) == 0 then "code-not-approved"
     elif (green | not) then "ci-not-green"
     else "candidate" end' <<< "$1"
 }
+# <<<REPLAY:specs-reviewable-again<<<
 
 # ── --self-test: bash -n on this file + the predicates on fixtures ──────────────────────────────
 # Expectations are derived from the CONTRACT (review-reflex.sh's filters, the exit contract), not
@@ -259,6 +339,15 @@ self_test() {
   local j
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r' <<< "$base");                       check "code approved at head → candidate" candidate "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_old]" '.reviews=$r' <<< "$base");                      check "code approval older than content → code-not-approved" code-not-approved "$(classify "$j")"
+  # homelab#3444: the approval was SUBMITTED after the content commit (10:30 ≥ 10:00) but FILED on an
+  # older commit (00000000…, the head the session read) → about an unread head → not the code gate.
+  # Filed on the content commit, or on the later update-branch merge (GitHub re-points a review
+  # across one), it is live; a commit gone from the PR (force-push) is not.
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "code approval submitted after the push but filed on the older commit → code-not-approved (#3444)" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"aaaa1111"}' <<< "$base"); check "code approval filed on the content commit → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"bbbb2222"} | .reviews[0].submittedAt="2026-10-16T11:30:00Z"' <<< "$base"); check "code approval filed on the later update-branch merge → candidate" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .reviews[0].commit={oid:"dead0000"}' <<< "$base"); check "code approval filed on a commit gone from the PR → code-not-approved" code-not-approved "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r | .reviews[1].commit={oid:"0000aaaa"} | .commits=[{"oid":"0000aaaa","committedDate":"2026-10-16T09:00:00Z","messageHeadline":"fix: first"}] + .commits' <<< "$base"); check "own verdict filed on an older commit is not own-at-head → candidate" candidate "$(classify "$j")"
   j=$(jq -c '.reviews=[]' <<< "$base");                                                 check "no code approval → code-not-approved" code-not-approved "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r' <<< "$base");               check "own live verdict at head → own-at-head" own-at-head "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok,$own_dismissed]" '.reviews=$r' <<< "$base");        check "own DISMISSED is not a verdict → candidate" candidate "$(classify "$j")"
@@ -272,6 +361,27 @@ self_test() {
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .statusCheckRollup=[{"name":"ci","conclusion":"CANCELLED"},{"name":"ci","conclusion":"FAILURE"}]' <<< "$base"); check "CANCELLED beside a FAILURE → ci-not-green" ci-not-green "$(classify "$j")"
   j=$(jq -c --argjson r "[$code_ok]" '.reviews=$r | .labels=[{"name":"agent/error"}]' <<< "$base"); check "agent/error → error-label (touch nothing)" error-label "$(classify "$j")"
   check "content sha skips the merge commit" aaaa1111 "$(jq -r "$JQ_PRELUDE"'content_sha' <<< "$base")"
+  # the body-edit leg (review-reflex.sh reviewable_again: CHANGES_REQUESTED re-opens when the body's
+  # lastEditedAt is newer than the verdict; APPROVED never does). Times from the fixtures above: the
+  # content commit 10:00, own APPROVED 10:40, own CHANGES_REQUESTED 10:50 — an edit at 10:55 is after
+  # the CR, one at 10:45 before it. .lastEditedAt "" = read, never edited; absent = not read.
+  local own_rc2='{"author":{"login":"homelab-specs-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-10-16T10:58:00Z"}'
+  local own_ok2='{"author":{"login":"homelab-specs-reviewer"},"state":"APPROVED","submittedAt":"2026-10-16T10:58:00Z"}'
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "body edited after own CHANGES_REQUESTED → candidate (re-review)" candidate "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt=""' <<< "$base");                     check "own CHANGES_REQUESTED, body never edited → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r | .lastEditedAt="2026-10-16T10:45:00Z"' <<< "$base"); check "body edited BEFORE own CHANGES_REQUESTED → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc]" '.reviews=$r' <<< "$base");                                        check "own CHANGES_REQUESTED, edit not read (degraded) → own-at-head" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_ok]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "body edited after own APPROVED → own-at-head (an approval never re-opens)" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_ok2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "CR, body edit, re-review APPROVED → own-at-head, not an anomaly" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_ok2]" '.reviews=$r' <<< "$base");                              check "CR then APPROVED, edit not read (degraded) → own-at-head, not an anomaly" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt=""' <<< "$base");           check "two own CHANGES_REQUESTED, body never edited → own-anomaly (a loop)" own-anomaly "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:55:00Z"' <<< "$base"); check "CR, body edit, CR again → own-at-head (the round answered, the next one stands)" own-at-head "$(classify "$j")"
+  j=$(jq -c --argjson r "[$code_ok,$own_rc,$own_rc2]" '.reviews=$r | .lastEditedAt="2026-10-16T10:59:00Z"' <<< "$base"); check "CR, edit, CR, edit again → candidate" candidate "$(classify "$j")"
+  # own_cr_numbers — the GraphQL ask set: own live CHANGES_REQUESTED only (not an own APPROVED, not a
+  # CR older than the content commit, not a draft)
+  local crs; crs="$(jq -c --argjson a "[$code_ok,$own_rc]" --argjson b "[$code_ok,$own_ok]" --argjson c '[{"author":{"login":"homelab-specs-reviewer"},"state":"CHANGES_REQUESTED","submittedAt":"2026-10-16T09:00:00Z"}]' \
+      '[ (.reviews=$a | .number=1 | .isDraft=false), (.reviews=$b | .number=2 | .isDraft=false), (.reviews=$c | .number=3 | .isDraft=false), (.reviews=$a | .number=4 | .isDraft=true) ]' <<< "$base")"
+  check "own CR numbers: exactly the PR under a live own CHANGES_REQUESTED" "1" "$(own_cr_numbers "$crs" | paste -sd' ')"
   check "specs path predicate: gateway/specs/access.md" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'gateway/specs/access.md' >/dev/null; echo $?)"
   check "specs path predicate: specs/x.md at root" 0 "$(grep -cE "$SPECS_PATH_RE" <<< 'specs/x.md' >/dev/null; echo $?)"
   check "trigger: homelab rule-test path → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'gateway/tests/test_access.py' >/dev/null; echo $?)"
@@ -289,6 +399,90 @@ self_test() {
   check "pack roots: repo without the field → table" "specs tests" "$(pack_roots plain)"
   check "pack roots: repo absent from every claim → table" "specs tests" "$(pack_roots some-island)"
   check "trigger follows the claim: moved repo's test root" 0 "$(grep -cE "$(review_path_re moved)" <<< 'qa/rules/test_x.py' >/dev/null; echo $?)"
+  # several roots per repo (the claim's repos[].extraSpecs, tests optional): the pairs list the
+  # primary pair first, then the extras in claim order; a malformed extra (no root, empty tests,
+  # non-string) is skipped; a repo without extraSpecs keeps the one pair, and its trigger
+  # expression is byte-for-byte the one-pair one (the oracle-fleet / single-field shape).
+  CLAIMS_JSON='{"items":[{"spec":{"repos":[{"name":"homelab","specs":{"root":"gateway/specs","tests":"gateway/tests"},"extraSpecs":[{"root":"islands/scan/specs"},{"root":"islands/launch/specs","tests":"islands/launch/tests"},{"tests":"x"},{"root":"islands/bad/specs","tests":""},{"root":"gateway/specs"}]},{"name":"one","specs":{"root":"specs","tests":"tests"}}]}}]}'
+  check "root pairs: primary first, extras in claim order, malformed and duplicate skipped" "gateway/specs gateway/tests|islands/scan/specs -|islands/launch/specs islands/launch/tests" "$(pack_root_pairs homelab | paste -sd'|')"
+  check "root pairs: no extraSpecs → the one pair" "specs tests" "$(pack_root_pairs one)"
+  check "pack roots: extras never change the primary pair" "gateway/specs gateway/tests" "$(pack_roots homelab)"
+  check "trigger: one pair = the old expression, byte for byte" "$SPECS_PATH_RE|^tests/" "$(review_path_re one)"
+  check "trigger: an island specs page → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'islands/scan/specs/x.md' >/dev/null; echo $?)"
+  check "trigger: an extra root's tests root → LLM pass" 0 "$(grep -cE "$(review_path_re homelab)" <<< 'islands/launch/tests/test_x.py' >/dev/null; echo $?)"
+  check "trigger: an island README is NOT a spec path" 1 "$(grep -cE "$(review_path_re homelab)" <<< 'islands/scan/README.md' >/dev/null; echo $?)"
+  check "touched pairs: an island page → that island's pair only" "islands/scan/specs -" "$(touched_pairs homelab 'islands/scan/specs/x.md')"
+  check "touched pairs: a gateway page → the primary pair, exactly as before" "gateway/specs gateway/tests" "$(touched_pairs homelab "$(printf 'gateway/specs/a.md\ngateway/src/x.py')")"
+  check "touched pairs: gateway + two islands → three, primary first" "gateway/specs|islands/scan/specs|islands/launch/specs" "$(touched_pairs homelab "$(printf 'islands/launch/tests/t.py\nislands/scan/specs/x.md\ngateway/tests/t.py')" | cut -d' ' -f1 | paste -sd'|')"
+  check "touched pairs: a stray specs/ path under no root → the primary pair (pack finds no rule → mechanical)" "gateway/specs gateway/tests" "$(touched_pairs homelab 'docs/specs/x.md')"
+  check "touched pairs: a root is a path prefix, not a substring" "gateway/specs gateway/tests" "$(touched_pairs homelab 'islands/scan/specsx/y.md')"
+  # one pass per root, one verdict: a root's review is read back from its own marked comment at
+  # the content commit only; the ONE review carries one Verdict line, CHANGES_REQUESTED when any
+  # root's is (naming that root's IDs), and is never read as mechanical by prior_review_pick.
+  local md; md="$(mktemp -d)"
+  printf '## Specs review\nVerdict: APPROVE — no blocking check failed\nRows: fine\n' > "$md/r1.md"
+  printf '## Specs review\nVerdict: CHANGES_REQUESTED — R-ROWS-1, E-NO_EVIDENCE/x\nF1 detail\n' > "$md/r2.md"
+  printf '## Specs review\nVerdict: APPROVE — no rule touched: touched-rules (allure-behavior-snippets 0.6.9) found no rule this diff touches under islands/launch/specs.\n' > "$md/r3.md"
+  local cmts; cmts="$(jq -cn --rawfile a "$md/r1.md" --rawfile b "$md/r2.md" '[{body:("SPECS ROOT REVIEW 1/2: x\n\n" + $a + "\n<!-- specs-review root=islands/scan/specs head=aaaa1111 -->\n")},{body:("old\n" + $b + "<!-- specs-review root=islands/launch/specs head=00000000 -->")}]')"
+  check "root review: read back from its marked comment" "$(cat "$md/r1.md")" "$(root_review_of "$cmts" islands/scan/specs aaaa1111)"
+  check "root review: a marker at an older content commit is not this head's" "" "$(root_review_of "$cmts" islands/launch/specs aaaa1111)"
+  check "root review: a root with no comment → empty" "" "$(root_review_of "$cmts" gateway/specs aaaa1111)"
+  root_comment islands/scan/specs 1 2 aaaa1111 "$md/r1.md" > "$md/rc.md"
+  check "root comment: round-trips through root_review_of" "$(cat "$md/r1.md")" "$(root_review_of "$(jq -cn --rawfile b "$md/rc.md" '[{body:$b}]')" islands/scan/specs aaaa1111)"
+  local agg; agg="$(aggregate_review aaaa1111bbbb islands/scan/specs="$md/r1.md" islands/launch/specs="$md/r2.md")"
+  check "aggregate: any root CHANGES_REQUESTED → CHANGES_REQUESTED" CHANGES_REQUESTED "$(parse_verdict "$agg")"
+  check "aggregate: the verdict names the requesting root and its IDs" "Verdict: CHANGES_REQUESTED — islands/launch/specs: R-ROWS-1, E-NO_EVIDENCE/x" "$(grep -m1 '^Verdict:' <<< "$agg")"
+  check "aggregate: exactly one Verdict line" 1 "$(grep -c '^Verdict:' <<< "$agg")"
+  check "aggregate: each root's body carried" 2 "$(grep -cE '^(Rows: fine|F1 detail)$' <<< "$agg")"
+  agg="$(aggregate_review aaaa1111bbbb islands/scan/specs="$md/r1.md" islands/launch/specs="$md/r3.md")"
+  check "aggregate: every root approved → APPROVE" APPROVE "$(parse_verdict "$agg")"
+  check "aggregate: a no-rule root never makes the review read as mechanical (round memory)" 1 "$(prior_review_pick "$(jq -cn --arg b "$agg" '[{user:{login:"homelab-specs-reviewer[bot]"},state:"APPROVED",commit_id:"aaaa1111",submitted_at:"2026-11-14T00:00:00Z",body:$b}]')" | grep -c '^previous review: APPROVED')"
+  # prior_for_root: a root's pass keeps only ITS section of a multi-root verdict (+ the first line and
+  # the head trailer the pack's prior-ruling carry reads); a root without a section is round 1 for
+  # it; a single-root review (no `### Root` section) passes whole. Built from aggregate_review's own
+  # output, so the section shape is the producer's, not a copy.
+  agg="$(aggregate_review aaaa1111bbbb islands/scan/specs="$md/r1.md" islands/launch/specs="$md/r2.md")"
+  local prv; prv="$(printf 'previous review: CHANGES_REQUESTED at aaaa1111bbbb (2026-11-15T16:42:11Z)\n\n%s\n\n<!-- specs-review head=aaaa1111bbbb session=s1 -->\n' "$agg")"
+  check "prior per root: the other root's findings are gone" 0 "$(prior_for_root "$prv" islands/scan/specs | grep -c 'F1 detail')"
+  check "prior per root: this root's section kept" 1 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^Rows: fine$')"
+  check "prior per root: the head trailer kept (it sits in the LAST root's section)" 1 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^<!-- specs-review head=aaaa1111bbbb')"
+  check "prior per root: the first line kept" "previous review: CHANGES_REQUESTED at aaaa1111bbbb (2026-11-15T16:42:11Z)" "$(prior_for_root "$prv" islands/scan/specs | head -1)"
+  check "prior per root: the last root keeps its findings and one trailer" "1 1" "$(prior_for_root "$prv" islands/launch/specs | grep -c 'F1 detail') $(prior_for_root "$prv" islands/launch/specs | grep -c 'specs-review head=')"
+  check "prior per root: the aggregate Verdict line (naming other roots) is not carried" 0 "$(prior_for_root "$prv" islands/scan/specs | grep -c '^Verdict:')"
+  check "prior per root: a root with no section → round 1 for it" 1 "$(prior_for_root "$prv" gateway/specs | grep -c '^previous review: none for root `gateway/specs`')"
+  check "prior per root: a single-root review passes whole" "$(printf 'previous review: X\n\n## Specs review\nVerdict: APPROVE — ok')" "$(prior_for_root "$(printf 'previous review: X\n\n## Specs review\nVerdict: APPROVE — ok')" islands/scan/specs)"
+  rm -rf "$md"
+  # pack_diff_base: the PR's spec diff is what the PR itself changes. A real repo, built here: master
+  # m0 → the goal branch adds launch/specs/a.md; master then adds retro/specs/guard.md and edits
+  # shared.md (m1); the PR branches from the goal, edits launch/specs/a.md, merges master. Expected
+  # from the contract (paths byte-identical to the merged-in master are not the PR's): three-dot
+  # from the returned base lists ONLY launch/specs/a.md; a merge-only PR lists nothing; a PR on
+  # master itself gets its base back unchanged; the head keeps its sha.
+  local gr; gr="$(mktemp -d)"
+  (
+    set -e; cd "$gr"; git init -q -b master .; git config user.email t@t; git config user.name t
+    mkdir -p launch/specs retro/specs; echo s > shared.md; echo o > launch/specs/o.md; git add -A; git commit -qm m0
+    git checkout -qb goal; echo a > launch/specs/a.md; echo og > launch/specs/o.md; git add -A; git commit -qm goal
+    git checkout -q master; echo g > retro/specs/guard.md; echo s2 > shared.md; git add -A; git commit -qm m1
+    git checkout -qb pr goal; echo a2 > launch/specs/a.md; git commit -qam "pr edit"; git merge -q --no-edit master
+    git checkout -qb pr-merge-only goal; git merge -q --no-edit master
+    git checkout -qb pr-on-master master; echo x > retro/specs/guard.md; git commit -qam "master pr"
+    # the goal edited launch/specs/o.md, master now edits it too, the PR's merge keeps MASTER's
+    # version: head == M there, but the goal's edit is discarded — a change against the base
+    git checkout -q master; echo om > launch/specs/o.md; git commit -qam "master o"
+    git checkout -qb pr-discard goal; git merge -q --no-edit -X theirs master
+  ) >/dev/null 2>&1 || { echo "  FAIL diff base: the fixture repo could not be built"; fails=$((fails+1)); }
+  local hsha db; hsha="$(git -C "$gr" rev-parse pr)"
+  db="$(pack_diff_base "$gr" goal pr master 2>/dev/null)"
+  check "diff base: master's merged-in paths drop, the PR's own edit stays" "launch/specs/a.md" "$(git -C "$gr" diff --name-only "$db...pr" | paste -sd' ')"
+  check "diff base: the head keeps its sha" "$hsha" "$(git -C "$gr" rev-parse pr)"
+  db="$(pack_diff_base "$gr" goal pr-merge-only master 2>/dev/null)"
+  check "diff base: a merge-only PR changes nothing of its own" "" "$(git -C "$gr" diff --name-only "$db...pr-merge-only")"
+  check "diff base: a PR on the upstream itself keeps its base" master "$(pack_diff_base "$gr" master pr-on-master master 2>/dev/null)"
+  check "diff base: no upstream merged in → the base unchanged" goal "$(pack_diff_base "$gr" goal goal master 2>/dev/null)"
+  db="$(pack_diff_base "$gr" goal pr-discard master 2>/dev/null)"
+  check "diff base: a base-side edit the merge discarded (head == upstream) stays the PR's change" "launch/specs/o.md" "$(git -C "$gr" diff --name-only "$db...pr-discard" | paste -sd' ')"
+  rm -rf "$gr"
   CLAIMS_JSON=null
   check "pack roots: homelab, claim read failed → table" "gateway/specs gateway/tests" "$(pack_roots homelab 2>/dev/null)"
   check "pack roots: default island layout, claim read failed → table" "specs tests" "$(pack_roots some-island 2>/dev/null)"
@@ -417,12 +611,12 @@ read|pr view 7 --repo o/r --json title,body,url -q .title
 read|pr list --repo o/r --state open
 read|issue view 3 --repo o/r --json title,body
 read|run list --repo o/r --commit abc --workflow ci.yaml
-read|run download 5 --repo o/r -n gateway-evidence -D /tmp/x
 read|api --paginate repos/o/r/pulls/7/files --jq '.[].filename'
 read|api repos/o/r/commits/abc --jq .sha
 read|api -X GET repos/o/r/pulls -f state=closed
 read|api graphql -f 'query=query($o:String!){repository(owner:$o,name:"r"){id}}' -f o=x -F p=7
 write|pr review 7 --approve
+write|run download 5 --repo o/r -n gateway-evidence -D /tmp/x
 write|pr comment 7 --body-file f.md
 write|pr edit 7 --add-label agent/error
 write|pr merge 7 --squash
@@ -459,7 +653,7 @@ ROWS
   gh_real() { command gh "$@"; }
   # Static: nothing on the shadow path bypasses the wrapper (`command gh` / an absolute gh path
   # skips the `gh` function) — gh_real is the one sanctioned call site.
-  check "shadow: no gh bypass outside gh_real" 0 "$(declare -f build_pack shadow_main shadow_one shadow_release pr_body_as_of issue_intent ci_success_run evidence_fetch evidence_download evidence_baseline_download prior_review_pick llm_env_args harness_claude harness_opencode harness_goose | grep -cE 'command gh|/bin/gh|\\gh ')"
+  check "shadow: no gh bypass outside gh_real" 0 "$(declare -f build_pack shadow_main shadow_one shadow_release pr_body_as_of issue_intent evidence_fetch evidence_download evidence_baseline_download prior_review_pick llm_env_args harness_claude harness_opencode harness_goose | grep -cE 'command gh|/bin/gh|\\gh ')"
   # As-of reads (replay fidelity): the PR body is the edit current at the live review's time —
   # GitHub's userContentEdits `diff` is the full body at that edit, the oldest is the original;
   # #2635's shape (opened 16:59:02 without `Spec changes:`, edited 17:06:24, first review 17:06:02).
@@ -568,6 +762,70 @@ prior_review_pick() {
     | "previous review: \(.state) at \((.commit_id // "")[0:12]) (\(.submitted_at))\n\n\(.body)"' <<< "$1"
 }
 
+# prior_for_root <prior-review-text> <root> → the prior review as ONE root's pass may read it. A
+# multi-root verdict (aggregate_review: one `### Root \`<root>\` — …` section per root) carries
+# every root's findings, but a root's pass sees only its own root's pack — handed the whole review,
+# it marks the other roots' findings "still open, not verifiable here". So it keeps the first line
+# (state, head, time), that root's section and the `specs-review head=` trailer (the pack's
+# prior-ruling carry reads it); a root with no section gets a round-1 line for that root. A review
+# with no root sections (a single-root round) is passed whole: nothing in it names a root.
+prior_for_root() {
+  if ! grep -q '^### Root `' <<< "$1"; then printf '%s\n' "$1"; return 0; fi
+  awk -v hdr="### Root \`$2\`" -v root="$2" '
+    NR == 1 { first = $0; next }
+    /^### Root `/ { insec = (index($0, hdr) == 1); if (insec) found = 1 }
+    /<!--[[:space:]]*specs-review[[:space:]]+head=/ { trailer = $0; if (insec) intrailer = 1; else next }
+    insec { sec = sec $0 "\n" }
+    END {
+      if (!found) {
+        sub(/^previous review: /, "", first)
+        printf "previous review: none for root `%s` — the newest own review (%s) covered other roots only; this is round 1 for this root\n", root, first
+        exit
+      }
+      printf "%s\n\n(the section for root `%s` of a multi-root review; each other root is reviewed in its own pass)\n\n## Specs review\n%s", first, root, sec
+      if (trailer != "" && !intrailer) printf "\n%s\n", trailer
+    }' <<< "$1"
+}
+
+# ── several spec roots in one PR: one pass per root, one verdict ────────────────────────────
+# touched-rules and evidence-pack take ONE specs root, so a PR touching N root pairs gets N packs,
+# one per tick (each pass keeps the whole LLM_TIMEOUT_S). Each root's review is held as a COMMENT
+# keyed `<!-- specs-review root=<root> head=<content sha8> -->`; when every touched root has one
+# at the content commit, ONE review carries them all (GitHub counts one approval per identity):
+# CHANGES_REQUESTED when any root's is. A push moves the content commit and every root re-runs; a
+# body edit that re-opens our CHANGES_REQUESTED drops the root reviews held from before it.
+# root_review_of <own-comments-json [{body}]> <root> <sha8> → that root's review body (from its
+# `## Specs review` line to the marker), newest first; "" = not reviewed at this content commit
+root_review_of() {
+  jq -r --arg m "<!-- specs-review root=$2 head=$3 -->" '[ .[] | (.body // "") | select(contains($m)) ] | last // ""' <<< "$1" \
+    | awk -v m="<!-- specs-review root=$2 head=$3 -->" 'index($0, m) {exit} /^## Specs review/{f=1} f'
+}
+# root_comment <root> <i> <n> <sha8> <review-file> → the comment body that holds one root's review
+root_comment() {
+  printf 'SPECS ROOT REVIEW %s/%s: `%s` at content commit %s. This PR touches %s spec roots; each gets its own pass (one per tick) and ONE verdict is posted when all have one.\n\n' "$2" "$3" "$1" "$4" "$3"
+  cat "$5"
+  printf '\n\n<!-- specs-review root=%s head=%s -->\n' "$1" "$4"
+}
+# aggregate_review <head> <root>=<review-file> … → the ONE review body: a single `Verdict:` line
+# (CHANGES_REQUESTED naming each root's blocking IDs when any root requests changes, else APPROVE),
+# then each root's body under `### Root` with its own `Verdict:` prefix dropped — so the body has
+# one verdict line for parse_verdict and never reads as a mechanical approval to prior_review_pick.
+aggregate_review() {
+  local head="$1" kv root f v line tail rc_part="" roots="" sections=""; shift
+  for kv in "$@"; do
+    root="${kv%%=*}"; f="${kv#*=}"
+    line="$(grep -m1 -E '^Verdict:' "$f" || true)"; v="$(parse_verdict "$line")"
+    tail="$(sed -E 's/^Verdict:[[:space:]]*//' <<< "$line")"
+    roots="${roots:+$roots, }\`${root}\`"
+    [ "$v" = CHANGES_REQUESTED ] && rc_part="${rc_part:+$rc_part; }${root}: $(sed -E 's/^CHANGES_REQUESTED[[:space:]]*[—-]*[[:space:]]*//' <<< "$tail")"
+    sections="${sections}"$'\n'"### Root \`${root}\` — ${tail:-no verdict line}"$'\n'"$(grep -v -E '^(## Specs review|Verdict:)' "$f")"$'\n'
+  done
+  printf '## Specs review\n'
+  if [ -n "$rc_part" ]; then printf 'Verdict: CHANGES_REQUESTED — %s\n' "$rc_part"
+  else printf 'Verdict: APPROVE — %s spec roots, each approved in its own pass: %s\n' "$#" "$roots"; fi
+  printf '\nThis PR touches %s spec roots (head %s); each root was reviewed in its own pass, held as a `SPECS ROOT REVIEW` comment, and is carried here whole.\n%s' "$#" "${head:0:12}" "$sections"
+}
+
 # llm_env_args <dispatch-json> <home-dir> → one `K=V` per line: the COMPLETE env the model runs
 # under (`env -i`). Exactly: the gateway's `env` map verbatim (keys validated — a shell-hostile
 # key is a refusal, exit 1), the OTEL/telemetry vars this pod carries, PATH, and a throwaway
@@ -651,11 +909,6 @@ issue_intent() {
     fi
   done <<< "$refs"
 }
-# ci_success_run <slug> <commit> → the newest completed, successful `ci` run id at <commit> ("" = none)
-ci_success_run() {
-  gh run list --repo "$1" --commit "$2" --workflow ci.yaml --status completed --json databaseId,conclusion --limit 3 \
-    --jq '[ .[] | select(.conclusion == "success") ] | .[0].databaseId // empty' 2>/dev/null || true
-}
 # evidence_fetch <repo> <prefix> <sha> <dir> → evidence/<prefix>/<sha>.tar.gz unpacked into <dir>
 # (rc 1 = absent, or the repo has no evidence bucket)
 evidence_fetch() {
@@ -665,52 +918,87 @@ evidence_fetch() {
   curl -fsS --max-time 60 -H "Host: ${b}.teststuff.net" "${EVIDENCE_WEB}/evidence/$2/$3.tar.gz" 2>/dev/null | tar -xz -C "$4" 2>/dev/null \
     && [ -s "$4/evidence.json" ] || return 1
 }
-# evidence_download <slug> <head> <dir> <pr-number> → the head's evidence pack unpacked into <dir>:
-# the bucket's evidence/pr-<N>/<head>, else the head run's LEGACY artifact (runs from before the
-# move; drop the fallback once those have expired — 14-day retention).
-# (rc 1 = none: no successful run, or the run uploaded no artifact — the pack states the absence)
+# evidence_download <slug> <head> <dir> <pr-number> → the head's evidence pack unpacked into <dir>
+# from the bucket's evidence/pr-<N>/<head> (rc 1 = none: ci published no pack at that head, or the
+# repo has no evidence bucket — the pack states the absence)
 evidence_download() {
   if evidence_fetch "${1#*/}" "pr-$4" "$2" "$3"; then
     log "evidence: bucket evidence/pr-$4/${2:0:8} → $(find "$3" -type f | wc -l) file(s)"; return 0
   fi
-  local run_id; run_id="$(ci_success_run "$1" "$2")"
-  [ -n "$run_id" ] || { log "evidence: no successful ci run at ${2:0:8}"; return 1; }
-  gh run download "$run_id" --repo "$1" -n "$EVIDENCE_ARTIFACT" -D "$3" >/dev/null 2>&1 \
-    || { log "evidence: ci run ${run_id} has no ${EVIDENCE_ARTIFACT} artifact"; return 1; }
-  log "evidence: ci run ${run_id} artifact ${EVIDENCE_ARTIFACT} → $(find "$3" -type f | wc -l) file(s)"
+  log "evidence: no pack at bucket evidence/pr-$4/${2:0:8}"; return 1
 }
 # evidence_baseline_download <slug> <base> <dir> [<ancestor-of>] → "<evidence.json path> <commit sha>"
 # from the bucket: the newest of the first 100 first-parent commits of <ancestor-of> (default
-# origin/<base>) with a pack under evidence/<base>/ — ancestry by construction. Else (LEGACY, the
-# artifact fallback) the newest successful ci PUSH run on <base> (of the newest 5) that uploaded the artifact;
-# "" = none. The gateway step runs only on gateway changes, so a run without the artifact is
-# skipped. <ancestor-of> (the shadow run's replay): only runs whose commit is an ancestor of it
-# count — the baseline the live reviewer could have seen — and the window widens to 30 runs.
+# origin/<base>) with a pack under evidence/<base>/ — ancestry by construction; "" = none. The
+# gateway step runs only on gateway changes, so a commit without a pack is skipped. <ancestor-of>
+# (the shadow run's replay) walks back from that rev instead — the baseline the live reviewer
+# could have seen.
 evidence_baseline_download() {
-  local slug="$1" base="$2" dir="$3" anc="${4:-}" runs id sha lim=5
+  local slug="$1" base="$2" dir="$3" anc="${4:-}" sha
   if [ -n "$(evidence_bucket "${slug#*/}")" ]; then
     while read -r sha; do
       [ -n "$sha" ] || continue
       if evidence_fetch "${slug#*/}" "$base" "$sha" "$dir"; then printf '%s %s\n' "$dir/evidence.json" "$sha"; return 0; fi
     done <<< "$(git -C "$WORK/repo" rev-list --first-parent -n 100 "${anc:-origin/${base}}" 2>/dev/null || true)"
   fi
-  [ -n "$anc" ] && lim=30
-  runs="$(gh run list --repo "$slug" --branch "$base" --event push --workflow ci.yaml --status success --limit "$lim" \
-            --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)"
-  while read -r id sha; do
-    [ -n "$id" ] || continue
-    if [ -n "$anc" ] && ! git -C "$WORK/repo" merge-base --is-ancestor "$sha" "$anc" 2>/dev/null; then continue; fi
-    rm -rf "$dir"; mkdir -p "$dir"
-    gh run download "$id" --repo "$slug" -n "$EVIDENCE_ARTIFACT" -D "$dir" >/dev/null 2>&1 || continue
-    [ -s "$dir/evidence.json" ] || continue
-    printf '%s %s\n' "$dir/evidence.json" "$sha"; return 0
-  done <<< "$runs"
   printf '\n'
 }
 
+# pack_diff_base <git-dir> <base-rev> <head-ref> <upstream-ref> → the rev evidence-pack diffs from
+# (stdout; rc 0 always — a failed step answers <base-rev>, the unnarrowed diff, and says so on
+# stderr). The PR's spec diff is what the PR ITSELF changes. A PR on a non-default base (a
+# `goal/**` branch) that merged the default branch in carries the upstream's commits, already
+# reviewed where they merged; three-dot `<base>...<head>` (the pinned pack's only diff form) shows
+# them as the PR's. So: M = merge-base(upstream, head) — the newest upstream commit the head holds.
+# When M is already inside B0 = merge-base(base, head), nothing was merged in: <base-rev> unchanged.
+# Else every path the BASE side left alone since X = merge-base(B0, M) and whose content at head is
+# byte-identical to M's (present in both, or absent from both) is not the PR's change — upstream
+# content carried in whole. A path the base side changed since X stays in the diff even when head
+# == M: there the merge DISCARDED the base's edit, and that is the PR's change. a synthetic commit = B0's tree with those paths taken from M, made
+# an ANCESTOR of head by a graft in this throwaway clone (`git replace --graft`, the head keeps its
+# sha and tree — the evidence stamp compares the sha), so three-dot's merge-base is that commit and
+# the diff carries only paths the PR made differ. Path-level: a path both sides changed keeps the
+# upstream's hunks too (no merge-tree, no conflict handling). Reads stay in the clone: no API call.
+pack_diff_base() {
+  local g="$1" base="$2" head="$3" up="$4" b0 m x idx tree bp n=0 p entry
+  local -a parents
+  b0="$(git -C "$g" merge-base "$base" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  m="$(git -C "$g" merge-base "$up" "$head" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  if git -C "$g" merge-base --is-ancestor "$m" "$b0" 2>/dev/null; then printf '%s' "$base"; return 0; fi
+  x="$(git -C "$g" merge-base "$b0" "$m" 2>/dev/null)" || { printf '%s' "$base"; return 0; }
+  idx="$(mktemp)"; rm -f "$idx"
+  if ! GIT_INDEX_FILE="$idx" git -C "$g" read-tree "$b0"; then
+    log "WARN pack diff base: read-tree ${b0:0:8} failed — the spec diff stays ${base}...head" >&2; printf '%s' "$base"; return 0
+  fi
+  # (paths B0→head changes MINUS paths M→head changes = where head == M and != B0) MINUS paths the
+  # base side changed since X (X→B0)
+  while IFS= read -r -d '' p; do
+    entry="$(git -C "$g" ls-tree "$m" -- "$p")"
+    if [ -n "$entry" ]; then
+      GIT_INDEX_FILE="$idx" git -C "$g" update-index --add --cacheinfo "$(awk '{print $1}' <<< "$entry"),$(awk '{print $3}' <<< "$entry"),$p"
+    else
+      GIT_INDEX_FILE="$idx" git -C "$g" update-index --force-remove -- "$p"
+    fi || { log "WARN pack diff base: index update for ${p} failed — the spec diff stays ${base}...head" >&2; rm -f "$idx"; printf '%s' "$base"; return 0; }
+    n=$((n+1))
+  done < <(comm -z -23 <(comm -z -23 <(git -C "$g" diff -z --no-renames --name-only "$b0" "$head" | sort -z) \
+                                     <(git -C "$g" diff -z --no-renames --name-only "$m" "$head" | sort -z)) \
+                      <(git -C "$g" diff -z --no-renames --name-only "$x" "$b0" | sort -z))
+  if [ "$n" -eq 0 ]; then rm -f "$idx"; printf '%s' "$base"; return 0; fi
+  mapfile -t parents < <(git -C "$g" rev-parse "${head}^@")
+  if tree="$(GIT_INDEX_FILE="$idx" git -C "$g" write-tree)" \
+     && bp="$(git -C "$g" -c user.name=specs-review -c user.email=specs-review@invalid commit-tree -p "$b0" -p "$m" -m "specs-review: diff base (${b0:0:8} + ${n} path(s) as at upstream ${m:0:8})" "$tree")" \
+     && git -C "$g" replace -f --graft "$(git -C "$g" rev-parse "$head")" "${parents[@]}" "$bp"; then
+    rm -f "$idx"
+    log "pack diff base: head holds upstream ${m:0:8}; ${n} path(s) identical to it are not this PR's change (diff base ${bp:0:8})" >&2
+    printf '%s' "$bp"; return 0
+  fi
+  rm -f "$idx"
+  log "WARN pack diff base: synthetic base failed — the spec diff stays ${base}...head" >&2; printf '%s' "$base"
+}
+
 # ── the context pack (ADR-156): ONE builder for the live pass and the shadow run ────────────────
-# build_pack <repo> <num> <base-branch> <head> → builds $WORK/inputs (the model's cwd) and
-# $WORK/lens.md (the system prompt). rc 0 built · 1 no review (logged; fail CLOSED) · 2 the head
+# build_pack <repo> <num> <base-branch> <head> [<specs-root> <tests-root|->] → builds $WORK/inputs
+# (the model's cwd) and $WORK/lens.md (the system prompt) for ONE root pair (default: pack_roots). rc 0 built · 1 no review (logged; fail CLOSED) · 2 the head
 # moved while fetching (logged; live only) · 4 touched-rules found no rule (the mechanical case).
 # EVERY step is checked explicitly: the live caller runs under `|| LLM_RC=$?`, which suspends
 # `set -e` (bot review, PR#2613 finding 2) — an unchecked failed fetch would hand the model an
@@ -720,7 +1008,10 @@ evidence_baseline_download() {
 # head), the PR body / prior review are as of $SHADOW_ASOF, and the baseline is an ancestor of
 # that base.
 build_pack() {
-  local repo="$1" num="$2" base="$3" head="$4"
+  local repo="$1" num="$2" base="$3" head="$4" specs_root="${5:-}" tests_root="${6:-}" primary_root _t
+  read -r primary_root _t <<< "$(pack_roots "$repo")"
+  [ -n "$specs_root" ] || { specs_root="$primary_root"; tests_root="$_t"; }
+  PACK_NOTE=""
   local slug="${ORG}/${repo}" inputs="$WORK/inputs" lens="$WORK/lens.md"
   local ctx="$WORK/ctx"; mkdir -p "$ctx"
   # 1) the lens IS the system prompt — a fetch failure is no review (blocking never degrades)
@@ -745,6 +1036,18 @@ build_pack() {
       || { log "[$repo#$num] merge-base origin/${base} × ${head:0:8} FAILED — no review"; return 1; }
     SHADOW_BASE_COMMIT="$base_rev"
   fi
+  # 2a) the diff base: on a non-default base, the default branch's content the head merged in is
+  #     not the PR's change (pack_diff_base). The default branch is the remote's HEAD symref — a
+  #     git read, no API call; a default-branch PR skips it entirely (its three-dot already holds M).
+  local diff_base="$base_rev" upstream
+  upstream="$(git -C "$WORK/repo" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { sub("^refs/heads/", "", $2); print $2; exit }')" || upstream=""
+  if [ -n "$upstream" ] && [ "$upstream" != "$base" ]; then
+    if git -C "$WORK/repo" fetch -q origin "+refs/heads/${upstream}:refs/remotes/origin/${upstream}"; then
+      diff_base="$(pack_diff_base "$WORK/repo" "$base_rev" "pr-${num}" "origin/${upstream}")"
+    else
+      log "[$repo#$num] WARN fetch of ${upstream} FAILED — the spec diff stays ${base}...head (upstream content the head merged in reads as the PR's)"
+    fi
+  fi
   # 2b) the pinned process: the wheel, verified by digest, extracted (never zip-imported)
   curl -fsSL --max-time 60 --retry 3 --retry-all-errors --retry-max-time 90 "$SNIPPETS_WHEEL" -o "$WORK/snippets.whl" \
     || { log "[$repo#$num] snippets wheel fetch FAILED — no review"; return 1; }
@@ -766,27 +1069,41 @@ build_pack() {
   if revs="$(gh api --paginate "repos/${slug}/pulls/${num}/reviews" --jq '.[]' 2>/dev/null | jq -s .)"; then
     [ -n "${SHADOW:-}" ] && revs="$(jq -c --arg t "$SHADOW_ASOF" '[ .[] | select((.submitted_at // "") < $t) ]' <<< "$revs")"
     prior="$(prior_review_pick "$revs")"
+    [ -n "$prior" ] && prior="$(prior_for_root "$prior" "$specs_root")"
     printf '%s\n' "${prior:-previous review: none, this is round 1}" > "$ctx/prior-review.md"
   else
     printf 'previous review: the reviews read FAILED; treat this as round 1 and say so\n' > "$ctx/prior-review.md"
   fi
   # 3b) evidence: the head's raw Allure results + the base branch's evidence.json (the baseline),
-  #     both from the bucket (evidence_fetch; legacy ci artifacts as the fallback). Absent evidence is NOT a refusal: an empty results dir makes
+  #     both from the bucket (evidence_fetch). Absent evidence is NOT a refusal: an empty results dir makes
   #     the pack say so, and the evidence brief turns that into E-STALE / NO_EVIDENCE findings.
+  #     The repo's bucket is its PRIMARY root's (evidence_bucket: homelab →
+  #     gateway-specs): an extra root has no evidence publisher, so its pack carries none and says
+  #     why (PACK_NOTE → the prompt) instead of borrowing another root's records.
   local results="$WORK/head-ev/allure-results" bl_json="" bl_commit=""
   mkdir -p "$WORK/head-ev"
-  evidence_download "$slug" "$head" "$WORK/head-ev" "$num" || true
-  mkdir -p "$results"
-  if read -r bl_json bl_commit <<< "$(evidence_baseline_download "$slug" "$base" "$WORK/base-ev" ${SHADOW:+"$base_rev"})" && [ -n "$bl_json" ]; then
-    log "[$repo#$num] baseline: ${base}@${bl_commit:0:8}"
+  if [ "$specs_root" = "$primary_root" ]; then
+    evidence_download "$slug" "$head" "$WORK/head-ev" "$num" || true
+    mkdir -p "$results"
+    if read -r bl_json bl_commit <<< "$(evidence_baseline_download "$slug" "$base" "$WORK/base-ev" ${SHADOW:+"$base_rev"})" && [ -n "$bl_json" ]; then
+      log "[$repo#$num] baseline: ${base}@${bl_commit:0:8}"
+    else
+      bl_json=""; log "[$repo#$num] baseline: none (no pack under evidence/${base}/ on the last 100 first-parent commits)"
+    fi
   else
-    bl_json=""; log "[$repo#$num] baseline: none (no pack under evidence/${base}/ on the last 100 first-parent commits, no legacy ${EVIDENCE_ARTIFACT} artifact)"
+    mkdir -p "$results"
+    PACK_NOTE=" This pack's specs root is ${specs_root} (tests root: $([ "$tests_root" = - ] && echo 'none declared' || echo "$tests_root")). No evidence pipeline publishes for this root yet, so the pack's evidence is absent by construction, not by a failed fetch."
+    log "[$repo#$num] evidence: none for ${specs_root} (no evidence pipeline for an extra root; the pack states it)"
   fi
   # 3c) the context pack (allure-behavior-snippets evidence-pack): touched rules + sections + the
   #     spec diff + the specs tree + evidence + digest + attachments + baseline + process/ briefs.
   #     It IS the model's inputs dir. A pack failure is no review (fail closed).
-  local specs_root tests_root; read -r specs_root tests_root <<< "$(pack_roots "$repo")"
-  local -a packargs=("$base_rev" "pr-${num}" "$results" --repo "$WORK/repo" --specs-root "$specs_root"
+  #     A root with no tests root ("-") passes its specs root as --tests-root: the pack's default
+  #     (`tests`) would make homelab's top-level tests/ this root's, and the specs root holds no .py,
+  #     so rules are reached through the spec pages alone.
+  [ "$tests_root" = - ] && tests_root="$specs_root"
+  log "[$repo#$num] pack roots: ${specs_root} ${tests_root}"
+  local -a packargs=("$diff_base" "pr-${num}" "$results" --repo "$WORK/repo" --specs-root "$specs_root"
     --tests-root "$tests_root" --prior-review "$ctx/prior-review.md" --issue-intent "$ctx/issue-intent.md"
     --pr-body "$ctx/pr-body.md" --out "$inputs")
   [ -n "$bl_json" ] && packargs+=(--baseline "$bl_json" --baseline-commit "$bl_commit")
@@ -846,7 +1163,7 @@ pass1_prompt() {
 review_prompt() {
   local staged=""
   [ "${STAGED:-0}" = 1 ] && staged=" This review is PASS 2 of a staged read: pass1.md is your frozen first pass over the masked surface (row keys r<table>.<row>; row-keys.tsv joins each key to its description). Before your new findings, mark EVERY pass-1 finding survives, contradicted or withdrawn against the revealed description and its cells. A finding the description alone explains SURVIVES (check 10: a condition that lives only in the description), the reveal never repairs it. Then the new intent findings. Never rewrite pass1.md."
-  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}). Your working directory is the context pack and holds your ONLY inputs; your Read and Glob tools are scoped to it. Start with manifest.json (what the pack holds and what was not provided), then intent: pr-body.md, issue-intent.md, spec-sections.md (each touched rule's section at the head + the spec diff), tree/ (the specs at the head, for neighbours), process/RULES.md and process/CONVENTIONS.md (the pinned process your briefs cite). Then evidence: digest.md first (its Stamp:, Baseline: and precomputed findings), the per-rule <RULE>.md tables, evidence/<RULE>.json for ONE rule's records (never the whole evidence.json: it holds every touched rule and can exceed your context), baseline-evidence.json, and attachments/ where a row's value is still unproven. prior-review.md is your previous review of this PR: on a later round, mark each of its findings resolved or still open FIRST. Apply BOTH briefs (rows, evidence) under the finding contract and write ONLY the review body in its Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <blocking finding IDs>'. Do not run commands, do not fetch anything, do not submit the review yourself: the launcher submits what you return.${staged}"
+  printf '%s' "You are the specs reviewer for pull request ${1}#${2} (head ${3}). Your working directory is the context pack and holds your ONLY inputs; your Read and Glob tools are scoped to it. Start with manifest.json (what the pack holds and what was not provided), then intent: pr-body.md, issue-intent.md, spec-sections.md (each touched rule's section at the head + the spec diff), tree/ (the specs at the head, for neighbours), process/RULES.md and process/CONVENTIONS.md (the pinned process your briefs cite). Then evidence: digest.md first (its Stamp:, Baseline: and precomputed findings), the per-rule <RULE>.md tables, evidence/<RULE>.json for ONE rule's records (never the whole evidence.json: it holds every touched rule and can exceed your context), baseline-evidence.json, and attachments/ where a row's value is still unproven. prior-review.md is your previous review of this PR: on a later round, mark each of its findings resolved or still open FIRST. Apply BOTH briefs (rows, evidence) under the finding contract and write ONLY the review body in its Output shape, starting with the line '## Specs review' and then the line 'Verdict: APPROVE — …' or 'Verdict: CHANGES_REQUESTED — <blocking finding IDs>'. Do not run commands, do not fetch anything, do not submit the review yourself: the launcher submits what you return.${PACK_NOTE:-}${staged}"
 }
 
 # ── the harnesses: ONE home per CLI invocation. Each runs CONFINED — `env -i` with exactly the
@@ -939,7 +1256,7 @@ review_run() {
 # `@file` field (a hidden body).
 gh_shadow_allows() {
   case "${1:-} ${2:-}" in
-    "pr view"|"pr list"|"pr diff"|"issue view"|"issue list"|"run list"|"run view"|"run download") return 0;;
+    "pr view"|"pr list"|"pr diff"|"issue view"|"issue list"|"run list"|"run view") return 0;;
   esac
   [ "${1:-}" = api ] || return 1
   shift
@@ -1035,7 +1352,14 @@ shadow_one() {
     "today=$(jq -cn --arg l "$LENS_BASE" --arg w "$SNIPPETS_VERSION" '{lens:$l, snippets:$w, issue_intent:"current"}')" \
     "confinement=$(js "$([ "$SHADOW_HARNESS" = goose ] && echo env-only || echo env+tool-scope)")"
   log "[$repo#$num] SHADOW ${cell} at ${head:0:8} (as of ${SHADOW_ASOF}, ${asof_src})"
-  local prc=0; build_pack "$repo" "$num" "$base" "$head" || prc=$?
+  # the FIRST touched root pair (touched_pairs): a shadow cell reviews one pack; a PR touching
+  # several roots records which one it read
+  local files sroot troot nroots
+  files="$(gh api --paginate "repos/${slug}/pulls/${num}/files" --jq '.[].filename' 2>/dev/null)" || files=""
+  nroots="$(touched_pairs "$repo" "$files" | grep -c .)"
+  read -r sroot troot <<< "$(touched_pairs "$repo" "$files" | sed -n 1p)"
+  shadow_record "$rec" "roots=$(jq -cn --arg r "$sroot" --arg t "$troot" --argjson n "$nroots" '{specs:$r, tests:$t, touched:$n}')"
+  local prc=0; build_pack "$repo" "$num" "$base" "$head" "$sroot" "$troot" || prc=$?
   shadow_record "$rec" "base_commit=$(js "$SHADOW_BASE_COMMIT")" \
     "touched_rules=$(jq -Rsc 'split("\n") | map(select(. != ""))' "$WORK/inputs/touched-rules.txt" 2>/dev/null || echo null)"
   case "$prc" in
@@ -1129,6 +1453,7 @@ shadow_main() {
   # attribution: the shadow's spend never reads as the live reviewer's
   OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES:+${OTEL_RESOURCE_ATTRIBUTES},}shadow=true,cell=${SHADOW_HARNESS}@${SHADOW_RAIL:-policy}"
   mkdir -p "$SHADOW_OUT"; SHADOW_WORK="$(mktemp -d)"; SESSION_ID=""
+  claims_load
   trap '[ -n "$SESSION_ID" ] && gw_curl -fsS --max-time 10 -X DELETE "${GATEWAY_URL}/sessions/${SESSION_ID}" >/dev/null 2>&1; rm -rf "$SHADOW_WORK"' EXIT
   local ref repo num head missing=0
   for ref in "${prs[@]}"; do
@@ -1186,7 +1511,8 @@ cleanup() {
 trap cleanup EXIT
 
 POSTED=""          # "repo#N repo#M …" — the exit contract re-reads these
-LLM_CANDIDATES=""  # "createdAt repo N base headSha contentSha" lines, oldest first after sort
+claims_load        # the tick's ONE claims read, in this shell (every root reader below is a `$( )`)
+LLM_CANDIDATES=""  # "createdAt repo N base headSha contentSha since|-" lines, oldest first after sort
 
 # ── the per-PR walk ─────────────────────────────────────────────────────────────────────────────
 for repo in $SPECS_REVIEW_REPOS; do
@@ -1194,6 +1520,13 @@ for repo in $SPECS_REVIEW_REPOS; do
         --json number,isDraft,createdAt,baseRefName,headRefOid,labels,reviews,commits,statusCheckRollup,comments 2>"$WORK/list.err")"; then
     log "[$repo] PR list FAILED — $(head -c 300 "$WORK/list.err" | tr '\n' ' ') — skipping repo this tick"; N_ERR=$((N_ERR+1)); continue
   fi
+  # the body-edit leg (classify's own_reopened): .lastEditedAt for the PRs under an own live
+  # CHANGES_REQUESTED only — ONE 1-point GraphQL query per repo per tick, none without such a PR; a
+  # failed read degrades to the commit-time rule with a WARN, never aborts the tick (the shared home)
+  # >>>REPLAY:specs-last-edited>>>
+  # shellcheck disable=SC2178,SC2128 # prs is the tick's JSON string; shadow_main's local array of the same name misleads the check
+  prs="$(pr_last_edited_merge "${ORG}/${repo}" "$prs" "$(own_cr_numbers "$prs")")"
+  # <<<REPLAY:specs-last-edited<<<
   n_open="$(jq -r '[ .[] | select(.isDraft | not) ] | length' <<< "$prs")"
   log "[$repo] $n_open open non-draft PR(s)"
   while IFS= read -r pr_json; do
@@ -1238,7 +1571,11 @@ for repo in $SPECS_REVIEW_REPOS; do
       esac
       continue
     fi
-    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head} ${content_sha}"$'\n'
+    # re-opened by a body edit after our own CHANGES_REQUESTED at this content commit: the edit's
+    # time rides along — a SPECS ROOT REVIEW comment older than it is the answered round's, not this one's
+    since="$(jq -r --arg me "$SPECS_REVIEWER_LOGIN" "$JQ_PRELUDE"'if own_reopened($me) then .lastEditedAt else "-" end' <<< "$pr_json")"
+    [ "$since" = - ] || log "[$repo#$num] PR body edited ${since} after our CHANGES_REQUESTED at ${content_sha:0:8} — reviewable again"
+    LLM_CANDIDATES="${LLM_CANDIDATES}${created} ${repo} ${num} ${base} ${head} ${content_sha} ${since}"$'\n'
   done < <(jq -c '.[] | select(.isDraft | not)' <<< "$prs")
 done
 
@@ -1248,31 +1585,59 @@ LLM_RC=0
 if [ -z "$pick" ]; then
   log "no specs PR awaiting the LLM pass this tick"
 else
-  read -r _created repo num base head content_sha <<< "$pick"
+  read -r _created repo num base head content_sha since <<< "$pick"
   n_cand="$(printf '%s' "$LLM_CANDIDATES" | grep -c . || true)"
   log "[$repo#$num] LLM pass (${n_cand} candidate(s); the rest wait for the next tick)"
   run_llm_pass() {
     local slug="${ORG}/${repo}" inputs="$WORK/inputs" lens="$WORK/lens.md" resp="$WORK/session.json"
+    # 0) which root pairs the diff touches (touched_pairs): one = the pass as it always was; several
+    #    = this tick reviews the first root without a SPECS ROOT REVIEW comment at the content
+    #    commit, and the verdict waits for the last one (aggregate_review)
+    local files c8="${content_sha:0:8}" sroot troot pending="" i n_roots own_comments="[]"
+    files="$(gh api --paginate "repos/${slug}/pulls/${num}/files" --jq '.[].filename' 2>/dev/null)" \
+      || { log "[$repo#$num] files re-read FAILED — no review"; return 1; }
+    local -a pairs=(); mapfile -t pairs < <(touched_pairs "$repo" "$files")
+    n_roots="${#pairs[@]}"
+    if [ "$n_roots" -gt 1 ]; then
+      own_comments="$(gh api --paginate "repos/${slug}/issues/${num}/comments" \
+          --jq ".[] | select(.user.login == \"${SPECS_REVIEWER_LOGIN}[bot]\" or .user.login == \"${SPECS_REVIEWER_LOGIN}\") | {body, created_at}" 2>/dev/null \
+          | jq -s --arg since "${since:--}" '[ .[] | select($since == "-" or (.created_at // "") > $since) ]')" \
+        || { log "[$repo#$num] comments read FAILED — no review"; return 1; }
+      for i in "${!pairs[@]}"; do
+        read -r sroot troot <<< "${pairs[$i]}"
+        root_review_of "$own_comments" "$sroot" "$c8" > "$WORK/root-$i.md"
+        [ -s "$WORK/root-$i.md" ] || { [ -n "$pending" ] || pending="$i"; }
+      done
+      log "[$repo#$num] ${n_roots} spec roots touched ($(printf '%s, ' "${pairs[@]}" | sed 's/, $//')); $([ -n "$pending" ] && echo "reviewing #$((pending+1)) this tick" || echo "all reviewed — posting the verdict")"
+    fi
+    read -r sroot troot <<< "${pairs[${pending:-0}]}"
+    local review="" verdict="" skip_llm=""
+    [ "$n_roots" -gt 1 ] && [ -z "$pending" ] && skip_llm=all-done
     # 1)–3c) the lens + the context pack (build_pack — the shadow run builds the SAME one)
-    local prc=0; build_pack "$repo" "$num" "$base" "$head" || prc=$?
+    local prc=0
+    [ -n "$skip_llm" ] || build_pack "$repo" "$num" "$base" "$head" "$sroot" "$troot" || prc=$?
     case "$prc" in
       0) ;;
       2) return 0;;   # head moved while fetching — logged; the next tick reads the new head
-      4)
-        printf '## Specs review\nVerdict: APPROVE — mechanical: touched-rules (allure-behavior-snippets %s) found no rule this diff touches. Head %s.\n' "$SNIPPETS_VERSION" "${head:0:12}" > "$WORK/mech-$num.md"
-        local rs0=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs0=$?
-        case "$rs0" in
-          0) log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no rule touched)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num"; return 0;;
-          3) return 0;;
-          *) log "[$repo#$num] mechanical approve FAILED"; return 1;;
-        esac;;
+      4) if [ "$n_roots" -gt 1 ]; then   # one root of several: its review is the fixed body, the verdict still waits
+           printf '## Specs review\nVerdict: APPROVE — no rule touched: touched-rules (allure-behavior-snippets %s) found no rule this diff touches under %s.\n' "$SNIPPETS_VERSION" "$sroot" > "$WORK/root-$pending.md"
+           skip_llm="root-mechanical"
+         else
+           printf '## Specs review\nVerdict: APPROVE — mechanical: touched-rules (allure-behavior-snippets %s) found no rule this diff touches. Head %s.\n' "$SNIPPETS_VERSION" "${head:0:12}" > "$WORK/mech-$num.md"
+           local rs0=0; review_submit "$repo" "$num" approve "$WORK/mech-$num.md" "$head" || rs0=$?
+           case "$rs0" in
+             0) log "[$repo#$num] MECHANICAL approve at ${head:0:8} (no rule touched)"; N_MECH=$((N_MECH+1)); POSTED="$POSTED $repo#$num"; return 0;;
+             3) return 0;;
+             *) log "[$repo#$num] mechanical approve FAILED"; return 1;;
+           esac
+         fi;;
       *) return 1;;
     esac
     # 4) admission: POST /sessions (gateway/specs/endpoints/sessions.md, sessions.schema.json post.input)
     #    — in a loop over `attempt` (GW-SESSIONS-ADMIT §The retry contract): a strike on this pass
     #    re-admits at the SAME round with attempt + 1; the gateway's walk excludes the struck cell.
     local body http attempt=1
-    while :; do
+    while [ -z "$skip_llm" ]; do
     body="$(jq -cn --arg task "specs-review ${repo}#${num}" --argjson a "$attempt" '{stack:"platform", role:"reviewer", task:$task, round:0, attempt:$a, harness:"claude"}')"
     http="$(gw_curl -sS --max-time 20 -o "$resp" -w '%{http_code}' -H 'Content-Type: application/json' -X POST "${GATEWAY_URL}/sessions" -d "$body" || echo 000)"
     if [ "$http" != "200" ]; then
@@ -1340,6 +1705,20 @@ else
         log "[$repo#$num] PARTIAL READ at ${content_sha:0:8} — held, no verdict (unfinished: ${unread:-unstated})"; N_PARTIAL=$((N_PARTIAL+1)); return 0
       fi
       log "[$repo#$num] PARTIAL READ at ${content_sha:0:8} but the hold comment FAILED — the next tick re-runs the pass"; return 1
+    fi
+    if [ "$n_roots" -gt 1 ]; then
+      # several roots: this tick's root review is held as its comment; the verdict waits for the last
+      if [ -n "$pending" ]; then
+        [ "$skip_llm" = root-mechanical ] || printf '%s\n' "$review" > "$WORK/root-$pending.md"
+        root_comment "$sroot" "$((pending+1))" "$n_roots" "$c8" "$WORK/root-$pending.md" > "$WORK/rootc-$num.md"
+        gh pr comment "$num" --repo "$slug" --body-file "$WORK/rootc-$num.md" >/dev/null \
+          || { log "[$repo#$num] SPECS ROOT REVIEW comment for ${sroot} FAILED — the next tick re-runs it"; return 1; }
+        log "[$repo#$num] root ${sroot} reviewed ($(grep -m1 '^Verdict:' "$WORK/root-$pending.md" | cut -c1-120)) — held as a comment"
+        for i in "${!pairs[@]}"; do [ -s "$WORK/root-$i.md" ] || return 0; done   # the verdict waits for the last root
+      fi
+      local -a agg=()
+      for i in "${!pairs[@]}"; do read -r sroot troot <<< "${pairs[$i]}"; agg+=("${sroot}=$WORK/root-$i.md"); done
+      review="$(aggregate_review "$head" "${agg[@]}")"; verdict="$(parse_verdict "$review")"
     fi
     printf '%s\n\n<!-- specs-review head=%s session=%s -->\n' "$review" "${head:0:12}" "$SESSION_ID" > "$WORK/review-$num.md"
     local kind

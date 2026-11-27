@@ -59,8 +59,8 @@ What this island adds, by rule:
 - **Rule 10 (incompleteness):** everything OUT of v0 is a `⚑ gap` row on the requirement it would
   belong to — the ADR-096 ladder past its capacity half, the FU-088 latches the admission rows do
   not cover, the capacity doorbell, `/route`
-  compatibility, the git broker (FU-269), the Zen rail, the codex rail's production credential
-  write-back / upstream profile / report ingress, the cost ledger, HA (FU-271).
+  compatibility, the git broker (FU-269), the Zen rail, the codex rail's upstream profile /
+  report ingress / reservation, the cost ledger, HA (FU-271).
 - **Worlds:** every row names its world ([worlds/README.md](worlds/README.md)) — a policy state
   plus a fake-upstream behaviour; tests carry it as the `world` label.
 - **Table shape:** the rows brief's checklist is a CANDIDATE under the operator's iteration and
@@ -116,13 +116,14 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 [endpoints/openai-responses.md](endpoints/openai-responses.md) (the data plane; the last is the codex rail, lit 2026-10-22) →
 [endpoints/metrics.md](endpoints/metrics.md) · [endpoints/health.md](endpoints/health.md) ·
 [endpoints/catalog.md](endpoints/catalog.md) (the two rails' vendor facts; the entry canary; the tier evidence and the rail choice) ·
+[endpoints/wire.md](endpoints/wire.md) (what the vendors actually answered — the recorded wire) ·
 [access.md](access.md) (the role × stack × service inventory) ·
 [glossary.md](glossary.md) · [worlds/](worlds/README.md).
 
 | Requirement | Page | What it pins |
 |---|---|---|
 | [GW-SESSIONS-ADMIT](endpoints/sessions.md#gw-sessions-admit) | sessions | may this unit run now, on which cell — the walk's order, the explicit overrides, the harness taken from the cell, the preferred end of a tier's list (`prefer`) · `⚑ gap`: `/route` not served, the ladder's labels / urgency / budget unread |
-| [GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry) | sessions | the retry contract — ordered tier lists, the task's strikes (cell / model / harness scope), `cells-exhausted`, `attempt` and the superseded re-run · `⚑ gap`: one model across rails is two ids |
+| [GW-SESSIONS-RETRY](endpoints/sessions.md#gw-sessions-retry) | sessions | the retry contract — ordered tier lists, the task's strikes (cell / model / harness scope), `cells-exhausted`, `attempt` and the superseded re-run |
 | [GW-SESSIONS-CAPACITY](endpoints/sessions.md#gw-sessions-capacity) | sessions | the ladder's capacity half — window utilization, the 429 latch, the cell cooldown, the rejected credential and its recovery, the Go window draw and catalog, the Go account headroom, the marks kept across a restart, the openrouter provider axis · `⚑ gap`: FU-109 tier thresholds, the OpenRouter account latch, the free-tier key budget, a Go 402, the capacity doorbell |
 | [GW-SESSIONS-ENV](endpoints/sessions.md#gw-sessions-env) | sessions | the pod's complete LLM env per harness |
 | [GW-SESSIONS-TOKEN](endpoints/sessions.md#gw-sessions-token) | sessions | the session token's shape, storage, lifetime |
@@ -150,6 +151,10 @@ Start here: **[use-cases/uc-1-worker-ride.md](use-cases/uc-1-worker-ride.md)** (
 | [GW-CATALOG-GO-PARSE](endpoints/catalog.md#gw-catalog-go-parse) | catalog | what the Go catalog's two reads say — the model's dialect, the page's limits, fees, peak hours and shares, the cost rows, the view's shape — and the policy's plan (no vendor fact in the policy) |
 | [GW-CATALOG-OR](endpoints/catalog.md#gw-catalog-or) | catalog | the OpenRouter rail's registry — the weekly ranking ∩ AA-benched, each candidate's endpoints, the persisted snapshot, the view's `pinnable` / `floor` verdict per harness |
 | [GW-CATALOG-OR-CANARY](endpoints/catalog.md#gw-catalog-or-canary) | catalog | the entry canary: a cell enters the order only after a clean, budget-capped canary ride pinned to it; a 429'd canary is no verdict (the cell backs off); the launcher's walk |
+| [GW-WIRE-RECORD](endpoints/wire.md#gw-wire-record) | wire | the recorder — each vendor read's latest answer per source, kept before its parser: `public` verbatim, `account` structure-only; a failed read, the bound, a restart; no credential in a record |
+| [GW-WIRE-VIEW](endpoints/wire.md#gw-wire-view) | wire | the read-only door — `GET /wire` (provenance only) and `GET /wire/<source>` (the stored bytes, provenance in headers) |
+| [GW-WIRE-PROBE](endpoints/wire.md#gw-wire-probe) | wire | the declared probe — a GET of a vendor endpoint the gateway does not call yet, read through the rail's credential lifecycle and recorded as an `account` source; the declarations file (`GATEWAY_WIRE`) is its one home, and the account class's key allowlist |
+| [GW-WIRE-QUARRY](endpoints/wire.md#gw-wire-quarry) | wire | the quarry tool — `wire-quarry.py list / show / find / cut` reads the door and cuts a fixture with its provenance sidecar, no credential · `⚑ gap`: fixtures cut by hand before it have no sidecar, nothing lints for one |
 | [GW-MODEL-TIERS](endpoints/catalog.md#gw-model-tiers) | catalog | the deployed per-(rail, tier) model lists are derived from benchmark evidence (AA intelligence bands of the rail's best, cheapest per CLEAN ride first, capped) — a committed snapshot, its staleness alert, an equality check with undecided tiers; the Go price |
 | [GW-RAIL-CHOICE](endpoints/catalog.md#gw-rail-choice) | catalog | the twin rule and the admission's rail choice between a model's twin cells on two rails, by cost per clean ride |
 | [GW-ACCESS](access.md#gw-access) | access | role × rail: `dispatch` or `defer: role-rail-denied` per `roles.<role>.rails`; the inventory's other columns unenforced |

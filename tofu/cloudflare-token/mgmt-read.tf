@@ -21,6 +21,13 @@ data "cloudflare_api_token_permission_groups_list" "bot_management_read" {
   scope = "com.cloudflare.api.account.zone"
 }
 
+# Notifications Read: refreshes the Tunnel Health Alert policy + reads the policies list
+# (tofu/cloudflare/notifications.tf) — the twin of main.tf's Notifications Write.
+data "cloudflare_api_token_permission_groups_list" "notifications_read" {
+  name  = "Notifications%20Read"
+  scope = "com.cloudflare.api.account"
+}
+
 data "cloudflare_api_token_permission_groups_list" "dns_read" {
   name  = "DNS%20Read"
   scope = "com.cloudflare.api.account.zone"
@@ -43,11 +50,12 @@ resource "cloudflare_api_token" "mgmt_read" {
   # compares positionally); sort(): the API returns permission_groups ascending by id.
   policies = [
     {
-      # account: the tunnel + its remote config (refresh only)
+      # account: the tunnel + its remote config, the notification policies (refresh only)
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id },
-      ]
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.notifications_read.result[0].id,
+      ]) : { id = gid }]
       resources = jsonencode(local.account_resource)
     },
     {

@@ -89,20 +89,98 @@ spec:
             description: "The daily 03:30Z deep-dig CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since the lane shipped 2026-10-04). Every triage: dig alert that stands or recurs is unread until it does. Check: argo -n agent-coordinator cron get deep-dig and the newest deep-dig-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/deep-dig. Design: docs/agents/roles.md §deep dig; selector: agents/deep-dig-select.sh."
         # ── island intake's own belt (FU-320, 2026-10-28) ─────────────────────────────────────
         # agents/coordinator/island-intake-argo.yaml pushes island_intake_last_run_timestamp_seconds
-        # on EVERY exit path (hold, cap, probe failure, session done) — the DeepDigStale shape for the
-        # lane that admits the dig's island findings. Same 8d bridge + `or vector(0)`, same 2 d on a
-        # daily schedule. triage: none + platform_machinery — the remedy is reading the cron in Argo.
+        # on EVERY exit path (no inputs, hold, cap, probe failure, session done), one series per island
+        # (grouping label `island`) — the scheduled run walks every island (homelab#3579). PER ISLAND
+        # (`max by (island)`): one island's run never hides another's silence. Same 8d bridge and 2 d on
+        # a daily schedule as DeepDigStale, but NO `or vector(0)`: an island that never pushed the series
+        # is silent (it is not in the selector's list yet), so only one that ran and then stopped fires.
+        # The Pushgateway serves an island's last push for good (its store is a PVC), so age alone
+        # would fire forever for an island that LEFT the list (a facts file removed, a stack dropping
+        # `repos[].intake.facts`, a mistyped `-p island=`). The second term is the gate: the list step
+        # pushes island_intake_listed_timestamp_seconds{island} for every island of the full walk,
+        # all with that run's epoch (islands/intake/scripts/listed-push.sh, one replaced group), and
+        # an island counts only while its value equals the newest one. Same 8d bridge on both sides,
+        # so a wipe or a dead list step keeps the last list in force and a stale island still fires.
+        # triage: none + platform_machinery — the remedy is reading the cron in Argo.
         # Fixture: island-intake.promtool-test.
         - alert: IslandIntakeStale
-          expr: (time() - (max(max_over_time(island_intake_last_run_timestamp_seconds[8d])) or vector(0))) > 2 * 86400
+          expr: ((time() - max by (island) (max_over_time(island_intake_last_run_timestamp_seconds[8d]))) > 2 * 86400) and on (island) (max by (island) (max_over_time(island_intake_listed_timestamp_seconds[8d])) == on () group_left () max(max_over_time(island_intake_listed_timestamp_seconds[8d])))
           for: 6h
           labels:
             severity: warning
             platform_machinery: "true"
             triage: none
           annotations:
-            summary: "Island intake has not run in >2 days — the dig's island findings are not being admitted"
-            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) has not completed a run in over 2 days (or never has since it shipped 2026-10-28). The deep dig's cause-found findings that name an island (gateway/) wait unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-intake. Brief: gateway/intake.md; selector: gateway/scripts/intake-select.sh --source dig."
+            summary: "Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted"
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island's has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands."
+        # ── island intake: the stack islands' source went unread (homelab#3580) ─────────────────
+        # The workflow's list step reads the live AgentStack claims for the stack islands
+        # (islands/intake/scripts/claims-read.sh) and pushes island_intake_claims_read_ok 1|0 on every
+        # scheduled run (job island_intake_claims). A failed read still walks the platform islands, so
+        # nothing else goes red: without this, every stack island would be skipped silently.
+        # `for: 2d` on a daily push = two consecutive failed runs (one failed day flips back to 1 at
+        # the next run and never fires). No bridge: after a Pushgateway wipe the series is absent until
+        # the next 05:00Z run pushes it again, and the clock restarts — a day late, never a false page.
+        # triage: none + platform_machinery — the remedy is reading the list step's log.
+        # Fixture: island-intake.promtool-test.
+        - alert: IslandIntakeClaimsUnread
+          expr: max(island_intake_claims_read_ok) == 0
+          for: 2d
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "Island intake has not read the AgentStack claims for 2 days — no stack island is getting a sitting"
+            description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) reads the live AgentStack claims in its list step to find the stack islands (repos[].intake.facts). That read has failed or answered no claim on every run for 2 days: the platform islands are still walked, every stack island is skipped. Check the `islands` step's log of the newest island-intake-* workflow (the line `island-intake: claims read FAILED — stack islands not walked` and the one after it), and: kubectl auth can-i list agentstacks.platform.teststuff.net --as=system:serviceaccount:agent-coordinator:island-intake (the rule is on ClusterRole island-intake-read, agents/coordinator/rbac.yaml). Reader: islands/intake/scripts/claims-read.sh."
+        # ── island intake: the scheduled experiment read (Goal #3586, homelab#3604) ──────────────
+        # The island-intake workflow's first step (islands/intake/scripts/experiment-read.sh) decides every
+        # closed issue labelled experiment/open and pushes (job island_intake_experiments)
+        # island_intake_experiments_oldest_overdue_seconds = now − the bound of the oldest experiment still
+        # open past its bound (0 when none) and island_intake_experiments_last_run_timestamp_seconds.
+        # An experiment left open two days past its bound means its read keeps failing (Prometheus, GitHub, an
+        # upload, a Goal lookup); a stale last run means the step itself does not run or does not finish. No
+        # `or vector(0)`: a series that was never pushed is silent, like IslandIntakeStale's never-listed island.
+        # triage: none + platform_machinery — the remedy is reading the experiments step's log.
+        # Fixture: island-intake.promtool-test §(g).
+        - alert: IntakeExperimentOverdue
+          expr: max(island_intake_experiments_oldest_overdue_seconds) > 2 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: An intake experiment is still open more than 2 days past its bound — its verdict was not written
+            description: 'An issue labelled experiment/open is still undecided two days after its window ended. The scheduled island-intake CronWorkflow (ns agent-coordinator) reads every such issue in its `experiments` step, before the sittings. Check that step''s log in the newest island-intake-* workflow (a Prometheus or GitHub read that failed, a GitHub write or a report upload that failed — the issue keeps experiment/open until one run finishes it) and read by hand: bash islands/intake/scripts/experiment-read.sh --dry-run. Reader: islands/intake/scripts/experiment-read.sh.'
+        - alert: IntakeExperimentReadStale
+          expr: (time() - max(max_over_time(island_intake_experiments_last_run_timestamp_seconds[8d]))) > 2 * 86400
+          for: 6h
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: The intake experiment read has not run for more than 2 days — open experiments are not being decided
+            description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) runs the experiment read as its first step; no run has pushed island_intake_experiments_last_run_timestamp_seconds in over 2 days. Check: argo -n agent-coordinator cron get island-intake and the `experiments` step of the newest island-intake-* workflow (a clone or devbox install that failed, a pod that never started). Reader: islands/intake/scripts/experiment-read.sh.'
+        # ── the island rules digest's own belt (FU-320) ─────────────────────────────────────────
+        # agents/coordinator/island-rules-digest-argo.yaml pushes
+        # island_rules_digest_last_success_timestamp_seconds only when the week's outcome LANDED (the
+        # report PR, or the no-change record) — RetroReportOverdue's threshold for a weekly lane (8d
+        # bridge, 7 d + 6 h) with DeepDigStale's single-series `or vector(0)`: never-landed fires, so a
+        # lane that never runs is as visible as one that stopped. triage: none + platform_machinery —
+        # the remedy is reading the cron in Argo, which a session could only restate. Fixture:
+        # island-rules-digest.promtool-test.
+        - alert: IslandRulesDigestOverdue
+          expr: (time() - (max(max_over_time(island_rules_digest_last_success_timestamp_seconds[8d])) or vector(0))) > 7 * 86400 + 6 * 3600
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+            triage: none
+          annotations:
+            summary: "The weekly island rules digest has not landed in over 7 days — rule-file changes are going unreviewed"
+            description: "The Friday 06:00Z island-rules-digest CronWorkflow (ns agent-coordinator) has not delivered a report PR or a no-change record in over 7 days. Changes to the island rules files (the briefs and rules launchers hand sessions) are not reaching the operator's weekly read. Check: argo -n agent-coordinator cron get island-rules-digest and the newest island-rules-digest-* workflow; re-fire via: argo -n agent-coordinator submit --from cronworkflow/island-rules-digest. Brief: docs/agents/retros/ISLAND-RULES-BRIEF.md; change record: agents/island_rules.py changes."
         # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
         # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
         # new path that subtracts against a failed read).
@@ -760,3 +838,105 @@ spec:
           annotations:
             summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
             description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last. If that marker is MISSING, check `time() - process_start_time_seconds{job=\"prometheus-pushgateway\"}` before concluding anything: a gateway younger than the pod means its emptyDir store was destroyed with its last pod, so the markers for pods older than it are gone and this alert is deliberately degraded for them until they end (homelab#353)."
+    # ── agent-loop-kpi (homelab#3728): the loop's own numbers, each a 7-day series per project with a target ──
+    # rides_ended counts worker pods (agent-<project>-issue-<n>-r<round>) that reached Succeeded or Failed in the 7 d
+    # (the denominator of the first KPI). rides_unrecorded counts those with no agent_run_total series of the same
+    # project, issue and round; target at most 1 (the bar of AgentRunBudgetCapHits). issues_within_two_rounds is the
+    # share of issues with a worker run pushed in the 7 d that have at most two worker rounds; target at least 0.60.
+    # queued_within_4h is the share of issues that carried agent/queued in the 7 d for at most 48 five-minute steps
+    # (4 h); target at least 0.60. Sizing (read 2026-11-24T06:39Z): unrecorded homelab 0 of 57, oracle-fleet 0 of 23
+    # (the 14-day replay peaked at 4 on homelab); rounds share homelab 0.838, oracle-fleet 0.833 (replay: homelab
+    # under 0.60 in 139 of 276 steps); queue share homelab 0.907, oracle-fleet under the floor (replay: homelab under
+    # 0.60 in 84 of 277 steps). Floor: a share has no sample under 10 issues in the 7 d. Hold times: for 2h on the
+    # count (hourly group), 6h on the shares. triage: dig, not now — a 7-day number is slow by construction; acute
+    # cases are AgentRunInfraDeathBurst and AgentQueueStalled.
+    # What the series do not see: a round is a worker round (reviewer runs push no agent_run_total); the rounds share
+    # does not ask whether an issue is done; the rounds share has no sample at an hourly evaluation that lands on a
+    # Pushgateway roll (one scrape without agent_run_total) and its for: restarts, the unrecorded count is bridged
+    # by last_over_time(...[1h]) and the share is not; a ride is matched by project, issue and round, so a round
+    # dispatched twice shares one pod name and one record key; queue time is every 5 minutes an issue carries
+    # agent/queued whatever holds it, and an issue still queued and under 4 h counts as within target (the numerator
+    # checks how long it has carried agent/queued so far, <= 48 steps, not whether the label has gone) so the queue
+    # share reads optimistic for the trailing 4 h; and a failed exporter poll leaves those minutes uncounted; the exporter lists
+    # the first 50 open agent/* issues per repo, so a queued issue past that page is not counted.
+    - name: agent-loop-kpi
+      interval: 1h
+      rules:
+        - record: agent_loop:rides_ended:count_7d
+          expr: |
+            count by (project) (
+              count by (project, issue, round) (
+                label_replace(label_replace(label_replace(
+                  max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                  "project", "$1", "namespace", "(.+)"),
+                  "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                  "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+              )
+            )
+        - record: agent_loop:rides_unrecorded:count_7d
+          expr: |
+            count by (project) (
+                count by (project, issue, round) (
+                  label_replace(label_replace(label_replace(
+                    max_over_time(kube_pod_status_phase{pod=~"agent-.+-issue-[0-9]+-r[0-9]+",phase=~"Succeeded|Failed"}[7d]) > 0,
+                    "project", "$1", "namespace", "(.+)"),
+                    "issue", "$1", "pod", "agent-.+-issue-([0-9]+)-r[0-9]+"),
+                    "round", "$1", "pod", "agent-.+-issue-[0-9]+-r([0-9]+)")
+                )
+              unless on (project, issue, round)
+                last_over_time(agent_run_total[1h])
+            )
+            or
+            agent_loop:rides_ended:count_7d * 0
+        - record: agent_loop:issues_within_two_rounds:ratio_7d
+          expr: |
+            (
+                count by (project) (
+                    (count by (project, issue) (count by (project, issue, round) (last_over_time(agent_run_total{role="worker"}[1h]))) <= 2)
+                  and on (project, issue)
+                    (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)
+                )
+              or
+                count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) * 0
+            )
+            /
+            (count by (project) (count by (project, issue) (agent_run_total{role="worker"} and on (project, issue, role, round) (time() - push_time_seconds{job="agent_run"}) < 7 * 86400)) >= 10)
+        - record: agent_loop:queued_within_4h:ratio_7d
+          expr: |
+            (
+                count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)")) <= 48)
+              or
+                count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) * 0
+            )
+            /
+            (count by (project) (sum by (project, number) (label_replace(count_over_time(github_agent_issue{label="agent/queued"}[7d:5m]), "project", "$1", "repo", "(.+)"))) >= 10)
+        - alert: AgentRidesUnrecorded
+          expr: |
+            agent_loop:rides_unrecorded:count_7d > 1
+          for: 2h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: '{{ $value }} worker rides on {{ $labels.project }} ended in the last 7 days without a run record — above the KPI target (at most 1)'
+            description: 'agent_loop:rides_unrecorded:count_7d{project="{{ $labels.project }}"} is {{ $value }} (target: at most 1). A ride counts when its pod agent-<project>-issue-<n>-r<round> reached Succeeded or Failed in the 7 d and no agent_run_total series carries the same project, issue and round — the cost boards, the ledger and the retro never saw it. Check: (1) the expression of the record rule without its outer count names each issue and round; (2) the issue''s timeline comment for that round (a strike, a re-dispatch); (3) s3://agent-transcripts/<project>/issue-<n>/ for a worker-r<round>-* prefix — none means the pod died before its finalize step. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+        - alert: AgentLoopRoundsBelowTarget
+          expr: |
+            agent_loop:issues_within_two_rounds:ratio_7d < 0.6
+          for: 6h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'Less than 60 % of the issues {{ $labels.project }} worked in the last 7 days were done within two worker rounds — below the KPI target'
+            description: 'agent_loop:issues_within_two_rounds:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues with a worker run in the 7 d). A round after the first is a PR that came back: changes requested, or a red check. Check: (1) count by (issue) (agent_run_total{project="{{ $labels.project }}",role="worker"}) > 2 names the issues; (2) the reviews on their PRs name what came back; (3) the escape records of the island intake receipts for the same PRs. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'
+        - alert: AgentLoopQueueWaitBelowTarget
+          expr: |
+            agent_loop:queued_within_4h:ratio_7d < 0.6
+          for: 6h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'Less than 60 % of the issues queued on {{ $labels.project }} in the last 7 days left the queue within 4 hours — below the KPI target'
+            description: 'agent_loop:queued_within_4h:ratio_7d{project="{{ $labels.project }}"} is {{ $value | humanizePercentage }} (target: at least 60 %; at least 10 issues carried agent/queued in the 7 d). An issue counts as waiting for every 5 minutes it carries agent/queued, whatever holds it (the WIP cap, a footprint hold, a blockedBy edge). Check: (1) sum by (number) (count_over_time(github_agent_issue{repo="{{ $labels.project }}",label="agent/queued"}[7d:5m])) / 12 > 4 names the issues and their hours; (2) the scan report''s hold line for each; (3) AgentQueueStalled for a wedged dispatcher. The KPI and its target are named in docs/agents/observability-and-retro.md §Part D.'

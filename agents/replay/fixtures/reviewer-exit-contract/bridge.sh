@@ -22,6 +22,15 @@ if [ "${SILENT_DEDUP:-0}" = "1" ]; then
   echo "SILENT_DEDUP_ASIDE: checks-pending at 0c2be42f" > "$SILENT_DEDUP_RECORD"
 fi
 
+# The verdict-pin drop record (homelab#3444): same discipline — session-scoped, always cleared,
+# written only by a row that sets VERDICT_DROPPED (the line the reviewer-verdict-pin shim writes).
+VP_DROP_RECORD="${TMPDIR:-/tmp}/verdict_dropped.$$"
+export VP_DROP_RECORD
+rm -f "$VP_DROP_RECORD"
+if [ "${VERDICT_DROPPED:-0}" = "1" ]; then
+  echo "VERDICT_DROPPED: content moved past abc1234d before submit (APPROVE)" > "$VP_DROP_RECORD"
+fi
+
 gh() {
   {
     printf 'CALL gh'

@@ -1,0 +1,23 @@
+# CloudflaredTunnelDown — the PublicRoute tunnel-down record, lifted out of prometheusrule.yaml
+# (comments and annotations stripped; the manifest is their one home). Loaded by
+# tunnel-down.promtool-test. Not a manifest: named .promtool-rules so manifest-lint's kubeconform
+# pass over argocd/resources/*.yaml never sees it. Its own pair because promtool evaluates every
+# rule in a loaded file at every step, and these inputs (connector + kube-state series) have no
+# business beside the edge-poller fixtures.
+#
+# Drift-pinned by prometheus-rules-lint (expr + for). Re-copy after every expr edit:
+#
+#   devbox run -- yq -o=json '{"groups": [{"name": "cloudflared-tunnel", "rules": [.spec.groups[].rules[] | select(.alert == "CloudflaredTunnelDown") | del(.annotations)]}]}' argocd/resources/cloudflare-exporter/prometheusrule.yaml | devbox run -- yq -P '.'
+groups:
+  - name: cloudflared-tunnel
+    rules:
+      - alert: CloudflaredTunnelDown
+        expr: |
+          sum by (namespace, deployment) (label_replace(cloudflared_tunnel_ha_connections, "deployment", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]+")) == 0
+          or
+          (sum by (namespace, deployment) (kube_deployment_spec_replicas{deployment=~"pr-.+-cloudflared"}) > 0
+            unless on (namespace, deployment) label_replace(cloudflared_tunnel_ha_connections, "deployment", "$1", "pod", "(.+)-[a-z0-9]+-[a-z0-9]+"))
+        for: 2m
+        labels:
+          severity: warning
+          triage: dig

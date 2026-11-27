@@ -90,14 +90,16 @@ fp_goal_exempt() {
 
 # classify_touches <footprint> → prints "machine-merge" | "codeowner-merge" | "codeowner-author"
 # ONE machine-readable home for the platform lane path tables (docs/agents/iac-lane.md §The
-# platform lane). Sources: the ❌ operator-author set (iac-lane.md, collapsed from the second
-# copy that was inlined in fix-debounce-argo.yaml) and the repo-root CODEOWNERS (parsed at
-# runtime, never restated). Returns the HIGHEST classification across all paths in the footprint:
+# platform lane). Sources: the ❌ operator-author set (the `GOVERNANCE=` line of
+# scripts/governance-lint.sh — ONE list for the CI-time lint and this classifier) and the
+# repo-root CODEOWNERS (parsed at runtime, never restated). Returns the HIGHEST classification
+# across all paths in the footprint:
 #   machine-merge    — CI gate only (tier 1: argocd/resources/** and unowned paths)
 #   codeowner-merge  — agent may author, human merges (tier 2 + tier 3 CODEOWNERS-owned paths)
-#   codeowner-author — only codeowner may author (❌ set: .github/, .agents/, devbox.json|lock,
-#                      mgmt/scripts/ + the three box-executed scripts/ verbs — paths that take
-#                      effect BEFORE a human approves, or that the management box runs from master)
+#   codeowner-author — only codeowner may author (the ❌ set — paths that take effect BEFORE a
+#                      human approves, or that the management box runs from master; the set is
+#                      scripts/governance-lint.sh's `GOVERNANCE=` line, read at call time, never
+#                      restated here)
 # The ❌ set is HOMELAB's governance and applies only when CLASSIFY_PLATFORM_SET=1 (the default);
 # a caller linting ANOTHER repo's tree uses classify_touches_repo, which sets 0 and classifies
 # against that repo's CODEOWNERS (homelab#1897).
@@ -137,11 +139,31 @@ _co_classify() {
   if [ "$_owned" -eq 1 ]; then printf 'codeowner-merge'; else printf 'machine-merge'; fi
 }
 
+# _fp_operator_author_re → the ❌ operator-author set as an anchored ERE on stdout; rc 1 = unreadable.
+# THE SET HAS ONE HOME: the `GOVERNANCE=` line of scripts/governance-lint.sh (the CI-time
+# worker-lane lint; the scan's governance_paths() evals the same line). A worker PR touching it
+# is red in CI, so no worker can deliver it — which is exactly what `codeowner-author` means.
+# CLASSIFY_GOVERNANCE_LINT overrides the path (tests), the CLASSIFY_CODEOWNERS pattern.
+_fp_operator_author_re() {
+  local _gl="${CLASSIFY_GOVERNANCE_LINT:-$_FP_DIR/../scripts/governance-lint.sh}" _line GOVERNANCE=""
+  [ -r "$_gl" ] || return 1
+  _line="$(grep -m1 '^GOVERNANCE=' "$_gl" 2>/dev/null)" || return 1
+  eval "$_line" || return 1
+  [ -n "$GOVERNANCE" ] || return 1
+  printf '%s' "$GOVERNANCE"
+}
+
 classify_touches() (
   set -f
   local footprint="$1" path tier="machine-merge"
   local _co_file="${CLASSIFY_CODEOWNERS:-CODEOWNERS}"
-  local _entries _new_tier _platform_author
+  local _entries _new_tier _platform_author _oa_re="" _oa_ok=1
+  if [ "${CLASSIFY_PLATFORM_SET:-1}" = 1 ]; then
+    # Unreadable set = fail CLOSED (every path codeowner-author): an unknown ❌ set must hold
+    # work, never release it (the scan's rule #6). Loud on stderr so the cause is visible.
+    _oa_re="$(_fp_operator_author_re)" || _oa_ok=0
+    [ "$_oa_ok" = 1 ] || echo "classify_touches: operator-author set unreadable (no GOVERNANCE= line at ${CLASSIFY_GOVERNANCE_LINT:-$_FP_DIR/../scripts/governance-lint.sh}) — failing closed" >&2
+  fi
 
   # Tier rank: machine-merge=1, codeowner-merge=2, codeowner-author=3
   _tier_rank() {
@@ -160,15 +182,14 @@ classify_touches() (
     _new_tier="machine-merge"
 
     # ── ❌ operator-author set — NEVER agent-authored (HOMELAB's platform governance) ────────
-    # These paths take effect BEFORE a human approves (iac-lane.md §The platform lane):
-    #   .github/**       — PR runs its own workflow (arbitrary code on the runner)
-    #   .agents/**       — next round reads its recipe from the branch
-    #   devbox.json|lock — CI executes from the branch
-    #   mgmt/scripts/**  — the management box runs them from master (mgmt/, 2026-09-28)
-    #   the box verbs    — scripts/{node-maintenance,maintenance-window,controlplane-upgrade}.sh,
-    #                      also run by the box (mgmt-reconcile / mgmt_health)
-    # The rest of scripts/** LEFT this set on 2026-09-28 (ADR-142 trial): CI still executes it
-    # from the branch, but the gate is now the reviewer's gate-change lens + the gate-drift report.
+    # These paths take effect BEFORE a human approves (iac-lane.md §The platform lane): CI runs
+    # .github/, devbox.json|lock and policy/ from the PR branch, the next round reads .agents/
+    # from it, the management box runs mgmt/scripts/ + the box verbs from master. The list
+    # itself is scripts/governance-lint.sh's `GOVERNANCE=` line (_fp_operator_author_re) — read
+    # it there, or better, run this function; a prose or code copy is the drift this collapsed.
+    # (The rest of scripts/** is NOT in it — the ADR-142 trial, governance-lint.sh's header.)
+    # Each entry is tested as itself AND with a trailing `/`, so a bare directory entry
+    # (`.github`, `policy`) meets the set's `dir/` alternatives.
     #
     # ⚠ This set is HOMELAB's shape, not a universal one (homelab#1897): on a stack repo scripts/**
     # is the ordinary chassis lane and .agents/** is CODEOWNERS-gated but worker-proposed. So it is
@@ -177,12 +198,11 @@ classify_touches() (
     # slug via classify_touches_repo, so a stack's paths read as ITS CODEOWNERS says.
     _platform_author=0
     if [ "${CLASSIFY_PLATFORM_SET:-1}" = 1 ]; then
-      case "$path" in
-        .github/*|.github) _platform_author=1 ;;
-        .agents/*|.agents) _platform_author=1 ;;
-        devbox.json|devbox.lock) _platform_author=1 ;;
-        scripts/node-maintenance.sh|scripts/maintenance-window.sh|scripts/controlplane-upgrade.sh|mgmt/scripts/*|mgmt/scripts) _platform_author=1 ;;
-      esac
+      if [ "$_oa_ok" != 1 ]; then
+        _platform_author=1
+      elif grep -qE -- "$_oa_re" <<< "$path"$'\n'"$path/"; then
+        _platform_author=1
+      fi
     fi
     if [ "$_platform_author" = 1 ]; then
       _new_tier="codeowner-author"

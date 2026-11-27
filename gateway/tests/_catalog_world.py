@@ -1,7 +1,7 @@
 """The Go catalog's fake vendor (GW-CATALOG-GO; specs/worlds/README.md §The Go catalog's fakes).
 
 One in-process Starlette app answers the three reads the leg makes — models.dev's `api.json` (the
-catalog), the console's V2 config (the workspace overlay) and the vendor's Go page source — from
+catalog), the console's V2 config (the workspace overlay) and the vendor's Go page source and Go models list — from
 the fixtures in `tests/fixtures/go-catalog/` (`models-dev.json` + `config.json` trimmed from the
 live answers of 2026-10-20, `go.mdx` from 2026-10-17/20). Each read has its own behaviour knob
 (`catalog-*`, `config-*`, `docs-*`); the variants are derived from the fixture in memory, so the
@@ -29,6 +29,7 @@ from .conftest import (
     GO_CONFIG_URL,
     GO_DOCS_URL,
     GO_KEY,
+    GO_LIMITS_URL,
     POLICY_FIXTURE,
     SELF_URL,
     UPSTREAM_BASES,
@@ -43,7 +44,8 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "go-catalog"
 CATALOG_URL = GO_CATALOG_URL
 CONFIG_URL = GO_CONFIG_URL
 DOCS_URL = GO_DOCS_URL
-HOSTS = {httpx.URL(u).host: read for read, u in (("catalog", CATALOG_URL), ("config", CONFIG_URL), ("docs", DOCS_URL))}
+LIMITS_URL = GO_LIMITS_URL
+HOSTS = {httpx.URL(u).host: read for read, u in (("catalog", CATALOG_URL), ("config", CONFIG_URL), ("docs", DOCS_URL), ("limits", LIMITS_URL))}
 SHRUNK = ("deepseek-v4-pro", "deepseek-v4.1-flash")
 TRIMMED = ("claude-haiku-5-5", "deepseek-v4-pro", "deepseek-v4.1-flash")
 SHRUNK_NAMES = ("DeepSeek V4.1 Flash", "DeepSeek V4 Pro")
@@ -112,67 +114,87 @@ def config_doc(behaviour: str) -> dict:
     return doc
 
 
+LIMITS_FIVE = {"deepseek-v4.1-flash": (80, 160), "step-5-preview": (60, 240), "deepseek-v4-pro": (15, 60), "claude-haiku-5-5": (15, 60)}
+PEAK_INPUTS = {"deepseek-v4.1-flash": (0.15, 0.6, 0.003), "deepseek-v4-pro": (0.66, 1.98, 0.022)}
+PEAK_WHEN = {"when": {"utc_days": {"in": ["mon", "tue", "wed", "thu", "fri"]},
+                      "any": [{"all": [{"utc_hours": {"gte": "01:00"}}, {"utc_hours": {"lt": "04:00"}}]},
+                              {"all": [{"utc_hours": {"gte": "06:00"}}, {"utc_hours": {"lt": "10:00"}}]}]}, "factor": 2}
+NULL_ROW_ID = "longcat-2.5-preview-free"
+
+
+def limits_fixture() -> list[dict]:
+    """The `data[]` list of the recorded limits answer (fixtures/go-catalog/limits.json)."""
+    return json.loads((FIXTURES / "limits.json").read_text(encoding="utf-8"))
+
+
+def _limits_ok() -> list[dict]:
+    """`limits-ok`: five rows derived from the recorded fixture — its rows of the four ids it holds plus its
+    first `monthly_usage: null` row under `longcat-2.5-preview-free` (a stand-in with a non-null row when the
+    cut lacks one of the five ids), with the world's limits and the two DeepSeek rows' peak inputs written in."""
+    rows = {r["id"]: r for r in limits_fixture()}
+    first_limited = next(r for r in rows.values() if r["go"]["monthly_usage"] is not None)
+    first_null = next(r for r in rows.values() if r["go"]["monthly_usage"] is None)
+    out = []
+    for mid, (go, plus) in LIMITS_FIVE.items():
+        row = copy.deepcopy(rows.get(mid, first_limited))
+        row["id"] = mid
+        row["go"]["monthly_usage"] = {**(row["go"]["monthly_usage"] or {}), "go": go, "go-plus": plus}
+        row.setdefault("cost", {}).pop("multipliers", None)
+        if mid in PEAK_INPUTS:
+            i, o, cr = PEAK_INPUTS[mid]
+            row["cost"]["text"] = {"input": {"price": i, "cache": {"read": cr}}, "output": {"price": o}}
+            row["cost"]["multipliers"] = [copy.deepcopy(PEAK_WHEN)]
+        out.append(row)
+    null = copy.deepcopy(rows.get(NULL_ROW_ID, first_null))
+    null["id"] = NULL_ROW_ID
+    null["go"]["monthly_usage"] = None
+    out.append(null)
+    return out
+
+
+def limits_doc(behaviour: str) -> dict:
+    if behaviour == "limits-recorded":
+        return {"object": "list", "data": limits_fixture()}
+    if behaviour == "limits-no-data":
+        return {"object": "list"}
+    data = _limits_ok()
+    by = {r["id"]: r for r in data}
+    if behaviour in ("docs-retired",):
+        data = [r for r in data if r["id"] != "claude-haiku-5-5"]
+    elif behaviour == "limits-shrunk":
+        data = [r for r in data if r["id"] in SHRUNK]
+    elif behaviour == "limits-no-go-plus":
+        del by["deepseek-v4-pro"]["go"]["monthly_usage"]["go-plus"]
+    elif behaviour == "limits-odd-when":
+        by["deepseek-v4-pro"]["cost"]["multipliers"][0]["when"] = {"region": {"in": ["eu"]}}
+    elif behaviour == "limits-two-windows":
+        by["deepseek-v4-pro"]["cost"]["multipliers"][0]["when"]["any"][1]["all"][0]["utc_hours"]["gte"] = "07:00"
+    elif behaviour == "limits-no-peak":
+        for mid in SHRUNK:
+            del by[mid]["cost"]["multipliers"]
+    elif behaviour == "limits-dated":  # the shape the vendor's own gemini-4-argon row carries in the record of 2026-11-23
+        dated = copy.deepcopy(by["step-5-preview"])
+        dated["id"] = "gemini-4-argon"
+        dated["cost"]["multipliers"] = [{"when": {"date": {"gte": "2026-12-01"}}, "factor": 2}]
+        data.append(dated)
+    return {"object": "list", "data": data}
+
+
 def docs_text(behaviour: str) -> str:
     text = (FIXTURES / "go.mdx").read_text(encoding="utf-8")
     lines = text.splitlines()
-    if behaviour == "docs-promo":  # #2933 case (a): the live page's PROMOTION spelling on Gemini
-        # 4 Argon — a trailing ` (50% off)` on a plan-row name the Endpoints table has; the plan
-        # cells and the limits are the live rows of 2026-10-25, laid into the fixture's tables
-        def promo_row(limit: str) -> str:
-            return (f"| Gemini 4 Argon (50% off)   | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10 "
-                    f"| -            | {limit} |")
-        for plan_tab, limit in (("go", "**$30**"), ("go-plus", "**$120**")):
-            i = next(n for n, line in enumerate(lines) if _slot_holds(lines, n, plan_tab)
-                     and line.lstrip().startswith("| Claude Haiku 5.5 (> 100K tokens)"))
-            lines.insert(i + 1, promo_row(limit))
-        i = next(n for n, line in enumerate(lines) if line.lstrip().startswith("| Step 5 Preview")
-                 and "opencode.ai/inference" in line)  # the Endpoints table's last row
-        lines.insert(i + 1, "| Gemini 4 Argon             | gemini-4-argon          "
-                            "| `https://opencode.ai/inference/go/google/v1beta/models/gemini-4-argon` "
-                            "| `@ai-sdk/google`         |")
-    elif behaviour == "docs-teams":  # #3011: the vendor's new Go Teams row in the Plan table
-        # (under Go Plus, verbatim as the live page of 2026-10-28 carries it — the live read's
-        # parse error reads `Plan row ['**Go Teams**', '**$20/member/month**', …]`) — a plan this
-        # leg does not model: passed over with one log line, not a parse failure
-        i = next(n for n, line in enumerate(lines) if line.lstrip().startswith("| **Go Plus**"))
-        lines.insert(i + 1, "| **Go Teams** | **$20/member/month** | Every member gets their own Go limits, plus $5/month on every model |")
-    elif behaviour == "docs-no-go-plus":  # the Plan table without its Go Plus row — the fees
+    if behaviour == "docs-no-go-plus":  # the Plan table without its Go Plus row — the fees
         # cannot price both plans: a whole-source parse failure (the no-table knob's sibling)
         lines = [line for line in lines if _first_cell(line) != "**Go Plus**"]
-    elif behaviour == "docs-unknown-model":
-        i = next(n for n, line in enumerate(lines) if "DeepSeek V4.1 Flash (Off-Peak)" in line)
-        lines.insert(i, lines[i].replace("DeepSeek V4.1 Flash (Off-Peak)", "DeepSeek V4.2 Flash            "))
-    elif behaviour == "docs-short-endpoint-row":
-        i = next(n for n, line in enumerate(lines) if line.startswith("| Step 5 Preview ") and "step-5-preview" in line)
-        lines[i] = "| Step 5 Preview |"
-    elif behaviour == "docs-header-drift":
-        lines = [line.replace("| Monthly limit ", "| Limit         ") for line in lines]
-    elif behaviour == "docs-no-peak-hours":
-        lines = [line for line in lines if "Peak hours are" not in line]
-    elif behaviour == "docs-no-shares":
-        lines = [line for line in lines if not line.startswith(("Each model has the following usage limits", "weekly — 50%"))]
-    elif behaviour == "docs-retired":  # the page drops claude-haiku-5-5's plan rows (the console still lists it)
-        lines = [line for line in lines if not line.lstrip().startswith("| Claude Haiku 5.5 (")]
+    elif behaviour == "docs-no-shares":  # the page without its two share bullets
+        lines = [line for line in lines if not line.startswith(("- The **5-hour limit**", "- The **weekly limit**"))]
     elif behaviour == "docs-no-plan-table":  # the page without its Plan | Price table (the fee's home)
-        lines = _drop_orphan_rules([line for line in lines if _first_cell(line) not in ("Plan", "**Go**", "**Go Plus**")])
-    elif behaviour == "docs-shrunk":
-        def keep(line: str) -> bool:
-            cell = line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None
-            return (cell is None or cell in ("Model", "Plan", "**Go**", "**Go Plus**") or cell.startswith("-")
-                    or any(cell.startswith(n) for n in SHRUNK_NAMES))
-        lines = [line for line in lines if keep(line)]
+        lines = _drop_orphan_rules([line for line in lines if _first_cell(line) not in ("Plan", "**Go**", "**Go Plus**", "**Go Teams**")])
     return "\n".join(lines) + "\n"
 
 
 def _first_cell(line: str) -> str | None:
     return line.strip().strip("|").split("|")[0].strip() if line.lstrip().startswith("|") else None
-
-
-def _slot_holds(lines: list[str], n: int, slot: str) -> bool:
-    """Is lines[n] inside `<div slot="…">…</div>`? (the promo derivation inserts per tab)."""
-    lo = next(i for i, line in enumerate(lines) if f'<div slot="{slot}">' in line)
-    hi = next(i for i, line in enumerate(lines[lo + 1:], lo + 1) if line.lstrip().startswith("</div>"))
-    return lo < n < hi
 
 
 def _drop_orphan_rules(lines: list[str]) -> list[str]:
@@ -190,11 +212,13 @@ class FakeVendor:
         self.catalog = "catalog-ok"
         self.config = "config-ok"
         self.docs = "docs-ok"
+        self.limits = "limits-ok"
         self.calls: list[dict] = []
         self.app = Starlette(routes=[
             Route("/api.json", self._catalog, methods=["GET"]),
             Route("/console/api/v2/config", self._config, methods=["GET"]),
             Route("/anomalyco/opencode/dev/go.mdx", self._docs, methods=["GET"]),
+            Route("/inference/go/v1/models", self._limits, methods=["GET"]),
         ])
 
     def _reply(self, request: Request, behaviour: str, response: Response) -> Response:
@@ -219,13 +243,21 @@ class FakeVendor:
             return self._reply(request, b, JSONResponse({"error": "unavailable"}, status_code=503))
         if b == "config-401-echo":
             return self._reply(request, b, JSONResponse({"error": f"invalid key {GO_KEY}"}, status_code=401))
+        if b == "config-200-echo":
+            return self._reply(request, b, JSONResponse({"note": f"key {GO_KEY}"}))
         return self._reply(request, b, JSONResponse(config_doc(b)))
 
     async def _docs(self, request: Request) -> Response:
         b = self.docs
         if b == "docs-404":
             return self._reply(request, b, PlainTextResponse("404: Not Found", status_code=404))
-        return self._reply(request, b, PlainTextResponse(docs_text(b), media_type="text/plain"))
+        return self._reply(request, b, PlainTextResponse(docs_text("docs-ok" if b == "docs-retired" else b), media_type="text/plain"))
+
+    async def _limits(self, request: Request) -> Response:
+        b = "docs-retired" if self.docs == "docs-retired" else self.limits  # `docs-retired` = limits-ok without haiku's row
+        if b == "limits-503":
+            return self._reply(request, b, JSONResponse({"error": "unavailable"}, status_code=503))
+        return self._reply(request, b, JSONResponse(limits_doc(b)))
 
 
 def _redacted(h: dict) -> dict:
@@ -239,11 +271,13 @@ class VendorTransport(httpx.AsyncBaseTransport):
     def __init__(self, vendor: FakeVendor, rails: RailTransport):
         self.vendor = httpx.ASGITransport(app=vendor.app)
         self.rails = rails
-        self.down: set[str] = set()  # `catalog-down` / `config-down` / `docs-down`: a connect failure on that read
+        self.attempts: dict[str, int] = {}
+        self.down: set[str] = set()  # `catalog-down` / `config-down` / `docs-down` / `limits-down`: a connect failure on that read
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         read = HOSTS.get(request.url.host)
         if read is not None:
+            self.attempts[read] = self.attempts.get(read, 0) + 1  # an answered request and a refused connection each count one
             if read in self.down:
                 raise httpx.ConnectError(f"{read} vendor unreachable (fake)", request=request)
             return await self.vendor.handle_async_request(request)
@@ -254,7 +288,7 @@ def catalog_settings(db_path: str, key: str | None = GO_KEY) -> Settings:
     env = {"GATEWAY_POLICY": str(POLICY_FIXTURE), "GATEWAY_DB": db_path, "GATEWAY_SELF_URL": SELF_URL,
            "ANTHROPIC_UPSTREAM": UPSTREAM_BASES["anthropic"], "OPENROUTER_UPSTREAM": UPSTREAM_BASES["openrouter"],
            "OPENCODE_GO_UPSTREAM": UPSTREAM_BASES["opencode"], "GATEWAY_GO_CATALOG_URL": CATALOG_URL,
-           "GATEWAY_GO_CONFIG_URL": CONFIG_URL, "GATEWAY_GO_DOCS_URL": DOCS_URL}
+           "GATEWAY_GO_CONFIG_URL": CONFIG_URL, "GATEWAY_GO_DOCS_URL": DOCS_URL, "GATEWAY_GO_LIMITS_URL": LIMITS_URL}
     if key:
         env["OPENCODE_GO_API_KEY"] = key
     return Settings.from_env(env)

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "issues/create-comment 403 — extracted from github/rest-api-description@c9c95fe34ced05fe076001f5c55704742bc8e7f8 descriptions-next/api.github.com/api.github.com.2022-11-28.json",
+  "$ref": "#/$defs/basic-error",
+  "$defs": {
+    "basic-error": {
+      "title": "Basic Error",
+      "description": "Basic Error",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "documentation_url": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

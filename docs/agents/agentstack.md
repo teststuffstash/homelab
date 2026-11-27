@@ -139,8 +139,35 @@ The Composition renders nothing for it; two consumers read it:
   without the field (and for cluster-less runs). The `specs-review` SA holds `agentstacks`
   get/list for this one read ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
 
+**Island intake for a stack repo: `repos[].intake: {facts}`.** Present = the daily
+[island intake](../../islands/intake/README.md#stack-islands) run holds a sitting for the repo as the island `<stack>/<repo>`,
+ruled by the platform's rules and the facts file at that repo-relative path; absent = off. The Composition
+renders the stack's READ path to those sittings: a per-repo Garage bucket `intake-transcripts-<repo>` (2Gi) with
+a write-only key whose Secret stays in `agent-coordinator` (the sitting leaf loads it) and a read-only key,
+copied into its own Secret first and only that one mirrored into ns `<repo>` as `intake-transcripts-s3`,
+through ClusterSecretStores whose `conditions` admit one namespace each (no store a stack can use reads the
+writer's Secret). Per-repo because Garage grants are per bucket — the canonical `agent-transcripts` reader would
+open every stack's transcripts.
+
+**Further roots in one repo: `repos[].extraSpecs: [{root, tests?}]`.** A monorepo of islands
+has several spec roots; `specs` stays the primary one (the worker mount, the pin, and the repo's
+evidence bucket all belong to it), and each further root is listed here — homelab lists
+`islands/{scan,launch,retro}/specs` beside the gateway's. Two consumers read it. The specs reviewer
+(`pack_root_pairs` → `touched_pairs`): a PR touching a listed root gets a context pack over THAT
+root and a real rows review instead of the mechanical approval; a PR touching several roots gets
+one pass per root (one per tick, each held as a `SPECS ROOT REVIEW` comment) and ONE verdict,
+CHANGES_REQUESTED when any root's is. `tests` is optional and has no default: a root without one
+is reached through its spec pages alone, and its pack carries no evidence (no publisher exists
+for an extra root yet), so unproven rows need the evidence brief's `🚧 WIP → #<issue>` or
+`⚑ gap` index mark. The worker launcher (same `REPLAY:specs-process-volume` clause): when the
+primary pair is not reached and the footprint reaches a listed root, the ride gets the same
+read-only mount, pinned from THAT root's `README.md` (its `RULES.md @ v<version>` link, the
+`gateway/specs/README.md` §Rules shape); a README with no parseable link falls back to the primary
+pin file, said on stderr. The primary pair wins a footprint that reaches both (one mount per ride).
+
 Replay: `agents/replay/fixtures/specs-process/` (reached / not reached / field absent / pin
-unresolvable). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
+unresolvable / single pair; `extra-*`: an island root reached, its README unpinned, not reached,
+reached beside the primary). Usage shape in the in-cluster doc ConfigMap (§The spec process rides with the
 worker).
 
 ## The MCP knob (`spec.mcp`, #1039)

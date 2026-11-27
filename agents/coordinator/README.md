@@ -795,7 +795,7 @@ it (§Authoring an issue body above — the gate is not optional):
 
 - **Each child is `adopted` at authoring** (ADR-122 (4)) — the authoring moment IS the ruling, so
   write the row in the same act:
-  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n> adopted
+  `python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <child-n | repo#n> adopted
   --by checkpoint`. One line per child; the store is one machine comment on the GOAL. Skip it and
   the children read `undispositioned`, which wakes a checkpoint to re-rule what you just decided.
 
@@ -832,6 +832,17 @@ WAKES this clause and never blocks it — an undispositioned member does not cou
 completion predicate, so (b) can fire in the same tick (#1315 held G-G's assembly ~10.5h under
 the old predicate, which counted every open member).
 
+Trigger (b) rides **once per assembly PR**. Its job is to get the assembly PR opened; while an
+OPEN `goal/**`-head PR carries this goal's `Assembly-for: #<goal>` trailer the scan holds (b)
+(the `state-fp:goal-checkpoint-b` hold, which hashes the PR's number and nothing else) and
+releases it only when that PR closes or is replaced by another. Nothing that happens ON the PR
+re-summons you through (b) — not a bot approval, a push, or a check result: a
+`CHANGES_REQUESTED` arrives as `trigger=assembly-cr` (below), a settled red check on an
+assembly that changes only machine-merged paths arrives as `trigger=assembly-ci-red` (below; on
+any other assembly a red check stays on the scan's report surface, in front of the codeowner the
+PR is waiting on), and the rest is the human's the PR is waiting on. Triggers (a), (c) and (e) are
+not held.
+
 **FIRST, dispose the MEMBERS** (ADR-122 (4) — this is what retires trigger (c); an
 undispositioned member wakes this clause once per member SET — the `state-fp:goal-checkpoint-c`
 hold, homelab#2565: a ride that rules nothing buys no second ride until a member is ruled, added or
@@ -847,7 +858,7 @@ descendants and rule each one that has no row yet — exactly one of:
   later. `deferred` is not a close and not a rejection — it is "not this goal".
 
 Write each ruling with
-`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n>
+`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <member-n | repo#n>
 adopted|deferred --by checkpoint`. The store is ONE machine comment on the GOAL
 (`<!-- epic-dispositions v1 -->`), edited in place — never a label on the member, never a
 comment per ruling. A member carrying an `agent/*` lifecycle label already reads as adopted, so
@@ -923,7 +934,7 @@ with the commands written out:
    /tmp/m.final.md` → `python3 /work/homelab/agents/issue_body.py json < /tmp/m.final.md` (the
    gate) → `gh issue edit <member-n> --repo <slug> --body-file /tmp/m.final.md`.
 6. **Write the disposition on the GOAL's store**: the theme is `adopted --by checkpoint`
-   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n>
+   (`python3 /work/homelab/agents/epic_dispositions.py set <owner/repo> <goal-n> <theme-n | repo#n>
    adopted --by checkpoint`); the members keep their existing rows — re-parenting moves nothing
    in the store, and a member that had no row was ruled in the FIRST step above.
 7. **Queue the members that are not yet queued** (`agent-fix` + `agent/queued`) under the
@@ -1063,6 +1074,29 @@ Rule exactly one of:
   `Assembly-for: #<n>` trailer) receives a `CHANGES_REQUESTED` verdict. The checkpoint session
   reads this trigger and routes the work as a NEW child on the goal, exactly per the rule above
   — the same decompose rules apply (`Base: goal/**`, narrowed `Touches:`, one deliverable).
+  **`trigger=assembly-ci-red`:** the scan's ci-red clause emits a `goal-checkpoint` unit when an
+  assembly PR has a check that SETTLED red and every file it changes classifies `machine-merge`
+  (`classify_touches`, agents/footprint.sh) — no codeowner is waiting on that PR and no fix round
+  can push to its head, so you are its only mover. You are here by this trigger when the goal's
+  open assembly PR carries a `state-fp:assembly-ci-red:` marker the scan wrote at this dispatch.
+  Re-read the PR's checks first (`gh pr view <pr> --json statusCheckRollup`): green or in flight
+  → the red already moved; say so on the goal and mint nothing. Otherwise read the failing run
+  (`gh run view <run-id> --json jobs,attempt`, `gh run view <run-id> --log-failed`) and rule
+  exactly one of:
+  - **Environmental, and the failing run is still attempt 1** (the §ci-red test: a transient
+    network/vendor blip or infra cold-start, the diff demonstrably not implicated) →
+    `gh run rerun <run-id> --failed`, ONCE, with the diagnosis and its `ci-cause:` line (§ci-cause)
+    in a comment on the assembly PR. Mint nothing: a re-run that goes green leaves nothing behind,
+    and one that settles red again is a new state the scan summons you for.
+  - **Anything else — the diff's own red, or a red on attempt ≥ 2** → ONE new child on the goal,
+    by the rule above (native sub-issue, `Base: goal/<n>-<slug>`, narrowed `Touches:`,
+    `agent/queued`). Its deliverable is that check green on the goal branch: name the assembly PR,
+    the failing `<job>/<step>` and the first failing lines of the log, and make the child's first
+    acceptance line the reproduction — the named check, run on the current goal head. **Never a
+    second child for the same red**: if an open child of this goal already owns this check on this
+    assembly PR, add what is new as a comment there and mint nothing.
+  A child of this kind that is still open once the assembly PR's check is green has its
+  acceptance met: close it with the green run linked, on whichever ride sees it first.
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
@@ -1115,9 +1149,10 @@ Read the diff + the whole review thread, then rule — exactly one of:
 > fix round, it MUST begin with a line-anchored `ARBITRATE` word (e.g., `ARBITRATE: re-run
 > with the fix below` or `ARBITRATE (context): ...`) — never a bare heading or substring that
 > merely discusses arbitration. The marker may be followed by an optional `(<context>)` and a
-> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher searches
-> both the issue comments AND the PR's conversation comments for this marker; a comment without
-> it is invisible to the worker. The directive may be posted on **either** surface. The marker is
+> colon, but the first word must be `ARBITRATE` at line start. The fix round's launcher takes the
+> **newest** marked comment over the issue comments AND the PR's conversation comments together; a
+> comment without it is invisible to the worker. The directive may be posted on **either** surface
+> — no surface takes precedence, a newer ruling anywhere supersedes an older one. The marker is
 > a **documented contract**, not implicit — always begin your arbitration ruling with it.
 
 - **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
@@ -1364,6 +1399,18 @@ handed out every tick. Same rule as above: the marker is machine-written, never 
 If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
 finding is the terminal ride (pod, launcher, budget), not another fix round.
 
+**Every ci-red ride ends in a play that moves the PR or holds it.** The debounce above holds only
+once a round has completed: while no round has posted stats since the scan's marker, the gate
+re-arms on every tick (FU-199, below). So a ruling that dispatches no round and re-runs nothing
+must park — `agent/blocked`, the reason, and a `blocked-on:` marker line in the same comment
+(§Blocked-on marker below) — or the same red is handed to a new ride every tick.
+There is no wait play: a red that a date would clear is still a red the diff can fix. A
+`lock-intake-lint` red of the form `too new <package>@<version>` on a lock file the PR itself adds
+or re-resolves is **content**: re-dispatch a fix round that sets the resolver's age cutoff in the
+project file and re-locks, without pinning a version — for a uv project the `[tool.uv]` block
+`gateway/pyproject.toml` carries (`exclude-newer = "<a date at least 7 days back>"`). That is
+ADR-143 (1)'s own mechanism applied at lock time, not the override ADR-143 (3) forbids.
+
 > **FU-199 (2026-09-03): two blind spots closed.** The state-fp debounce had two silent stalls
 > that the board could not see:
 > 1. **Arbitrate no-op-after-directive** — a completed no-op round (stats posted, HEAD unchanged)
@@ -1453,14 +1500,23 @@ issue.
 | producer | the **worker**, via its repo's `.agents/fix.yaml` | ONE issue comment whose first characters are exactly `AGENT_INFEASIBLE: <path or resource>`, then END the run **without pushing** |
 | consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
 
-Three properties are load-bearing, and each is pinned by
-`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail):
+Four properties are load-bearing, and each is pinned by
+`agents/replay/fixtures/c4c5-infeasible` (rows parks, quoted-inert, probe-fail, and the four
+`marker-*` rows):
 
 - **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
   issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the
   string, and a human quoting a past exit writes `> AGENT_INFEASIBLE: …`. This is the fix-debounce
   lane's `alert-fp:` lesson (homelab#244) one lane over.
-- **The marker alone suppresses the redispatch**, whether or not the label write lands. A
+- **A marker counts only for the ride that posted it** — the marker comment must be newer than the
+  issue's newest dispatch stamp (the `<!-- agent-event kind=dispatch ts=… -->` line step 2's
+  `machine-comment.sh event --kind dispatch` appends to the summary comment). An earlier ride's
+  marker is history: once the issue is re-queued and dispatched again it rides, and only a marker
+  the NEW ride posts parks it. Without this the terminal was a latch with no release — the park
+  comment says "then remove `agent/blocked` and re-queue", and the scan re-parked the re-dispatched
+  issue on the old marker (homelab#3301/#3306). A thread with no dispatch stamp has no anchor, so
+  its newest marker counts. This is why step 2's stamp is not optional bookkeeping.
+- **A current marker alone suppresses the redispatch**, whether or not the label write lands. A
   failed/half-applied write reports loudly and the issue *still* leaves the unit list: re-riding a
   task a worker already proved impossible spends a paid session to re-derive a known answer, which
   is strictly worse than a report line. An **unreadable** comments probe is the other way round —
@@ -1472,8 +1528,9 @@ Three properties are load-bearing, and each is pinned by
 
 **What YOU do with one.** Nothing automatic — that is the point. The issue sits `agent/blocked` with
 the resource named on the thread. Either re-scope it so the deliverable is inside a fix-class
-worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
-it unchanged reaches the same verdict** — and unlike a strike, this one is free.
+worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue — nothing
+else to type or edit, the next dispatch's stamp is what retires the old marker. **Re-queueing it
+unchanged reaches the same verdict**, at the price of one more ride to re-derive it.
 
 > ⚠ **The producer half is per-repo — installed everywhere** (homelab `566fe38` 2026-08-11;
 > oracle-fleet, sleep-tracking, circles, snore-recorder verified 2026-10-14). A NEW stack repo
@@ -1767,8 +1824,8 @@ The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
 (`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) +
 `agents/coordinator/kustomization.yaml` `newTag` (every in-cluster manifest, ArgoCD-synced); the
-repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The ghcr package
-is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
+repo's `build-image.yaml` `deploy-pin` job opens the homelab bump PR (FU-051). The image lives on
+`registry.teststuff.net` (LAN-only, anonymous pull), never on ghcr: it carries the Claude Code binary. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 
 ## Logs & behaviour analysis
@@ -1794,8 +1851,9 @@ labels) + **`pull_requests:write`** + **`contents`** (merge). It is minted from 
 `homelab-agents` GitHub App as the worker token (ESO generator, [`git-token.yaml`](git-token.yaml),
 ~1h) — no hand PAT; the App private key in Infisical is the only long-lived secret.
 
-The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
-(`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
+The **image-build CI** pushes to `registry.teststuff.net` with the `REGISTRY_PUSH_TOKEN` repo secret (a
+copy of the registry's push credential — `scripts/github-secrets-sync.sh`). The only *new* credential the
+coordinator adds at runtime is `coordinator-git`.
 
 ## Blocked-on marker — terminal rulings record what they wait on (homelab#1188)
 
@@ -1865,6 +1923,8 @@ A ci-red terminal ruling (rounds exhausted, escalated to arbitrate) that identif
 blocker should write a `blocked-on:` marker. The scan's ci-red clause checks for this marker
 before dispatching a fix round: if the marker is present and the blocker is still unresolved,
 the clause emits a report line instead of a unit.
+The same holds for any ci-red ruling that dispatches no round and re-runs nothing: it carries the
+marker in the ruling comment itself (the `ci-red` clause above says why).
 
 ### §changes-requested — when to write it
 

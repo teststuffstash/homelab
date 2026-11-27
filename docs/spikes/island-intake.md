@@ -5,6 +5,7 @@ adding the `agent/queued` label … right now I am the blocker in queueing issue
 **a brief + a selector built and run twice against the live pile (dry-run, then apply); no
 decision taken here** — the wiring was RULED and BUILT 2026-10-28 (its own CronWorkflow, dig
 source first — §Open questions 1, #3004) and the issue pile joined it 2026-11-11 (§Run 3, ADR-163);
+a review before queueing and the escape read joined the brief 2026-11-14 (§Run 4);
 the remaining rulings in §Open questions are the operator's; tracked by FU-320. Relates: [`context-and-autonomy.md`](context-and-autonomy.md) §The plan **P6**
 (machine admission for `agent-fix` filings — "safe once the lens is the gate") and §C7 (islands),
 ADR-139 (the island), ADR-155/156 (the specs reviewer — the lens that makes P6 safe here),
@@ -23,7 +24,7 @@ it lacks, or a close with evidence — well enough that the operator reads PRs i
 
 ## What was built
 
-- **The brief** — [`gateway/intake.md`](../../gateway/intake.md): seven outcomes (`queue`, `goal`,
+- **The brief** — [`gateway/intake.md`](../../islands/intake/rules/intake.md): seven outcomes (`queue`, `goal`,
   `seat`, `fold`, `close`, `standing`, `file`), a five-step procedure (still real? → already
   owned? → needs a human fact? → how big? → worth a ride now?), a queue-ready body shape that
   carries the KEY ROWS (pinned rule 2: "an issue carries a handful of key rows … the implementing
@@ -112,7 +113,7 @@ memory; homelab#3166, a retro report): both cite `argocd/resources/pushgateway/�
 `gateway/`.
 
 What changed: the age-aware ownership rule (ADR-163), the `reread:` input with procedure step R
-and the `requeue` outcome, a wider live read set (in the [brief](../../gateway/intake.md)); the
+and the `requeue` outcome, a wider live read set (in the [brief](../../islands/intake/rules/intake.md)); the
 selector's `--source pile` and a dig match on the island's alerts and evidence paths; the cron
 running both sources in one sitting (§Open questions 1).
 
@@ -156,6 +157,57 @@ re-cut; the ServiceAccounts in the listed bind namespaces (#2684's trigger); whe
 egress blocks npm (#2650); `GET /sessions?task=` answers a non-judge caller only its own
 sessions, so the ride record is the read that works; §Island facts' pinned-process version had
 drifted from `gateway/specs/README.md`.
+
+## Run 4 — 2026-11-14: the review trial
+
+**Question:** would a review of the bodies intake writes, before they are queued, have caught what
+the worker PRs' reviewers later found? **Truth:** six gateway worker PRs built from intake bodies
+(#3260, #3264, #3324, #3327, #3336, #3337) plus a held-out stack Goal (private repo, not
+committed here); each blocking review finding classed A–E by the brief that is now
+[`gateway/intake-escape.md`](../../islands/intake/rules/intake-escape.md). **Method:** each Goal or single was
+frozen as a case (bodies, human comments, edges, base sha); two lenses ran on each, as fresh
+sessions with no view of the PRs — a unit review (cross-issue, against the base) and the pinned
+specs reviewer's `rows.md` mapped onto the issue body with its masked first pass. Two brief
+iterations (v0, v1) and one cross-model run, each finding scored against what merged
+(real-fixed / real-landed / moot / refuted / open). Fixtures:
+[`island-intake-fixtures/`](island-intake-fixtures/) — `cases/<case>/` (the gateway cases),
+`truth/pr-*.md`, `score-v1/*.md`.
+
+**Numbers.**
+- 14 of 31 gateway PR findings were intake escapes (A/B/C); 12 of 13 change-request rounds came
+  from the specs reviewer. Intake is clean where it COPIES rows and defective where it AUTHORS
+  tables.
+- v1: the rows lens blocked on 10 of 26 known defects (7 of 12 on the untuned holdout); the unit
+  lens found 13 real blockers with 1 wrong, mostly cross-issue defects the rows lens cannot see.
+  The two lenses agree at blocking posture on 3 of 50 distinct findings — complements, not
+  duplicates. Wrong-block share of decided findings 31% (v0) → 24% (v1); the controls (#3011,
+  #2782, #2753 — zero review rounds) drew changes on 0/3 (unit) and 1/3 (rows).
+- Agreement is not a gate: the same brief run twice agrees on about half its findings; findings
+  both runs raise are 80% precise against 61% for one run, but a "≥ 2 runs" gate halves recall on
+  the truth set (6/26 against 14/26). Hence one review, one repair, no loop.
+- A second vendor added no real defect the strong model missed (#3118: posture only; holdout:
+  3/12 against 5/12).
+- Hand-tuned rule lists lost to a 36-line brief; the final lenses are that brief and `rows.md`
+  unchanged plus an input mapping.
+
+**Decided (operator, 2026-11-14).** Review live, platform first:
+[`gateway/intake.md`](../../islands/intake/rules/intake.md) §Review and repair — two lenses once each
+([unit](../../islands/intake/rules/intake-review-unit.md), [rows](../../islands/intake/rules/intake-review-rows.md)), one
+author repair pass answering every finding by id, queue regardless, unresolved findings and
+advisories posted for the worker (the trial's one landed defect was an advisory nobody carried:
+#3180's `health.md:8`). One strong model, no agreement gate. Each island runs its own ESCAPE READ
+(step E): the PRs of issues it queued that drew changes, one record per finding, a class seen
+twice filed against the brief or the facts file; the frozen cases are the regression set. Two
+authoring rules the trial earned joined §A queue-ready body (quote before you author; an
+exception names the universal it breaks — #3302's allowlist contradicted a sibling's universal).
+
+**Open.**
+- Not catchable at intake: on a goal-branch PR `Fixes #N` does not link, so the PR specs reviewer
+  never gets the issue's rows (5 of 5 PRs); old spec debt a shared-file edit pulls in; late
+  findings (FU-291).
+- The lenses' first live runs are unscored: the escape read is how they get scored.
+- Whether a lens brief should change on its own escape records, or only by a seat-run re-score on
+  the fixtures, is unruled.
 
 ## Reading
 
@@ -205,6 +257,12 @@ drifted from `gateway/specs/README.md`.
    **An operator text that answers a parked question is the ruling, lean or not (operator,
    same day):** #3231 came back `seat` after three operator statements because "leaning towards
    runtime" was read as too weak to reverse recorded rulings.
+   **A recorded ruling is not a pending one (same day):** #3145 sat `seat` twice asking for a
+   ruling to "replace" the codex candidate rule, which GW-MODEL-TIERS already records and which
+   was executable given a catalog view and an entry canary — the sitting filed both (#3296,
+   #3310) once told so. **The loop may launch an entry canary itself, one ride per rail per
+   refresh (operator, same day: "2. yes")** — before it, #3310 could build the codex gate but a
+   new id still needed a jail-launched ride in an operator window.
 3. **Human-filed issues — RULED 2026-11-11 (ADR-163):** intake may close, fold and rewrite
    issues under the operator's login, weighted by age; any other human's issue stays `seat`. The
    rule is the brief's (§Hard limits).

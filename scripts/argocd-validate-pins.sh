@@ -6,6 +6,8 @@
 # only fails at sync. Mirrors sleep-iac/scripts/ci.sh. Needs helm + yq (both in homelab's devbox.json).
 # Second leg (bottom): version-set pairs declared by the `homelab.teststuff.net/app-version-of`
 # annotation must pin charts that ship ONE appVersion (gap G16).
+# Third leg (last): the one chart VENDORED in this repo (argocd/charts/garage) — rendered with its
+# Application's values, every local patch asserted in the output (scripts/vendor-garage-chart.sh --verify).
 #
 #   devbox run argocd-validate-pins
 set -euo pipefail
@@ -90,3 +92,6 @@ while IFS=$'\t' read -r f partner repo chart ver; do
 done < <(printf '%s\n' "$helm_srcs" | jq -r 'select(.of != null) | .of as $o | .f as $f | .src[] | [$f, $o, .repoURL, .chart, .targetRevision] | @tsv')
 [ "$sets" -gt 0 ] || { echo "   ✗ no app-version-of annotation found — the version-set leg asserted nothing"; exit 1; }
 echo "✓ argocd-validate-pins: ${sets} version-set pair(s) ship one appVersion"
+
+# --- the vendored chart: built from a pin + local patches; prove the patches are in what ArgoCD renders ---
+bash scripts/vendor-garage-chart.sh --verify

@@ -1,0 +1,172 @@
+# kargo-prod-diagnose — an alert STARTS a stack's fixed WorkflowTemplate, with no session between
+# (oracle-iac#1192; oracle-fleet#1094 rulings). KargoProdVerificationFailed (oracle-iac
+# prometheusrule-kargo.yaml) → Alertmanager receiver `kargo-prod-diagnose`
+# (argocd/platform/values/kube-prometheus-stack.yaml) → the agent-loop EventSource's
+# /kargo-prod-failed (review-argo.yaml) → this Sensor → a Workflow in oracle-fleet that is nothing
+# but a reference to WorkflowTemplate `prod-diagnose`: no argument, no step of its own. The
+# template, its ServiceAccount and every decision it makes are the oracle stack's (oracle-iac);
+# its Kargo/Loki grants are platform-owned (argocd/resources/kargo/rbac-namespaced.yaml
+# `platform-prod-diagnose`, argocd/resources/loki/loki-tenant-grants.yaml). The responder triages
+# the same alert on /alert and reads the finished record.
+#
+# Why a reference and nothing else: whoever CREATES a Workflow writes its steps and names its
+# ServiceAccount. The Sensor's `sensor-review` SA gets `create` on Workflows in oracle-fleet (Role
+# below — the platform reaching INTO a stack namespace, the FU-080 doorbell direction), and the
+# `workflow-template-start-guard` ValidatingAdmissionPolicy below pins every Workflow that SA creates
+# there to `spec: {workflowTemplateRef: {name: prod-diagnose}}` — so the grant cannot run anything
+# else, nor under another SA of oracle-fleet. A new (namespace, starter) pair = one entry in the
+# policy's matchCondition list and its `allowed` map, and the matching Role.
+#
+# Repeats: the rule is transition-keyed and resolves after an hour (one fire per verdict) and the
+# receiver sends no resolve, so one failed verification = one delivery. A second failure inside the
+# group interval arrives as a fresh group delivery and starts a second diagnosis — correct: a new
+# verdict. The trigger's rate limit is the belt.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: kargo-prod-diagnose
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+    # Same values as the other agent-loop Sensors (homelab#103): requests only CPU, limits memory.
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: prod-failed-dep
+      eventSourceName: agent-loop
+      eventName: kargo-prod-failed
+      filters:
+        data:
+          - path: body.status
+            type: string
+            value: ["firing"]
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 1 }
+      template:
+        name: start-prod-diagnose
+        conditions: "prod-failed-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: prod-diagnose-
+                namespace: oracle-fleet
+              spec:
+                workflowTemplateRef: { name: prod-diagnose }
+---
+# The Sensor's start right in oracle-fleet: create the Workflow, read it back, and get the one
+# template it references (the submit validates the reference). Pinned by the policy below.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-start-prod-diagnose
+  namespace: oracle-fleet
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [create, get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtemplates]
+    resourceNames: [prod-diagnose]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-start-prod-diagnose
+  namespace: oracle-fleet
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: platform-start-prod-diagnose }
+subjects:
+  - { kind: ServiceAccount, name: sensor-review, namespace: agent-coordinator }
+---
+# The RESPONDER's start right (ADR-165; oracle-iac#1193): the triage session may start
+# oracle-fleet/prod-step-back — the oracle stack's fixed, refusing step-back — and nothing else.
+# Its own SA (rbac.yaml §responder) gets create on Workflows here, pinned by the guard below to the
+# bare reference; promote on prod stays with the template's own SA (platform-prod-step-back).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-responder-start-prod-step-back
+  namespace: oracle-fleet
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [create, get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtemplates]
+    resourceNames: [prod-step-back]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-responder-start-prod-step-back
+  namespace: oracle-fleet
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: platform-responder-start-prod-step-back }
+subjects:
+  - { kind: ServiceAccount, name: responder, namespace: agent-coordinator }
+---
+# workflow-template-start-guard — a guarded starter may create, in a guarded namespace, ONLY a
+# Workflow that references one allowed WorkflowTemplate and carries nothing else: no steps, no
+# serviceAccountName, no podSpecPatch, no arguments, no cluster-scoped template. Argo merges a
+# Workflow's spec OVER its template's, so any extra spec key would override the template — hence
+# the closed key set. Native ValidatingAdmissionPolicy (the kargo-write-guard / ADR-147 shape, no
+# Kyverno controller). Matches only the listed (namespace, user) pairs — the Argo controller's own
+# Workflow writes and every other creator are never evaluated. failurePolicy Fail: a broken
+# policy blocks only a guarded start. Deny from the start: nothing else creates Workflows as a
+# guarded starter there, so there is no traffic to soak. Starters today: the Sensor above
+# (prod-diagnose) and the responder (prod-step-back, ADR-165).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workflow-template-start-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [argoproj.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE]
+        resources: [workflows]
+  matchConditions:
+    - name: guarded-starters-only
+      expression: >-
+        (request.namespace + '|' + request.userInfo.username) in
+        ['oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review',
+         'oracle-fleet|system:serviceaccount:agent-coordinator:responder']
+  variables:
+    - name: allowed
+      expression: >-
+        {'oracle-fleet|system:serviceaccount:agent-coordinator:sensor-review': ['prod-diagnose'],
+         'oracle-fleet|system:serviceaccount:agent-coordinator:responder': ['prod-step-back']}
+        [request.namespace + '|' + request.userInfo.username]
+  validations:
+    - expression: "request.operation == 'CREATE'"
+      messageExpression: "'workflow-template-start-guard: ' + request.userInfo.username + ' may only CREATE Workflows in ' + request.namespace"
+    - expression: >-
+        has(object.spec.workflowTemplateRef) && has(object.spec.workflowTemplateRef.name)
+        && object.spec.workflowTemplateRef.name in variables.allowed
+        && !(has(object.spec.workflowTemplateRef.clusterScope) && object.spec.workflowTemplateRef.clusterScope)
+      messageExpression: "'workflow-template-start-guard: ' + request.namespace + ' Workflows from ' + request.userInfo.username + ' must reference an allowed WorkflowTemplate (namespace-scoped)'"
+    - expression: "object.spec.all(k, k == 'workflowTemplateRef' || k == 'arguments')"
+      messageExpression: "'workflow-template-start-guard: a guarded start carries spec.workflowTemplateRef and nothing else'"
+    - expression: >-
+        !has(object.spec.arguments) || object.spec.arguments.all(k,
+          (k == 'parameters' || k == 'artifacts') && size(object.spec.arguments[k]) == 0)
+      messageExpression: "'workflow-template-start-guard: a guarded start takes no arguments'"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workflow-template-start-guard
+spec:
+  policyName: workflow-template-start-guard
+  validationActions: [Deny, Audit]

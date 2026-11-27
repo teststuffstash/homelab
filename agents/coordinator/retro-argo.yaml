@@ -182,7 +182,7 @@ spec:
         artifacts:
           - { name: evidence, path: /work/bundle.json, archive: { none: {} } }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |
@@ -334,7 +334,7 @@ spec:
             sources:
               - serviceAccountToken: { audience: agent-gateway, expirationSeconds: 600, path: token }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         command: ["bash", "-lc"]
         args:
           - |
@@ -441,7 +441,7 @@ spec:
           - { name: log-a, path: /work/log-a, optional: true }
           - { name: log-b, path: /work/log-b, optional: true }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator
+        image: registry.teststuff.net/agent-coordinator
         # Argo's init container stages input artifacts root-owned; the image's non-root user
         # then can't read them (xkj88: "sed: can't read /work/log-a: Permission denied" — the
         # THIRD latent bug in this lane, each one step deeper than the last). Single-pod

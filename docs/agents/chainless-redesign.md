@@ -3,8 +3,8 @@
 **Status: CHARTER (operator direction, 2026-08-13), build LARGELY EXECUTED** — chunks A–H
 shipped (2026-08-13/14), role wiring landed via Goal G-A homelab#775 (2026-08-23: every role
 routes), oracle + sleep run chainless (oracle-iac#387, sleep-iac#77), and the platform's
-chainless flip rode the same wave; what remains is flip acceptance 2–4, the FU-186/ADR-115
-provider legs, and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
+chainless flip rode the same wave; what remains is flip acceptance 2–4 (the FU-186/ADR-115
+provider legs moved to the gateway's tier evidence, GW-MODEL-TIERS, 2026-11-23), and build-order item 6 (the legacy-deletion sweep). This doc owns the redesign's
 decisions, the claim-knob ledger, the OpenCode Go rail evidence, and the build plan — so the
 direction survives any one session. Routing mechanism stays owned by [`model-routing.md`](model-routing.md) (rules; the §M8–M13 mechanism history is in [`model-routing-history.md`](../spikes/model-routing-history.md)) and the
 claim by [`agentstack.md`](agentstack.md); this doc records what CHANGES in each and why. The
@@ -611,5 +611,5 @@ Three lessons the rollout is worth remembering for:
   console-exact only since the epoch-anchored bounds + window-DRAW pricing of PR#481.
 - **Part 1's first closeout (#420, 2026-08-19) is the stint-ritual pilot** — and the operator's
   same-day correction is the rule: a post-originals BUG sprout in the stint's own deliverable
-  BINDS and holds the parent open. Residues live on their own tracker items (FU-170/171/172),
+  BINDS and holds the parent open. Residues live on their own tracker items (FU-171/172; FU-170's went to the gateway's Goal #3118, 2026-11-23),
   not here.

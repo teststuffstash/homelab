@@ -31,6 +31,7 @@ spec:
             - circles-iac
             - dummy-apps # tests/kind-kargo/fixtures/apps.yaml — the kind e2e's target namespace, never synced to prod
             - homelab
+            - jail-clusters # ADR-167: the throwaway kata+dind pods a jail session starts (argocd/resources/jail-clusters/)
             - node-maintenance
             - oracle-fleet
             - oracle-iac
@@ -51,6 +52,7 @@ spec:
             - alloy-logs-reader
             - crossplane-agentstack-composed
             - eso-transcripts-reader-ssrr
+            - island-intake-read # Goal #3574 pin 6 (homelab#3577): the intake sitting's own read-only identity — resourcequotas, prometheusrules, cronworkflows, workflowtemplates get/list (agents/coordinator/rbac.yaml)
             - kps-lease-crds # ADR-150: the kube-prometheus-stack PostSync hook reads the monitoring.coreos.com CRDs' operator version (get/list only)
             - loki-rbac-proxy-authn
             - loki-tenant-reader
@@ -78,6 +80,10 @@ spec:
             - eso-retro-git-reader-ssrr
             - eso-kargo-git-reader-ssrr # kargo git-token mirror (argocd/resources/kargo-prod/git-token.yaml) → the eso-transcripts-reader-ssrr role
             - eso-transcripts-reader-ssrr
+            - island-intake-read # homelab#3577 (see the ClusterRole above)
+            - island-intake-read-app # homelab#3577: the same SA on agent-read-app
+            - island-intake-read-infra # homelab#3577: the same SA on agent-read-infra
+            - responder-read-infra # homelab#3628: the responder's own SA (off agent-coordinator) on agent-read-infra (agents/coordinator/rbac.yaml)
             - kps-lease-crds # ADR-150 (see the ClusterRole above)
             - loki-rbac-proxy-authn
             - openrouter-proxy-semaphore
@@ -95,14 +101,20 @@ spec:
             - MutatingAdmissionPolicyBinding
           names:
             - pg-backup-default # ADR-147: CNPG Clusters wired to their namespace's backup store
+            - pg-archive-timeout-default # CNPG archive_timeout 5min → 1h on every Cluster (incident 2026-11-20-nx-02-boot-disk, #3625)
       - resources:
           kinds:
             - ValidatingAdmissionPolicy
             - ValidatingAdmissionPolicyBinding
           names:
+            - eso-clusterstore-scoped # ADR-168 (argocd/resources/extras/eso-guard.yaml): every ClusterSecretStore but two names its namespaces
+            - eso-infisical-guard # ADR-168 (argocd/resources/extras/eso-guard.yaml): stack namespaces read only allowlisted Infisical keys
+            - jail-clusters-pod-guard # ADR-167 (argocd/resources/jail-clusters/admission-policy.yaml): every pod in jail-clusters is kata on nx-01 with the pinned dind, no host access
             - kargo-write-guard # argocd/resources/kargo/admission-policy.yaml: the belt over every kargo-SA write
+            - workflow-template-start-guard # homelab#3629 (agents/coordinator/kargo-prod-diagnose-argo.yaml): a guarded starter may create only a bare workflowTemplateRef to an allowed template
       - resources:
           kinds:
             - PriorityClass
           names:
+            - jail-clusters # ADR-167: below every workload, preemptionPolicy Never — jail pods lose to rides and CI
             - node-maintenance # the node-pinned maintenance CronJobs (node-fstrim) — preempt instead of OutOfcpu at kubelet admission (2026-10-09)

@@ -1,0 +1,37 @@
+# The `agent-gateway-requests` group, lifted VERBATIM out of prometheusrule.yaml (comments
+# stripped — the manifest is their one home) — the rules file requests.promtool-test loads.
+# Not a manifest: `promtool test rules` needs upstream-format rules (top-level `groups:`). Named
+# .promtool-rules rather than .yaml because manifest-lint kubeconforms every *.yaml under
+# argocd/resources.
+#
+# DRIFT-PINNED by prometheus-rules-lint (expr + for per alert name, both directions). RE-COPY AFTER
+# EVERY EXPR EDIT, then re-attach this header:
+#
+#   yq -o=json '{"groups":[{"name":"agent-gateway-requests","rules":[.spec.groups[] | select(.name == "agent-gateway-requests") | .rules[]]}]}' argocd/resources/agent-gateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-gateway-requests
+    rules:
+      - alert: GatewayAbsent
+        expr: |
+          absent(up{job="agent-gateway"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: 'No agent-gateway pod has answered a scrape for 5 minutes — every ride''s admission and every rail call goes through it'
+          description: 'up{job="agent-gateway"} has had no series at 1 for 5 m: the Deployment has no ready pod, or Prometheus cannot scrape it. Check: (1) kubectl -n agent-egress get deploy,pods -l app=agent-gateway; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=50; (3) the agent-gateway ServiceMonitor still selects the Service. A pod roll leaves a gap of about one minute and does not fire this.'
+      - alert: GatewayErrorShare
+        expr: |
+          (
+            (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[30m])) or vector(0))
+            /
+            (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) >= 10)
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          triage: now
+        annotations:
+          summary: 'More than 20 % of the gateway''s real requests were answered 5xx over the last 30 minutes'
+          description: '{{ $value | humanizePercentage }} of the real-traffic requests (traffic="real", at least 10 in the window) got a 5xx from the gateway. Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=100; (3) GET /healthz on the gateway. A 4xx is not counted: 429 and 424 are the upstream''s answers passed through (a 424 on the opencode rail has its own alert, GoRailCredentialRejected). The contract is gateway/specs/endpoints/metrics.md (GW-METRICS).'

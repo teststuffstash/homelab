@@ -205,7 +205,7 @@ class Proxy:
             return error(401, code, "session token unknown, expired or released")
         assert row is not None
         if not rails.serves(row.rail, dialect):
-            self.metrics.request(row.rail, dialect, 501)
+            self.metrics.request(row.rail, dialect, 501, role=row.role)
             return error(501, "dialect-unsupported-on-rail", f"rail {row.rail} does not serve the {dialect} dialect")
         body: bytes | None = None
         streaming = False
@@ -214,10 +214,10 @@ class Proxy:
             try:
                 doc = json.loads(raw) if raw else {}
             except ValueError:
-                self.metrics.request(row.rail, dialect, 400)
+                self.metrics.request(row.rail, dialect, 400, role=row.role)
                 return error(400, "malformed-body", "body is not JSON")
             if not isinstance(doc, dict):
-                self.metrics.request(row.rail, dialect, 400)
+                self.metrics.request(row.rail, dialect, 400, role=row.role)
                 return error(400, "malformed-body", "body must be a JSON object")
             wire = wire_model(row.rail, row.model)
             asked = doc.get("model")
@@ -228,7 +228,7 @@ class Proxy:
                 row.rail, row.model, asked, self.sessions.policy.rails[row.rail].side_models
             ):
                 log.warning("model-not-session: session=%s asked=%s session_model=%s", row.id, asked, row.model)
-                self.metrics.request(row.rail, dialect, 403)
+                self.metrics.request(row.rail, dialect, 403, role=row.role)
                 return error(403, "model-not-session", f"this session rides {row.model}")
             else:
                 body = raw  # the body already names the session's model — forwarded untouched
@@ -237,13 +237,13 @@ class Proxy:
             credential = await self.sessions.resolver.resolve(row.rail, self.sessions.policy.stacks[row.stack])
         except CredentialTransient:
             self.metrics.credential(row.rail, "transient")
-            self.metrics.request(row.rail, dialect, 503)
+            self.metrics.request(row.rail, dialect, 503, role=row.role)
             retry = str(self.sessions.resolver.negative_cache_s)
             return error(503, "credential-transient", f"kube API failed resolving the {row.rail} credential — retry",
                          headers={"retry-after": retry})
         except CredentialUnresolved:
             self.metrics.credential(row.rail, "definitive")
-            self.metrics.request(row.rail, dialect, 401)
+            self.metrics.request(row.rail, dialect, 401, role=row.role)
             return error(401, "credential-unresolved", f"no usable credential for rail {row.rail}")
         self.metrics.credential(row.rail, "resolved")
         try:
@@ -252,7 +252,7 @@ class Proxy:
                 user_agent=self.sessions.policy.rails[row.rail].user_agent,
             )
         except rails.HeaderRefused as e:
-            self.metrics.request(row.rail, dialect, 502)
+            self.metrics.request(row.rail, dialect, 502, role=row.role)
             return error(502, "header-refused", str(e))
         if body is not None and "content-type" not in headers:
             headers["content-type"] = "application/json"
@@ -292,7 +292,7 @@ class Proxy:
                 if ep is not None and nxt is not None:
                     self._fail_over(row, dialect, wire, ep, nxt, "timeout", 504, elapsed, {}, type(e).__name__)
                     continue
-                self.metrics.request(row.rail, dialect, 504, elapsed)
+                self.metrics.request(row.rail, dialect, 504, elapsed, role=row.role)
                 self._provider_outcome(row, wire, ep, "timeout")
                 self.sessions.store.record_request(row.id, 504, int(elapsed * 1000), ts=self.sessions.clock(),
                                                    provider=ep.slug if ep else "")
@@ -304,7 +304,7 @@ class Proxy:
                 if ep is not None and nxt is not None:
                     self._fail_over(row, dialect, wire, ep, nxt, "unreachable", 502, elapsed, {}, type(e).__name__)
                     continue
-                self.metrics.request(row.rail, dialect, 502, elapsed)
+                self.metrics.request(row.rail, dialect, 502, elapsed, role=row.role)
                 self._provider_outcome(row, wire, ep, "unreachable")
                 self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock(),
                                                    provider=ep.slug if ep else "")
@@ -323,7 +323,7 @@ class Proxy:
                         continue
                     if kind == "content-type":  # the order exhausted on an unreadable 2xx: the typed error
                         await resp.aclose()
-                        self.metrics.request(row.rail, dialect, 502, elapsed)
+                        self.metrics.request(row.rail, dialect, 502, elapsed, role=row.role)
                         self._provider_outcome(row, wire, ep, kind)
                         self.sessions.store.record_request(row.id, 502, int(elapsed * 1000), ts=self.sessions.clock(), provider=ep.slug)
                         self.sessions.outcomes.transport(row, "provider-5xx", ep.slug)
@@ -344,7 +344,7 @@ class Proxy:
             elapsed = time.monotonic() - t0
             kind = classify_auth_failure(status, raw_err[:ERROR_BODY_MAX])
             if kind == "edge":
-                self.metrics.request(row.rail, dialect, 403, elapsed)
+                self.metrics.request(row.rail, dialect, 403, elapsed, role=row.role)
                 self._provider_outcome(row, wire, ep, "edge")
                 self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
                 log.warning("upstream-edge-refused %s %d session=%s — a non-JSON refusal (an edge judged this request's client), "
@@ -352,13 +352,13 @@ class Proxy:
                 return error(403, "upstream-edge-refused",
                              f"an edge in front of rail {row.rail} refused this request (upstream {status}, not a credential verdict)")
             if kind == "refused":
-                self.metrics.request(row.rail, dialect, 403, elapsed)
+                self.metrics.request(row.rail, dialect, 403, elapsed, role=row.role)
                 self._provider_outcome(row, wire, ep, "refused")
                 self.sessions.store.record_request(row.id, 403, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
                 self.sessions.outcomes.transport(row, "refused", provider)
                 log.warning("upstream-refused %s %d session=%s model=%s [%s]", row.rail, status, row.id, row.model, note)
                 return error(403, "upstream-refused", f"rail {row.rail} refused this request for {row.model} (upstream {status}, a policy refusal — not the credential)")
-            self.metrics.request(row.rail, dialect, 424, elapsed)
+            self.metrics.request(row.rail, dialect, 424, elapsed, role=row.role)
             self.metrics.upstream_auth_rejected(row.rail)
             self._provider_outcome(row, wire, ep, "auth")
             self.sessions.store.record_request(row.id, 424, int(elapsed * 1000), ts=self.sessions.clock(), provider=provider)
@@ -524,10 +524,10 @@ class Proxy:
                         incomplete = cut[0]
                     elif not watch.complete(streaming):
                         incomplete = "no-terminal"
-                self.metrics.request(row.rail, dialect, final[0], elapsed)
-                self.metrics.tokens(row.rail, usage)
+                self.metrics.request(row.rail, dialect, final[0], elapsed, role=row.role)
+                self.metrics.tokens(row.rail, usage, role=row.role)
                 if incomplete:
-                    self.metrics.request_incomplete(row.rail, dialect, incomplete)
+                    self.metrics.request_incomplete(row.rail, dialect, incomplete, role=row.role)
                 # The gateway's own transport classes as strikes (GW-SESSIONS-OUTCOME): a relayed upstream
                 # 5xx, a cut stream. A client that hung up is the consumer's to classify ⚖.
                 if status >= 500:

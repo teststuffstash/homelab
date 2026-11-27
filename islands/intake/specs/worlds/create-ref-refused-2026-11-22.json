@@ -1,0 +1,25 @@
+{
+  "provenance": {
+    "recorded_at": "2026-11-22T05:37:12.681Z",
+    "source": "s3://agent-transcripts/homelab/intake-scan-2026-11-22/intake-r1-20261122T053048Z/0bd0ea6d-6ba6-4c2a-8acc-4540ac7ddcb3.jsonl",
+    "tool_use_id": "toolu_01WTUV5weCgEJrD3xkZVewnX",
+    "identity": "the island intake sitting's GH_TOKEN (Secret coordinator-git), the scan island's apply sitting",
+    "captured": "the sitting's own `gh api -X POST repos/teststuffstash/homelab/git/refs -f ref=… -f sha=… 2>&1 | head -c 800`: the response body (131 bytes, untruncated) and gh's status line; response headers were not captured"
+  },
+  "request": {
+    "method": "POST",
+    "path": "repos/teststuffstash/homelab/git/refs",
+    "fields": {
+      "ref": "refs/heads/goal/3656-scan-checkpoint-b",
+      "sha": "efc9d765de3cdec2f74c7ad001d7ae99e74a8748"
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "message": "Reference update failed",
+      "documentation_url": "https://docs.github.com/rest/git/refs#create-a-reference",
+      "status": "422"
+    }
+  }
+}

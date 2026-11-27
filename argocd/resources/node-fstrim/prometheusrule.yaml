@@ -29,10 +29,13 @@ spec:
           annotations:
             summary: "fstrim failed on {{ $labels.node }} (rc={{ $value }})"
             description: >-
-              The guest trim exited non-zero, so freed blocks on this node were NOT returned to
-              pve's LVM thin pool. The pool only ratchets up; three fills have frozen wk-01 twice
-              and wiped Garage's metadata. Read the Job log in ns node-maintenance, then check the
-              pool directly on pve with `lvs -o lv_name,data_percent pve`.
+              The fstrim Job on {{ $labels.node }} exited non-zero, so its /var was NOT trimmed.
+              Read the Job log in ns node-maintenance first. Then the consequence check depends on
+              the node: a VM on a hypervisor thin pool (cp-01, wk-01..03 on pve; wk-04 on nx-02's
+              `nvme-thin`) — the pool level (`pve_lvm_thin_pool_data_percent`, or `lvs` on that
+              host), since an untrimmed pool only ratchets up and every VM on it freezes at 100%;
+              nx-01 (metal, no pool) — EPHEMERAL write latency and `NodeDiskIOSaturation` on its
+              BC711, the flash-GC stall the trim prevents (fstrim.yaml header).
         # The trim STOPPED running. Twice-daily schedule (since 2026-09-04) → 36 h is three missed
         # runs, not one late one. This is the rule that would have caught what actually happened
         # historically: nothing failed, the reclaim simply had no owner.
@@ -44,10 +47,11 @@ spec:
           annotations:
             summary: "No successful fstrim on {{ $labels.node }} for {{ $value | humanizeDuration }}"
             description: >-
-              The only mechanism that returns freed blocks to pve's thin pool has not run on this
-              node. Nothing else meters that pool, so this alert is the whole warning. Check the
-              CronJob in ns node-maintenance (`kubectl -n node-maintenance get cronjob,job`) and
-              the pool's headroom on pve — at 100% every VM on it goes read-only together.
+              The fstrim CronJob for {{ $labels.node }} has not completed a run. Check it in ns
+              node-maintenance (`kubectl -n node-maintenance get cronjob,job`). Consequence check
+              by node: a VM on a hypervisor thin pool (pve's four; wk-04 on nx-02) — that pool's
+              headroom (the PveThinPool* belt meters it); nx-01 (metal, no pool) — EPHEMERAL
+              write latency and `NodeDiskIOSaturation` on its BC711 (fstrim.yaml header).
         # NO alert on "reclaimed a lot". It was written as severity: info and
         # prometheus-rules-lint correctly refused it — InfoInhibitor silently suppresses info, so
         # it would have dispatched to nothing. Promoting it to warning is worse: the first runs

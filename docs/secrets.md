@@ -53,8 +53,8 @@ irreducible minimum and ArgoCD/Infisical take over:
 ```
 KeePass ──tofu/argocd.tf──► ArgoCD + Infisical bootstrap secrets (encryption/auth keys, DB creds, git PAT)
    │                            └─ chart autoBootstrap → super admin (creds in KeePass), org "homelab"
-   ▼                                   └─ emits a non-expiring instance-admin TOKEN (in-cluster secret)
-tofu/infisical/ (Infisical TF provider, token-auth) ──► project "homelab" + "eso-reader" UA identity
+   ▼                                   └─ emits an instance-admin TOKEN (in-cluster secret; DEAD since chart 1.12 — see below)
+tofu/infisical/ (TF provider; per-run super-admin login, scripts/infisical-login.sh) ──► project "homelab" + "eso-reader" UA identity
    ▼                                                        └─ writes infisical-machine-identity → ESO
 ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for every app
 ```
@@ -64,7 +64,15 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
 1. **Put the value in Infisical** (homelab project, `prod` env, `/` path by default):
    ```sh
    devbox run infisical-secret MY_API_KEY=s3cr3t
+   printf '%s' "$line" | devbox run infisical-secret CIRCLES_PAGE_HTPASSWD=-   # any value with `$`
    ```
+   The script logs in per run as the super admin (wallet `infisical-admin-email`/`-password`) and
+   reads every key back before exiting 0. A value containing `$` goes on **stdin** (`KEY=-`) or via
+   `bash scripts/infisical-secret.sh KEY='…'`: the `devbox run` task layer re-evaluates its argv,
+   so `$…` in a `devbox run infisical-secret KEY=…` argument is expanded before the script sees it.
+   The bootstrap instance-admin token is not durable any more: Infisical ≥ chart 1.12 rejects
+   exp-less tokens past 2026-05-04 + 90 d and caps every machine-identity token at 90 d
+   (`MAX_MACHINE_IDENTITY_TOKEN_AGE`).
 2. **Pull it into the app's namespace** with an `ExternalSecret` (copy
    `argocd/resources/extras/demo-externalsecret.yaml`):
    ```yaml
@@ -78,7 +86,8 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
        - secretKey: MY_API_KEY
          remoteRef: { key: MY_API_KEY }
    ```
-   Commit it (ArgoCD applies it); ESO writes Secret `my-app/my-app`. The `secrets-demo/demo-ping`
+   Commit it (ArgoCD applies it); ESO writes Secret `my-app/my-app`. Outside the platform
+   namespaces the key must be on that namespace's allowlist ([§Boundaries](#boundaries)). The `secrets-demo/demo-ping`
    canary proves the whole chain is healthy.
 
 ## Useful commands
@@ -125,6 +134,17 @@ jail/wallet credential, even when one token *could* technically serve both.
   the UI (ad-hoc, as admin), or a **Crossplane Workspace** publishing via the Infisical TF provider
   (the `crossplane-tf-writer` identity — how app-generated keys land in Infisical, ADR-076).
 - Rotation: re-run the relevant `tofu`/`infisical-secret`; ESO re-syncs consumers on its refresh.
+- **Which namespace may read what (ADR-168).** A stack holds `admin` in its own namespaces, so it can
+  write ExternalSecrets there, and an ExternalSecret may name any ClusterSecretStore. Two admission
+  policies in [`eso-guard.yaml`](../argocd/resources/extras/eso-guard.yaml) bound that:
+  `eso-infisical-guard` gives every namespace outside the platform list a per-namespace key allowlist
+  for the `infisical` store (no `dataFrom`, no PushSecret to a ClusterSecretStore), and
+  `eso-clusterstore-scoped` makes every other ClusterSecretStore list its namespaces in
+  `spec.conditions` (exempt: `agent-transcripts`, one shared write-only key). **A stack that needs a
+  new Infisical key** = add the key to its namespace's `perNamespace` entry in the same PR as the
+  ExternalSecret; without it the apiserver refuses the ExternalSecret and ArgoCD reports the sync
+  error. **A new platform namespace** that reads arbitrary keys joins `platform`. Decision table:
+  `bash scripts/eso-guard-test.sh`.
 
 ## Credential expiry is telemetry, not documentation (design direction 2026-08-08, FU-156)
 

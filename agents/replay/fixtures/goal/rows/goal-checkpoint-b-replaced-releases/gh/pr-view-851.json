@@ -1,0 +1,17 @@
+{
+  "headRefOid": "851aaaa1111bbbb2222cccc3333dddd4444eeee",
+  "reviewDecision": "REVIEW_REQUIRED",
+  "statusCheckRollup": [
+    {
+      "name": "ci",
+      "conclusion": "SUCCESS"
+    },
+    {
+      "name": "iac-sentinel",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "reviews": [],
+  "comments": [],
+  "commits": []
+}

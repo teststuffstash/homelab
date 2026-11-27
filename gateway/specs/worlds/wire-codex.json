@@ -1,0 +1,7 @@
+{
+  "_comment": "The wire-codex declarations world (GW-WIRE-PROBE): one probe on the codex rail's fake upstream, no allowlisted key. Fixture hosts only — the deployed declarations are argocd/resources/agent-gateway/wire.json.",
+  "probes": {
+    "codex-models": { "rail": "codex", "path": "/models", "query": { "client_version": "0.155.0" }, "interval_s": 21600 }
+  },
+  "keep_keys": {}
+}

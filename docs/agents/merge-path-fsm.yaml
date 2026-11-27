@@ -141,6 +141,7 @@ transitions:
     replay:
       - agents/reviewer-optout-replay.sh
       - agents/replay/fixtures/reviewer-exit-contract
+      - agents/replay/fixtures/reviewer-verdict-pin
       - agents/replay/fixtures/review-pick/two-lanes-two-picks
       - agents/replay/fixtures/review-pick/same-lane-oldest
       - agents/replay/fixtures/review-pick/required-context-absent-held
@@ -241,6 +242,14 @@ transitions:
           before pod creation) stay 0. Pinned by an executed replay (agents/replay/fixtures/
           reviewer-exit-contract, six rows)"
         anchor: { file: agents/reviewer-session.sh, pattern: "EXIT CONTRACT" }
+      - desc: "VERDICT PIN (homelab#3444): a verdict is filed on the commit that was REVIEWED. The
+          pod puts a shim first on PATH as `gh`; an --approve/--request-changes re-reads the PR and
+          submits through the REST reviews endpoint with commit_id = the head PREP checked out, only
+          when no non-merge commit follows it; content moved before submit → no verdict + a drop
+          record (an exit-contract terminal, no specs doorbell); moved during submit → the review is
+          dismissed. The specs gate reads a code verdict as live only when it is filed on the content
+          commit or later (specs-reviewer-session.sh reviewed_current, --self-test)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "THE VERDICT PIN" }
     incidents: ["2026-07-12 oracle-fleet#13 (reviewDecision aliasing, 12 approvals)", "2026-07-21 oracle-fleet#57 (merge-commit staleness, 9 reviews, 88% window burn)"]
 
   - id: MP-T04
@@ -367,7 +376,7 @@ transitions:
       - agents/replay/fixtures/changes-requested/dispatched
       - agents/replay/fixtures/changes-requested/reviewable-again-held
       - agents/replay/fixtures/changes-requested/body-edit-held
-      - agents/replay/fixtures/changes-requested/body-edit-specs-reviewer-dispatches
+      - agents/replay/fixtures/changes-requested/body-edit-specs-reviewer-held
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -383,10 +392,8 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: "STATE_FP_JQ" }
       - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
-      - desc: "changes-requested clause holds when newest non-merge commit — or the PR body's lastEditedAt (GraphQL via agents/pr-last-edited.sh, homelab#2168) — post-dates the newest review: the answered round is the reviewer's, and the next bot verdict retires the clause (homelab#975)"
+      - desc: "changes-requested clause holds when newest non-merge commit — or the PR body's lastEditedAt (GraphQL via agents/pr-last-edited.sh, homelab#2168) — post-dates the newest review, whichever reviewer (code or specs) asked: the answered round is the reviewer's, and the next bot verdict retires the clause (homelab#975)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "reviewable_again" }
-      - desc: "the body-edit leg skips a SPECS-reviewer CHANGES_REQUESTED: that identity re-reviews only a new content commit, so a body-only answer is still the worker's round (oracle-fleet#1013 sat held for good)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: "newest_cr_by" }
     belts:
       - desc: "ordinary-path ruling removal (homelab#1507): when a PR armed + green wears agent/arbitrate but the newest coordinator ruling carries NO blocked-on marker (ordinary-path: re-dispatch, follow-up-class, or nothing-to-do), the belt removes the label so the reflex picks it normally (label-first-then-verify, IL-T16)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "arbitrate-ordinary-path-belt" }

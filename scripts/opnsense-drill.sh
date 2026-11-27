@@ -110,7 +110,8 @@ LIVE="$(yq -r '.all.children.opnsense.hosts[]? | select(.opnsense_standby != tru
 PROD="$(sed -n '1s/^[^ ]* //p' <<< "$LIVE")"
 NODES="$(yq -r '.all.children.opnsense.hosts[]?.ansible_host' "$ROOT/ansible/router-nodes/inventory.yml" | tr '\n' ' ')"
 grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$PROD" || die "could not read a live prod router address from the ansible inventories (got: $(echo $LIVE))"
-pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$PVE" "$@"; }
+pve() { ssh -i "$PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile="$ROOT/machines/hypervisor_known_hosts" "root@$PVE" "$@"; }   # pinned host key
 # fetch_backup <out> — the newest FU-013 object, decrypted (scripts/opnsense-backup-fetch.sh).
 fetch_backup() { OPN_BACKUP_KUBECONFIG="$KUBECONFIG_DRILL" bash "$ROOT/scripts/opnsense-backup-fetch.sh" "$1"; }
 

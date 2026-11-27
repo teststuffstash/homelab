@@ -15,11 +15,12 @@ snapshot:
   model, a `cost`, `limit`, `name`, `family` or `capabilities.tools` present on a row wins. Until
   2026-10-20 the console answer carried the whole catalog; since then it carries the overrides
   only, which is what it always was to the vendor's client.
-- **docs** — the vendor's Go page source (`go.mdx`, fetched unauthenticated from the vendor repo):
-  each plan's monthly fee (the page's Plan table — the Go rail's price, GW-MODEL-TIERS, divides
-  it by what the plan buys), each model's monthly limit per plan, the promotion multiplier, the
-  peak price rows, the peak hours and the 5h/weekly/monthly share of the monthly limit. Parsed
-  strictly: any drift from the shape this file knows is a parse failure, never a guess.
+- **docs** — two reads, both sent at every refresh: the vendor's Go page source (`go.mdx`, fetched
+  unauthenticated from the vendor repo) gives each plan's monthly fee (the Plan table — the Go rail's
+  price, GW-MODEL-TIERS, divides it by what the plan buys) and the 5h/weekly share of the monthly
+  allowance; the Go models list (the limits read, `GET …/inference/go/v1/models`, public) gives each
+  model's monthly limit per plan and the peak facts. Parsed strictly: any drift from the shape this
+  file knows is a parse failure, never a guess.
 
 A refresh that fails — the fetch, the parse, or an implausible drop in the model count — keeps
 the source's last good snapshot (persisted in the gateway's store, so a restart starts from it)
@@ -44,7 +45,8 @@ from .store import Store, iso
 log = logging.getLogger("gateway.catalog")
 
 SOURCES = ("config", "docs")
-READS = {"config": ("catalog", "config"), "docs": ("docs",)}  # a source's reads, in order; each read has a URL
+WIRE_SOURCES = {"catalog": "go-models-dev", "config": "go-console-config", "docs": "go-docs", "limits": "go-limits"}  # GW-WIRE-RECORD: a read's source name
+READS = {"config": ("catalog", "config"), "docs": ("docs", "limits")}  # a source's reads, in order; each read has a URL
 OUTCOMES = ("ok", "fetch-failed", "parse-failed", "implausible")
 # ⚖ #2933 (operator ruling 2026-10-26): a LISTED model whose dialect the parser does not know is
 # dropped from that refresh — counted and logged by the reason, and the rest of the source lands
@@ -319,23 +321,11 @@ def merge(catalog: dict, config: dict, dropped_ids=frozenset()) -> dict:
 
 
 # -- docs: the vendor's go.mdx ----------------------------------------------------------------
-_PLAN_HEADER = ["Model", "Input", "Output", "Cached Read", "Cached Write", "Monthly limit"]
 _FEE_HEADER = ["Plan", "Price", "Included usage"]  # the page's Plan table: `| **Go** | **$10/month** | … |`
 _FEE_PLANS = {"**Go**": "go", "**Go Plus**": "go-plus"}
 _FEE = re.compile(r"^\*\*\$(?P<usd>[\d.]+)/month\*\*$")
-_SUFFIX = re.compile(r"^(?P<name>.+?)\s*\((?P<tag>Off-Peak|Peak|[≤>]\s*[\d.]+K tokens)\)$")
-# ⚖ #2933 (ruling, case (a): the live page of 2026-10-25): a plan row's PROMOTION suffix — a
-# trailing ` (<N>% off)` on a name the Endpoints table has. The name is read without it; the
-# promotion multiplier N/100 (0.5 at 50% off) is kept per model, beside the Nx `bonus` multiplier
-# the limit cells carry (a price promotion, not a usage one — it is the multiplier the page's own
-# struck price cells display, and no row here is priced by the docs leg: §(Peak) reads only Peak rows).
-_PROMO = re.compile(r"^(?P<name>.+?)\s*\((?P<digits>\d+)%\s+off\)$")
-_LIMIT = re.compile(r"^(?:~~\$[\d.]+~~\s*)?\*\*\$(?P<usd>[\d.]+)\*\*(?:<br\s*/>.*)?$")
-_UNLIMITED = re.compile(r"^\*\*Unlimited\*\*(?:<br\s*/>.*)?$")
-_BONUS = re.compile(r"<small>\s*(?P<x>\d+)x\b")
-_PRICE = re.compile(r"^\$(?P<usd>[\d.]+)$")
-_SHARES = re.compile(r"5-hour\s+—\s+(?P<h5>\d+)% of the monthly limit;\s*weekly\s+—\s+(?P<w>\d+)%;\s*and\s+monthly\s+—\s+(?P<m>\d+)%")
-_PEAK = re.compile(r"Peak hours are (?P<spans>\d\d:\d\d-\d\d:\d\d(?:(?:,| and) \d\d:\d\d-\d\d:\d\d)*) UTC, (?P<d0>[A-Z][a-z]+day) through (?P<d1>[A-Z][a-z]+day)")
+_SHARE_5H = re.compile(r"\*\*5-hour limit\*\* is (?P<n>\d+)% of your monthly allowance")
+_SHARE_WEEK = re.compile(r"\*\*weekly limit\*\* is (?P<n>\d+)% of your monthly allowance")
 _DAYS = {"Monday": "mon", "Tuesday": "tue", "Wednesday": "wed", "Thursday": "thu", "Friday": "fri", "Saturday": "sat", "Sunday": "sun"}
 
 
@@ -359,24 +349,6 @@ def _tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
     return out
 
 
-def _slot(text: str, slot: str) -> str:
-    m = re.search(r'<div slot="' + re.escape(slot) + r'">(?P<body>.*?)</div>', text, re.S)
-    if not m:
-        raise ParseError(f'no <div slot="{slot}"> plan tab')
-    return m.group("body")
-
-
-def _price(where: str, cell: str) -> float | None:
-    if cell == "-":
-        return None
-    if cell == "Free":
-        return 0.0
-    m = _PRICE.match(cell)
-    if not m:
-        raise ParseError(f"{where}: price cell {cell!r} is not $N, Free or -")
-    return float(m.group("usd"))
-
-
 def _hour(where: str, hhmm: str) -> int:
     h, mm = int(hhmm[:2]), int(hhmm[3:])
     if mm != 0 or not 0 <= h <= 24:
@@ -384,127 +356,143 @@ def _hour(where: str, hhmm: str) -> int:
     return h
 
 
-def parse_docs(text: str) -> tuple[dict, list[dict]]:
-    """The Go page → (`{plan_fees: {go: usd, go-plus: usd}, plans: {go: {id: usd | "unlimited"},
-    go-plus: {…}}, bonus: {id: x}, promotion: {id: multiplier}, peak: {id: {in, out, cache_read,
-    cache_write}}, peak_hours_utc, peak_weekdays, window_shares}`, the dropped rows — []). Rows
-    are keyed by MODEL id through the page's own Endpoints table (display name → Model ID); the
-    fees by the Plan table's plan names. A plan row's trailing ` (<N>% off)` is the page's PROMOTION
-    spelling on a name the table has: the row is read under the stripped name and its multiplier
-    N/100 is kept per model (#2933 case (a)) — a promotion, never a dialect.
-    ⚖ A Plan-table row whose name is a plan this leg does not model (neither `**Go**` nor
-    `**Go Plus**` — the vendor's new **Go Teams** row, #3011) is PASSED OVER with one log line
-    naming the row: not a model, so not the drop counter (#2933) — a plan the policy cannot name
-    (`rails.opencode.plan` is `go` | `go-plus`) buys admission nothing, so passing it over loses
-    nothing that worked. A row of another shape (a wrong cell count) is still a shape the parser
-    does not know — a parse failure, never a guess. A plan row whose name is still not in the
-    Endpoints table is a shape the leg does not know (ruling: drop-and-count was ruled for the
-    DIALECT; the docs leg keeps its parse failure — the Endpoints table is the page's own index, an
-    unlisted name there is a page fault). A Plan table missing `**Go**` or `**Go Plus**` is a
-    whole-source failure (the fees cannot price both plans). The docs leg never drops: the list is
-    always empty."""
+def parse_page(text: str) -> dict:
+    """The Go page → `{plan_fees: {go: usd, go-plus: usd}, window_shares: {5h, 7d, 30d}}`: the page's
+    Plan table (the fees) and its two share bullets; the page carries no model table any more (the
+    limits read gives the models). ⚖ A Plan-table row whose name is a plan this leg does not model
+    (neither `**Go**` nor `**Go Plus**` — the vendor's **Go Teams** row, #3011) is PASSED OVER with one
+    log line naming the row; a row of another shape (a wrong cell count) is a parse failure. A Plan
+    table missing `**Go**` or `**Go Plus**`, or a page missing either share bullet, is a failure."""
     if not isinstance(text, str) or not text.strip():
         raise ParseError("empty page")
-    ids: dict[str, str] = {}
     fees: dict[str, float] = {}
     for header, rows in _tables(text):
-        if header[:2] == ["Model", "Model ID"]:
-            for r in rows:
-                if len(r) != len(header) or not r[0] or not r[1]:
-                    raise ParseError(f"Endpoints row {r!r}: {len(r)} cells, expected {len(header)} with a name and an id")
-                ids[r[0]] = r[1]
-        elif header == _FEE_HEADER:
+        if header == _FEE_HEADER:
             for r in rows:
                 if len(r) != len(_FEE_HEADER):
                     raise ParseError(f"Plan row {r!r}: expected {' | '.join(_FEE_HEADER)}")
                 if r[0] not in _FEE_PLANS:
-                    # ⚖ a plan this leg does not model is passed over, logged, never a failure
-                    # (the strict paragraph's second exception — #3011; no drop count: the row is
-                    # not a model).
                     log.info("catalog: docs plan row passed over — %s (not a plan this leg models)", r[0])
                     continue
                 m = _FEE.match(r[1])
                 if not m:
                     raise ParseError(f"Plan row {r[0]}: price cell {r[1]!r} is not **$N/month**")
                 fees[_FEE_PLANS[r[0]]] = float(m.group("usd"))
-    if not ids:
-        raise ParseError("no Endpoints table (Model | Model ID)")
     if set(fees) != set(PLANS):
         raise ParseError(f"no Plan table ({' | '.join(_FEE_HEADER)}) pricing both plans — read {sorted(fees) or 'none'}")
-    plans: dict[str, dict] = {}
-    bonus: dict[str, int] = {}
-    promotion: dict[str, float] = {}
+    h5, wk = _SHARE_5H.search(text), _SHARE_WEEK.search(text)
+    if not h5 or not wk:
+        raise ParseError("no '5-hour limit is N% of your monthly allowance' / 'weekly limit is N% …' bullets")
+    return {"plan_fees": fees, "window_shares": {"5h": int(h5["n"]) / 100, "7d": int(wk["n"]) / 100, "30d": 1}}
+
+
+def _is_num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _num(where: str, v) -> float:
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+        raise ParseError(f"{where} is not a non-negative number: {v!r}")
+    return float(v)
+
+
+def _peak_when(where: str, when) -> tuple[list[str], list[list[int]]]:
+    """A multiplier's `when` holding `utc_days.in` and an `any` of `all: [{utc_hours: {gte}}, {utc_hours: {lt}}]` pairs."""
+    try:
+        if set(when) != {"utc_days", "any"} or set(when["utc_days"]) != {"in"}:
+            raise KeyError
+        days = list(when["utc_days"]["in"])
+        hours: list[list[int]] = []
+        for term in when["any"]:
+            conds = term["all"]
+            if len(conds) != 2 or set(conds[0]) != {"utc_hours"} or set(conds[1]) != {"utc_hours"}:
+                raise KeyError
+            lo, hi = conds[0]["utc_hours"], conds[1]["utc_hours"]
+            if set(lo) != {"gte"} or set(hi) != {"lt"}:
+                raise KeyError
+            hours.append([_hour(where, lo["gte"]), _hour(where, hi["lt"])])
+    except (KeyError, TypeError, ValueError, IndexError, ParseError):
+        raise ParseError(f"{where}: multiplier condition {when!r} is not a peak window the parser knows") from None
+    if not days or not hours or any(d not in _DAYS.values() for d in days):
+        raise ParseError(f"{where}: multiplier condition {when!r} is not a peak window the parser knows")
+    return days, hours
+
+
+def parse_limits(doc) -> dict:
+    """The limits read (`GET …/inference/go/v1/models`) → `{plans: {go: {id: usd | "unlimited"}, go-plus: {…}},
+    peak: {id: {in, out, cache_read, cache_write}}, peak_hours_utc, peak_weekdays}`. Per `data[]` row keyed by
+    `id`: `go.monthly_usage.go` / `["go-plus"]` (⚖ `null` is unlimited; any other key — `go-teams` — is passed
+    over silently); the peak from `cost.multipliers[]` (⚖ a multiplier whose `when` holds only `date` is a dated
+    price change, passed over with one log line; ⚖ a peak multiplier whose window differs from another's is a
+    parse failure — the snapshot keeps one window). The peak row is the row's own `cost.text` prices × `factor`."""
+    if not isinstance(doc, dict) or not isinstance(doc.get("data"), list):
+        raise ParseError("the limits answer has no `data` list")
+    plans: dict[str, dict] = {p: {} for p in PLANS}
     peak: dict[str, dict] = {}
-    for plan in PLANS:
-        tabs = _tables(_slot(text, plan))
-        if len(tabs) != 1 or tabs[0][0] != _PLAN_HEADER:
-            raise ParseError(f"plan {plan}: expected one table headed {' | '.join(_PLAN_HEADER)}")
-        limits: dict[str, float | str] = {}
-        for r in tabs[0][1]:
-            where = f"plan {plan} row {r[0]!r}"
-            if len(r) != len(_PLAN_HEADER):
-                raise ParseError(f"{where}: {len(r)} cells, expected {len(_PLAN_HEADER)}")
-            m = _SUFFIX.match(r[0])
-            name, tag = (m.group("name"), m.group("tag")) if m else (r[0], None)
-            promo = None
-            if tag is None and (pm := _PROMO.match(r[0])):
-                name, promo = pm.group("name"), float(pm.group("digits")) / 100
-            if name not in ids:
-                raise ParseError(f"{where}: {name!r} is not in the Endpoints table")
-            mid = ids[name]
-            cell = r[5]
-            if _UNLIMITED.match(cell):
-                lim: float | str = "unlimited"
-            elif lm := _LIMIT.match(cell):
-                lim = float(lm.group("usd"))
-            else:
-                raise ParseError(f"{where}: monthly limit {cell!r} is neither **$N** nor **Unlimited**")
-            if mid in limits and limits[mid] != lim:
-                raise ParseError(f"{where}: two monthly limits for {mid} ({limits[mid]} vs {lim})")
-            limits[mid] = lim
-            if (bm := _BONUS.search(cell)) and plan == "go":
-                bonus[mid] = int(bm.group("x"))
-            if tag == "Peak" and plan == "go":
-                peak[mid] = {"in": _price(where, r[1]), "out": _price(where, r[2]),
-                             "cache_read": _price(where, r[3]), "cache_write": _price(where, r[4])}
-            if promo is not None:
-                if mid in promotion and promotion[mid] != promo:
-                    raise ParseError(f"{where}: two promotion multipliers for {mid} ({promotion[mid]} vs {promo})")
-                promotion[mid] = promo
-        if not limits:
-            raise ParseError(f"plan {plan}: the table has no rows")
-        plans[plan] = limits
-    shares = _SHARES.search(text)
-    if not shares:
-        raise ParseError("no '5-hour — N% of the monthly limit; weekly — N%; and monthly — N%' sentence")
-    window_shares = {"5h": int(shares["h5"]) / 100, "7d": int(shares["w"]) / 100, "30d": int(shares["m"]) / 100}
-    spans = _PEAK.findall(text)
-    hours: list[list[int]] = []
-    days: list[str] = []
-    if len(spans) > 1:
-        raise ParseError(f"{len(spans)} peak-hours sentences — the parser knows one")
-    if spans:
-        m = _PEAK.search(text)
-        for span in re.split(r",| and ", m["spans"]):
-            lo, hi = span.strip().split("-")
-            hours.append([_hour("peak hours", lo), _hour("peak hours", hi)])
-        if m["d0"] not in _DAYS or m["d1"] not in _DAYS:
-            raise ParseError(f"peak days {m['d0']}..{m['d1']} are not weekdays")
-        order = list(_DAYS.values())
-        a, b = order.index(_DAYS[m["d0"]]), order.index(_DAYS[m["d1"]])
-        if b < a:
-            raise ParseError("peak days run backwards")
-        days = order[a:b + 1]
-    if peak and not hours:
-        raise ParseError("peak rows but no 'Peak hours are … UTC, <day> through <day>' sentence")
-    return ({"plan_fees": fees, "plans": plans, "bonus": bonus, "promotion": promotion, "peak": peak,
-             "peak_hours_utc": hours, "peak_weekdays": days, "window_shares": window_shares}), []
+    window: tuple[list[str], list[list[int]]] | None = None
+    for row in doc["data"]:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"]:
+            raise ParseError(f"limits row {row!r} has no id")
+        mid = row["id"]
+        where = f"limits row {mid!r}"
+        if mid in plans["go"]:
+            raise ParseError(f"{where}: two rows for one model")
+        go = row.get("go")
+        if not isinstance(go, dict) or "monthly_usage" not in go:
+            raise ParseError(f"{where}: no go.monthly_usage")
+        mu = go["monthly_usage"]
+        if mu is None:
+            for p in PLANS:
+                plans[p][mid] = "unlimited"
+        elif isinstance(mu, dict):
+            for p in PLANS:
+                if p not in mu:
+                    raise ParseError(f"{where}: monthly_usage has no {p!r}")
+                plans[p][mid] = _num(f"{where} monthly_usage.{p}", mu[p])
+        else:
+            raise ParseError(f"{where}: monthly_usage is neither an object nor null")
+        cost = row.get("cost")
+        for mult in (cost.get("multipliers") if isinstance(cost, dict) else None) or []:
+            when = mult.get("when") if isinstance(mult, dict) else None
+            if isinstance(when, dict) and set(when) == {"date"}:
+                log.info("catalog: docs limits multiplier passed over — %s (a dated price change, not a peak)", mid)
+                continue
+            if not isinstance(when, dict):
+                raise ParseError(f"{where}: multiplier {mult!r} has no condition")
+            days, hours = _peak_when(where, when)
+            if window is not None and window != (days, hours):
+                raise ParseError(f"{where}: its peak window differs from another model's — the snapshot keeps one")
+            window = (days, hours)
+            factor = _num(f"{where} multiplier factor", mult.get("factor"))
+            try:
+                text = cost["text"]
+                cache = text["input"].get("cache") or {}
+                price = {"in": text["input"]["price"], "out": text["output"]["price"],
+                         "cache_read": cache.get("read"), "cache_write": cache.get("write")}
+            except (KeyError, TypeError, AttributeError):
+                raise ParseError(f"{where}: a peak multiplier but no cost.text input/output price") from None
+            # a cache price that is not a number (the object spelling, #3533 §Unverified) has no peak cell
+            peak[mid] = {k: (round(_num(f"{where} {k}", v) * factor, 10)
+                             if v is not None and not (k.startswith("cache") and not _is_num(v)) else None)
+                         for k, v in price.items()}
+    if not plans["go"]:
+        raise ParseError("the limits answer holds no rows")
+    return {"plans": plans, "peak": peak, "peak_hours_utc": window[1] if window else [],
+            "peak_weekdays": window[0] if window else []}
+
+
+def build_docs(page: dict, limits: dict) -> dict:
+    """The docs snapshot: the page's fees and shares + the limits answer's plans and peak facts; `bonus`
+    and `promotion` stay empty maps (the vendor's answer has no such fact; the shape is kept)."""
+    return {"plan_fees": page["plan_fees"], "plans": limits["plans"], "bonus": {}, "promotion": {},
+            "peak": limits["peak"], "peak_hours_utc": limits["peak_hours_utc"],
+            "peak_weekdays": limits["peak_weekdays"], "window_shares": page["window_shares"]}
 
 
 # each parser returns (body, dropped rows) — `docs` never drops; drop-and-count rides the
 # catalog read (#2933)
 PARSERS: dict[str, Callable] = {"catalog": lambda r: parse_catalog(r.json()), "config": lambda r: parse_config(r.json()),
-                                "docs": lambda r: parse_docs(r.text)}
+                                "docs": lambda r: (parse_page(r.text), []), "limits": lambda r: (parse_limits(r.json()), [])}
 
 
 @dataclass(frozen=True)
@@ -529,7 +517,8 @@ class GoCatalog:
     """The two snapshots, their refresh, and what /metrics and GET /catalog/opencode read."""
 
     def __init__(self, policy: Policy, store: Store, client: httpx.AsyncClient, urls: dict[str, str],
-                 api_key: str | None, clock, refresh_s: float):
+                 api_key: str | None, clock, refresh_s: float, wire=None):
+        self.wire = wire  # GW-WIRE-RECORD: the recorder each read's answer reaches BEFORE the parser
         self.policy = policy
         self.store = store
         self.client = client
@@ -568,6 +557,12 @@ class GoCatalog:
             h |= {"authorization": f"Bearer {self.api_key}", "x-opencode-session": str(uuid.uuid4())}
         return h
 
+    def _wire(self, read: str, status: int | None, r, headers: dict[str, str]) -> None:
+        if self.wire is not None:
+            self.wire.record(WIRE_SOURCES[read], self.urls[read], status, r.content if r is not None else None, headers,
+                             r.headers.get("content-type", "") if r is not None else "",
+                             secrets=(self.api_key or "",))
+
     async def refresh_source(self, source: str) -> str:
         now = self.clock()
         self.last_attempt[source] = now
@@ -583,33 +578,50 @@ class GoCatalog:
 
     async def _refresh(self, source: str, now: float) -> str:
         """The source's reads in order (READS); the first one that fails ends the refresh with its
-        outcome, the log line naming the read — no read is a guess for another."""
+        outcome, the log line naming the read — no read is a guess for another. The docs source's two
+        reads are both sent at every refresh whatever the other's outcome (each is recorded); the
+        outcome is the first failure in read order, the page's before the limits'."""
+        failed: str | None = None
         if source == "config" and not self.api_key:
             log.error("catalog: %s fetch skipped — no OPENCODE_GO_API_KEY (no request is sent)", source)
             return "fetch-failed"
         parts: dict[str, dict] = {}
         dropped: list[dict] = []
         for read in READS[source]:
+            headers = self._headers(read)
             try:
-                r = await self.client.get(self.urls[read], headers=self._headers(read), timeout=FETCH_TIMEOUT_S)
+                r = await self.client.get(self.urls[read], headers=headers, timeout=FETCH_TIMEOUT_S)
             except httpx.HTTPError as e:
+                self._wire(read, None, None, headers)
                 log.warning("catalog: %s fetch failed (%s read: %s) — keeping the last good snapshot", source, read, type(e).__name__)
-                return "fetch-failed"
+                failed = failed or "fetch-failed"
+                if source != "docs":
+                    return failed
+                continue
+            self._wire(read, r.status_code, r, headers)
             if r.status_code != 200:
                 log.warning("catalog: %s fetch answered %d (%s read) — keeping the last good snapshot", source, r.status_code, read)
-                return "fetch-failed"
+                failed = failed or "fetch-failed"
+                if source != "docs":
+                    return failed
+                continue
             try:
                 parts[read], read_dropped = PARSERS[read](r)
             except Exception as e:  # noqa: BLE001 — ANY drift from the known shape is a parse failure, never a guess
                 log.error("catalog: %s parse failed (%s read — %s: %s) — keeping the last good snapshot", source, read, type(e).__name__, e)
-                return "parse-failed"
+                failed = failed or "parse-failed"
+                if source != "docs":
+                    return failed
+                continue
             dropped += read_dropped
+        if failed:
+            return failed
         if dropped:
             for d in dropped:
                 self.dropped[(source, d["reason"])] += 1
             log.info("catalog: %s dropped %d model(s) — %s", source, len(dropped),
                      "; ".join(f"{d['model']} ({d['reason']})" for d in dropped))
-        body = merge(parts["catalog"], parts["config"], {d["model"] for d in dropped}) if source == "config" else parts["docs"]
+        body = merge(parts["catalog"], parts["config"], {d["model"] for d in dropped}) if source == "config" else build_docs(parts["docs"], parts["limits"])
         fresh = Snapshot(source, now, body)
         last = self.snapshots.get(source)
         if fresh.models == 0 or (last is not None and fresh.models < MIN_KEPT_SHARE * last.models):

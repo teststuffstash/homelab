@@ -42,15 +42,16 @@ cd gateway
 devbox run serve          # uvicorn on :8080; GATEWAY_POLICY=/etc/agent-gateway/policy.json, GATEWAY_DB=/data/gateway.db
 ```
 
-Environment: `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
+Environment: `GATEWAY_RELEASE` (the running release — the image tag the deploy pin carries, derived at render by the kustomization; answered as `/healthz` `release` and `gateway_build_info{release}`; unset or not tag-shaped = `unknown`), `GATEWAY_POLICY`, `GATEWAY_DB` (`:memory:` fail-open if the file is unusable —
 logged, and `/healthz` says `db: memory`), `OPENCODE_GO_API_KEY` (the gateway's own mounted Go
 key), `GATEWAY_SELF_URL` (what the pod env points at; defaults to the cluster Service name),
 `ANTHROPIC_UPSTREAM` / `OPENROUTER_UPSTREAM` / `OPENCODE_GO_UPSTREAM` (base URLs, overridable for
 tests), `CODEX_UPSTREAM` (native backend; no default), `CODEX_SEED_FILE` (ESO-mounted JSON seed; SHA-256-gated import into `GATEWAY_DB`), `CODEX_USAGE_URL` (the account usage endpoint the gateway polls for headroom — GW-CODEX-HEADROOM §Poll; no default), `CODEX_CAPTURE_TASK_PREFIX` (GW-CODEX-CAPTURE's scope; empty = off) / `CODEX_CAPTURE_MAX_BYTES` (262144) / `CODEX_CAPTURE_RETENTION_DAYS` (7), `GATEWAY_CRED_CACHE_S` (300) / `GATEWAY_CRED_NEGATIVE_CACHE_S` (20), `GATEWAY_CONNECT_TIMEOUT_S` (10) / `GATEWAY_READ_TIMEOUT_S` (600, the upstream budget),
-`GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_CONFIG_URL` / `GATEWAY_GO_DOCS_URL` (the Go catalog's three
-reads — models.dev, the console overlay, the Go page — overridable for tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
+`GATEWAY_GO_CATALOG_URL` / `GATEWAY_GO_CONFIG_URL` / `GATEWAY_GO_DOCS_URL` / `GATEWAY_GO_LIMITS_URL` (the Go catalog's four
+reads — models.dev, the console overlay, the Go page, the public Go models list — overridable for tests) and `GATEWAY_GO_CATALOG_REFRESH_S` (21600; 0 = no schedule), `GATEWAY_OR_MCP_URL` (the OpenRouter
 MCP the catalog's ranking + benchmark reads ride) and `GATEWAY_OR_CATALOG_REFRESH_S` (21600; 0 = no schedule),
 `GATEWAY_BENCHMARKS_MANUAL` (the optional manual benchmark rows the tier derivation reads; unset = none),
+`OPENCODE_USAGE_URL` (the Go account usage endpoint the gateway polls with its own key — GW-SESSIONS-CAPACITY §Go account headroom, read only when the policy carries `rails.opencode.headroom`; unset under that block = the Go rail answers `quota-unknown`), `GATEWAY_WIRE` (GW-WIRE-PROBE's declarations file; unset = no probe) / `GATEWAY_WIRE_MAX_BYTES` (1048576),
 `GATEWAY_PORT` (8080) and `GATEWAY_LOG_LEVEL` (INFO).
 
 Deploy manifests: `argocd/resources/agent-gateway/` (the Service is
@@ -114,6 +115,26 @@ every good catalog refresh from the gateway's own store under the policy's `tier
 only those numbers); the `anthropic` and `codex` lists declare those rails' candidates, and the
 priced rails' lists are left for the post-launch policy edit (homelab#3305) — no snapshot is
 committed or mounted for the derivation.
+
+## KPIs
+
+The gateway's own numbers, each with a target. Each is a recorded series in the
+`agent-gateway-kpi` group of `argocd/resources/agent-gateway/prometheusrule.yaml`. An alert
+(`triage: dig`) fires when a series has been under its target for an hour; the deep dig reads
+it, and its finding is an input of the island's intake sitting.
+
+| KPI | series | target | when named (7 d to 2026-11-24T05:13Z) | alert |
+|---|---|---|---|---|
+| real requests answered without a 5xx | `gateway:real_requests_success:ratio_7d` | at least 0.99 | 1 (0 of 7 020) | `GatewayRequestSuccessBelowTarget` |
+| session requests dispatched, the prober's left out | `gateway:sessions_dispatched:ratio_7d` | at least 0.90 | 0.963 (534 of 554) | `GatewayDispatchShareBelowTarget` |
+
+A series has no sample while its floor is not met (200 real requests, 50 session requests, in
+the 7 d). A target moves in the rule and in this table in one PR.
+
+Both shares read slightly high after pod rolls: a counter series is born at its first sample,
+and `increase()` does not count that sample. When named, the 7 d held 23 gateway pods; 4
+deferred and 58 dispatched session requests were uncounted, so the dispatched share was about
+0.961 with them, and no 5xx series existed at all.
 
 ## Implementation notes the specs do not state
 

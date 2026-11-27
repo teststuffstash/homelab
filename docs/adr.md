@@ -1357,6 +1357,9 @@ CODEOWNERS carve-outs each carry their lint; tier-1 ownership is a scaffold that
 IAC-G04 enforces on homelab; queue-time denial anywhere (e.g. the fix-debounce lane) may use only
 the ❌ table. Doctrine + tier table: `docs/agents/iac-lane.md` §"The platform lane"; enforcement:
 `CODEOWNERS`, `scripts/pin-only-lint.sh`, `tofu/github/repo_rulesets.tf`.
+**Consequence (2026-11-22, homelab#3680):** `policy/**` and `CODEOWNERS` joined the ❌ table (`ci`
+reads `policy/` from the branch; governance-lint reds a worker PR on either) — and the table is one
+line, governance-lint's `GOVERNANCE=`, which `classify_touches` reads.
 
 **Addendum (2026-09-25, design sitting — the `.github/workflows` pin carve-out, homelab#1990).
 Decision:** `.github/workflows/*.y(a)ml` is un-owned by owner→rule replacement: a PR may change
@@ -2968,8 +2971,9 @@ recipe repo gains the script before the launcher change lands; `retry:` blocks l
 oracle-fleet's own `scripts/pr-open.sh` retires and its checker moves behind the hook.
 
 ### ADR-158 — Stack test pins of platform components run within one minor AHEAD of prod, never behind (2026-10-31)
-**Status:** Accepted (operator, 2026-10-31: stacks bump first and fix their dashboards/logic before
-the platform bump; the platform bump never waits for a stack).
+**Status:** Superseded-by ADR-166 (2026-11-21: the version window became a time offset). Was Accepted
+(operator, 2026-10-31: stacks bump first and fix their dashboards/logic before the platform bump;
+the platform bump never waits for a stack).
 **Decision:** a stack's kind/e2e pin of a platform component (Grafana, Postgres fixtures, …) sits in
 the window prod ≤ pin ≤ prod + 1 minor, in each product's own versioning; patches free, never a
 major ahead. Stacks' Renovate proposes, the migration lens gates, the platform lane never holds.
@@ -3074,7 +3078,7 @@ under the operator's login, weighted by age: old and stale, a free hand on the e
 light editing only, and a would-be close is `seat`. Any other human's issue stays `seat`. Every such
 write is reversible from the comment and edit history. Re-reading the waits an earlier ruling left
 (`agent/blocked`, `intake: seat`) is part of the sitting. Mechanism:
-[`gateway/intake.md`](../gateway/intake.md) §Hard limits and procedure step R; evidence:
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §Hard limits and procedure step R; evidence:
 [`spikes/island-intake.md`](spikes/island-intake.md) §Run 3.
 **Considered:** keeping "never close a human-filed issue" (rejected: 18 of 28 gateway issues are
 under the operator's login but nearly all were written by jail sessions, so most of the pile could
@@ -3085,3 +3089,106 @@ much the operator still holds an issue's wording. A wait is a claim about one fa
 re-tested it: 3 of 4 rulings a fresh read changed were re-reads of earlier waits.
 **Consequences:** the sitting's token closes and edits issues it previously only commented on. The
 daily cron reads the issue pile and its waits (FU-320). A wrong close is undone by reopening.
+
+### ADR-164 — Island intake asks the operator only for a closed list; everything else it decides and production corrects (2026-11-19)
+**Status:** Accepted (operator, 2026-11-19).
+**Decision:** an [island intake](glossary.md) sitting parks an item on the operator (`intake: seat`,
+`blocked-on: human`) only for an entry of a closed list — access or money the island does not hold,
+an attended or irreversible act, direction (a Goal over the ceiling, what the island is for),
+another owner's gate, a ruling the tracker records as pending on that question, and the ADR-163
+whose-issue limits. With no entry, intake pins the cheaper-to-reverse option ⚖ and queues; the
+island's alerts, the deep dig, the escape read and prober rides correct a wrong pin. "Ruling" means
+the operator's recorded answer, whatever session typed it under the operator's login. Mechanism:
+[`gateway/intake.md`](../islands/intake/rules/intake.md) §The procedure step 3; each island's instances are its
+facts' `Operator-only` lines ([`intake/`](intake/)).
+**Considered:** the open-ended "a human fact is missing" trigger (rejected: a read of ten gateway
+waits found six decidable from what intake already reads); drafting the list and waiting for
+evidence before adopting it (rejected: the build needs the data that adopting it produces).
+**Why:** a wrong queue costs one ride and is caught by the feedback the island already runs; a
+wrong park costs operator time and nothing re-tests it.
+**Consequences:** fewer `seat` outcomes; more queued items, some of them wrong and undone by the
+loop. A re-read whose wait maps to no entry, or whose `blocked-on: issue=|pr=` target closed, is
+decided afresh. The literal `intake: seat` and every receipt key stay as they are.
+
+### ADR-165 — The responder may start a stack's fixed WorkflowTemplate the alert names; the admission guard is the boundary (2026-11-21)
+**Status:** Accepted (operator, 2026-11-21).
+**Decision:** the responder's "no kubectl mutations" breaker gets ONE exception: when the alert names a
+stack's fixed WorkflowTemplate as its remedy, the triage session may start it — a Workflow whose spec
+is only `workflowTemplateRef: {name: <template>}`, no arguments. The template decides and refuses on its
+own; the responder only starts it. The boundary is admission, not the brief: the
+`workflow-template-start-guard` ValidatingAdmissionPolicy admits, per (namespace, starter), only the
+granted templates in that shape (`agents/coordinator/kargo-prod-diagnose-argo.yaml`), on the
+responder's own ServiceAccount (`agents/coordinator/rbac.yaml` §responder). First grant:
+`oracle-fleet/prod-step-back` (oracle-iac#1193, oracle-fleet#1095).
+**Considered:** the #818 graduation dial (rejected for now: it renders core-group verbs only, binds
+`agentstack-loop` rather than the responder's SA, and has no consumer — the larger build); keeping
+step-back a human act (rejected: the stack ruled a fixed, refusing workflow for it).
+**Why:** a start of a fixed, refusing template carries no authority the template's own SA does not
+already bound, and the guard makes any other shape fail at the apiserver whatever the session writes.
+**Consequences:** a new stack template = one guard entry + one Role, written by the platform. Written
+so the dial can absorb it later as its first non-core entry. The responder's report names the started
+Workflow.
+
+### ADR-166 — Stack test pins lead prod by TIME, not version distance: platform minors/majors wait 14 days, stacks 7 (2026-11-21)
+**Status:** Accepted (operator, 2026-11-21). Supersedes ADR-158.
+**Decision:** on homelab (where prod's pins live) a minor or major waits 14 days in Renovate, a
+week past the stacks' 7; patches wait 7 on both sides, security fixes none. A stack's test pin of a
+platform component is never behind prod and has no upper cap — stable releases only. Versions are
+compared only in the unit every packaging agrees on, the product's own compatibility unit
+(Postgres: major; Garage, Grafana, Prometheus: minor); each test keeps its own packaging (a raw
+image, a nix package). The platform warns and polls nobody before a bump: the offset is the notice.
+Mechanism: [dependency-upgrades.md §Version SETS](dependency-upgrades.md#version-sets--what-must-move-together-operator-ruling-2026-09-27-owner-2014).
+**Considered:** ADR-158's prod ≤ pin ≤ prod + 1 minor (rejected: prod jumps more than one version —
+Garage 2.3 → 2.5 in one PR, #3344 — and the "ahead" pin ends behind where prod lands); the test
+runs prod's exact artifact (rejected: the CNPG operand needs the operator, nixpkgs names majors
+only); stacks with no cooldown for the most lead (rejected: the Trivy Docker Hub images were
+overwritten for ~3.5 days in 2026-03 and stack CI is what that payload robs); the offset on
+patches too (rejected: no lead needed, it only delays fixes).
+**Why:** time lines up across Docker, nix and chart sources where version numbers don't; however
+far prod jumps, it lands on a version every stack has run for a week.
+**Consequences:** the migration lens drops its window check and keeps "behind prod" and
+"pre-release" refusals. Manual platform lanes (a Postgres `imageName` major, a Garage attended
+minor, Cilium) are floored by the offset, never faster. Docker has no release time Renovate can
+use, so the platform runs its own first-seen clock ([renovate.md §The image
+clock](renovate.md#the-image-clock)); a prod pin absent from git gives the stacks nothing to read
+(Postgres, FU-323). Revisit: shrink to 10 days if stacks routinely land the bump within a few.
+
+### ADR-167 — Jail clusters: a jail's kind/k3d gate runs in a throwaway kata+dind pod on nx-01, never on the jail host (2026-11-22)
+**Status:** Proposed (2026-11-22; cap, priority and egress are defaults for the operator to confirm).
+**Decision:** a jail session or its subagent that needs a Docker daemon runs `scripts/jail-cluster.sh`:
+one pod per run in namespace `jail-clusters` — a kata microVM pinned to nx-01 with the docker-mode
+ride's dind sidecar (extracted from `agents/agent-session.sh`, one home) and an agent-base runner. The
+verb ships the working tree in, runs the gate there, copies evidence out and deletes the pod. Bounds:
+a ResourceQuota cap of 2 pods, a PriorityClass below every workload that never preempts, a mandatory
+admission policy (kata, nx-01, pinned dind, no host access or API token), the docker-ride egress
+legs, and a namespace-scoped ServiceAccount whose ≤4h token subagents hold. Mechanism:
+[`jail-clusters.md`](jail-clusters.md).
+**Considered:** a Docker daemon in the jail (rejected: a 16 GB laptop, several subagents at once);
+waiting for CI after a push (kept as the fallback, too slow as the only loop); runc pods (rejected:
+privileged runc is root on the node); a PriorityClass for rides first (rejected: ADR-159 deferred it;
+one class below the default 0 ranks jail pods last and changes nothing else).
+**Why:** the island test tier needs a pre-merge cluster run from the seat's own loop, and nx-01 has
+the memory the jail host lacks. **The rig is OPTIONAL (ADR-108: the jail must be able to fix the
+cluster, so nothing in its toolchain may require it):** no pre-push gate and no required check may
+depend on a jail cluster; push and wait for CI stays the fallback.
+**Consequences:** that kata contains a privileged container is ASSUMED until the smoke's device probe
+passes — no token before it; ~4 GiB per pod is an estimate; the dind pin lives twice, test-held equal.
+
+### ADR-168 — Stack namespaces read Infisical through a per-namespace key allowlist enforced at admission (2026-11-25)
+**Status:** Accepted (operator, 2026-11-25: "Urgent: ESO/Infisical").
+**Decision:** two ValidatingAdmissionPolicies bound what an ExternalSecret may pull.
+`eso-infisical-guard`: outside a short platform namespace list, an ExternalSecret reads from the
+`infisical` ClusterSecretStore only the keys on its namespace's allowlist (a common list + a
+`perNamespace` map, in the policy file), never via `dataFrom`, and a PushSecret names no
+ClusterSecretStore. Default-deny: an unlisted namespace gets only the common list.
+`eso-clusterstore-scoped`: every other ClusterSecretStore lists its namespaces explicitly in
+`spec.conditions[].namespaces`. Mechanism: [secrets.md §Boundaries](secrets.md#boundaries).
+**Considered:** ESO `conditions` on `infisical` (rejected: stack namespaces legitimately read a few
+keys each, and a condition admits whole namespaces); per-stack Infisical folders + identities + stores
+(the vendor-shaped end state, deferred: it moves keys in Infisical); Kyverno (no controller here).
+**Why:** a stack's workbench token and its ArgoCD app could mirror ANY key of the homelab/prod project
+(proven 2026-11-25: `oracle-workbench` synced `DEMO_PING` into `oracle-fleet`), and four
+kubernetes-provider stores had no `conditions`.
+**Consequences:** a stack's new Infisical key is one allowlist line in a platform PR. A new platform
+namespace that reads arbitrary keys joins the list. A stack's ExternalSecret outside its allowlist
+fails at sync, visibly.

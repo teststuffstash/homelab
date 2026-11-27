@@ -82,10 +82,10 @@ async def _rides_total(gw) -> dict[str, float | None]:
 
 # ── What a session's ride pins ────────────────────────────────────────────────────────────────
 PIN_ROWS = [
-    pytest.param("worker, tier heavy (M)", "candidate", "none", "none", id="a new cell is a candidate: selection does not pin it ⚖"),
+    pytest.param("worker, rail openrouter, tier heavy (M)", "candidate", "none", "none", id="a new cell is a candidate: selection does not pin it ⚖"),
     pytest.param("prober, canary {M, deepinfra}", "candidate", "order deepinfra, allow_fallbacks false", "deepinfra",
                  id="a canary session is admitted on a candidate cell, pinned to it ⚖"),
-    pytest.param("worker, tier heavy (M)", "eligible (a clean canary)", "order deepinfra, allow_fallbacks false", "none",
+    pytest.param("worker, rail openrouter, tier heavy (M)", "eligible (a clean canary)", "order deepinfra, allow_fallbacks false", "none",
                  id="a clean canary makes the cell eligible: selection pins it"),
 ]
 
@@ -103,9 +103,10 @@ async def test_what_a_ride_pins(gw, app, store, upstreams, session, cell_before,
             with quiet():
                 r = await gw.post("/sessions", json=canary_body(M, "deepinfra"))
         else:
+            role, rail, tier = (part.split(" ")[-1 if i == 0 else 1] for i, part in enumerate(session.split(", ")))  # the cell's own words
             with quiet():
-                r = await gw.post("/sessions", json={"stack": "platform", "role": "worker", "harness": "opencode", "task": "homelab-2742-pin",
-                                                     "rail": OR_RAIL, "tier": "heavy"})
+                r = await gw.post("/sessions", json={"stack": "platform", "role": role, "harness": "opencode", "task": "homelab-2742-pin",
+                                                     "rail": rail, "tier": tier})
         doc = r.json()
         attach_json("the admission", {k: doc.get(k) for k in ("decision", "rail", "model", "harness")})
         assert doc["decision"] == "dispatch", doc
@@ -217,7 +218,7 @@ UPS = "upstream_provider_shared_pool"
 BACKOFF_ROWS = [
     pytest.param("a 429'd canary at T0", "candidate", "T0 + 3600 s", "3600", UPS, "no-verdict 1", "none", 0,
                  id="a 429'd canary is no verdict: the cell backs off ⚖"),
-    pytest.param("a struck canary at T0; a 429'd canary at T0 + 86400 s", "candidate", "T0 + 90000 s", "3600", UPS, "no-verdict 1, excluded 1", "none", 1,
+    pytest.param("a struck canary at T0; a 429'd canary at T0 + 86400 s; no refresh between", "candidate", "T0 + 90000 s", "3600", UPS, "no-verdict 1, excluded 1", "none", 1,
                  id="a cell back from exclusion backs off the same way"),
     pytest.param("four 429'd canaries, each at the previous horizon", "candidate", "T0 + 39600 s", "3600, 7200, 14400, 14400", UPS, "no-verdict 4", "none", 0,
                  id="a consecutive 429'd canary doubles the horizon; the policy caps it ⚖"),

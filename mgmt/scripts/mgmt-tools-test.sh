@@ -149,7 +149,7 @@ done
 if [ -z "$hits" ]; then ok "lint: no \`devbox run\` in a box-executed script"
 else bad "lint: \`devbox run\` in a box-executed script — use mgmt_x / mgmt_tree_path (mgmt/scripts/mgmt-tools.sh)" "$(printf '\n%s' "$hits")"; fi
 NIX="$REPO/mgmt/nixos/hosts/mgmt/default.nix"
-for u in mgmt-sentinel mgmt-apply mgmt-lease mgmt-reconcile mgmt-state-snapshot; do
+for u in mgmt-sentinel mgmt-apply mgmt-lease mgmt-reconcile mgmt-state-snapshot mgmt-cert-carry; do
   blk="$(awk -v u="systemd.services.$u = {" 'index($0, u){f=1} f{print} f && /^  };/{exit}' "$NIX")"
   if [ -z "$blk" ]; then bad "nix: unit $u not found in default.nix"; continue; fi
   if grep -E '^[^#]*path[[:space:]]*=' <<<"$blk" | grep -q devbox; then bad "nix: $u's path carries devbox"

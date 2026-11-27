@@ -172,7 +172,9 @@ mechanism. The probe set (`mgmt/scripts/mgmt-probe.sh`, run by a systemd timer o
 | `tofu plan` → empty on the **cone-clean** roots only: `provisioning` and `github` (read-only PAT + the three App keys via `mgmt/scripts/mgmt-root-env/github.sh`) | toolchain + remote state + encryption passphrase + Garage reachable + no drift. ⚠ NOT "every migrated root": `infisical`'s provider auth port-forwards into the live cluster, `cloudflare`'s cloudflared Deployment half rides the kubernetes provider, and `main` rides the kubernetes/Talos providers — a plan of any of the three asserts the cluster is up, the opposite of what this box probes. The SENTINEL still plans `cloudflare` and `main` per PR head (§MB3): a plan-on-PR may assert the cluster, the belt may not |
 | `talosctl version` against a live node | no client/server skew after a toolchain bump |
 | **the node diff** (`check_nodes`, 2026-09-21; the Kubernetes-facing axes the same day) | DECLARED (`tofu output node_install_targets` — the same expression the upgrade verb passes as `--image` — with its `.ephemeral` install-time half, and `node_declared_k8s`: the labels/taints tofu itself sets, `tofu/outputs.tf`) vs LIVE, per node, seven axes: **reachable** / **version** / **schematic** (`talosctl version`, the `schematic` extension), **registered** (a Node object exists — wk-metal-02's ~12 h, 2026-09-21) / **labels** / **taints** (the Node object, compared over the union of keys tofu declares, so an imperative `kubectl label` on one of those keys is drift too) and **ephemeral_disk** (`volumestatus EPHEMERAL` vs `systemdisk`, plus the selector's `disk.<field>` for the `disk.transport == "nvme"` form) | that the fleet runs what git says. This is §MB4 layer 1 — the diff install-time drift needs, because `talos_machine_configuration_apply` records DELIVERY and Talos honours install-time fields only on the next install, so state is truthful, `plan` is clean, and the node still runs the wrong image (nx-01 after #1717). ⚠ It REPORTS, never fails the probe: a version gap is the normal state of a rollout in progress, and a belt that reds the box on every window teaches everyone to ignore it. Publishes `mgmt_node_drift{node,axis}` (0 = checked and matched, which "no series" cannot say; a read failure publishes no series rather than a false 1); the "too long" judgement belongs to the `MgmtNode*` alerts' `for:` (`argocd/resources/mgmt-metrics/`) |
+| **the runner seed check** (`check_seeds`) | DECLARED (the snippet content `source_raw[0].data` each `proxmox_virtual_environment_vm.ci_runner*` references, read from the main root's STATE — not a plan, because after a human apply the state holds the new content while the VM booted the old) vs LIVE (the VM's own `ci_runner_seed_info{vm,sha256}`, the sha256 of `/var/lib/cloud/instance/user-data.txt` its cloud-init writes at boot to the `ci-runner-node` exporter) | that each runner booted the seed tofu now holds — the consumed-trigger case §Non-Talos VMs describes, which no plan shows. Reports, never fails (a read failure is `unparseable` and publishes no series). Publishes `mgmt_runner_seed_declared_info{vm,sha256}`, VM names from the state; `MgmtRunnerSeedDrift` (`argocd/resources/mgmt-metrics/`) owns the join and the `for:` |
 | **the substrate-currency check** (`check_substrate`, 2026-09-23 — FU-254) | DECLARED (the `default` of `talos_version_{controlplane,worker}` / `kubernetes_version` / `cilium_version` in `tofu/variables.tf`, read straight out of the checkout — deliberately not a `tofu output`: none carries the last two, and `node_install_targets` needs the main state and an initialised root) vs UPSTREAM (each project's GitHub releases, drafts and prereleases dropped). It asserts the one thing every other check here takes for granted: **that the declaration itself is still current, and still inside its project's support window** — Talos 1.13 left community support at the 1.14.0 release (2026-09-03) and the fleet learned it from a conversation, not a mechanism. Renovate cannot fill this: class 6 in [`dependency-upgrades.md`](dependency-upgrades.md) is deliberately "must not auto-deploy". Publishes `mgmt_substrate_minors_behind{component}` (0 = current), `mgmt_substrate_supported{component}` (0 = EOL) and a fetch-age series; the "how long is too long" judgement is `MgmtSubstrateBehind` (7 d, still supported) / `MgmtSubstrateUnsupported` (1 h, past the window) in `argocd/resources/mgmt-metrics/`. ⚠ **The support windows are hand-encoded constants** in the check (Talos: the CURRENT minor only — community support for 1.13 ended on the 1.14.0 release date, so one minor behind is already EOL and Talos skips the `Behind` grace entirely; Kubernetes and Cilium: three minors) — nothing here discovers a policy, so an upstream that changes its window makes the EOL gauge lie quietly until that table is corrected. ⚠ The upstream answer is **cached 6 h**: the belt ticks every 15 min, and a fetch per tick would be ~288 GitHub API calls a day against a 60/hour anonymous per-IP budget for an answer that moves a few times a year. A component whose release list cannot be read publishes NO series rather than a false "current" |
+| **the router firmware currency check** (`check_firmware`, 2026-11-17 — class 14, ADR-152 program step 1) | per CARP node (`ansible/router-nodes/inventory.yml`) and the test VM: is an update OFFERED, and since when? The router's own `firmware/check` is the authority ([`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path), and `GET core/firmware/status` is only that check's cached answer — a node nobody checked answers "requires to check for update first" (opnsense-pve, 2026-11-17) — so the belt **runs the check**: a `POST core/firmware/check` when the node's `last_check` is over 24 h old (config-neutral, ~3 s), at most once an hour per node, never while `firmware/running` says a job is busy, its poll bounded at 90 s per node and 180 s per tick (the unit's `TimeoutStartSec` is 30 min); it never calls `update`/`upgrade` (that is step 4). Identity: the dedicated `firmware` API user (`OPN_FIRMWARE_API_*`, held only by this box), never `automation` — OPNsense has ONE ACL for the whole firmware API (`page-system-firmware-manualupdate`, package installs included), so the identity every play runs as stays unable to install packages (operator, 2026-11-17; the ruling beside `opnsense_api_users`); no pair → the check skips `no-input` and `MgmtRouterFirmwareUnread` sees the missing series. The test VM reads with its own pair. Publishes `mgmt_router_firmware_read_ok{node,role}` for every router tried and, for a reading that counts, `…_info{version,offered}`, `…_update_available`, `…_update_needs_reboot`, `…_last_check_timestamp_seconds` and `…_update_offered_since_timestamp_seconds` (box-kept, seeded from the router's `last_check`). `MgmtRouterFirmwareBehind` (offered > 7 d — `MgmtSubstrateBehind`'s week) and `MgmtRouterFirmwareUnread` (no usable reading 6 h, or a check > 2 d old) judge `role="node"` only, in `argocd/resources/mgmt-metrics/router-firmware.yaml`. Reports, never fails the probe; an unread node publishes no currency series. **The same node loop reads each router's root filesystem** (2026-11-21, [`incidents/2026-11-20-nx-02-boot-disk.md`](incidents/2026-11-20-nx-02-boot-disk.md) — a full disk kept Unbound from starting and nothing alerted): `GET diagnostics/system/system_disk` (df's `/` row in bytes), as the same `firmware` user — its ACL is `page-system-login-logout` ("Lobby: Dashboard", read-only widget endpoints), granted beside its firmware privilege because no pair the box holds could read it. Publishes `mgmt_router_disk_read_ok{node,role}` and, for a reading that counts, `mgmt_router_disk_size_bytes` / `mgmt_router_disk_avail_bytes` (df's avail, negative past 100 %); `MgmtRouterDiskLow` (under 20 % available for 30 m) and `MgmtRouterDiskUnread` (no reading 6 h) judge `role="node"` only, in `argocd/resources/mgmt-metrics/router-disk.yaml`. `SKIP=firmware` skips both readings |
 | `ansible --check` on an OPNsense play + every `apply_ansible` group's plays (Matchbox, since 2026-10-26 — §Ansible applies) | the collection + the pinned httpx interpreter + the API credential still work, and the recap's `changed=` count is read for drift — class 9 in [`dependency-upgrades.md`](dependency-upgrades.md) is the sharpest unreconciled-surface gap. ⚠ **A partial belt, by construction:** `ansible-playbook --check` exits 0 even when tasks report `changed` (only a task *error* is non-zero), so the exit code alone proves plumbing, not currency — hence the recap parse; and `oxlorg.opnsense.raw` tasks with `action: post` return `changed=False` in check mode by design, so **advanced-settings drift stays invisible** no matter how the recap is parsed |
 | **the prometheus-operator CRD owner check** (`check_kps_crds`, 2026-10-07 — ADR-151, gap G16) | every `monitoring.coreos.com` CRD's `operator.prometheus.io/version` equals the running `kube-prometheus-stack-operator` image tag. The pair moves in one Renovate group, but a failed CRD sync, a stack bump merged outside the group, or a lease revert of the stack pin alone (ADR-150 never downgrades CRDs) leave the operator on a schema it did not ship — kube-state-metrics exports no CRD annotations, so the read is this kubectl probe; reason `skew` names the drifted CRDs |
 | each credential it holds, read once | a rotation did not lock the box out |
@@ -226,7 +228,33 @@ not liveness. The transport is the hypervisors' pattern: the box runs node_expor
 textfile collector (`mgmt/nixos/hosts/mgmt/default.nix`, 9100 open to the LAN only),
 `mgmt-apply.sh` writes `mgmt_apply_*` on every exit, and the cluster Prometheus scrapes it as the
 static job `mgmt-node`. **The residue-age belt is `MgmtApplyResidueStanding`** (github-exporter,
-from master's commit status). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
+from master's commit status). It reads EVERY `management-apply` status of the last master commits (the box posts
+several on one commit: each root, each ansible bracket, the stamp, the re-read) as one verdict stream,
+**per subject** — the description's `<subject>:` prefix, never a list — and this model says which
+verdict ends which standing refusal (the exporter's header holds the same table; its self-test walks
+every row):
+
+| Kind | Subject | Ends when |
+|---|---|---|
+| restated | a root (`main`), `stage 1` (incl. the security boundary, and its legacy `ansible <g>: security-boundary` text), `policy` (an ansible row the box cannot run as written) — every `refuse()`: it writes `refused-rev`, so the box restates it on each new master commit | a box status on a NEWER commit (the loop got past it); a newer commit left without a status for 30 min; a later span-scoped verdict on the SAME commit (the `baseline:` stamp) |
+| stamped | a root failure posted after an apply, then stamped (`<root>: … applied, POST-CHECK regressed` / `… applied, STOPPED on the verdict`) — never restated | a later success of the same root, or the `baseline:` stamp — never another root, never a group's event |
+| group | `ansible <group>` — live state or the box's means to read it (drift, check-failed, unreachable, pair, runner, toolchain, STOPPED) | a later success of the same group: the bracket's clean/confirmed branch, or the hourly re-read (§Ansible applies); nothing else. While it stands the box re-posts it every 7 days (`… refused since <epoch> …`, same run, same age) |
+
+"A newer commit left without a status for 30 min" is the OPTIMISTIC reading of a status-less commit: it
+also happens while a declared window defers the loop or the box is down. The refusal then blanks, and
+when the box restates it `since` returns but the alert's 1 h `for:` restarts — a held or dead loop is
+`MgmtApplyDeferredByWindow`'s, `MgmtApplyLoopStale`'s and `MgmtBoxDown`'s, not this alert's.
+
+A group refusal is not restated after a human stamp, so two things keep it visible: the exporter's
+retention never drops a standing run, and the box re-posts a still-dirty group refusal every
+`ANS_REPOST_DAYS` (7, `mgmt/scripts/mgmt-ansible.sh`) carrying the run's first epoch — inside the
+exporter's cold walk after a restart (≤500 master commits, about 19 days on 2026-11-17), with its
+original age. `github_mgmt_apply_since_floored` is 1 only when that walk was capped and nothing it read
+is older than the run's first retained failure (a refusal whose start, and any re-post, lie beyond it
+is not seen at all). A lost group-success post is retried: the re-read marker stays armed
+(`success-unposted`) until a success post lands. Reading only the newest commit missed the router's 2026-10-31 → 11-17 refusal: unrelated clean
+applies (11-11, 11-14) read as cleared, and every status-less head published nothing
+(`collect_mgmt_apply`, fixture shapes 4–7 in `argocd/resources/github-exporter/mgmt-apply.promtool-test`). The box-side belts in `argocd/resources/mgmt-metrics/` cover what a
 status cannot show — a loop or box that stopped posting: `MgmtApplyLoopStale`,
 `MgmtApplyMetricsAbsent`, `MgmtBoxDown`. The operator's at-a-glance PROGRESS view is the Grafana
 dashboard **"Management box — now"** (`https://grafana.teststuff.net`,
@@ -454,10 +482,33 @@ check that can be absent deadlocks the merge).
 - **One VM, newest head.** Its own flock (never the sentinel/apply lock — a 15-min run must not stall
   an apply), its own clone under `/var/lib/mgmt-router` (0711; `/var/lib/mgmt` stays 0700). A run whose
   PR head moves is killed by the watchdog; the new head is judged next tick. Memo per head sha.
+- **A PASS carries to unchanged content.** Master requires up-to-date branches, so every master merge
+  makes the merge bot update every open PR — a new head sha with no verdict, ~20 min of the one VM
+  each (2026-11-17: `fe4d665d` merged a non-router master commit into #3525 and re-ran for 20 min
+  after a PASS). Before a run the loop computes the head's **content key** (`mgmt_router_key`, a
+  sha256 over git object ids only — nothing of the head executes): the router-path blobs at head,
+  base and their merge-base (the plays under test come from that diff) plus the glob list; master's
+  harness (`scripts/opnsense-test-vm.sh`, `ansible/test-vm/**`, `ansible/inventory.yml`, the verdict
+  script); `devbox.lock`'s entries for the tools the harness runs (ansible, python3, yq-go, jq, curl,
+  openssl); and the test VM's baseline identity (`9110/baseline@<snaptime>` from `qm config
+  --snapshot`, which a rebaseline or a VM rebuild replaces —
+  [`opnsense-test-vm.md`](opnsense-test-vm.md) §Recipes). A key equal to a recorded **PASS** posts
+  `success` "PASS carried from `<sha8>` — router content unchanged" at once: no VM, no PR comment (the
+  status description is the record; the earlier run's comment stays). A FAIL is never carried (a step
+  assertion can be a flake or VM state — the next run arbitrates; the per-sha memo still stops a FAIL
+  head re-running itself), nor an `error`. A key is checked right before each head's slot, so a PASS
+  earlier in the same pass carries to a later head with identical router content. The record is
+  box-local `/var/lib/mgmt-router/keys/passes` (0700 — the sandbox user can traverse
+  `/var/lib/mgmt-router`, never this dir; a file not owned by the loop or group/world-writable is
+  ignored), one line per PASS, pruned to 500 lines / 30 days; a lost or corrupt record costs a run,
+  never a false success. Unbuilt: ordering pending heads by key.
 - **Credentials:** the test VM's own pair (`OPN_TESTVM_API_*` ← wallet `opnsense-test-api-*`) and the
   pve seed key — nothing that opens the router.
 - **Belts:** `mgmt_router_verdict_*` (textfile) → `MgmtRouterVerdictStale` / `-Errored` /
   `-MetricsAbsent` ([`router-verdict.yaml`](../argocd/resources/mgmt-metrics/router-verdict.yaml)).
+  Carries count in `mgmt_router_verdict_carried_total` (+ `_last_carry_timestamp_seconds`) and never
+  touch `_last_result` / `_last_verdict_timestamp_seconds` (the last REAL run: `-Errored` keeps reading
+  the VM's health); `-Stale` reads the pass's end, which a carry-only pass writes too.
 - **Retry a head left red after three errors:** on the box, `rm /var/lib/mgmt-router/done/<sha>.errors`.
 - A head changing the harness itself (`scripts/opnsense-*.sh`, `ansible/test-vm/**`) is NOT a router
   path: the box runs master's copy, so it is judged after it lands (the seat's run + the weekly drill).
@@ -548,7 +599,11 @@ The apply side has the same wedge and the same clearing act: `mgmt-apply.sh` ref
 that hits stage 1 or leaves the apply allowlist and waits "for a new commit or a human apply" — but
 its baseline (`applied-rev`) only ever advanced on its own applies, so every later master carried
 the same hit forever. A **full** apply of `origin/master` now stamps the baseline and clears
-`refused-rev` on success; a scoped one does not (finish with a full one). Since the plan-id change
+`refused-rev` on success; a scoped one does not (finish with a full one). The stamp is the ONE human
+stamp site, and it is observable: it leaves `/var/lib/mgmt/apply/human-stamp`, and the apply loop's next
+tick posts `baseline: stamped by a human apply (mgmt-tf plan <id>) — the span is accounted for` on the
+stamped commit (`mgmt_post_human_stamp`, `mgmt/scripts/mgmt-lib.sh`) — what ends a standing root or
+`stage 1` refusal for `MgmtApplyResidueStanding` (§"A standing refusal is a third verdict shape"). Since the plan-id change
 that verdict is read from the PLAN's `.meta` — was it unscoped, was it taken from `origin/master` —
 rather than from the apply's own flags, which a plan-file apply no longer has. **Since 2026-09-28
 the loop ADMITS the provider-pin shape on a master span exactly as the sentinel does on a head**
@@ -864,7 +919,9 @@ tofu roots, off the loops' shared lock (no tofu state is touched).
 1. **Toolchain** — ansible-core as the clone's `devbox.lock` pins it, read as DATA (`mgmt_lock_tool`,
    §Two pins — devbox never runs in a gate loop; a bad lock refuses this group with its reason).
 2. **Target** — `--check --diff` of every play at master. changed=0 everywhere → live already IS master
-   (a hand converge, or a no-op change): nothing to apply, status success, the group's confirmed sha
+   (a hand converge, or a no-op change): nothing to apply, status success (`backup-only` runs as `on` here, so
+   the router row posts it too — that success is what ends the group's standing refusal for
+   `MgmtApplyResidueStanding`), the group's confirmed sha
    advances. The diff hunks go to the journal.
 3. **Drift — the preflight refusal.** The same plays at the sha this group was last CONFIRMED at
    (`$ADIR/ansible-confirmed-<group>` — an OBSERVATION, written in any mode by every check that read
@@ -901,6 +958,20 @@ refused | stopped) and `mgmt_apply_ansible_would_change{group}`. **Clearing a st
 (`ansible-stopped` names the dir under `/var/lib/mgmt/apply/ansible/`: `summary.txt`, one log per play
 and phase), then `rm /var/lib/mgmt/apply/ansible-stopped`, `kubectl -n agent-coordinator delete cm
 upgrade-lease-ansible-<group>`, `devbox run maint -- close --id <window>`.
+
+**The standing-refusal re-read.** Every group refusal whose truthful end is the group reading clean —
+`ansible-live-drift`, `ansible-check-failed`, `ansible-unreachable`, `ansible-pair-unhealthy`, a runner or
+toolchain the box could not start, a STOP (read only once a human cleared the marker and lease) — arms
+`$ADIR/ansible-reread-<group>`. Never the security boundary (subject `stage 1`) or a policy fault (subject
+`policy`): both are span verdicts, ended by a newer evaluated commit or the human stamp. On an IDLE tick (master applied, or the loop waiting on THAT group's
+refusal at the current sha — `refused-desc` names the refusing subject), outside declared windows and off the shared lock, the loop re-runs ONE
+armed group's target `--check` at most every `reread_min` (row knob, default 60) through the bracket
+itself (`ans_reread` → `ans_bracket` with `ANS_REREAD=1` and an empty span): clean → step 2's clean
+branch (confirmed sha = master, `ansible <group>: live matches master …` posted — in every enforcing mode,
+`backup-only` included); still dirty → nothing posted, the group's metric refreshed. Skipped while
+`ansible-stopped` or the group's lease stands. In the waiting case a clean read also lifts `refused-rev`,
+so the next tick runs the span on. This is what ends a hand-converged refusal within the hour instead of
+at the next span that happens to touch the group.
 
 **The belt sees what the loop does not look at.** The loop only reads a group when a span touches its
 paths; a hand edit on the LXC between merges is the belt's: `check_ansible` (§MB2) runs every play of
@@ -950,7 +1021,9 @@ names made mechanical. What it adds to §Ansible applies:
   master, codeowner-gated — over a role-level list in the applier): the row's `deny_paths` name the
   WAN-firewall + port-forward surface (`opnsense/tuya-egress.py`: filter + `d_nat` rules), WireGuard,
   ACME + ddclient (the DNS credentials), the API users and CARP (pair mechanics, and a password the box
-  does not hold). A span touching one is refused to a human (`security-boundary`), whatever else it
+  does not hold). A span touching one is refused to a human (`stage 1: security-boundary (ansible <group>)`
+  — subject `stage 1`, because it is a verdict on the SPAN like the sentinel's `deny_paths`, so it ends with
+  the human apply's stamp, never with a read of the row's plays, which exclude the denied ones), whatever else it
   holds; those plays are not in the row's list either. A `group_vars/opnsense.yml` edit to one of those
   plays' values selects the row and converges nothing (the plays that read it are not run) — the human
   path stays `opnsense-router-node.sh converge`.
@@ -994,6 +1067,42 @@ names made mechanical. What it adds to §Ansible applies:
 fixture `py-no-check-support-*`): it would ignore the flag and write. A span whose drift base
 predates check mode therefore refuses once (`ansible-check-failed`), by design.
 
+### Router certificate carry — nightly, as `automation`
+
+The CARP BACKUP cannot order a certificate (the WAN gate gives it no WAN link), so its copies follow
+the MASTER's Let's Encrypt renewals only through
+[`scripts/opnsense-cert-carry.sh`](../scripts/opnsense-cert-carry.sh): each renewed cert + key from
+the MASTER's trust store onto the BACKUP under the same refid, the BACKUP's ACME row status, one
+HAProxy reconfigure ([`router-move.md`](router-move.md) §The identity the new router carries). The box
+runs it nightly — unit + timer `mgmt-cert-carry` (03:15 UTC, hours after the routers' 00:00
+Europe/Tallinn acme.sh cron), wrapper [`mgmt/scripts/mgmt-cert-carry.sh`](../mgmt/scripts/mgmt-cert-carry.sh)
+from a detached worktree (the drill's reason):
+
+- **Who is MASTER is read live**, with the converge's own resolver (`ans_carp_map` +
+  `ans_carp_backup` in `mgmt-ansible.sh`, §Router config converge): exactly one MASTER + one BACKUP
+  and hasync config sync off, or the run fails. After a failover the arguments swap by themselves;
+  the carry script's own guard (refuse unless `<master>` is CARP MASTER) still runs.
+- **Declared windows hold it** (`mgmt_apply_window_gate`, §Declared windows hold the apply loop): a
+  live window not opened with `--admit-apply` — the box's own BACKUP converge opens one — means no
+  router call that night (outcome `held`).
+- **Identity: the `automation` API user**, the env file's pair. The carry needed one privilege it
+  lacked, `page-system-certmanager` (trust/cert/search answered 403 on both nodes, 2026-11-17; every
+  other call already answered it) — declared in `opnsense_api_users`, applied once by the seat with
+  `scripts/opnsense-api-users.sh` (an API-users edit is on the human side of ADR-152 (4)'s
+  `deny_paths`; the box never applies it). It adds no reach: the box already holds root ssh to both
+  nodes (the seed key) and the `backup-puller` pair, whose `config.xml` download carries every
+  private key. Revisions are attributed to `automation`, so the click detector stays quiet — each
+  root-key run used to be a row. The env file's `OPN_BACKUP_API_*` (the puller's pair) are unset
+  before the carry, which would read them as the backup node's own creds. Root's pair is a jail
+  opt-in only (`OPN_AS_ROOT=1`).
+- **Metrics + the belt**: `mgmt_cert_carry_*` in `mgmt_cert_carry.prom` — last run, success,
+  outcome (`ok`/`warn`/`failed`/`held`), certs carried, first run, last success. Only an `ok` run
+  advances the last-success stamp, so the ONE alert, `MgmtCertCarryStale`
+  ([`cert-carry.yaml`](../argocd/resources/mgmt-metrics/cert-carry.yaml)), fires after 50 h without
+  one, whatever the cause (failed, warned, held every night, the timer gone). By hand on the box:
+  `systemctl start mgmt-cert-carry`, `journalctl -u mgmt-cert-carry`; a plan without writes:
+  `MGMT_CERT_CARRY_DRY=1` (no metrics). Fixture: `mgmt/scripts/mgmt-cert-carry-test.sh`.
+
 ### The capability ledger — what the box has been TESTED doing on its own (FU-097)
 
 The one answer to "what does the box do on its own, what is attended, and what is still a human at
@@ -1011,14 +1120,14 @@ install-impact line do what the issue asked, given what the fleet and the box al
 intent and plan disagreeing is BLOCKING even when every check is green
 ([`.agents/review.md`](../.agents/review.md)). The cross-class view — every dependency class, what
 is still manual and what it waits on — is [`dependency-upgrades.md`](dependency-upgrades.md); this
-table is the box's half. Live reads below are as of 2026-11-12.
+table is the box's half. Live reads below are as of 2026-11-12 (router rows, the runner row and the box closure re-read 2026-11-23).
 
 | Surface | Mode today (toggle) | Last proven | Evidence | Waiting on, to become unattended |
 |---|---|---|---|---|
 | Plan-on-PR sentinel: `main`, `provisioning`, `github`, `cloudflare` (`management-sentinel`, a verdict, never an apply) | unattended (required context) | every PR head since 2026-09-13 | §MB3; cloudflare plans with the read-only `cloudflare-mgmt-read` token | — (hardening open: FU-237 (c)/(d), FU-305) |
-| Router config: test-VM verdict on every PR head (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | unattended (required context since 2026-10-27; a verdict, never an apply) | 2026-10-31 (last router-path head judged, `mgmt_router_verdict_last_verdict_timestamp_seconds`) | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test` | — |
+| Router config: test-VM verdict on every PR head (`mgmt-router-verdict`, the `opnsense-test-vm` status — §MB3 "The router surface") | unattended (required context since 2026-10-27; a verdict, never an apply) | 2026-11-21 (last router-path head judged, `mgmt_router_verdict_last_verdict_timestamp_seconds`) | ADR-152 step 1; PR code sandboxed as `mgmt-opnsense-test` | — |
 | Main root, raw-k8s residue (the apply allowlist) | unattended (always on) | since 2026-09-13; loop ticking clean 2026-11-12 | every `management-apply` tick; §The test surface | — |
-| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the two verbs below |
+| Main root, any address outside the allowlist (Proxmox VMs, an unnamed Service/PVC, a node onboarding) | manual: `devbox run mgmt-tf -- plan`, then `apply <plan-id>`, in a window | — | §MB3 "When the box refuses" | a per-surface ruling + policy row; none pending except the host verb below (the runner's row is `on` since 2026-11-14) |
 | Talos config apply, workers (`no_reboot`, health-gated) | unattended | 2026-09-22 | #1875; the 1.14.1 bump auto-applied 09:43:54Z, post-check clean | — |
 | Talos config apply, control planes | unattended (`apply_controlplane_config: true`) | 2026-09-22 | the same apply, CP rows included | — |
 | Talos install rollout, workers + CPs (`mgmt-reconcile`) | unattended once the bump is merged (`reconcile_rollout.enabled: true`) | 2026-09-22 | #1879: 13/13 v1.14.1 09:43→13:17Z, canary per type, CPs last | the mechanism: nothing. The bump PR is human-proposed and operator-attended as class 6 (FU-319; a Renovate proposer is #1988's substrate row). No rollout has run since: declared = live = v1.14.1 on 13/13 |
@@ -1031,25 +1140,26 @@ table is the box's half. Live reads below are as of 2026-11-12.
 | Helm release apply, longhorn (restore point + ordered engine moves + the HOLD for 1-replica volumes) | unattended (policy row); majors stay a human merge by ruling | 2026-10-11 | longhorn 1.13.0 (#2487): chart bracket CONFIRMED 07:17:46Z, `mgmt-helm-engines` 42/42 moves, 9 holds, CONFIRMED 09:00:14Z. Records `s3://helm-evidence/20261011T07*-box-longhorn-*`; the two breakage records are in §Helm release applies | — |
 | The box verdict as a gate (apply, reconcile, helm) | unattended (always on) | 2026-10-10 (the read) | §The box verdict; the gates have met no real DOWN — harness only | the first real DOWN |
 | Matchbox (`ansible/matchbox*.yml`; `apply_ansible.matchbox`, §Ansible applies) | unattended (`mode: on`) | 2026-10-26 | #2950: proxydhcp=2 + ipxe-tftp=1 applied 23:14:12Z, confirm clean, health ok, lease + window closed | — |
-| Router config converge, CARP BACKUP (`apply_ansible.opnsense`, §Router config converge — BACKUP-only) | unattended by policy (`mode: backup-only`), **refusing since 2026-10-31** | 2026-10-27 | #2955 CONFIRMED on opnsense-pve; the 2026-10-31 and 2026-11-08 spans REFUSED `ansible-live-drift` (kea-dhcp.py on the BACKUP). The node-local restore FIRING is proven on test VM 9110 only | a human converge of the BACKUP to clear the drift (no tracking item found 2026-11-12) |
-| Router config converge, CARP MASTER (`scripts/opnsense-router-node.sh converge <node>`) | manual: seat-run per node in a window | — (not a box capability) | the test VM + the weekly rebuild drill are its test surfaces (FU-297) | ADR-152 program step 3's rolling part (through `carp-maintenance` with the dead-man) — ROADMAP §Deploy paths; not ruled, not built |
+| Router config converge, CARP BACKUP (`apply_ansible.opnsense`, §Router config converge — BACKUP-only) | unattended by policy (`mode: backup-only`); the 2026-10-31 drift refusal ended 2026-11-17 | 2026-10-27 | #2955 CONFIRMED on opnsense-pve; the 2026-10-31 and 2026-11-08 spans REFUSED `ansible-live-drift` (kea-dhcp.py on the BACKUP), cleared 2026-11-17 by the seat's converge of both nodes + `ansible-confirmed-opnsense` seeded to 7126007a (refusal subjects 0 since 23:24Z; `mgmt_apply_ansible_would_change{group="opnsense"}` 0, read 2026-11-23). The node-local restore FIRING is proven on test VM 9110 only | the next router-play change on master — the first confirmed span since 2026-10-27 |
+| Router config converge, CARP MASTER (`scripts/opnsense-router-node.sh converge <node>`) | manual: seat-run per node in a window | 2026-11-17 (seat, both nodes — not a box capability) | the test VM + the weekly rebuild drill are its test surfaces (FU-297) | ADR-152 program step 3's rolling part (through `carp-maintenance` with the dead-man) — ROADMAP §Deploy paths; not ruled, not built |
 | Router security-boundary plays (WAN firewall + port forwards, WireGuard, ACME, ddclient, API users, CARP) | manual, by design | — | the `deny_paths` of the `opnsense` row refuse them (ADR-152 (4)) | nothing — stays human |
 | Router firmware (`core/firmware/check` → `update` → `upgrade`, per node) | manual: seat API calls, test VM 9110 first (ruling 2026-09-29, [`opnsense-test-vm.md`](opnsense-test-vm.md) §The official update path) | — (prod by hand 2026-09-29/30) | class 14 in `dependency-upgrades.md` | ADR-152 program step 4 (test VM → BACKUP → MASTER under one lease) — ROADMAP §Deploy paths; not built |
-| Router BACKUP certificate carry (`scripts/opnsense-cert-carry.sh`) | manual: a seat verb | — | FU-297 | FU-297 next (1): a nightly box timer |
-| OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-08 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
-| ci-runner VM replace (`runner-maintenance`) | attended: `devbox run runner-maint -- run <plan-id> <vm>` | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below | the box wiring designed in §Non-Talos VMs — not built, no tracking item (2026-11-12) |
+| Router BACKUP certificate carry (`mgmt-cert-carry`, nightly, as `automation` — §Router certificate carry) | unattended | 2026-11-23 (`mgmt_cert_carry_last_success_timestamp_seconds` 03:19Z; first run 2026-11-17 23:17Z) | #3526; fixture `mgmt-cert-carry-test.sh` | — |
+| OPNsense rebuild drill (`mgmt-opnsense-drill`, weekly) | unattended (a drill, changes nothing in prod) | 2026-11-22 (`mgmt_opnsense_drill_last_run_timestamp_seconds`) | [`opnsense-test-vm.md`](opnsense-test-vm.md) | — |
+| ci-runner VM replace (`runner-maintenance`; `apply_vm_recreate.main`, §Non-Talos VMs) | attended: `devbox run runner-maint -- run <plan-id> <vm>`; the box wiring is **on** since 2026-11-14 (`mode: "on"`; shadow homelab#3366 → on after a clean shadow tick on be5f7fcf) | 2026-10-08 (attended) | both runners recreated by the verb; §Non-Talos VMs below. 2026-11-14: the box recreated both runners unattended twice — each VM replaced cleanly, each gate failed on signals not about the VM, closed by the seat (→ #3370, #3372) | the first unattended run that closes clean (no runner template change since #3372) |
 | Proxmox host maintenance (`host-maintenance`, nx-02 / pve) | attended: `devbox run host-maint -- preflight\|down\|up <host>` | 2026-10-09 (attended, nx-02) | §Hypervisor below | box wiring not built, no tracking item (2026-11-12); FU-288 for the BMC power path |
 | Upgrade-lease revert for an ArgoCD chart whose cone holds its own detector (`mgmt-lease`, §MB5) | unattended | 2026-10-10 (drill) | revert #2441 opened by the box, merged with zero hand acts — [`dependency-upgrades.md`](dependency-upgrades.md) §Last proven end to end | — |
-| The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-10 (`mgmt-confirm` gate 5/5, `mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
+| The box's own NixOS closure (`mgmt-pull` → `nixos-rebuild test` → `mgmt-confirm`; `flake.lock` from the weekly `devbox-update` PR) | unattended; a closure that never boots needs hands (§Rollback layer 2) | 2026-11-17 (`mgmt_probe_last_run_timestamp{mode="gate"}`) | §The update loop, §Two pins | the never-boots class waits on the permanent box (UEFI + vPro) — hardware |
 | Reinstall of the box itself | manual, by design (the stick + `nixos-anywhere`) | 2026-09-13 | §OS and install | nothing — a recovery root's own recovery is manual |
 | Applies of the plan-only roots (`provisioning`, `github`, `cloudflare`) and the foreign roots (`infisical`, `cloudflare-token`) | manual: from the jail / the host | — | `apply: false` / `foreign_roots` in the policy | no ruling to move them; the credential prerequisite is FU-012 |
 | Talos PKI (rotate-ca) | manual (seat-run FROM the box, 2026-09-22; FU-264) | — | not a box capability | nothing planned |
 
 ### Non-Talos VMs: the runner verb
 
-The two GitHub Actions runner VMs (`tofu/ci-runner.tf`, Debian + cloud-init, not Talos) are
-replaced whole by any edit to their cloud-init template, and a `proxmox_virtual_environment_vm`
-replace is outside the apply allowlist, so the box refuses that plan to a human apply. The runner
+The two GitHub Actions runner VMs (`tofu/ci-runner.tf`, Debian + cloud-init, not Talos) take a
+cloud-init template edit only through a recreate: since FU-306 the edit re-renders the snippet file
+and replaces no VM, and neither the snippet nor a `proxmox_virtual_environment_vm` replace is in the
+apply allowlist, so the box refuses that plan to a human apply. The runner
 is stateless; the replace is safe exactly when no job is running on it. `node-maintenance.sh`
 covers Talos nodes only, so the runner has its own verb,
 [`scripts/runner-maintenance.sh`](../scripts/runner-maintenance.sh) (`devbox run runner-maint`):
@@ -1066,21 +1176,74 @@ baseline and the drain it also opens Alertmanager silences (`instance=~"<ip>(:[0
 `TargetDown{job="ci-runner-node"}`, which is job-wide), owner-tagged so close expires only its own;
 a failure leaves them with the window, and `silence-close <vm>` expires them once you have finished.
 
-**It is ATTENDED today.** The box wiring below is designed, not built, and no FU or issue tracks
-it (2026-11-12):
+**The box wiring is the operator's toggle** (`apply_vm_recreate.main` `mode` in
+`policy/mgmt/plan-input.yaml`; its current value is the capability-ledger row above). Under `off` and
+`shadow` the box refuses a runner template change to a human apply exactly as before (shadow first
+journals the scoped plan and its scope check), and the [runbook recipe](runbook.md#replacing-a-ci-runner-vm--drained-one-at-a-time)
+is the path. Mechanism: [`mgmt/scripts/mgmt-runner.sh`](../mgmt/scripts/mgmt-runner.sh) (its header is
+the step list), the reads in `mgmt-lib.sh` (`mgmt_runner_candidates`, `_rest`, `_scope`), fixtures in
+`mgmt-runner-test` (inside `mgmt-policy-test`). The shape:
 
-- **The policy maps an address glob and an action to a verb**: a `proxmox_virtual_environment_vm`
-  replace under `ci_runner*` runs `runner-maintenance run` instead of refusing the plan. The
-  allowlist stays a list of addresses, and the verb is the gate for this one shape.
-- **The VM name is read from the plan JSON**, the replaced resource's `name`, never from a list of
-  runner names in the policy or the script.
-- **One VM per tick.** With both runners pending, the loop plans with `-exclude` on the other
-  runner's VM and snippet file, runs the verb on that scoped plan id, and leaves the other runner
-  for the next tick. The lane is never empty.
+- **The policy maps an address glob to a verb**: the row `proxmox_virtual_environment_vm.ci_runner*` →
+  `runner-maintenance`, with `mode` `off` | `shadow` | `on` (the operator's toggle, the `apply_ansible`
+  convention). The allowlist stays a list of addresses, and the verb is the gate for this one shape.
+- **The trigger is the seed file, not a VM replace** — the design predated FU-306. Both runner VMs
+  ignore `initialization[0].user_data_file_id` (`tofu/ci-runner.tf`), so a template edit plans only the
+  snippet file's re-create and no VM diff. The loop's unscoped plan of master names the VM anyway: the
+  plan JSON's `configuration` lists what each VM's `initialization` block references, and a matched VM
+  that plans no change while a file it references is created/replaced/updated is a `seed` candidate (a
+  matched VM the plan replaces outright is a `replace` one). A VM with an in-place update is not a
+  candidate. The shape was checked against a real `tofu show -json` (a dependant whose reference is
+  ignored plans `no-op` beside the replaced resource). Not covered: a human apply that re-creates the
+  snippet WITHOUT the recreate (an unscoped `mgmt-tf apply`, or the runbook's unscoped `-replace` plan
+  of the other VM) consumes the trigger — that VM keeps its old seed until a recreate is planned by hand.
+  The belt's runner seed check (§MB2) detects it: `MgmtRunnerSeedDrift` fires when a VM's booted seed
+  differs from the one the state holds, and its annotation carries the attended recipe.
+- **The VM name is read from the plan JSON** (the VM's `name`), never from a list of runner names.
+- **Admitted only when the rest of the plan is the box's anyway**: every change the candidates do not
+  cover inside the allowlist, the Talos precondition clean. An admitted helm change rides along untouched
+  (the scoped apply never reaches it) and goes through its own bracket once the last VM is done — the
+  bracket's "alone" rule cannot hold before that, so standing down for it would deadlock both (seen
+  2026-11-14: argocd 10.14.0 + the #3313 snippets). Otherwise the ordinary path decides (and refuses the
+  snippet to a human).
+- **One VM per tick, scoped with `-target`, not `-exclude`.** The box plans
+  `-target=<vm> -replace=<vm>`: the VM and its dependencies (its own snippet, the seed image) and
+  nothing else, so the other runner's snippet stays pending and its trigger survives for the next tick.
+  `-replace` beside `-exclude` is silently ignored ([runbook](runbook.md) §Recreating a Talos VM), so
+  the design's "`-exclude` the other runner" bullet became this; `mgmt_plan_root` refuses the pair. The
+  snippet re-create rides in the same scoped apply as its VM's replace, which is what the new VM boots.
+  The box then checks the scoped plan itself (that VM replaced, no other VM, no Talos/helm change, the
+  rest its seed files or allowlisted) and hands the plan id to `runner-maintenance run <plan-id> <vm>`,
+  which re-checks its VM half and runs the bracket above. `mgmt-runner.sh` doubles as the verb's
+  `MGMT_TF` on the box (`summary`/`apply` of the locally saved plan — `mgmt-tf.sh` reaches the box over
+  ssh and cannot run on it).
+- **The verdict.** Verb 0 → `management-apply` success naming the VM, no stamp. 1 (failed after acting:
+  its window and silences stay open, and that window holds the loop), 2 (drain refused, labels restored),
+  3 (refused before a window) → a refusal naming it, `refused-rev` like any other. The same VM still a
+  candidate after its recreate at the same sha is refused as a perpetual diff, never recreated twice.
+- **CI outcomes are not the verb's health signal** (operator ruling, 2026-11-14). The verb's own `verify`
+  (every registration online with its labels, the exporter up) plus the cluster compare decide; the
+  compare declares `GithubWorkflowRunFailed` expected (`compare --expect`, `scripts/runner-maintenance.sh`
+  `CI_OUTCOME_ALERTS`) and its window opens `--no-ci` (close skips the stranded-CI probe, which needs a
+  `gh` the box does not have), because a red run anywhere in the fleet is routine and says nothing about the VM,
+  and even a re-run green job would not prove it. A runner change that breaks a build shows up as that
+  stack's red CI, and the stack reports it or makes the version bump on its side. Seen on the first
+  unattended run: oracle-fleet's own lint failure (started before the window) failed ci-runner-01's run,
+  and ci-runner-02's clean run failed at close on "CI status UNREADABLE". Its new-alert diff is likewise
+  **scoped to the VM** (`--scope-ip/-vm/-prefix CiRunner` on the window and the compare — its instance,
+  a `vm`/`name`/`host` label, which covers the pve guest alerts, or a `CiRunner*` name): an alert about
+  anything else in the fleet prints out of scope and passes — round two failed on the agent platform's
+  `BlockingCodeownerParkWaiting`. The cluster probes stay strict.
 - **The final full apply stamps.** A scoped apply does not advance `applied-rev`; the tick after
   the last runner plans master unscoped, and that apply stamps as any other.
+- **Shadow** makes the scoped plan and its scope check and writes the would-be `run` to the journal,
+  then lets the ordinary path refuse as before. The sentinel's PR comment names the VMs the box will
+  recreate when the row is `on`.
 
-It enters the ledger above as box-run only after its first unattended success.
+**Trying it (operator):** flip the row to `mode: shadow` (a codeowner-gated policy PR), merge a runner
+template change, read the tick (`journalctl -u mgmt-apply` on the box: `VM recreate candidate …`,
+`scoped plan … in scope`, `[shadow] would run …`), then flip to `on`; the next template change runs it.
+The first unattended success moves the ledger row.
 
 ### Hypervisor: the host verb
 
@@ -1090,8 +1253,8 @@ preflight|down|up <host>`): a composer over the verbs above — guests read live
 and classified by name, then the runner verb, `node-maintenance` (control planes via
 `controlplane-upgrade.sh`), `pct shutdown`, and the router node's `carp-maintenance` last, in the
 order [runbook §Proxmox host maintenance](runbook.md#proxmox-host-maintenance-window-updates--reboot)
-gives. It opens its own host window (an `instance` silence + a declared window). **Attended**,
-like the runner verb; box wiring is not built.
+gives. It opens its own host window (an `instance` silence + a declared window). **Attended**;
+box wiring is not built (the runner verb's is, `on` since 2026-11-14).
 
 ## MB4. The end state — master is truth, the box reconciles (ADR-132)
 
@@ -1623,7 +1786,7 @@ this section.
 - **Which credentials, and whose:** the env file carries exactly what the belt's cone-clean checks
   need (the Garage state key + the state passphrase, the Cloudflare token — the read-only
   `homelab-mgmt-read` since FU-238's cloudflare leg, the write key before — and the Matchbox-Proxmox token,
-  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
+  the OPNsense `automation` API pair — never root's since 2026-10-26, FU-013 — plus the read-only `backup-puller` pair for the drill's compare and the `firmware` pair for the firmware belt, the box's alone) **and, since 2026-09-13, the main root's `TF_VAR_*` set** (the
   `keepass-env.sh` list, one table line each) + `main.tfvars` + the runner App key
   `ci-runner.tf` reads by path + the `homelab-sentinel` App key, plus the file-shaped ones the `provisioning` root reads by path — the
   Matchbox gRPC client files and the **Proxmox SSH seed key** (found one plan at a time on the
@@ -1642,7 +1805,7 @@ this section.
 
 ## Open, and deliberately not built yet
 
-Every open item on this box with its tracker (read 2026-11-12). The per-surface answer to "what is
+Every open item on this box with its tracker (read 2026-11-12; the router cert carry and BACKUP-converge rows closed and the runner row updated 2026-11-23). The per-surface answer to "what is
 still a human" is §The capability ledger.
 
 | Open | State | Tracked by |
@@ -1654,9 +1817,8 @@ still a human" is §The capability ledger.
 | PXE flags set and cleared inside one reconciler sync (the reinstall class) | the interim shape is live (`flags.local.tf`); the reconciler half is not built | FU-244 |
 | BMC credentials rotated into the wallet; a BMC path in `node-maintenance` | half landed | FU-288 |
 | Router MASTER converge and router firmware as box runs | not built — ADR-152 program step 3 (the rolling part) and step 4 | ROADMAP §Deploy paths |
-| The router BACKUP's certificate carry as a box timer | a seat verb today | FU-297 |
-| The router BACKUP converge is refusing on live drift (Kea, since 2026-10-31) | needs a human converge | no tracking item found 2026-11-12 |
-| ci-runner VM replace and Proxmox host maintenance as box-run verbs | designed (§Non-Talos VMs), attended today | no tracking item 2026-11-12 |
+| ci-runner VM replace as a box-run verb | `on` since 2026-11-14; no unattended run has closed clean yet (§The capability ledger) | no tracking item 2026-11-23 |
+| Proxmox host maintenance as a box-run verb | attended today (§Hypervisor), box wiring not designed | no tracking item 2026-11-12 |
 | The pilot's replacement (a Tiny; UEFI + vPro) — and with it a PXE install path and an automatic boot-failure rollback | waits on hardware | the private hardware register's R12 row |
 | A CI gate on `mgmt/nixos/` (`nix flake check`) | deliberately not built: the repo's CI is a list of `devbox run` steps, and the step wants the nix cache warm on the runner first | — |
 

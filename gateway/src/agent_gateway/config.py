@@ -70,8 +70,20 @@ GO_CATALOG_URLS = {
     "catalog": "https://models.dev/api.json",
     "config": "https://opencode.ai/console/api/v2/config",
     "docs": "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx",
+    # the docs source's second read (GW-CATALOG-GO, the limits read): the Go models list, public; recorded and parsed
+    "limits": "https://opencode.ai/inference/go/v1/models",
 }
 GO_CATALOG_REFRESH_S = 21600  # ⚖ every 6 h (operator: hours, not minutes); the first refresh runs at start unless the store's snapshot is younger
+
+
+# GW-HEALTH §The answer names the running release: a tag-shaped GATEWAY_RELEASE is the release for the
+# process's life; anything else (unset, empty, another shape) is `unknown` — which itself matches the pattern.
+RELEASE_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
+RELEASE_UNKNOWN = "unknown"
+
+
+def release_of(value: str | None) -> str:
+    return value if value is not None and RELEASE_PATTERN.fullmatch(value) else RELEASE_UNKNOWN
 
 
 class PolicyError(ValueError):
@@ -671,6 +683,9 @@ class Policy:
     def from_dict(d: dict) -> Policy:
         if not isinstance(d, dict):
             raise PolicyError("policy: top level must be an object")
+        if "wire" in d:  # GW-WIRE-PROBE: probes and the key allowlist are the operator's read — their own file (GATEWAY_WIRE)
+            raise PolicyError("policy: a `wire` key is refused — probe declarations and the account allowlist live in the "
+                              "declarations file GATEWAY_WIRE names, never in the policy")
         stacks: dict[str, StackPolicy] = {}
         for name, s in (d.get("stacks") or {}).items():
             if not isinstance(s, dict) or not s.get("loop_ns"):
@@ -803,6 +818,13 @@ class Settings:
     # GW-MODEL-TIERS §The derivation at a refresh: the OPTIONAL manual benchmark rows (a file the feed has not
     # caught up with); unset or no file = no manual rows. Mounting one is a deploy step, not a default.
     benchmarks_manual_path: str = ""
+    # GW-HEALTH §The answer names the running release: read once, at start, from GATEWAY_RELEASE.
+    release: str = RELEASE_UNKNOWN
+    # GW-WIRE-RECORD: the byte bound of one kept vendor answer (an over-bound answer is cut and marked incomplete).
+    wire_max_bytes: int = 1_048_576
+    # GW-WIRE-PROBE: the declarations file (probes + the account class's key allowlist). Unset or empty = no
+    # probe goes out and no account string is kept. Its own file, never the policy.
+    wire_path: str = ""
 
     @staticmethod
     def from_env(env: dict[str, str] | None = None) -> Settings:
@@ -824,7 +846,8 @@ class Settings:
             read_timeout_s=float(e.get("GATEWAY_READ_TIMEOUT_S", "600")),
             go_catalog_urls={"catalog": e.get("GATEWAY_GO_CATALOG_URL", GO_CATALOG_URLS["catalog"]),
                              "config": e.get("GATEWAY_GO_CONFIG_URL", GO_CATALOG_URLS["config"]),
-                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"])},
+                             "docs": e.get("GATEWAY_GO_DOCS_URL", GO_CATALOG_URLS["docs"]),
+                             "limits": e.get("GATEWAY_GO_LIMITS_URL", GO_CATALOG_URLS["limits"])},
             go_catalog_refresh_s=float(e.get("GATEWAY_GO_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             codex_usage_url=e.get("CODEX_USAGE_URL", "").strip(),
             opencode_usage_url=e.get("OPENCODE_USAGE_URL", "").strip(),
@@ -834,4 +857,7 @@ class Settings:
             or_mcp_url=e.get("GATEWAY_OR_MCP_URL", "https://mcp.openrouter.ai/mcp"),
             or_catalog_refresh_s=float(e.get("GATEWAY_OR_CATALOG_REFRESH_S", str(GO_CATALOG_REFRESH_S))),
             benchmarks_manual_path=e.get("GATEWAY_BENCHMARKS_MANUAL", "").strip(),
+            release=release_of(e.get("GATEWAY_RELEASE")),
+            wire_max_bytes=int(e.get("GATEWAY_WIRE_MAX_BYTES", "1048576")),
+            wire_path=e.get("GATEWAY_WIRE", "").strip(),
         )

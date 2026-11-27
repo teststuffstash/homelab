@@ -67,8 +67,8 @@ Also physical, not code: `sensor.plug_opnsense_power` (HA `power.yaml`, the dash
 | Identity | Consumer that breaks without it | Mechanism | State |
 |---|---|---|---|
 | Certificates + CAs (17 LE certs, refids intact) + the web GUI's `ssl-certref` | every HAProxy frontend (binds by refid), the GUI name | **carried from the newest FU-013 backup** at seed time (`opnsense/test-vm/seed-shape.py` `trust`) | operator ruling 2026-09-29; rehearsal-proven (below) |
-| The registered ACME account + its certificate rows | renewal; a fresh account would re-register (FU-298's 404) and re-issue 17 certs against LE's weekly limit | carried (`acme`) — acme.sh renews on its 60-day clock from there **only once the AcmeClient cron job exists**, and that job is NOT identity: the plugin creates it in `settings/fetchCronIntegration` (a GUI-page call; an API settings write never makes it), so both rebuilt nodes ran with auto-renewal ON and no job — nothing renewed from 09-29 to 2026-10-26 (`LanCertExpiringSoon`, #2927; the acme role now makes the call). A BACKUP cannot order at all (no WAN link behind the gate), so its renewal path is the carry: `scripts/opnsense-cert-carry.sh <master> <backup>` copies each renewed cert+key from the MASTER's trust store onto the BACKUP under the same refid and reconfigures its HAProxy (the acme role skips sign+poll on a BACKUP) | same; cron gap found 2026-10-26 |
-| API users `backup-puller`, `automation` + their keys; root's API key | the backup CronJob's ESO secret, the box's `OPN_API_*` belts, every playbook | carried (`api-users`: the users with their hashed keys; root's prod key lines appended to the seed's own) — no key is re-minted, so nothing in the wallet/Infisical flips | rehearsal-proven (below); the users role then finds each user WITH a key and mints nothing |
+| The registered ACME account + its certificate rows | renewal; a fresh account would re-register (FU-298's 404) and re-issue 17 certs against LE's weekly limit | carried (`acme`) — acme.sh renews on its 60-day clock from there **only once the AcmeClient cron job exists**, and that job is NOT identity: the plugin creates it in `settings/fetchCronIntegration` (a GUI-page call; an API settings write never makes it), so both rebuilt nodes ran with auto-renewal ON and no job — nothing renewed from 09-29 to 2026-10-26 (`LanCertExpiringSoon`, #2927; the acme role now makes the call). A BACKUP cannot order at all (no WAN link behind the gate), so its renewal path is the carry: `scripts/opnsense-cert-carry.sh <master> <backup>` copies each renewed cert+key from the MASTER's trust store onto the BACKUP under the same refid and reconfigures its HAProxy (the acme role skips sign+poll on a BACKUP), run nightly by the management box as the `automation` API user ([`management-box.md`](management-box.md) §Router certificate carry) | same; cron gap found 2026-10-26 |
+| API users `backup-puller`, `automation` + their keys; root's API key | the backup CronJob's ESO secret, the box's `OPN_API_*` belts, every playbook | carried (`api-users`: the users with their hashed keys; root's prod key lines appended to the seed's own) — no key is re-minted, so nothing in the wallet/Infisical flips. A user added to the list after the build (prod lacks it, so it is not carried) gets ONE pair on every node from the users play: minted once, installed on the other node ([runbook §OPNsense config backup](runbook.md#opnsense-config-backup--click-detector-fu-013)) | rehearsal-proven (below); the users role then finds each user WITH a key and mints nothing |
 | WAN MAC (`em0`, `machines.yaml` `opnsense.wan_mac`) | the ISP lease (and the public IP ddclient publishes) | `spoofmac` on `igb0` | rehearsal-proven (below) |
 | WireGuard server keypair | the two client configs | **carried** (`wireguard`: the whole section — operator 2026-09-30 chose (a) over (b) export to the wallet + an import path and (c) re-issue both clients: the key already rides every encrypted backup, and no client is touched; (c) stays the lost-everything fallback, (b) returns with CARP's shared-key question) | rehearsal-proven (below): `wg_handshake` |
 | root password | the console / GUI login (the VM's break-glass: nx-02's console) | **the router's own wallet entry `opnsense-root-password`** (operator 2026-09-30 chose it over carrying prod's hash: root becomes rebuildable from the wallet like every other secret) — the seed renders its hash; Big Data keeps its own, so the fallback's login is unchanged | rehearsal-proven (below): `root_password` |
@@ -156,7 +156,18 @@ window, since a bridge is a host network change. Then `bash scripts/opnsense-rou
    every HAProxy VIP on `lo0`, BGP neighbours disabled, DHCP off — dnsmasq AND Kea, its HA hook too
    (since 2026-10-08; before that a standby node's Kea went unread) — ddclient/ACME renewal off, the switch
    armed and never tripped) and prod unharmed (`.1` at Big Data's MAC, Unbound answering, a
-   HAProxy name serving).
+   HAProxy name serving). Since 2026-11-21 it also asks the node's OWN Unbound (on its LAN
+   address), whatever its CARP role: `.1` answering says nothing about a BACKUP whose resolver is
+   down — the node that then took `.1` with a full disk (docs/incidents/2026-11-20-nx-02-boot-disk.md).
+
+**Disk size** (2026-11-21). Each node's disk (`size` in `tofu/opnsense-router.tf`) holds 30 days of
+logs — OPNsense's default ~31-day keep of `/var/log/filter` (~110 MB/day) plus `/var/log/haproxy` —
+and firmware headroom: 32 GB, a thin LV (only used blocks allocate). The 8 GB it was born with
+filled to 108 % and Unbound could not start after a cold boot (the incident above); the ruling was
+to keep the retention and size the disk for it. Growing `size` is an in-place tofu update; the guest
+filesystem (UFS straight on `da0`, label `ufs/OPNsense_Nano`, no partition table) then grows online
+with one command on the node: `growfs -y /dev/ufs/OPNsense_Nano`. The belt's disk reading
+(`mgmt_router_disk_*`, `MgmtRouterDiskLow` — docs/management-box.md §MB2) is what notices the next fill.
 
 **The CARP trial** (2026-09-30, both nodes standing). `ansible/opnsense-carp.yml` puts one `carp`
 VIP per `router_carp_vips` entry (`ansible/router-nodes/group_vars/opnsense.yml` — router nodes
@@ -283,6 +294,8 @@ sees to its hypervisor's node_exporter textfile — `router_node_carp_master`, `
 a heartbeat — so the pair is watched from OUTSIDE the guests. `RouterPairMasterCount` (critical,
 1 m): masters ≠ 1 — 2 is split-brain, 0 is nobody routing (a failover's ~4 s dip rides under the
 `for:`). `RouterWanGateSilent`: a stale heartbeat or fewer than two gates — the count unreadable.
+`RouterMasterWanDark` (critical, 2 m): the MASTER's hypervisor has no carrier on its WAN port —
+node_exporter's own `node_network_carrier` for `eno2` (nx-02) / `enp6s0` (pve), no gate export.
 
 **The split-brain drill** (2026-09-30, detector first): an ebtables rule on nx-02
 (`ebtables -I FORWARD -o tap9170i0 -p IPv4 --ip-proto 112 -j DROP`) cut the adverts into nx-02's
@@ -432,6 +445,13 @@ the hypervisor's flooding, not the node's config.
 
 ## Status
 
+- 2026-11-21: **both nodes' disks 8 → 32 GB + a root-filesystem belt** (#3621, after
+  [`incidents/2026-11-20-nx-02-boot-disk.md`](incidents/2026-11-20-nx-02-boot-disk.md)) — §Disk size above;
+  `MgmtRouterDiskLow`/`MgmtRouterDiskUnread` in [`management-box.md`](management-box.md) §the router firmware
+  currency check.
+- 2026-11-17: **both nodes converged from master** inside windows (dnsmasq/Kea 0 differences — the
+  MASTER's stale wk-metal-04 MAC below is gone); the nightly cert carry runs on the box as `automation`
+  (#3526); the firmware currency belt reads both nodes (#3525). What is still owed: FU-297's **Next**.
 - 2026-10-27 00:29Z: **the box converged the BACKUP unattended** (#2955, `mode: backup-only`):
   opnsense-pve, dnsmasq-dhcp.py=4 (two reservation descrs), node-local restore armed → cancelled,
   `check pve` ok, CARP unchanged, writes attributed to `automation@192.168.2.53`; MASTER untouched
@@ -551,8 +571,9 @@ the hypervisor's flooding, not the node's config.
   Realtek 378/378 Mbit/s (operator speedtest, wired) — the ISP is the ceiling. nx-02's WAN gate restarted
   while BACKUP (flood-off script, kill switch stays retired) — no blip, which is the shape for any future
   gate change. The dead-man fired at 11:33:42Z → nx-02 MASTER + WAN 11:33:43.9Z, pve dark at :46, ~9 s
-  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307) is now
-  unblocked — the gate's carrier export can ride the same BACKUP-side restart.
+  gap, pidfile gone: FU-308 drilled. Window closed clean. Standing: `RouterMasterWanDark` (FU-307 → homelab#3711) is now
+  unblocked — the gate's carrier export can ride the same BACKUP-side restart. (2026-11-24, homelab#3711:
+  built on node_exporter's `node_network_carrier` instead — no gate change and no restart is coming.)
 - 2026-10-01: **ADR-145 — two windows, the first in the pair's end shape** (operator). Kea HA
   checked API-complete against core 26.7.5 (reads + source; leases are a local `memfile`, no
   database). The inert drills proved the machinery, not the service layer — the next evidence is

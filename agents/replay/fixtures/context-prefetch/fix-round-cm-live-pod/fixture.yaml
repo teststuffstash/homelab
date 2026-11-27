@@ -1,0 +1,12 @@
+# homelab#1941 — fix round, ConfigMap create refused AlreadyExists while a LIVE same-key pod (Running) holds
+# the bundle: the launcher must NOT delete it. The argv fallback runs, and its line names AlreadyExists
+# (the same-key gate then refuses the dispatch as it does today).
+name: context-prefetch/fix-round-cm-live-pod
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:context-prefetch
+  - file:post.sh
+env:
+  - STUB_KUBECTL_create=alreadyexists

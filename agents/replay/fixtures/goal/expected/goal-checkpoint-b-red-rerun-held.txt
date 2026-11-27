@@ -5,6 +5,6 @@ CALL gh pr view 845 --repo teststuffstash/circles --json headRefOid,reviewDecisi
 OUT GACTED <none>
 OUT UNITS <none>
 OUT THEMES <none>
-OUT ORPHANS [circles] ⏳ goal #29: child-set complete pre-launch SETTLING — assembly PR #845 has 1 check(s) still in flight on the head (<1800s). The hold is judged against a settled rollup, next tick (homelab#2477). 
+OUT ORPHANS [circles] ⏳ goal #29: child-set complete pre-launch HELD — assembly PR #845 is OPEN and awaiting a human (`state-fp:goal-checkpoint-b:a04172e75052`, homelab#2477). Opening the assembly is all trigger (b) exists to do; the hold releases only when this PR closes or is replaced by another assembly PR. 
 OUT REACHED: end
 RC 0

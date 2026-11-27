@@ -6,3 +6,7 @@ opnsense_api_users: []
 # must have somewhere to land. scripts/opnsense-api-users.sh passes a private tmpdir and routes
 # the files to the wallet (+ Infisical for in-cluster consumers), then deletes them.
 opnsense_users_key_sink: ""
+# {user: public key} as the wallet holds it — scripts/opnsense-api-users.sh passes it (public halves
+# only). The plan refuses a node key the wallet lacks or contradicts. Null = no wallet (the test-VM
+# harness): only the cross-node checks apply.
+opnsense_users_wallet_keys: ~

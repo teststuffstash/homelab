@@ -105,15 +105,18 @@ resources:
 # coordinator and reviewer pods run there as this SA — granted ahead of the launchers that will use
 # it) — and `researcher` (the jail's agents/research-fanout.sh mints this SA's token; each platform
 # arm is a worker-launcher ride, FU-270). `agent-coordinator:agent-coordinator` = the coordinator
-# namespace's SHARED SA — the responder, deep dig, island intake and fix-debounce workflows:
-# `coordinator` + `responder`, unbound; and `retro`, bound into `openrouter-operator` (the retro
+# namespace's SHARED SA — the deep dig and fix-debounce workflows: `coordinator` + `responder`
+# (the dig still admits as role `responder`), unbound; and `retro`, bound into `openrouter-operator` (the retro
 # cron's cells hand off to the worker launcher, whose ride pod lives in the platform retro's ride
 # namespace — agents/retro-project.sh) (shared, so the grant reaches every workflow on it — the
 # #2685 per-SA split is the narrower alternative). `agent-coordinator:specs-review` = the specs-review tick + its shadow cells
 # (agents/coordinator/specs-review-argo.yaml), their OWN ServiceAccount since #2685 (callers are
 # per SA; as `agent-coordinator` the key covered every workflow in that namespace): `reviewer`, and
 # `worker` for the goose@openrouter shadow cell (docs/agents/specs-reviewer.md §Shadow runs); it
-# never binds. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
+# never binds. `agent-coordinator:responder` = the `respond` WorkflowTemplate (responder-argo.yaml),
+# its OWN ServiceAccount since the 2026-11-21 split (agents/coordinator/rbac.yaml §responder):
+# `responder`, unbound (a triage is an inline session). `agent-coordinator:island-intake` = the island
+# intake sitting (#3577): `coordinator`, unbound. `agent-coordinator:outcome-judge` = the deploy-revert chain's judge step
 # (agents/coordinator/deploy-revert-argo.yaml; FU-270 (b), #2785): admits nothing (no roles, no
 # binds), `outcome: any` — it lists a task's sessions and reports `wrong-verdict` on the review
 # sessions of a merge the chain reverted (GW-SESSIONS-OUTCOME). `enforce` since 2026-10-17
@@ -139,6 +142,14 @@ configMapGenerator:
       # gateway can say how old the prices it compares on are (gateway_tier_evidence_age_seconds →
       # TierEvidenceStale); a re-cut rolls the pod like a policy edit.
       - benchmarks.json
+  # The gateway's own Grafana dashboard (shipped as code; the Grafana sidecar picks up the label).
+  - name: grafana-dashboard-agent-gateway
+    namespace: agent-egress
+    files:
+      - agent-gateway.json=dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
 
 # The image pin — the ONLY line .github/workflows/gateway-image.yaml's deploy/agent-gateway pin PR
 # edits (calver-gsha, `2026.<m>.<d>-g<sha12>`). 0.0.0-pending = no build has landed yet: the
@@ -146,4 +157,22 @@ configMapGenerator:
 # consumes :latest (none is pushed).
 images:
   - name: ghcr.io/teststuffstash/agent-gateway
-    newTag: 2026.11.12-gd4b21ecc6894
+    newTag: 2026.11.27-ga7fbe6458bb0
+
+# GW-HEALTH / GW-METRICS: the running release is the pinned tag, derived at render so `newTag` stays the
+# only line a pin PR edits. Source = the gateway container's image (after the `images:` transformer, so
+# `<name>:<newTag>`), the part after `:`; target = GATEWAY_RELEASE's value.
+replacements:
+  - source:
+      kind: Deployment
+      name: agent-gateway
+      fieldPath: spec.template.spec.containers.[name=gateway].image
+      options:
+        delimiter: ":"
+        index: 1
+    targets:
+      - select:
+          kind: Deployment
+          name: agent-gateway
+        fieldPaths:
+          - spec.template.spec.containers.[name=gateway].env.[name=GATEWAY_RELEASE].value

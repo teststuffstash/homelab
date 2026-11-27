@@ -293,7 +293,8 @@ never harder posture on quiet ones.
   🚨 issues were held open by it). Evidence + the build:
   [`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md) §The 2026-09-16 pass;
   capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
-  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
+  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations (one exception: starting a stack's fixed
+  WorkflowTemplate the alert names, admitted by the start guard — [ADR-165](../adr.md)), no agent labels
   (inert, breaker #1), loop-smell → report-only stop.
   **Dispatch SPLIT from triage 2026-08-07 (FU-133 dispatch half):** the session's issue carries
   `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan's
@@ -425,7 +426,12 @@ never harder posture on quiet ones.
   marked triaged, nothing filed, the probe lane deferring to it as COVERED, the alert standing 8 h).
   Every session now writes `homelab/alert-<fp>/responder-r1-<ts>/` — input alert, `triage.log`,
   the transcript, an A1 manifest and a typed `finding.json` — with the write-only bucket key, before
-  the post-session belts, degrading loudly rather than failing.
+  the post-session belts, degrading loudly rather than failing. **A recurring report-only class is
+  consumed:** findings that filed nothing but carry a `remediation_would`, on an island's alert or a
+  ride of an island's issue, reach that island's intake sitting as one input per alert + namespace
+  once they recur — the rule and its floor live in
+  [`intake-select.sh`](../../islands/intake/scripts/intake-select.sh)'s header (`--source dig`, FU-320);
+  the responder itself still files nothing for them.
   Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPs both
   resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
   none of this shell).
@@ -441,7 +447,11 @@ never harder posture on quiet ones.
   2026-10-12), or a dig finding
   for the same (alert, subject) within 7 d (keyed on the `members` the harvest stamps on each
   finding from the run's own digest — never on the session's free-text `alerts`). The explained set is RECORDED in the digest with its
-  reason, so the session reads the record instead of re-deriving it. The subject is the responder's
+  reason, so the session reads the record instead of re-deriving it. An issue, follow-up or
+  meta-state explanation is not permanent: when the alert has stood through the whole lookback
+  and no dig has looked at it for a hold period, it is selected as a **re-test** group carrying
+  the record, which the session tests against live evidence (rule and constants: the selector's
+  header, step 3b; FU-249). Fresh groups rank ahead of re-tests under the group cap. The subject is the responder's
   own cascade, extracted from `responder-argo.yaml` at run time (one home, pinned by the responder's
   fixtures); grouping is by ONSET (hour bucket) and HOST — the two correlation keys the 2026-10-03
   audit named ([`../spikes/responder-week-audit.md`](../spikes/responder-week-audit.md)
@@ -468,7 +478,7 @@ never harder posture on quiet ones.
   surfacing them on the board is the next step, not built here. **Island findings are consumed:**
   a `cause-found` finding whose text names an island (`gateway/`) is a `text:` input to that
   island's intake sitting — [`island-intake-argo.yaml`](../../agents/coordinator/island-intake-argo.yaml),
-  daily 05:00Z, brief [`gateway/intake.md`](../../gateway/intake.md) — which folds, files and queues
+  daily 05:00Z, brief [`islands/intake/rules/intake.md`](../../islands/intake/rules/intake.md) — which folds, files and queues
   it (FU-320); the dig itself still files nothing.
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (a human-queued
   MISSION issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =

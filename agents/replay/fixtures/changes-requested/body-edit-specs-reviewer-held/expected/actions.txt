@@ -1,0 +1,6 @@
+CALL gh pr view 1097 --repo teststuffstash/homelab --json comments,commits,reviews
+CALL gh api graphql -f query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { p1097: pullRequest(number: 1097) { number lastEditedAt } } } -f owner=teststuffstash -f name=homelab
+OUT ORPHAN [homelab] ⏳ changes-requested held (re-review pending — PR body edited 2026-08-26T17:30:00Z after the verdict):
+OUT ORPHAN   PR #1097
+OUT REACHED: end
+RC 0

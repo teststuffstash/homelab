@@ -1,0 +1,4 @@
+{
+  "_comment": "UC-1 step 7 — a clean tasked ride's report, sent before the DELETE (LAUNCH-OUTCOME-GATEWAY). Shape: gateway sessions.schema.json #/outcome/input.",
+  "class": "clean"
+}

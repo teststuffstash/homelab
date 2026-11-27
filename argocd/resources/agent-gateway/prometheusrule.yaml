@@ -227,3 +227,95 @@ spec:
           annotations:
             summary: 'The codex rail is declared but its usage poll has not run for 15 m — the rail sits on quota-unknown'
             description: 'gateway_codex_usage_poll_total renders (the policy declares the codex rail) but no poll ran in 15 m. The poll runs only with CODEX_USAGE_URL set AND a credential backend (CODEX_UPSTREAM + CODEX_SEED_FILE with a mounted seed — ESO Secret agent-egress/codex-seed): kubectl -n agent-egress logs deploy/agent-gateway | grep "codex usage poll dark" names which is missing; a live schedule that died logs "codex usage poll: one pass failed". Until a poll is accepted every codex admission defers quota-unknown.'
+    # ── The gateway's own request outcomes (GW-METRICS, gateway/specs/endpoints/metrics.md) ──
+    # Every other rule here reads catalog, credential or store state; these two read what the gateway
+    # does to its callers. Behaviour fixture: requests.promtool-{rules,test}.
+    #   GatewayAbsent     — no scrape of the gateway answered for 5 m: no ride can be admitted or
+    #                       served. Sizing: over 14 d (read 2026-11-23) `up` had 23 minutes at 0, every
+    #                       gap exactly 1 minute (a pod roll), so for: 5m is five times the longest gap.
+    #   GatewayErrorShare — more than 20 % of the REAL requests (traffic="real"; synthetic probes are
+    #                       left out) answered 5xx over 30 m. 4xx is not counted: 429 and 424 are the
+    #                       upstream's answers passed through. The floor (>= 10 real requests in the
+    #                       window) exists because 59 % of 30-minute windows carry no real request and
+    #                       the thin rails cannot carry a ratio, hence one share over all rails. Replayed
+    #                       over the 14 d: true in no minute (the floor held in 3 005 of them, all since
+    #                       the traffic label went live on 2026-11-17). The numerator `or vector(0)`
+    #                       makes an all-success window read 0 rather than no sample.
+    - name: agent-gateway-requests
+      rules:
+        - alert: GatewayAbsent
+          expr: |
+            absent(up{job="agent-gateway"} == 1)
+          for: 5m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'No agent-gateway pod has answered a scrape for 5 minutes — every ride''s admission and every rail call goes through it'
+            description: 'up{job="agent-gateway"} has had no series at 1 for 5 m: the Deployment has no ready pod, or Prometheus cannot scrape it. Check: (1) kubectl -n agent-egress get deploy,pods -l app=agent-gateway; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=50; (3) the agent-gateway ServiceMonitor still selects the Service. A pod roll leaves a gap of about one minute and does not fire this.'
+        - alert: GatewayErrorShare
+          expr: |
+            (
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[30m])) or vector(0))
+              /
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) >= 10)
+            ) > 0.2
+          for: 10m
+          labels:
+            severity: warning
+            triage: now
+          annotations:
+            summary: 'More than 20 % of the gateway''s real requests were answered 5xx over the last 30 minutes'
+            description: '{{ $value | humanizePercentage }} of the real-traffic requests (traffic="real", at least 10 in the window) got a 5xx from the gateway. Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real"}[30m])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) kubectl -n agent-egress logs deploy/agent-gateway --tail=100; (3) GET /healthz on the gateway. A 4xx is not counted: 429 and 424 are the upstream''s answers passed through (a 424 on the opencode rail has its own alert, GoRailCredentialRejected). The contract is gateway/specs/endpoints/metrics.md (GW-METRICS).'
+    # ── The gateway's KPIs, each with a target (cut from #3505) ──
+    # Two recorded 7-day ratios and an alert under each; the table is gateway/README.md §KPIs.
+    # Behaviour fixture: kpi.promtool-{rules,test}.
+    #   gateway:real_requests_success:ratio_7d — the share of REAL requests (traffic="real") answered
+    #       without a 5xx. Floor: >= 200 real requests in the 7 d (about 3 % of a week's volume; 7 020
+    #       when named, 2026-11-24), so a gateway that carried almost nothing has no sample. Read 1 when
+    #       named; replayed over 14 d (min_over_time ... [14d:10m]) it was 1 in all 892 steps where the
+    #       floor held. Target 0.99: 70 failed requests in a week at today's volume. The numerator
+    #       `or vector(0)` makes an all-success week read 1 rather than no sample.
+    #   gateway:sessions_dispatched:ratio_7d — the share of session requests (the prober's left out)
+    #       that were dispatched rather than deferred. Floor: >= 50 session requests in the 7 d (about
+    #       9 %; 554 when named). Read 0.963 when named; replayed over 14 d: min 0.922, max 1, under 0.9
+    #       in none of 1 792 steps. The same share over 1 d dips to 0.844, which is why the window is 7 d.
+    #       Target 0.90: below every 7-day value seen, above the worst day.
+    #   Both shares read slightly high after pod rolls: a counter series is born at its first sample and
+    #   increase() does not count it (23 pods in the 7 d when named).
+    #   triage: dig — a 7-day share is slow by construction; the deep dig reads a firing alert and its
+    #   finding is an input of the gateway island's intake sitting. The acute case is GatewayErrorShare.
+    - name: agent-gateway-kpi
+      rules:
+        - record: gateway:real_requests_success:ratio_7d
+          expr: |
+            1 - (
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[7d])) or vector(0))
+              /
+              (sum(increase(gateway_requests_total{job="agent-gateway",traffic="real"}[7d])) >= 200)
+            )
+        - record: gateway:sessions_dispatched:ratio_7d
+          expr: |
+            (sum(increase(gateway_sessions_total{job="agent-gateway",role!="prober",decision="dispatch"}[7d])) or vector(0))
+            /
+            (sum(increase(gateway_sessions_total{job="agent-gateway",role!="prober"}[7d])) >= 50)
+        - alert: GatewayRequestSuccessBelowTarget
+          expr: |
+            gateway:real_requests_success:ratio_7d < 0.99
+          for: 1h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway answered less than 99 % of its real requests without a 5xx over the last 7 days — below its KPI target'
+            description: 'gateway:real_requests_success:ratio_7d is {{ $value | humanizePercentage }} (target: at least 99 %; at least 200 real requests in the 7 d). Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[7d])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) whether GatewayErrorShare fired in the window (the same share over 30 m, above 20 %); (3) gateway_build_info names the release that was serving. The KPI and its target are named in gateway/README.md §KPIs.'
+        - alert: GatewayDispatchShareBelowTarget
+          expr: |
+            gateway:sessions_dispatched:ratio_7d < 0.9
+          for: 1h
+          labels:
+            severity: warning
+            triage: dig
+          annotations:
+            summary: 'The gateway dispatched less than 90 % of the sessions it was asked for over the last 7 days — below its KPI target'
+            description: 'gateway:sessions_dispatched:ratio_7d is {{ $value | humanizePercentage }} (target: at least 90 %; at least 50 session requests in the 7 d, the prober''s left out). Check: (1) sum by (role, stack) (increase(gateway_sessions_total{job="agent-gateway",decision="defer"}[7d])) names who was deferred; (2) gateway_subscription_utilization and gateway_cells_cooled name the rail that was full or cooled; (3) the policy''s rails for that role in argocd/resources/agent-gateway/policy.json. A defer is the gateway''s designed answer when every listed rail is held; this alert is about the share, not one defer. The KPI and its target are named in gateway/README.md §KPIs.'

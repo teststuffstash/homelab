@@ -1,0 +1,6 @@
+# specs-review-body-edit — the decision table (family contract in fixture.yaml).
+# `body-edited` is the row that reds on base (no body-edit leg in the specs reviewer's skip).
+# id          | world   | patch                                          | env                              | expect   | params
+body-edited   | sr-3444 | gh/api-graphql.json @ patches/body-edited.jq   |                                  | skip     | v=candidate
+never-edited  | sr-3444 |                                                |                                  | skip     | v=own-at-head
+read-fails    | sr-3444 | gh/api-graphql.json @ patches/body-edited.jq   | STUB_GH_api_graphql=fail         | degraded |

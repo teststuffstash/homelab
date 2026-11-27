@@ -358,6 +358,7 @@ spec:
                     format as workerModel without the "openrouter/" prefix requirement.
                 repos:
                   type: array
+                  maxItems: 32   # bounds the per-item CEL rule's cost estimate (the API server rejects an unbounded one)
                   description: >-
                     Every repo the stack's coordinator watches (issues/PRs), in scan order.
                     A repo WITH a `fixer` block also gets worker infrastructure rendered into
@@ -368,9 +369,15 @@ spec:
                   items:
                     type: object
                     required: [name]
+                    # repos[].intake renders per-repo names with a `.` suffix (`.src`, `.reader`) whose
+                    # collision-freedom rests on the repo name being a DNS label (no `.`).
+                    x-kubernetes-validations:
+                      - rule: "!has(self.intake) || self.name.matches('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')"
+                        message: "a repo with `intake` must have a DNS-label name (lowercase, digits, `-`; no `.`): it names a namespace and the intake-transcripts resources"
                     properties:
                       name:
                         type: string
+                        maxLength: 100   # GitHub's own repo-name limit; bounds the CEL rule above
                         description: >-
                           GitHub repo name in the teststuffstash org; doubles as the worker
                           namespace name for fixer-enabled repos.
@@ -526,6 +533,59 @@ spec:
                               `<parent of root>/scripts/lib/snippets.sh` (`gateway/scripts/lib/
                               snippets.sh` for `gateway/specs`, `scripts/lib/snippets.sh` for
                               `specs`). Declare only when the repo keeps its pin elsewhere.
+                      intake:
+                        type: object
+                        required: [facts]
+                        description: >-
+                          Present = island intake holds a daily sitting for this repo (a STACK
+                          island, named `<stack>/<repo>`; homelab#3580). Absent = intake is off
+                          for the repo. Consumed by the island intake LAUNCHER, which reads the
+                          live claims (islands/intake/scripts/claims-read.sh → intake-select.sh
+                          `--claims`; scripts/sitting.sh clones the repo's default branch and
+                          reads the facts file there). The Composition renders the stack's read
+                          path to the sittings: bucket `intake-transcripts-<repo>`, its write-only
+                          key in agent-coordinator, and a read-only key mirrored into ns <repo> as
+                          Secret `intake-transcripts-s3`.
+                        properties:
+                          facts:
+                            type: string
+                            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                            description: >-
+                              Repo-relative path of the island's facts file, in THIS repo (ADR-160:
+                              a stack's facts stay in the stack). No leading/trailing slash, no
+                              dot-led segment. Its required parts: islands/intake/README.md
+                              §Stack islands.
+                      extraSpecs:
+                        type: array
+                        maxItems: 16
+                        description: >-
+                          The repo's FURTHER spec roots, beside `specs` (a monorepo of islands:
+                          homelab's gateway owns `specs`, each island adds its own root here).
+                          Consumed by the SPECS REVIEWER (specs-reviewer-session.sh
+                          pack_root_pairs): a PR touching a listed root gets that root's own
+                          context pack and rows review instead of the mechanical approval; a PR
+                          touching several roots gets one pass per root and ONE verdict. And by
+                          the worker launcher (agent-session.sh REPLAY:specs-process-volume): a
+                          ride whose footprint reaches a listed root (and not `specs`) gets the
+                          pinned process mount, versioned by that root's README.md
+                          `RULES.md @ v<version>` link (else the primary pin). Never an evidence
+                          source: the repo's evidence bucket belongs to `specs`, so an extra
+                          root's pack states it carries no evidence.
+                        items:
+                          type: object
+                          required: [root]
+                          properties:
+                            root:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: Repo-relative directory of the spec pages (same grammar as `specs.root`).
+                            tests:
+                              type: string
+                              pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+                              description: >-
+                                Repo-relative directory of the rule tests. Omit when the root has
+                                none yet — the reviewer then reaches rules through the spec pages
+                                alone; it never assumes a default tests root.
                       fixer:
                         type: object
                         description: >-

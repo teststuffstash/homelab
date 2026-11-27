@@ -1,0 +1,40 @@
+[project]
+name = "launch-island"
+version = "0.1.0"
+description = "Launch island (homelab islands/launch/) — the tests root: rule-labelled replay rows as local Allure evidence."
+requires-python = ">=3.15"
+license = "MIT"
+dependencies = [
+    "jsonschema>=4.23,<5",
+]
+
+[dependency-groups]
+dev = [
+    "allure-pytest>=2.16,<3",
+    "pytest>=9.0.3,<10",
+    "ruff>=0.9,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+# Raw Allure results for every run, local only (never committed, not published).
+addopts = "--alluredir=allure-results --clean-alluredir --allure-no-capture"
+# Case ids are the spec's row ids verbatim; keep them unescaped.
+disable_test_id_escaping_and_forfeit_all_rights_to_community_support = true
+markers = [
+    "rule(id): the spec requirement this case proves (LAUNCH-…); fails at collection when specs/ has no such heading",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py315"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.uv]
+# ADR-143 floor (lock-intake-lint): a resolved version must be ≥ 7 days old.
+exclude-newer = "2026-10-08T00:00:00Z"

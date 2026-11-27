@@ -660,7 +660,7 @@ vm_start() {
   [ -n "$hvip" ] || { log "$NODE is VM $vmid on $hv, but machines.yaml has no ip for $hv — start it by hand (qm start $vmid); waiting for Ready"; return 0; }
   log "$NODE is a VM (vmid $vmid on $hv) — qm start via root@$hvip"
   ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$hvip" "qm start $vmid" \
+    -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$REPO/machines/hypervisor_known_hosts" -o ConnectTimeout=10 "root@$hvip" "qm start $vmid" \
     || log "qm start $vmid on $hv failed (already running? host key? key file?) — still waiting for Ready in case the VM is already up"
 }
 
@@ -676,7 +676,7 @@ up() {
       else
         log "WoL $NODE ($mac) via $PVE_HOST"
         ssh -i "$PVE_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
-          -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$PVE_HOST" \
+          -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$REPO/machines/hypervisor_known_hosts" -o ConnectTimeout=10 "$PVE_HOST" \
           "python3 -c \"import socket; m=bytes.fromhex('$mac'); p=b'\\xff'*6+m*16; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); s.sendto(p,('255.255.255.255',9))\"" \
           || log "WoL hop to $PVE_HOST failed (host key? key file?) — no magic packet sent; still waiting for Ready in case the box is already on"
       fi

@@ -19,6 +19,13 @@
 # week after the 2026-08-24 restore and every publish 403'd while CI stayed green — oracle-fleet#318,
 # which s3-publish.sh's verify-own-write now catches loudly).
 #
+# A second bucket rides this Workspace: `scan-specs`, the scan island's browsable specs site
+# (islands/scripts/specs-site.sh; https://scan-specs.homelab.teststuff.net, route in
+# argocd/resources/homelab-gateway/httproute-scan-specs.yaml). It is declared HERE, not in a
+# Workspace of its own, so the same writer key publishes it: one repo's CI, one trust level, and
+# no second pair of Actions secrets to copy host-side (scripts/github-secrets-sync.sh). Site only —
+# no evidence packs — so 1Gi is ample (the same ~5–10 MB site, purged PR previews).
+#
 # Keys: writer (read+write — the publish mirrors with --remove on its prefix and needs list) is
 # exposed to CI as the GitHub Actions secrets above; reader is read-only for humans/tools.
 apiVersion: tf.upbound.io/v1beta1
@@ -39,6 +46,13 @@ spec:
         website_index_document = "index.html"
       }
 
+      resource "garage_bucket" "scan_specs" {
+        global_alias           = "scan-specs"
+        max_size               = 1073741824 # 1Gi — sizing note above
+        website_enabled        = true
+        website_index_document = "index.html"
+      }
+
       resource "garage_key" "writer" { name = "gateway-specs-writer" }
       resource "garage_key" "reader" { name = "gateway-specs-reader" }
 
@@ -51,6 +65,21 @@ spec:
       }
       resource "garage_bucket_permission" "reader_read" {
         bucket_id     = garage_bucket.specs.id
+        access_key_id = garage_key.reader.id
+        read  = true
+        write = false
+        owner = false
+      }
+
+      resource "garage_bucket_permission" "scan_writer_rw" {
+        bucket_id     = garage_bucket.scan_specs.id
+        access_key_id = garage_key.writer.id
+        read  = true
+        write = true
+        owner = false
+      }
+      resource "garage_bucket_permission" "scan_reader_read" {
+        bucket_id     = garage_bucket.scan_specs.id
         access_key_id = garage_key.reader.id
         read  = true
         write = false

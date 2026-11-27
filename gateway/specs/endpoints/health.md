@@ -3,13 +3,13 @@ id: EP-HEALTH
 use-cases: [UC-1]
 schema: health.schema.json
 ---
-# GET /healthz — liveness, and which store the gateway is running on
+# GET /healthz — liveness, which store the gateway is running on, and which release
 
 The probe target and the one place the [store mode](../glossary.md#store-mode) is visible.
-`{ok: true, db: "pvc"}` is the normal answer. ADR-139 keeps the gateway single-replica on SQLite
+`{ok: true, db: "pvc", release: "<the image tag>"}` is the normal answer; `release` names the build the pod is running, so a metric sample can be tied to the release that produced it. ADR-139 keeps the gateway single-replica on SQLite
 at `/data/gateway.db` (a 1Gi Longhorn PVC); when the PVC is unusable at start the gateway **fails
 open** to an in-memory store, logs it loudly, and says so here (`db: "memory"`) — sessions, and the
-admission's capacity marks ([GW-SESSIONS-ADMIT §Kept across a restart](sessions.md#kept-across-a-restart)),
+admission's capacity marks ([GW-SESSIONS-CAPACITY §Kept across a restart](sessions.md#kept-across-a-restart)),
 then live only until the next restart. HA (FU-271) is a gap.
 
 ## Interface — the machine half
@@ -30,7 +30,7 @@ flowchart LR
   P["GET /healthz\n(no credential read)"] --> S{"the store opened at start"}
   S -->|/data/gateway.db opens| V["db: pvc"]
   S -->|PVC missing · read-only · corrupt| M["db: memory — FAIL-OPEN, logged"]
-  V --> A["200 ok: true, db"]
+  V --> A["200 ok: true, db, release"]
   M --> A
   V --> R["sessions survive a restart;\nan older schema is migrated on open"]
   M --> F["sessions are forgotten on restart"]
@@ -59,14 +59,19 @@ The gateway opens its store once, at start, from `GATEWAY_DB`: a path that opens
 [store mode](../glossary.md#store-mode); a path whose directory is missing, that cannot be opened
 for writing, or whose file fails SQLite's integrity check falls open to an in-memory store, the
 `memory` mode ⚖ — one `ERROR` log line names the path and the cause, and `GET /healthz` reports
-the mode in `db` for the process's whole life. The answer is always `200 {ok: true, db}`, nothing
-more and nothing less, and the probe reads no credential. A `pvc` store keeps its sessions across a
+the mode in `db` for the process's whole life. The gateway reads its release once, at start, from
+`GATEWAY_RELEASE`: a value matching `^[A-Za-z0-9._-]{1,64}$` is answered as `release` for the
+process's whole life, anything else — unset, empty, another shape — is answered as `unknown`. The
+answer is always `200 {ok: true, db, release}`, nothing more and nothing less, and the probe reads
+no credential. A `pvc` store keeps its sessions across a
 restart and adds the columns a newer schema needs on open (additive only — the 2026-10-16 schema
-without the cache columns opens and its sessions ride); a `memory` store forgets everything at
+without the cache columns opens and its sessions ride). The schema and its migration apply in one
+transaction: a crash or error midway leaves the file at the schema it had, never a partial one
+(the error falls open like any other; unverified — no row drives a mid-migration error). A `memory` store forgets everything at
 restart, so a pod's session token is `session-unknown` to its successor.
 
 **World: [policy-default](../worlds/README.md#policy-worlds)** — `GATEWAY_DB=<tmp>/data/gateway.db`
-unless a row says `memory`; a worker session is admitted on the Go rail (`opencode`) and its
+unless a row says `memory`; `GATEWAY_RELEASE` unset unless a row's `GATEWAY_RELEASE` cell says otherwise; a worker session is admitted on the Go rail (`opencode`) and its
 ride goes to the fake Go upstream, `upstream-ok`.
 
 #### Which store the gateway runs on
@@ -83,6 +88,18 @@ the path, and the cause on a fail-open).
 | the PVC is missing — fail open ⚖ | `missing-dir` | `memory` | `db: memory — FAIL-OPEN, sessions do not survive a restart` |
 | the PVC is read-only — fail open ⚖ | `read-only` | `memory` | `db: memory — FAIL-OPEN, sessions do not survive a restart` |
 | the DB file is corrupt — fail open ⚖ | `corrupt` | `memory` | `db: memory — FAIL-OPEN, sessions do not survive a restart` |
+
+#### The answer names the running release
+
+Legend: `GATEWAY_RELEASE` = the environment variable when the gateway starts (`unset` = not in the
+environment; `empty` = set to the empty string); `release?` = the `release` field of the 200 answer.
+
+| description | GATEWAY_RELEASE | release? |
+|---|---|---|
+| the deploy's pinned tag is answered | `2026.11.16-g3446cf3bba98` | `2026.11.16-g3446cf3bba98` |
+| no release declared is unknown ⚖ | `unset` | `unknown` |
+| an empty value is unknown | `empty` | `unknown` |
+| a value that is not tag-shaped is never echoed ⚖ | `v1 {"x"}` | `unknown` |
 
 #### What survives a restart
 
@@ -116,8 +133,8 @@ session token` = `Bearer gws_` + 32 characters no session owns); `status?` = the
 
 | description | authorization | status? | body? |
 |---|---|---|---|
-| no auth is required | `none` | `200` | `{"ok": true, "db": "pvc"}` |
-| a bearer changes nothing — the probe reads no credential | `an unknown session token` | `200` | `{"ok": true, "db": "pvc"}` |
+| no auth is required | `none` | `200` | `{"ok": true, "db": "pvc", "release": "unknown"}` |
+| a bearer changes nothing — the probe reads no credential | `an unknown session token` | `200` | `{"ok": true, "db": "pvc", "release": "unknown"}` |
 
 > Tombstone (removed by PR #3184; one cycle): ~~no other field is served~~ — carried now by the
 > `body?` cell of both rows above (the whole body, exactly).

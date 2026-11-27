@@ -506,7 +506,7 @@ after.
 | no report yet is unknown | `none` | `none` | — | `none` | `quota-unknown` |
 | a gateway restart forgets | `poll, T−10, 20 % / 64 % (on the old instance)` | `none` | — | `none` | `quota-unknown` |
 | an equal or older timestamp cannot overwrite | `poll, T−10, 20 % / 64 %` | `poll, T−10 / T−11 / T−110, 20 % / 64 %, limited` | `quota-out-of-order` | `0.2 / 0.64` | `admit` |
-| a newer report from another source replaces | `poll, T−10, 20 % / 64 %` | `jail, T−1, limited` | `accepted` | `0.2 / 0.64, limited` | `quota-limited` |
+| a newer report from another source replaces | `poll, T−10, 20 % / 64 %` | `jail, T−1, 20 % / 64 %, limited` | `accepted` | `0.2 / 0.64, limited` | `quota-limited` |
 
 #### A malformed report is refused
 
@@ -547,7 +547,8 @@ An ACCEPTED report from either producer — and only one — sets the two subscr
 `5h`, 10080 → `7d`) — the policy profile decides which series exist, and a profile minute the
 vocabulary lacks renders `other` like any out-of-set label value ⚖. A refused report reaches no
 gauge; a fresh gateway renders no codex series until a report is accepted. The Grafana panels on
-UID `claude-subscription` (the "Codex subscription (gateway headroom)" row) read these series.
+UID `agent-gateway` (the "Subscription headroom" row of the gateway's own dashboard) read these
+series.
 
 Legend: the clock is `now` = 1800000000; `reports` = the reports offered, in order;
 `utilization?` / `reset_seconds?` = the `5h` / `7d` series of each gauge (`absent` = no series).
@@ -560,10 +561,12 @@ Legend: the clock is `now` = 1800000000; `reports` = the reports offered, in ord
 
 #### The window label
 
-Legend: `profile_minutes` = the windows of one accepted report; `labels?` = the `window` label
-values rendered on `rail="codex"`.
+Legend: `profile` = the row's policy profile: the world's policy with
+`rails.codex.headroom.windows_minutes` replaced by these minutes (the world's own profile is
+`300, 10080`); one report carrying exactly these windows is offered and accepted; `labels?` = the
+`window` label values rendered on `rail="codex"`.
 
-| description | profile_minutes | labels? |
+| description | profile | labels? |
 |---|---|---|
 | the window label is the profile's minutes in the window vocabulary ⚖ | `300, 10080, 1440, 90` | `5h, 7d, other` |
 
@@ -651,6 +654,11 @@ are never read, logged, attached or rendered. Every outcome is counted on
 only while the policy DECLARES the codex rail (an undeclared rail renders no series, so the
 silent-poll alert cannot fire on it) and then every outcome renders from 0; a refused or failed poll
 leaves the last ACCEPTED report standing.
+A poll whose `Lifecycle.acquire()` fails stops at the credential store, the endpoint never
+contacted, and is counted in the class admission gives the same store state
+([GW-CODEX-OAUTH](#gw-codex-oauth)): a store that does not answer (`credential-store-unavailable`)
+is `credential-transient`, a persisted `refreshing` marker (`credential-recovery-required`) is
+`credential-unresolved`.
 
 **World: [policy-codex](../worlds/README.md#the-codex-rails-fakes-tests_codex_worldpy)** —
 `poll_interval_s` 30 under `max_age_s` 120; the fake usage endpoint answers the observed shape with
@@ -678,8 +686,9 @@ line at DEBUG carries an identity value.
 #### A failed poll leaves the last report standing
 
 Legend: `last_report` = the snapshot before the poll (`accepted` = one accepted poll, 5 s earlier;
-`none`); `answer` as above (`(the store)` = the endpoint is never contacted); `outcome?` = the
-counted outcome per variant; `verdict?` after.
+`none`); `answer` as above (`(the store) …` = the endpoint is never contacted: the poll stops at
+the credential store, in the state the variant names); `outcome?` = the counted outcome per
+variant; `verdict?` after.
 
 | description | last_report | answer | outcome? | verdict? |
 |---|---|---|---|---|
@@ -687,7 +696,7 @@ counted outcome per variant; `verdict?` after.
 | a 429 or 500 is an http error, nothing accepted | `none` | `429 / 500` | `upstream-http-error` | `quota-unknown` |
 | an unreachable endpoint and a timeout are told apart | `none` | `connect error / read timeout` | `upstream-unreachable / upstream-timeout` | `quota-unknown` |
 | a non-JSON, wrong-type or oversize body is refused ⚖ | `none` | `text/html / application/json that is not JSON / 70 KiB (bound 64 KiB)` | `upstream-content-type` | `quota-unknown` |
-| a store that does not answer is transient; a recovery marker is unresolved | `none` | `(the store)` | `credential-transient / credential-unresolved` | `quota-unknown` |
+| a store that does not answer is transient; a recovery marker is unresolved | `none` | `(the store) the lock raises / a persisted refreshing marker` | `credential-transient / credential-unresolved` | `quota-unknown` |
 
 A usage 401 alone is no revocation evidence (the spike §Refresh and headroom implications): it is
 counted, never a credential verdict.
@@ -867,7 +876,7 @@ Legend: `sequence` = what happens to the store, in order; `result?` = the durabl
 | seed once | `an empty database, a mounted seed` | `ready` | `seed` | 1 |
 | seed unchanged is not imported again | `rotate, restart on the same seed bytes` | `ready` | `rotation` | 0 |
 | changed seed replaces ⚖ | `rotate and leave a refreshing marker, reseed, restart` | `ready` | `reseed` | 1 |
-| restart recovers state | `revoke, restart` | `revoked` | `rotation` | 0 |
+| restart recovers state | `rotate, revoke, restart` | `revoked` | `rotation` | 0 |
 | crash between exchange and save ⚖ | `the child exits in the exchange; the parent acquires; reseed; acquire` | `refreshing, then credential-recovery-required, then ready after the reseed` | `reseed` | 1 |
 | memory fallback is refused | `a :memory: store path` | `credential-store-unavailable` | — | — |
 
@@ -893,7 +902,7 @@ Legend: `store` = the fault injected (`save #1` = the marker write, `save #2` = 
 
 | description | store | exchange | result? | exchanges? | state? |
 |---|---|---|---|---|---|
-| a failed marker write prevents the exchange | `save #1 raises` | — | `credential-store-unavailable, then the rotation` | `0, then 1` | `ready, rotated` |
+| a failed marker write prevents the exchange | `save #1 raises` | `the rotation` | `credential-store-unavailable, then the rotation` | `0, then 1` | `ready, rotated` |
 | a failed rotation write blocks restart | `save #2 raises` | `the rotation` | `credential-store-unavailable, then credential-recovery-required` | 1 | `refreshing` |
 | an ambiguous save reloads the committed rotation | `save #2 commits, then raises` | `the rotation` | `credential-store-unavailable, then the rotation` | 1 | `ready, rotated` |
 | a lock failure is the store class | `the lock raises` | — | `credential-store-unavailable` | 0 | `ready, unchanged` |

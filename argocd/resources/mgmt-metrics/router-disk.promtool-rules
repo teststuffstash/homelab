@@ -1,0 +1,23 @@
+# The mgmt-router-disk group, lifted VERBATIM out of router-disk.yaml (annotations stripped —
+# the manifest is their one home) — the rules file router-disk.promtool-test loads.
+# DRIFT-PINNED by `devbox run prometheus-rules-lint`. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | .rules |= map(del(.annotations))]}' argocd/resources/mgmt-metrics/router-disk.yaml | yq -P '.'
+#
+groups:
+  - name: mgmt-router-disk
+    rules:
+      - alert: MgmtRouterDiskLow
+        expr: |
+          mgmt_router_disk_avail_bytes{role="node"} / mgmt_router_disk_size_bytes{role="node"} < 0.20
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+      - alert: MgmtRouterDiskUnread
+        expr: |
+          mgmt_router_disk_read_ok{role="node"} == 0
+        for: 6h
+        labels:
+          severity: warning
+          triage: none

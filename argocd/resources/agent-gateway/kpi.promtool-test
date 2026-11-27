@@ -1,0 +1,114 @@
+# Behaviour fixture for the `agent-gateway-kpi` rules (prometheusrule.yaml beside this file) —
+# the gateway's two KPIs, each a recorded 7-day ratio with a sample floor and an alert under a
+# target (gateway/README.md §KPIs).
+#
+#   devbox run prometheus-rules-lint      # runs this, and every other *.promtool-test under argocd/
+#
+# LABELS are the real scraped set of gateway_* (container, endpoint, instance, job, namespace, pod,
+# service), plus rail, dialect, status and traffic on gateway_requests_total, and stack, rail, role
+# and decision on gateway_sessions_total.
+rule_files:
+  - kpi.promtool-rules
+
+evaluation_interval: 1h
+
+tests:
+  - interval: 1h
+    name: K1 healthy — every real request answered 2xx reads 1 and stays silent
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="200",traffic="real"}'
+        values: "0+10x200"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+0x200"
+    promql_expr_test:
+      - expr: gateway:real_requests_success:ratio_7d
+        eval_time: 180h
+        exp_samples:
+          - labels: 'gateway:real_requests_success:ratio_7d'
+            value: 1
+    alert_rule_test:
+      - eval_time: 180h
+        alertname: GatewayRequestSuccessBelowTarget
+        exp_alerts: []
+  - interval: 1h
+    name: K2 below target — one real request in eleven answered 502 fires once the floor holds
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="200",traffic="real"}'
+        values: "0+10x200"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+1x200"
+    alert_rule_test:
+      - eval_time: 10h
+        alertname: GatewayRequestSuccessBelowTarget
+        exp_alerts: []
+      - eval_time: 180h
+        alertname: GatewayRequestSuccessBelowTarget
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: 'The gateway answered less than 99 % of its real requests without a 5xx over the last 7 days — below its KPI target'
+              description: 'gateway:real_requests_success:ratio_7d is 90.91% (target: at least 99 %; at least 200 real requests in the 7 d). Check: (1) sum by (rail, status) (increase(gateway_requests_total{job="agent-gateway",traffic="real",status=~"5.."}[7d])) names the rail and the status — 502 is an unreachable upstream, 503 the gateway''s own refusal; (2) whether GatewayErrorShare fired in the window (the same share over 30 m, above 20 %); (3) gateway_build_info names the release that was serving. The KPI and its target are named in gateway/README.md §KPIs.'
+  - interval: 1h
+    name: K3 synthetic or thin — a prober's failures, and failures under the floor, stay silent
+    input_series:
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="synthetic"}'
+        values: "0+10x200"
+      - series: 'gateway_requests_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",rail="anthropic",dialect="anthropic",status="502",traffic="real"}'
+        values: "0+1x100 100x100"
+    alert_rule_test:
+      - eval_time: 60h
+        alertname: GatewayRequestSuccessBelowTarget
+        exp_alerts: []
+      - eval_time: 180h
+        alertname: GatewayRequestSuccessBelowTarget
+        exp_alerts: []
+  - interval: 1h
+    name: D1 healthy — nineteen dispatches in twenty reads 0.95 and stays silent
+    input_series:
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="anthropic",role="reviewer",decision="dispatch"}'
+        values: "0+19x200"
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="none",role="reviewer",decision="defer"}'
+        values: "0+1x200"
+    promql_expr_test:
+      - expr: gateway:sessions_dispatched:ratio_7d
+        eval_time: 180h
+        exp_samples:
+          - labels: 'gateway:sessions_dispatched:ratio_7d'
+            value: 0.95
+    alert_rule_test:
+      - eval_time: 180h
+        alertname: GatewayDispatchShareBelowTarget
+        exp_alerts: []
+  - interval: 1h
+    name: D2 below target — one session in five deferred fires once the floor holds
+    input_series:
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="anthropic",role="reviewer",decision="dispatch"}'
+        values: "0+4x200"
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="none",role="reviewer",decision="defer"}'
+        values: "0+1x200"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: GatewayDispatchShareBelowTarget
+        exp_alerts: []
+      - eval_time: 180h
+        alertname: GatewayDispatchShareBelowTarget
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+            exp_annotations:
+              summary: 'The gateway dispatched less than 90 % of the sessions it was asked for over the last 7 days — below its KPI target'
+              description: 'gateway:sessions_dispatched:ratio_7d is 80% (target: at least 90 %; at least 50 session requests in the 7 d, the prober''s left out). Check: (1) sum by (role, stack) (increase(gateway_sessions_total{job="agent-gateway",decision="defer"}[7d])) names who was deferred; (2) gateway_subscription_utilization and gateway_cells_cooled name the rail that was full or cooled; (3) the policy''s rails for that role in argocd/resources/agent-gateway/policy.json. A defer is the gateway''s designed answer when every listed rail is held; this alert is about the share, not one defer. The KPI and its target are named in gateway/README.md §KPIs.'
+  - interval: 1h
+    name: D3 prober — a prober's defers are not counted
+    input_series:
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="anthropic",role="worker",decision="dispatch"}'
+        values: "0+10x200"
+      - series: 'gateway_sessions_total{container="gateway",endpoint="http",instance="10.244.7.31:8080",job="agent-gateway",namespace="agent-egress",pod="agent-gateway-6d484cdd96-bb87m",service="agent-gateway",stack="platform",rail="none",role="prober",decision="defer"}'
+        values: "0+10x200"
+    alert_rule_test:
+      - eval_time: 180h
+        alertname: GatewayDispatchShareBelowTarget
+        exp_alerts: []

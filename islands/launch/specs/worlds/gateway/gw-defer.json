@@ -1,0 +1,5 @@
+{
+  "provenance": {"kind": "hand-written", "validated_against": "gateway/specs/endpoints/sessions.schema.json", "part": "post.defer", "note": "placeholder values only; not recorded from a live gateway"},
+  "status": 200,
+  "body": {"decision": "defer", "reason": "rail-capacity", "retry_after_s": 120}
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teststuffstash/homelab/islands/scan/specs/major-handoff.schema.json",
+  "title": "major-handoff.sh — invocation, the evidence it requires, the exit contract",
+  "type": "object",
+  "x-requirements": {
+    "/properties/invocation": ["SCAN-HANDOFF-GATE"],
+    "/properties/pr_read": ["SCAN-HANDOFF-GATE"],
+    "/properties/pull_commits_read": ["SCAN-HANDOFF-GATE"],
+    "/properties/evidence": ["SCAN-HANDOFF-GATE"],
+    "/properties/evidence/properties/upstream_line": ["SCAN-HANDOFF-ARM"],
+    "/properties/exit": ["SCAN-HANDOFF-GATE", "SCAN-HANDOFF-ARM"]
+  },
+  "properties": {
+    "invocation": {
+      "type": "object",
+      "required": ["slug", "pr"],
+      "properties": {
+        "slug": {"type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"},
+        "pr": {"type": "integer"}
+      }
+    },
+    "pr_read": {
+      "description": "the answer of `gh pr view <pr> --repo <slug> --json state,labels,reviews,commits` (field names as recorded in worlds/pr-handoff/): every field the gate reads; an answer lacking one is unreadable (exit 4, nothing written)",
+      "type": "object",
+      "required": ["state", "labels", "reviews", "commits"],
+      "properties": {
+        "state": {"type": "string"},
+        "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}},
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["author", "state", "submittedAt", "body"],
+            "properties": {
+              "author": {"type": "object", "required": ["login"], "properties": {"login": {"type": "string"}}},
+              "state": {"type": "string"},
+              "submittedAt": {"type": "string"},
+              "body": {"type": "string"}
+            }
+          }
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["oid", "messageHeadline", "committedDate"],
+            "properties": {"oid": {"type": "string"}, "messageHeadline": {"type": "string"}, "committedDate": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "pull_commits_read": {
+      "description": "the raw answer of `gh api repos/<slug>/pulls/<pr>/commits?per_page=100`: which commit of the PR read is a merge commit (two or more parents; glossary.md merge commit). Issued only when the gate reaches the approval-at-head check; an answer lacking a field, or an element for a commit of the PR read, is unreadable (exit 4, nothing written)",
+      "type": "array",
+      "items": {"type": "object", "required": ["sha", "parents"], "properties": {"sha": {"type": "string"}, "parents": {"type": "array", "items": {"type": "object", "required": ["sha"], "properties": {"sha": {"type": "string"}}}}}}
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["state", "labels_include", "approval_at_head", "headings"],
+      "properties": {
+        "state": {"const": "OPEN"},
+        "labels_include": {"const": "major"},
+        "approval_at_head": {"description": "reviewer bot ([bot] suffix normalized) APPROVED, submittedAt > newest non-merge commit"},
+        "headings": {"const": ["Upstream", "Known issues", "Platform compatibility", "Evidence"], "description": "each a line-anchored `## …` heading or `**…**` label, case-insensitive"},
+        "upstream_line": {"type": "string", "pattern": "^(?i)appVersion: (unchanged \\(.+\\)|.+ → .+)$", "description": "`unchanged (<v>)` arms; anything else, or absent, parks"}
+      }
+    },
+    "exit": {
+      "oneOf": [
+        {"const": 0, "description": "handed off (major/awaiting-human added, agent/in-progress removed, re-read) OR armed (packaging-only chart major)"},
+        {"const": 3, "description": "REFUSED — nothing written; the migration evidence is missing"},
+        {"const": 4, "description": "UNREADABLE — a probe failed before any write"},
+        {"const": 5, "description": "end state NOT PROVEN — writes issued, re-read does not show them"}
+      ]
+    }
+  }
+}

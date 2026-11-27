@@ -736,7 +736,8 @@ class SessionService:
         return JSONResponse({"decision": "defer", "reason": reason, "retry_after_s": retry})
 
     def _struck(self, adm: Admission) -> tuple[set[str], set[tuple[str, str, str]], set[str]]:
-        """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id on every rail;
+        """This task's counted strikes (GW-SESSIONS-OUTCOME): model-scoped → the model id and its twins
+        (`tiers.same_model`, GW-SESSIONS-RETRY §A strike crosses the twins) on every rail;
         cell-scoped → that (rail, model, provider) — provider '' is the model's own cell, a slug one
         provider's cell on it (GW-RAIL-OPENROUTER); harness-scoped → the harness on every cell."""
         models: set[str] = set()
@@ -745,6 +746,10 @@ class SessionService:
         for st in self.store.strikes_for(adm.stack.name, adm.task):
             if st["scope"] == "model":
                 models.add(st["model"])
+                # The twin rule is id arithmetic: every policy id that names the same model is struck too.
+                for rcfg in self.policy.rails.values():
+                    for tier_models in rcfg.models.values():
+                        models.update(m for m in tier_models if same_model(st["model"], m))
             elif st["scope"] == "harness":
                 if st["harness"]:
                     harnesses.add(st["harness"])

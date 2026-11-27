@@ -10,12 +10,13 @@ description cells; the admission rows are tests/test_codex_admission.py (GW-CODE
 from __future__ import annotations
 
 import copy
+import dataclasses
 import re
 
 import pytest
 
 from agent_gateway.config import Policy
-from agent_gateway.headroom import Headroom, ReportError, Window
+from agent_gateway.headroom import Headroom, ReportError
 from agent_gateway.metrics import Metrics
 
 from ._codex_rows import expect, row, verdicts
@@ -75,7 +76,7 @@ LAST = "poll, T−10, 20 % / 64 %"
     pytest.param("none", "none", "—", "none", "quota-unknown", id="no report yet is unknown"),
     pytest.param(f"{LAST} (on the old instance)", "none", "—", "none", "quota-unknown", id="a gateway restart forgets"),
     pytest.param(LAST, "poll, T−10 / T−11 / T−110, 20 % / 64 %, limited", "quota-out-of-order", "0.2 / 0.64", "admit", id="an equal or older timestamp cannot overwrite"),
-    pytest.param(LAST, "jail, T−1, limited", "accepted", "0.2 / 0.64, limited", "quota-limited", id="a newer report from another source replaces"),
+    pytest.param(LAST, "jail, T−1, 20 % / 64 %, limited", "accepted", "0.2 / 0.64, limited", "quota-limited", id="a newer report from another source replaces"),
 ])
 def test_report_replaces(last_accepted, report, expected_accepted, expected_snapshot, expected_verdict):
     world("policy-codex")
@@ -238,15 +239,22 @@ async def test_gauges(codex_app, codex_gw, clock, reports, expected_utilization,
     )
 
 
-@pytest.mark.parametrize(("profile_minutes", "expected_labels"), [
+@pytest.mark.parametrize(("profile", "expected_labels"), [
     pytest.param("300, 10080, 1440, 90", "5h, 7d, other", id="the window label is the profile's minutes in the window vocabulary ⚖"),
 ])
-def test_window_label(profile_minutes, expected_labels):
-    world("policy-codex")
-    row(profile_minutes=profile_minutes, expected_labels=expected_labels)
-    minutes = [int(m) for m in profile_minutes.split(", ")]
+def test_window_label(profile, expected_labels):
+    world("policy-codex", note="rails.codex.headroom.windows_minutes replaced by the row's profile")
+    row(profile=profile, expected_labels=expected_labels)
+    minutes = [int(m) for m in profile.split(", ")]
     m = Metrics(("platform",))
-    with when(f"subscription_report codex: windows of profile_minutes {profile_minutes}"):
-        m.subscription_report("codex", [Window(0.2 + i / 100, T + 1000 * (i + 1), n) for i, n in enumerate(minutes)])
+    with given(f"policy profile: rails.codex.headroom.windows_minutes = {minutes}"):
+        room = Headroom(_Clock(), dataclasses.replace(_policy(), windows=tuple(minutes)))
+        room.on_accept = lambda snapshot: m.subscription_report("codex", snapshot.windows)  # app.py's binding
+    report = {"observed_at": T - 10, "source": "poll", "limited": False,
+              "windows": [{"used_percent": 20 + i, "resets_at": T + 1000 * (i + 1), "window_minutes": n}
+                          for i, n in enumerate(minutes)]}
+    with when(f"one report with the windows {profile} is offered"):
+        attach_json("the report and its fate", {"report": report, "outcome": _refusal(room, report)})
         labels = re.findall(r'^gateway_subscription_utilization\{rail="codex",window="([^"]+)"\}', m.render(), re.M)
+    assert room.snapshot is not None, "the report was refused"
     expect("labels", ", ".join(sorted(set(labels))), expected_labels)

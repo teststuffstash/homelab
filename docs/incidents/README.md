@@ -52,6 +52,7 @@ the same exemption the TICK-LOG and ADRs carry.
 
 | Date | Incident | Residual |
 |---|---|---|
+| 2026-10-29 | [A worker printed its env into a prompt; the provider that served it was breached](2026-10-29-worker-env-dump-to-breached-provider.md) | the writer-key rotation (this PR); scanner belt + boundary rollout as FUs from the 2026-11-22 second-jail handoff |
 | 2026-07-27 | [Kata ride OOM cascade — agents killed platform daemons on three nodes](2026-07-27-kata-ride-oom-cascade.md) | FU-112, FU-116 |
 | 2026-07-27 | [The ghcr mirror filled four times in eight days — three mechanisms, five peer issues](2026-07-27-ghcr-mirror-recurring-fill.md) | FU-093 |
 | 2026-07-27 | [Responder deferred an alert into silence](2026-07-27-responder-silent-defer.md) | FU-113 |
@@ -76,3 +77,4 @@ the same exemption the TICK-LOG and ADRs carry.
 | 2026-10-08 | [nine hours without WAN — the window-2 failover proof left nx-02 in CARP maintenance (`carp_status/enable` does not leave it; `maintenance` is a toggle); detectors and the box timers self-healed, stranded CI and a 4-hour responder backoff holding the subscription semaphore did not](2026-10-08-carp-maintenance-not-left.md) | — |
 | 2026-10-17 | [the OpenCode Go rail ran ~2 h on an expired key (no expiry tracked, no alert), and a later forwarded-UA Cloudflare 403 self-latched the gateway's opencode rail](2026-10-17-opencode-go-key-expired.md) | FU-313 |
 | 2026-10-28 | [opencode 2.x headless rides hung on an open stdin from the 10-26 major bump until #2998 — invisible to every belt (quiet stall)](2026-10-28-opencode-2-stdin-hang.md) | FU-187 |
+| 2026-11-20 | [nx-02's boot SSD dropped off the bus; the dead backup Garage stopped WAL archiving and grafana-pg filled with WAL (Grafana down ~8 h) — DRAFT, reboot owed](2026-11-20-nx-02-boot-disk.md) | FU-299 |

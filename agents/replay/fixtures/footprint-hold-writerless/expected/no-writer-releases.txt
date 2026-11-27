@@ -1,0 +1,5 @@
+CALL kubectl -n agent-coordinator get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+OUT DISPATCH #60 (homelab, class=build, declared: gateway/specs/glossary.md, gateway/src/agent_gateway/sessions.py)
+OUT ORPHAN [homelab] ⏳ footprint NOT holding siblings — in-progress issue #50 has no live writer (no worker pod, no item session, no open PR; untouched past the 15m guard): its `Touches:` (gateway/specs/endpoints/sessions.md, gateway/src/agent_gateway/) leaves the ADR-097 hold set this pass. Its own C4/C5 handling is unchanged.
+OUT REACHED: end
+RC 0

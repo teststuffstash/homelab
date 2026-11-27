@@ -1535,7 +1535,7 @@
       "id": 15,
       "type": "stat",
       "title": "management-apply status on master (github-exporter)",
-      "description": "github_mgmt_apply_refused / _refused_since_timestamp / _outside_addresses — the box's `management-apply` commit STATUS on master, read by github-exporter. Absent = the loop has not posted a verdict on HEAD (absent ≠ zero, by design). The belt is MgmtApplyResidueStanding.",
+      "description": "github_mgmt_apply_refused / _refused_since_timestamp / _outside_addresses — the box's `management-apply` commit STATUSES on master, read by github-exporter per `subject` (a root, `stage 1`, `ansible <group>`): A = any subject refused, B/C = each standing subject's age and address count. Absent = the exporter has not read the history yet (absent ≠ zero, by design). The belt is MgmtApplyResidueStanding.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1552,9 +1552,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "github_mgmt_apply_refused{context=\"management-apply\"}",
+          "expr": "max(github_mgmt_apply_refused{context=\"management-apply\"})",
           "refId": "A",
-          "legendFormat": "__auto",
+          "legendFormat": "refused (any subject)",
           "instant": true,
           "range": false
         },
@@ -1565,7 +1565,7 @@
           },
           "expr": "time() - github_mgmt_apply_refused_since_timestamp{context=\"management-apply\"}",
           "refId": "B",
-          "legendFormat": "__auto",
+          "legendFormat": "{{subject}} age",
           "instant": true,
           "range": false
         },
@@ -1574,9 +1574,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "github_mgmt_apply_outside_addresses{context=\"management-apply\"}",
+          "expr": "github_mgmt_apply_outside_addresses{context=\"management-apply\"} > 0",
           "refId": "C",
-          "legendFormat": "__auto",
+          "legendFormat": "{{subject}} addresses",
           "instant": true,
           "range": false
         }
@@ -1596,7 +1596,7 @@
               }
             ]
           },
-          "noValue": "no verdict on HEAD yet",
+          "noValue": "no history read yet",
           "color": {
             "mode": "thresholds"
           }

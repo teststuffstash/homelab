@@ -17,7 +17,8 @@
 # - ORPHAN: a docs/agents/*.md that docs/agents/README.md (the doc table) never links
 # WARNS on (never fails):
 # - the same breakage inside HISTORICAL records (docs/agents/retros/, docs/incidents/,
-#   docs/follow-ups-archive.md) — their references may be fixed (docs-cleanup), but
+#   docs/follow-ups-archive.md, docs/spikes/*-fixtures/ — frozen regression inputs) — their
+#   references may be fixed (docs-cleanup; never in a fixture), but
 #   sediment never blocks CI.
 # Links resolving OUTSIDE the repo (e.g. ../teststuff) are skipped — not ours to hold,
 # and absent on CI runners.
@@ -51,7 +52,9 @@ status=0
 
 is_historical() {
   case "$1" in
-    docs/agents/retros/*|docs/incidents/*|docs/follow-ups-archive.md) return 0 ;;
+    # frozen fixtures: verbatim copies of issue bodies / scored outputs as they stood (regression
+    # inputs — editing one to satisfy a lint would change the test), sediment by construction
+    docs/agents/retros/*|docs/incidents/*|docs/follow-ups-archive.md|docs/spikes/*-fixtures/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -129,12 +132,12 @@ CODE_RE='[A-Z][0-9][0-9]?[a-z]?'
 anchor_refs=$(git grep -hoE "§${CODE_RE}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' \
     ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
     ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
-    ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | sed 's/^§//' | sort -u)
+    ":(exclude)docs/follow-ups-archive.md" ":(exclude)docs/spikes/*-fixtures/*" 2>/dev/null | sed 's/^§//' | sort -u)
 for code in $anchor_refs; do
   defs=$(git grep -nE "^#{1,6} +${code}[^A-Za-z0-9]|^- \*\*${code}[^A-Za-z0-9]" -- '*.md' \
       ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
       ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
-      ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | cut -d: -f1,2)
+      ":(exclude)docs/follow-ups-archive.md" ":(exclude)docs/spikes/*-fixtures/*" 2>/dev/null | cut -d: -f1,2)
   n=$(printf '%s\n' "$defs" | grep -c . || true)
   if [ "$n" -eq 0 ]; then
     where=$(git grep -lF "§${code}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' 2>/dev/null | head -3 | tr '\n' ' ')
@@ -167,7 +170,7 @@ while IFS= read -r ref; do
   defs=$(git grep -lE "^#{1,6} +${code}[^A-Za-z0-9]|^- \*\*${code}[^A-Za-z0-9]" -- '*.md' \
       ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
       ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
-      ":(exclude)docs/follow-ups-archive.md" 2>/dev/null)
+      ":(exclude)docs/follow-ups-archive.md" ":(exclude)docs/spikes/*-fixtures/*" 2>/dev/null)
   [ -n "$defs" ] || continue          # unresolved is check #4's finding, not this one
   # Compare on BASENAME: a ref may name the full path or the bare filename, both legal shapes.
   # ⚠ Never write a file-qualified §-code EXAMPLE anywhere in this script — the grep below scans
@@ -180,7 +183,7 @@ done <<EOF2
 $(git grep -hoE "[A-Za-z0-9._/-]+\.md §${CODE_RE}" -- '*.md' '*.sh' '*.py' '*.yaml' '*.yml' \
     ":(exclude)agents/coordinator/TICK-LOG.md" ":(exclude)docs/adr.md" \
     ":(exclude)docs/agents/retros" ":(exclude)docs/incidents" \
-    ":(exclude)docs/follow-ups-archive.md" 2>/dev/null | sort -u)
+    ":(exclude)docs/follow-ups-archive.md" ":(exclude)docs/spikes/*-fixtures/*" 2>/dev/null | sort -u)
 EOF2
 if [ "$misfiled" -gt 0 ]; then
   if [ "$DOCS_GRAPH_MISFILED_ENFORCE" = 1 ]; then

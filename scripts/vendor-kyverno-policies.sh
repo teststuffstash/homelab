@@ -29,7 +29,7 @@
 # scripts/dependency-coverage.py (class 18, docs/dependency-classes.yaml). Keep REF first, SHA next,
 # no blank line between, bare 40-hex value.
 KYVERNO_POLICIES_REF=release-1.19
-KYVERNO_POLICIES_SHA=282e77f6d54e1e1a636190ff2dacc3d02c2d689c
+KYVERNO_POLICIES_SHA=693ea0215f96347dbd71203e6d1a824efd12f7c8
 #
 # MANIFEST — one line per vendored file: `<upstream path>|<local file>|<choice>|<note>`.
 #   choice  cel      the `-vpol` CEL ValidatingPolicy — the audit marks it `equivalent` to the legacy rule

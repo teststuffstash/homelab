@@ -167,6 +167,143 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows
 subjects:
   - { kind: ServiceAccount, name: outcome-judge, namespace: agent-coordinator }
 ---
+# The island intake sitting's OWN identity (homelab#3577, Goal #3574 pin 6): READ-ONLY. Until this
+# SA the sitting (island-intake-argo.yaml) ran as `agent-coordinator` and so held that SA's pod
+# create/delete, pods/exec create, configmap create/delete/patch and openrouterkeys writes — none
+# of which a sitting uses: it reads, and writes only to GitHub (its token), the transcripts bucket
+# (its key) and the Pushgateway (HTTP). Its kube grant is three reads and the executor's write:
+#   - `agent-read-infra` + `agent-read-app` (agent-read-rbac.yaml), cluster-wide: what the
+#     coordinator's lanes already read (pods and their logs, events, workloads, PVCs, nodes,
+#     Longhorn, ArgoCD apps, workflows, network policies, ESO specs, claims). `agents/
+#     subscription-latch.sh`'s belt (`kubectl get pods -A -l …subscription-session`) rides it;
+#   - `island-intake-read` below: the four kinds a ruling needed and could not read, and the
+#     AgentStack claims (the stack islands' declaration, homelab#3580);
+#   - the chart-rendered `argo-workflows-workflow` Role (`workflowtaskresults` create/patch — the
+#     Argo executor's own write), the `specs-review` pattern above.
+# NOT bound to ClusterRole `agent-coordinator`, to `responder-ledger` or to
+# `coordinator-scan-workflows`. No Secret and no ConfigMap read (agent-read-rbac.yaml §NEVER
+# GRANTED). The gateway admits it by name (argocd/resources/agent-gateway/policy.json `callers`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: island-intake
+  namespace: agent-coordinator
+---
+# What the read roles lack and an intake ruling stands on: a namespace's quota (is the ride
+# starved or the quota wrong), the alert rule as deployed (not as the repo has it), and the
+# schedules and templates of the loop's own workflows. And the AgentStack claims (homelab#3580):
+# a stack declares an intake island as `repos[].intake.facts` in its claim, and the workflow's list
+# step and a stack island's sitting read the claims live (islands/intake/scripts/claims-read.sh) —
+# never agents/stacks.json, so a stack turning intake on needs no homelab commit. get/list, nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: island-intake-read
+rules:
+  - apiGroups: [""]
+    resources: [resourcequotas]
+    verbs: [get, list]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    verbs: [get, list]
+  - apiGroups: [argoproj.io]
+    resources: [cronworkflows, workflowtemplates]
+    verbs: [get, list]
+  - apiGroups: [platform.teststuff.net]
+    resources: [agentstacks]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: island-intake-read }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read-infra
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: island-intake-read-app
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-app }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-island-intake, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: island-intake, namespace: agent-coordinator }
+---
+# The RESPONDER's OWN identity (operator 2026-11-21: the dig, intake and responder each get their own
+# account and token while staying in the intake island). A role carries its own boundary
+# (docs/agents/roles.md §What a role is); until this SA the `respond` WorkflowTemplate
+# (responder-argo.yaml) ran as `agent-coordinator` and so held cluster-wide pod create/delete,
+# configmap create/delete/patch and openrouterkeys writes it never uses — and every grant made "to
+# the responder" (the #818 dial, a stack's alert-edge start right) would have reached the coordinator
+# too. Its grant is what the template does:
+#   - `agent-read-infra` (agent-read-rbac.yaml), cluster-wide: the triage's kubectl READS (pods and
+#     logs, events, workloads, PVCs, nodes, Longhorn, ArgoCD apps — the window/claim reads at the
+#     gateway gate — network policies, ESO specs, the AgentStack claims for ROUTE_STACK);
+#   - `responder-ledger` below (the responder-seen ConfigMap — fp/subject dedup + the daily cap);
+#   - `responder-hubble-exec` below: pods/exec in kube-system ONLY — the brief's (1b) HUBBLE step runs
+#     `kubectl exec -n kube-system ds/cilium -- hubble observe` (no hubble binary in the image). This is
+#     the one wide verb left (a cilium agent is node-privileged); it was cluster-wide before;
+#   - the chart-rendered `argo-workflows-workflow` Role (the Argo executor's own write);
+#   - per stack, a start right on that stack's fixed templates (ADR-165) — today
+#     `platform-responder-start-prod-step-back` in oracle-fleet (kargo-prod-diagnose-argo.yaml).
+# NOT bound to ClusterRole `agent-coordinator` or `coordinator-scan-workflows`; no Secret read. Its
+# GitHub token is `responder-git` (responder-git.yaml); the gateway admits it by name
+# (argocd/resources/agent-gateway/policy.json `callers`).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: responder
+  namespace: agent-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: responder-read-infra
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: responder, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: responder-hubble-exec
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: responder-hubble-exec
+  namespace: kube-system
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: responder-hubble-exec }
+subjects:
+  - { kind: ServiceAccount, name: responder, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-responder, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: responder, namespace: agent-coordinator }
+---
 # Responder fingerprint ledger (responder-argo.yaml): one triage per alert fp per 24h + the
 # daily cap live in the responder-seen ConfigMap — NAMESPACED on purpose (a cluster-wide cm
 # patch grant could touch other namespaces' config; the pods grant above is cluster-wide only
@@ -192,8 +329,13 @@ roleRef:
   kind: Role
   name: responder-ledger
 subjects:
+  # agent-coordinator stays: the deploy-revert chain keys its idempotency into the same ledger
+  # (deploy-revert-argo.yaml, `deploy-<app>-<revision>`).
   - kind: ServiceAccount
     name: agent-coordinator
+    namespace: agent-coordinator
+  - kind: ServiceAccount
+    name: responder
     namespace: agent-coordinator
 ---
 # ADR-106 (5) doorbell collapse + FU-160 wake source: the scan reads its OWN Workflow object

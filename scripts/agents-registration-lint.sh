@@ -2,7 +2,7 @@
 # agents-registration-lint — the stale-registration gate (TICK-LOG meta-session 1: FIVE of six
 # reflex gaps in one day were this class — a repo in the stack registry missing from some
 # per-identity token list). Deterministic check: every repo in agents/stacks.json appears in the
-# coordinator-git AND reviewer-git `repositories:` lists. stacks.json is the committed MIRROR of
+# coordinator-git, reviewer-git AND responder-git `repositories:` lists. stacks.json is the committed MIRROR of
 # the AgentStack claims (FU-048; CI has no cluster access — the ADR-085 build-time question), so
 # this lint doubles as the mirror's freshness incentive; runs in CI next to argocd-validate-pins.
 #
@@ -70,7 +70,7 @@ fail=0
 # every repo. Each entry is a pending OPERATOR install click; remove the entry (and add the repo
 # to both lists) the moment the install lands (the exporter /apps page confirms). Empty today.
 TOKEN_EXEMPT=""
-for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.yaml; do
+for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.yaml agents/coordinator/responder-git.yaml; do
   have="$(list_repos "$HERE/$target")"
   for repo in $stack_repos; do
     case " $TOKEN_EXEMPT " in *" $repo "*)
@@ -117,9 +117,9 @@ else
 fi
 
 if [ "$fail" -ne 0 ]; then
-  echo "agents-registration-lint: FAILED — a stack repo is invisible to the coordinator/reviewer" >&2
+  echo "agents-registration-lint: FAILED — a stack repo is invisible to the coordinator/reviewer/responder" >&2
   echo "token (the stale-registration class; add it to the list AND verify the exporter /apps page" >&2
   echo "covers it, or ESO token generation 422s)." >&2
   exit 1
 fi
-echo "agents-registration-lint: ok ($(printf '%s\n' "$stack_repos" | wc -l | tr -d ' ') stack repos covered in both token lists)"
+echo "agents-registration-lint: ok ($(printf '%s\n' "$stack_repos" | wc -l | tr -d ' ') stack repos covered in every token list)"

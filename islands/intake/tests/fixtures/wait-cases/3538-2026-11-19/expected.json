@@ -1,0 +1,7 @@
+{
+ "outcome": "seat",
+ "blocked_on": "human",
+ "class": "H",
+ "split": "train",
+ "basis": "the Go key's scope is a vendor-console mint (facts: operator-only, the Go key mint)"
+}

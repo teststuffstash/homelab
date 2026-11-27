@@ -33,11 +33,6 @@ punits=""
 # The (b) HOLD's side map (homelab#2477) — the `assembly_cr_prs` shape, initialised per stack in
 # the scan's per-repo loop. The goal lane appends to it when (b) fires against an OPEN assembly PR.
 goal_ckpt_b_prs=""
-# The (b) HOLD's settling clock (`pr_rollup_settling`, block:state-fp-jq): pinned so a row's
-# "in flight for N minutes" is deterministic — the unarmed-major family's seam, same name. The
-# default sits after every in-flight entry's settle window in this family's worlds; a row that
-# wants a YOUNG in-flight entry sets IN_NOW.
-um_now() { date -u -d "${IN_NOW:-2026-10-10T19:00:00Z}" +%s; }
 # The (c) HOLD's side map (homelab#2565) — same shape, carrying the undispositioned-member SET's
 # fingerprint. The goal lane appends to it when (c) fires against a set the marker does not
 # already record; the dispatch-marker block (a separate fixture) reads it back.

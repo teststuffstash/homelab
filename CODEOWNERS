@@ -92,6 +92,11 @@
 # required `iac-sentinel` check; iac-lane.md §L0b). The temporary ownership scaffold that held
 # this path from 2026-08-04 was removed the same day enforcement went live, per its own
 # REMOVE-WHEN condition.
+#
+# One file under it IS owned: the gateway's wire declarations (Goal #3300) — each entry adds an
+# upstream read on a subscription credential or lets an account-bound value into a recorded
+# answer, so every change is the operator's read (docs/spikes/island-intake.md, question 2).
+/argocd/resources/agent-gateway/wire.json  @RasmusSoot
 
 # ── Carve-outs, last so they win.
 # The deploy-pin lane is mechanical: the homelab-deploy App bumps this file (ADR-084) and
