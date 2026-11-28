@@ -43,6 +43,14 @@
 #    Promotions are exempt): promoting a non-candidate Freight holds, promoting the candidate
 #    resumes. prod-diagnose: shadow only (it promotes the failed and the previous Freight to the
 #    standing shadow, then the newest back) + AnalysisRuns read; prod-step-back: prod only.
+#    prod-diagnose also gets `patch` on stages/shadow, for ONE write: the `kargo.akuity.io/reverify`
+#    annotation. Kargo reuses the newest AnalysisRun labelled with the Stage + Freight collection
+#    instead of verifying again unless that annotation is set (regular_stages.go
+#    startVerification/findExistingAnalysisRun, v1.12), and every Freight prod-diagnose re-promotes
+#    has already been verified on shadow, so without a reverify its readings are the old verdicts.
+#    No narrower verb exists: Kargo's own reverify API writes the same annotation through `patch`.
+#    RBAC cannot scope a patch to one annotation; `kargo-stage-reverify-guard`
+#    (admission-policy.yaml) refuses any other change to the Stage from this SA.
 #
 # Names carry `platform-` so they never collide with the RoleBindings Kargo itself creates in the
 # Project namespace (kargo-project-admin, kargo-*-read-secrets, kargo-admin/viewer/promoter).
@@ -278,7 +286,7 @@ rules:
   - apiGroups: [kargo.akuity.io]
     resources: [stages]
     resourceNames: [shadow]
-    verbs: [promote]
+    verbs: [promote, patch]
   - apiGroups: [kargo.akuity.io]
     resources: [promotions]
     verbs: [create]
