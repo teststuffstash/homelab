@@ -482,7 +482,8 @@
         "outcome",
         "attempt",
         "state",
-        "release_reason"
+        "release_reason",
+        "bind"
       ],
       "properties": {
         "id": {
@@ -603,6 +604,20 @@
           "description": "the session's LATEST outcome (a judge's supersedes the admitter's); null = none reported",
           "x-requirements": [
             "GW-SESSIONS-OUTCOME"
+          ]
+        },
+        "bind": {
+          "oneOf": [
+            {
+              "$ref": "#/post/input/properties/bind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the admission body's bind exactly as sent (the pod identity that may pull this session's env); null = an unbound session \u2014 an identity, never a credential",
+          "x-requirements": [
+            "GW-SESSIONS-PULL"
           ]
         },
         "requests_incomplete": {

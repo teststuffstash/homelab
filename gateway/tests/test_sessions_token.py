@@ -18,15 +18,21 @@ pytestmark = rule("GW-SESSIONS-TOKEN")
 TOKEN_RE = re.compile(r"^gws_[A-Za-z0-9_-]{32}$")
 FIELDS = {"id", "stack", "role", "task", "round", "rail", "harness", "model", "created_at", "expires_at", "released_at", "requests",
           "tokens_in", "tokens_out", "tokens_cache_read", "tokens_cache_write", "caller", "requests_incomplete", "outcome", "attempt",
-          "state", "release_reason"}
+          "state", "release_reason", "bind"}
 
 ROWS = [
     pytest.param("policy-default", "dispatch", "token matches ^gws_[A-Za-z0-9_-]{32}$", id="the token has the fixed shape"),
     pytest.param("policy-default", "dispatch twice", "tokens differ, ids differ", id="two dispatches never share a token"),
     pytest.param("policy-default", "dispatch, read the DB", "token_hash = sha256(token); the token nowhere in the dump", id="the row holds a hash, not the token"),
-    pytest.param("policy-default", "dispatch, GET", "200; the 22 row fields; no token, no token_hash", id="GET returns the row without the token"),
+    pytest.param("policy-default", "dispatch, GET", "200; the 23 row fields; no token, no token_hash", id="GET returns the row without the token"),
     pytest.param("policy-default", "GET /sessions/nope", "404 session-not-found", id="GET on an unknown id"),
     pytest.param("policy-default", "dispatch, GET", "expires_at = created_at + 14400 s", id="expiry is the policy TTL"),
+    pytest.param("policy-default", "dispatch bound to platform-agents/agentstack-worker/fixer-1, GET",
+                 "bind = {namespace: platform-agents, serviceaccount: agentstack-worker, pod: fixer-1}", id="a bound session's row names its bind"),
+    pytest.param("policy-default", "dispatch bound to platform-agents/agentstack-worker, GET",
+                 "bind = {namespace: platform-agents, serviceaccount: agentstack-worker}; no pod key",
+                 id="a bind without a pod is on the row as it was sent ⚖"),
+    pytest.param("policy-default", "dispatch, GET", "bind = null", id="an unbound session's row has a null bind ⚖"),
     pytest.param("policy-default · upstream-ok", "dispatch, one upstream-ok call, GET", "requests 1, tokens_in 7, tokens_out 3",
                  id="a request through the data plane is counted on the row"),
     pytest.param("policy-default · upstream-ok", "dispatch, x-api-key: the token on the data plane", "200",
@@ -70,6 +76,22 @@ async def test_the_token_and_the_row(gw, settings, store, policy, clock, world, 
         result = (f"{r.status_code}; the {len(body)} row fields; no token, no token_hash"
                   if set(body) == FIELDS and doc["session"]["token"] not in r.text and "token_hash" not in body
                   else f"{r.status_code}; fields {sorted(body)}; token in body: {doc['session']['token'] in r.text}")
+    elif action.startswith("dispatch bound to "):
+        ns, sa, *pod = action.removeprefix("dispatch bound to ").removesuffix(", GET").split("/")
+        sent = {"namespace": ns, "serviceaccount": sa, **({"pod": pod[0]} if pod else {})}
+        with when(f"POST /sessions with bind {sent} → dispatch, then GET /sessions/{{id}}"):
+            doc = await open_session(gw, bind=sent)
+            row = (await gw.get(f"/sessions/{doc['session']['id']}")).json()
+        got = row["bind"]
+        result = (f"bind = {{namespace: {got['namespace']}, serviceaccount: {got['serviceaccount']}, pod: {got['pod']}}}" if "pod" in got
+                  else f"bind = {{namespace: {got['namespace']}, serviceaccount: {got['serviceaccount']}}}; no pod key")
+        if got != sent:
+            result += f" (sent {sent})"
+    elif action == "dispatch, GET" and expected_result.startswith("bind"):
+        with when("POST /sessions (unbound) → dispatch, then GET /sessions/{id}"):
+            doc = await open_session(gw)
+            row = (await gw.get(f"/sessions/{doc['session']['id']}")).json()
+        result = "bind = null" if "bind" in row and row["bind"] is None else f"bind = {row.get('bind', '(absent)')}"
     elif action == "dispatch, GET":
         with when("POST /sessions → dispatch, then GET /sessions/{id}"):
             doc = await open_session(gw)

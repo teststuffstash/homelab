@@ -285,6 +285,15 @@ class Session:
     def bound(self) -> bool:
         return self.bind_serviceaccount is not None
 
+    def bind_public(self) -> dict | None:
+        """GW-SESSIONS-TOKEN: the admission body's bind as sent — the `pod` key absent when none was named; None = unbound."""
+        if not self.bound:
+            return None
+        bind = {"namespace": self.bind_namespace, "serviceaccount": self.bind_serviceaccount}
+        if self.bind_pod is not None:
+            bind["pod"] = self.bind_pod
+        return bind
+
     def state(self, now: float | None = None) -> str:
         """`active` | `released` | `expired` — the OLDER fact wins: a session that expired before
         its DELETE stays `expired` on the data plane (GW-SESSIONS-RELEASE ⚖)."""
@@ -320,6 +329,7 @@ class Session:
             "tokens_cache_write": self.tokens_cache_write,
             "caller": self.caller,
             "requests_incomplete": self.requests_incomplete,
+            "bind": self.bind_public(),
         }
 
 
