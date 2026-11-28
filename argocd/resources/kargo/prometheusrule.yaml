@@ -31,7 +31,8 @@ spec:
           annotations:
             summary: "Kargo write {{ $labels.enforcement_action }} by admission policy {{ $labels.policy }}"
             description: >-
-              A kargo ServiceAccount attempted a write the {{ $labels.policy }} admission policy forbids
+              A guarded identity (a kargo ServiceAccount; for kargo-stage-reverify-guard, a reverify-only
+              Stage patcher) attempted a write the {{ $labels.policy }} admission policy forbids
               ({{ $labels.enforcement_action }}). Find the request in the apiserver audit log
               (annotation validation.policy.admission.k8s.io/validation_failure) before changing the
               policy — see argocd/resources/kargo/admission-policy.yaml.

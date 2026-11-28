@@ -107,3 +107,58 @@ metadata:
 spec:
   policyName: kargo-write-guard
   validationActions: [Warn, Audit]
+---
+# kargo-stage-reverify-guard — the shape half of a Stage `patch` grant that exists ONLY to request
+# a reverify (rbac-namespaced.yaml §prod-diagnose). RBAC grants `patch` on stages/shadow; this
+# policy lets that identity change nothing but the `kargo.akuity.io/reverify` annotation: spec,
+# labels, finalizers, ownerReferences and every other annotation must stay as they were. Kargo's
+# mutating Stage webhook enriches the annotation (actor), which runs before this check and only
+# touches the allowed key. Deny from the start, unlike kargo-write-guard: it gates a new, narrow
+# grant rather than a broad existing install, so there is nothing to soak. KargoWriteDenied
+# (policy=~"kargo.*") counts its refusals too.
+# A new reverify-only identity = one more entry in matchConditions.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kargo-stage-reverify-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [kargo.akuity.io]
+        apiVersions: ["*"]
+        operations: [UPDATE]
+        resources: [stages]
+  matchConditions:
+    - name: reverify-only-identities
+      expression: "request.userInfo.username in ['system:serviceaccount:oracle-fleet:prod-diagnose']"
+  variables:
+    - name: key
+      expression: "'kargo.akuity.io/reverify'"
+    - name: newAnn
+      expression: "has(object.metadata.annotations) ? object.metadata.annotations : {}"
+    - name: oldAnn
+      expression: "has(oldObject.metadata.annotations) ? oldObject.metadata.annotations : {}"
+  validations:
+    - expression: "object.spec == oldObject.spec"
+      messageExpression: "'kargo-stage-reverify-guard: ' + request.userInfo.username + ' may not change the spec of Stage ' + request.namespace + '/' + request.name"
+    - expression: >-
+        (has(object.metadata.labels) ? object.metadata.labels : {})
+        == (has(oldObject.metadata.labels) ? oldObject.metadata.labels : {})
+        && (has(object.metadata.finalizers) ? object.metadata.finalizers : [])
+        == (has(oldObject.metadata.finalizers) ? oldObject.metadata.finalizers : [])
+        && (has(object.metadata.ownerReferences) ? object.metadata.ownerReferences : [])
+        == (has(oldObject.metadata.ownerReferences) ? oldObject.metadata.ownerReferences : [])
+      messageExpression: "'kargo-stage-reverify-guard: ' + request.userInfo.username + ' may not change labels, finalizers or ownerReferences of Stage ' + request.namespace + '/' + request.name"
+    - expression: >-
+        variables.newAnn.all(k, k == variables.key || (k in variables.oldAnn && variables.oldAnn[k] == variables.newAnn[k]))
+        && variables.oldAnn.all(k, k == variables.key || k in variables.newAnn)
+      messageExpression: "'kargo-stage-reverify-guard: ' + request.userInfo.username + ' may change only the kargo.akuity.io/reverify annotation of Stage ' + request.namespace + '/' + request.name"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kargo-stage-reverify-guard
+spec:
+  policyName: kargo-stage-reverify-guard
+  validationActions: [Deny]
