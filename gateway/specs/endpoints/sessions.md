@@ -1478,7 +1478,7 @@ the pulled `env`, the data plane, or the row then shows (`…` = this gateway's 
 | the pull answers the opencode env GW-SESSIONS-ENV would have | policy-default | worker | opencode | (policy) | env keys = env_keys; apiKey a fresh gws_ token; baseURL …/openai/v1; model gateway/deepseek-v4.1-flash |
 | the pull answers the claude env | policy-default | reviewer | claude | (policy) | ANTHROPIC_AUTH_TOKEN a fresh gws_ token; ANTHROPIC_BASE_URL …/anthropic; ANTHROPIC_MODEL sonnet |
 | the pull answers the goose env | policy-default | worker | goose | openrouter | OPENAI_API_KEY a fresh gws_ token; OPENAI_BASE_URL …/openai/v1; GOOSE_PROVIDER openai; GOOSE_MODEL deepseek/deepseek-v4-flash |
-| the pulled token rides the data plane | policy-default · upstream-ok | worker | opencode | (policy) | 200; the row's requests = 1 |
+| the pulled token rides the data plane | policy-default · upstream-ok | worker | opencode | (policy) | POST /openai/v1/chat/completions with the pulled apiKey → 200; the row's requests = 1 |
 | the row stores the pulled token's sha256 only | policy-default | worker | opencode | (policy) | token_hash = sha256(token); the token nowhere in the sqlite dump |
 
 #### Codex token re-read
@@ -2241,6 +2241,7 @@ the line is written, whatever the call site passed — the precedent is the old 
 Legend: `path` = the request path that writes the lines; `log_line_contains?` = a fragment some log
 line of that path holds (a containment check — `…` stands for the session id the row's own admission
 returned); `never_logged?` = fragments separated by `, `, none of which appears on any log line.
+`upstream-401 on openrouter` = an openrouter session's chat call that the `upstream-401` fake answers 401 with the body `{"error": {"type": "authentication_error", "message": "invalid x-api-key sk-ant-oat-LEAK"}}`.
 
 | description | world | path | log_line_contains? | never_logged? |
 |---|---|---|---|---|
