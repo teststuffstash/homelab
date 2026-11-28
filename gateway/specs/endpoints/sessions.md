@@ -32,7 +32,7 @@ response and error shapes; the service **imports it**. Coupling is enforced by
 | [GW-SESSIONS-ENV](#gw-sessions-env) | `POST /sessions` | `post.output.dispatch.env`, `post.output.dispatch.context_tokens` | — | v0 for `claude` / `opencode` / `goose` / `codex` (the codex rail lit 2026-10-22 — [openai-responses.md](openai-responses.md)); `⚑ gap (2026-10-17, PR #2656 → work #2650)`: the goose/opencode wire evidence is a one-off in-cluster probe, not CI, and opencode's provider-package fetch under enforced egress is unobserved ([§Evidence outside CI](#evidence-outside-ci)) |
 | [GW-SESSIONS-TOKEN](#gw-sessions-token) | `POST /sessions`, `GET /sessions/{id}` | `post.output.dispatch.session`, `get.output` | `session-not-found` | v0 |
 | [GW-SESSIONS-RELEASE](#gw-sessions-release) | `DELETE /sessions/{id}`, `GET /sessions/{id}` | `delete.output`, `get.output.released_at` | `session-not-found` | v0 |
-| [GW-SESSIONS-PULL](#gw-sessions-pull) | `POST /sessions` (`bind`), `POST /sessions/{id}/env` | `post.input.bind`, `post.output.dispatch_bound`, `pull.output`, `pull.token_reread` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found`, `token-rotation-conflict` | v0; the Codex same-pod token re-read after the first delivery; `⚑ gap`: the racing-rotation arm has no row ([§Named gaps — pull](#named-gaps-pull)) |
+| [GW-SESSIONS-PULL](#gw-sessions-pull) | `POST /sessions` (`bind`), `POST /sessions/{id}/env` | `post.input.bind`, `post.output.dispatch_bound`, `pull.output`, `pull.token_reread`, `get.output.bind` | `pull-identity-refused`, `tokenreview-transient`, `env-already-delivered`, `session-released`, `session-expired`, `session-not-found`, `token-rotation-conflict` | v0; the Codex same-pod token re-read after the first delivery; `⚑ gap`: the racing-rotation arm has no row ([§Named gaps — pull](#named-gaps-pull)) |
 | [GW-SESSIONS-LIVENESS](#gw-sessions-liveness) | `GET /sessions/{id}` | `get.output.state`, `get.output.release_reason` | — | v0 |
 | [GW-SESSIONS-AUTH](#gw-sessions-auth) | `all` | `caller`, `get.output.caller`, `list.input`, `list.output` (the judge's `GET /sessions?task=` — [§A judge finds a task's sessions](#a-judge-finds-a-tasks-sessions)) | `caller-unauthenticated`, `caller-unknown`, `caller-stack-denied`, `caller-role-denied`, `caller-bind-denied`, `caller-not-owner`, `tokenreview-transient`, `session-not-found`, `malformed-body` (a list without `task`) | v0, deployed in `enforce` (the knob; `observe` 2026-10-17 until every caller sent its token); `⚑ gap (2026-10-17, PR #2683 → work #2684)`: a bind's ServiceAccount is not constrained per caller ([§Named gaps — auth](#named-gaps-auth)) |
 | [GW-SESSIONS-OUTCOME](#gw-sessions-outcome) | `POST /sessions/{id}/outcome`, `GET /sessions/{id}` | `outcome.input`, `outcome.output`, `outcome.strike`, `get.output.outcome` | `outcome-class-unknown`, `outcome-evidence-refused`, `outcome-judge-only`, `outcome-window-closed`, `outcome-conflict`, `caller-not-owner`, `session-not-found` | v0 — the admission's walk reads it ([GW-SESSIONS-RETRY](#gw-sessions-retry)); `⚑ gap`: the fleet view across tasks ([§Named gaps — outcome](#named-gaps-outcome)) |
@@ -1316,11 +1316,11 @@ Legend: `context_tokens` = the key added to an otherwise `policy-default` docume
 per dispatch, and returns it **once** — in the `dispatch` body. The DB stores `sha256(token)` and never
 the token; `GET /sessions/{id}` returns the row without it: `id, stack, role, task, round, attempt, rail,
 harness, model, created_at, expires_at, released_at, requests, tokens_in, tokens_out, tokens_cache_read,
-tokens_cache_write, caller, requests_incomplete, outcome, state, release_reason` (`state` / `release_reason`:
+tokens_cache_write, caller, requests_incomplete, outcome, state, release_reason, bind` (`state` / `release_reason`:
 [GW-SESSIONS-LIVENESS](#gw-sessions-liveness); `outcome`: the latest reported outcome,
 [GW-SESSIONS-OUTCOME](#gw-sessions-outcome); `requests_incomplete`: the 2xx answers whose body stopped
 before its end, [GW-RAIL-OPENROUTER](openai-chat.md#gw-rail-openrouter); `caller`: the admitting caller,
-[GW-SESSIONS-AUTH](#gw-sessions-auth)) — no `token`, no `token_hash`. The data plane accepts the token as
+[GW-SESSIONS-AUTH](#gw-sessions-auth); `bind`: the admission body's [`bind`](../glossary.md#bind) exactly as it was sent — `{namespace, serviceaccount, pod}`, the `pod` key absent when the body named none — and `null` for a session admitted without one, [GW-SESSIONS-PULL](#gw-sessions-pull) ⚖) — no `token`, no `token_hash`. The bind is an identity, never a credential: the row shows it to whoever may read the row. A `GET /sessions/{id}` whose id names no session is 404 `session-not-found`. The data plane accepts the token as
 `Authorization: Bearer gws_…` or `x-api-key: gws_…` ([GW-CRED-BOUNDARY](anthropic-messages.md#gw-cred-boundary)).
 `expires_at = created_at + session_ttl_s` (14400 s in `policy-default`). A request through the data
 plane is counted on the row: `requests`, and the upstream `usage` as `tokens_in` (uncached input) /
@@ -1329,16 +1329,21 @@ plane is counted on the row: `requests`, and the upstream `usage` as `tokens_in`
 #### The token and the row
 
 A platform worker's dispatch. Legend: `action` = what happens after it; `result?` = what the answer,
-the row or the DB dump shows.
+the row or the DB dump shows. `bound to <namespace>/<serviceaccount>[/<pod>]` in `action` = the dispatch body
+carries `bind: {namespace, serviceaccount[, pod]}`; a dispatch with no such words is unbound. `one upstream-ok call` =
+one data-plane request that the `upstream-ok` fake answers 200 with a usage of 7 uncached input and 3 output tokens.
 
 | description | world | action | result? |
 |---|---|---|---|
 | the token has the fixed shape | policy-default | dispatch | token matches ^gws_[A-Za-z0-9_-]{32}$ |
 | two dispatches never share a token | policy-default | dispatch twice | tokens differ, ids differ |
 | the row holds a hash, not the token | policy-default | dispatch, read the DB | token_hash = sha256(token); the token nowhere in the dump |
-| GET returns the row without the token | policy-default | dispatch, GET | 200; the 22 row fields; no token, no token_hash |
+| GET returns the row without the token | policy-default | dispatch, GET | 200; the 23 row fields; no token, no token_hash |
 | GET on an unknown id | policy-default | GET /sessions/nope | 404 session-not-found |
 | expiry is the policy TTL | policy-default | dispatch, GET | expires_at = created_at + 14400 s |
+| a bound session's row names its bind | policy-default | dispatch bound to platform-agents/agentstack-worker/fixer-1, GET | bind = {namespace: platform-agents, serviceaccount: agentstack-worker, pod: fixer-1} |
+| a bind without a pod is on the row as it was sent ⚖ | policy-default | dispatch bound to platform-agents/agentstack-worker, GET | bind = {namespace: platform-agents, serviceaccount: agentstack-worker}; no pod key |
+| an unbound session's row has a null bind ⚖ | policy-default | dispatch, GET | bind = null |
 | a request through the data plane is counted on the row | policy-default · upstream-ok | dispatch, one upstream-ok call, GET | requests 1, tokens_in 7, tokens_out 3 |
 | the x-api-key form is accepted on the data plane | policy-default · upstream-ok | dispatch, x-api-key: the token on the data plane | 200 |
 
@@ -1735,7 +1740,7 @@ ServiceAccount` = the same, as `system:serviceaccount:platform-agents:default`; 
 `[https://kubernetes.default.svc]`; `no bearer` = no `Authorization` header; `(the review raises)` =
 the API is away. The body is a platform worker bound to `{platform-agents, agentstack-worker, fixer-1}`
 unless a cell says otherwise. `counted?` = the `gateway_control_plane_unauthenticated_total{route,reason}`
-series that moved, as `route/reason +1` (`none` = no series moved).
+series that moved, as `route/reason +1` (`none` = no series moved). `route` = `admit` (`POST /sessions`), `lookup` (`GET /sessions/{id}`), `release` (`DELETE /sessions/{id}`), `outcome` (`POST /sessions/{id}/outcome`) or `list` (`GET /sessions?task=`); `reason` = `absent` (no bearer), `invalid` (a token the review does not authenticate for audience `agent-gateway`) or `review-transient` (the review raises).
 
 #### Who may call, under enforce
 
@@ -1818,6 +1823,17 @@ error code of a refused list.
 | a list without a bearer, under observe, is served and counted ⚖ | policy-default | the platform loop | no bearer | T | 200 | (the platform loop, active) | list/absent +1 |
 | no task is 400 malformed-body | policy-enforce | — | the judge | (none) | 400 | malformed-body | none |
 | a list without a bearer, under enforce | policy-enforce | — | no bearer | T | 401 | caller-unauthenticated | list/absent +1 |
+
+**The listed rows name their binds.** Legend: `T` = `homelab-2588-r1`; `admitted_by` = the task's sessions, oldest
+first — `the platform loop bound to fixer-N` = a platform worker body at round 1, attempt 1, with `bind: {namespace:
+platform-agents, serviceaccount: agentstack-worker, pod: fixer-N}`; `the specs reviewer` = the same unbound `reviewer`
+admission as in the table above (round 0); `binds?` = the listed rows' `bind`, oldest first, as
+`<namespace>/<serviceaccount>/<pod>` (`null` = the row's `bind` is null).
+
+| description | world | admitted_by | presented | task | status? | binds? |
+|---|---|---|---|---|---|---|
+| the admitting caller tells one task's two bound sessions apart | policy-enforce | the platform loop bound to fixer-1 + the platform loop bound to fixer-2 | the platform loop | T | 200 | platform-agents/agentstack-worker/fixer-1, platform-agents/agentstack-worker/fixer-2 |
+| the judge reads the bind of a session it did not admit ⚖ | policy-enforce | the platform loop bound to fixer-1 + the specs reviewer | the judge | T | 200 | platform-agents/agentstack-worker/fixer-1, null |
 
 #### One TokenReview path, and the pull stays the pod's
 

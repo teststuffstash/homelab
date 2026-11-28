@@ -309,7 +309,11 @@ async def _task_sessions(gw, store, clock, admitted_by: str) -> None:
                                  created_at=clock(), expires_at=clock() + 3600, caller=ORACLE_LOOP)
         else:
             name = who.removesuffix(" (released)")
-            doc = await admitted(gw, name, REVIEWER if name == "the specs reviewer" else WORKER)
+            body = REVIEWER if name == "the specs reviewer" else WORKER
+            if " bound to " in name:  # `the platform loop bound to fixer-N`: the worker body with that pod's bind
+                name, pod = name.split(" bound to ")
+                body = {**WORKER, "bind": {**BIND, "pod": pod}}
+            doc = await admitted(gw, name, body)
             if who.endswith("(released)"):
                 with quiet():
                     await gw.delete(f"/sessions/{doc['session']['id']}", headers=as_(name))
@@ -336,6 +340,29 @@ async def test_a_judge_finds_a_tasks_sessions(gws, store, clock, world, admitted
         listed = err(r)  # a refused list: the `rows?` cell is the error code
     expect({"status": r.status_code, "rows": listed, "counted": await counted(gw, "list", before)},
            status=expected_status, rows=expected_rows, counted=expected_counted)
+
+
+BIND_ROWS = [
+    pytest.param("policy-enforce", "the platform loop bound to fixer-1 + the platform loop bound to fixer-2", "the platform loop", "T", 200,
+                 "platform-agents/agentstack-worker/fixer-1, platform-agents/agentstack-worker/fixer-2",
+                 id="the admitting caller tells one task's two bound sessions apart"),
+    pytest.param("policy-enforce", "the platform loop bound to fixer-1 + the specs reviewer", "the judge", "T", 200,
+                 "platform-agents/agentstack-worker/fixer-1, null", id="the judge reads the bind of a session it did not admit ⚖"),
+]
+
+
+@pytest.mark.parametrize(("world", "admitted_by", "presented", "task", "expected_status", "expected_binds"), BIND_ROWS)
+async def test_the_listed_rows_name_their_binds(gws, store, clock, world, admitted_by, presented, task, expected_status, expected_binds):
+    enter_world(world)
+    inputs(admitted_by=admitted_by, presented=presented, task=task)
+    gw = gws[world]
+    with given(f"admitted_by = {admitted_by}: task {TASK}'s sessions, oldest first"):
+        await _task_sessions(gw, store, clock, admitted_by)
+    with when(f"GET /sessions?task={TASK} presenting {presented}"):
+        r = await gw.get("/sessions", params={"task": TASK}, headers=as_(presented))
+    binds = ", ".join("null" if row["bind"] is None else f"{row['bind']['namespace']}/{row['bind']['serviceaccount']}/{row['bind']['pod']}"
+                      for row in r.json()["sessions"]) if r.status_code == 200 else err(r)
+    expect({"status": r.status_code, "binds": binds}, status=expected_status, binds=expected_binds)
 
 
 # -- one TokenReview path, and the pull stays the pod's --------------------------------------------------------
