@@ -296,3 +296,58 @@ tests:
             exp_annotations:
               summary: "The intake experiment read has not run for more than 2 days \u2014 open experiments are not being decided"
               description: "The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) runs the experiment read as its first step; no run has pushed island_intake_experiments_last_run_timestamp_seconds in over 2 days. Check: argo -n agent-coordinator cron get island-intake and the `experiments` step of the newest island-intake-* workflow (a clone or devbox install that failed, a pod that never started). Reader: islands/intake/scripts/experiment-read.sh."
+  # ── (h) IslandIntakeUnruledOld (homelab#3837): the oldest unruled issue a sitting was offered ──────
+  #   The sitting pushes the age once a day and the Pushgateway serves it until the next push, so the
+  #   series is flat between runs. Per island, and silent for an island that never pushed.
+  #   (h1) 52 h (the gateway's value when the KPI was named) is inside the target.
+  - interval: 1m
+    name: "(h1) an oldest unruled issue of 52 h is inside the 72 h target"
+    input_series:
+      - series: 'island_intake_oldest_unruled_age_seconds{job="island_intake", island="gateway"}'
+        values: "187200+0x180"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: IslandIntakeUnruledOld
+        exp_alerts: []
+  #   (h2) exactly 72 h is the target, not past it.
+  - interval: 1m
+    name: "(h2) exactly 72 h does not fire"
+    input_series:
+      - series: 'island_intake_oldest_unruled_age_seconds{job="island_intake", island="gateway"}'
+        values: "259200+0x180"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: IslandIntakeUnruledOld
+        exp_alerts: []
+  #   (h3) 96 h on one island fires for that island after for:1h; the island at 0 stays quiet.
+  - interval: 1m
+    name: "(h3) 96 h fires for its own island after for:1h; an island at 0 stays quiet"
+    input_series:
+      - series: 'island_intake_oldest_unruled_age_seconds{job="island_intake", island="gateway"}'
+        values: "345600+0x180"
+      - series: 'island_intake_oldest_unruled_age_seconds{job="island_intake", island="launch"}'
+        values: "0+0x180"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: IslandIntakeUnruledOld
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: IslandIntakeUnruledOld
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: dig
+              island: gateway
+            exp_annotations:
+              summary: "The gateway island's oldest unruled issue was 4d 0h 0m 0s old at its last intake sitting — above the KPI target (72 h from filing to a ruling)"
+              description: "island_intake_oldest_unruled_age_seconds{island=\"gateway\"} is 4d 0h 0m 0s (target: at most 72 h). The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) pushes it from every sitting that read its selection: the age of the oldest issue of the island that carried no agent/* label and no intake: ruling when the sitting was offered it (0 when none). An issue is offered at the first daily sitting after it is 24 h old, so a value above 72 h means sittings ran and left it unruled, or did not run. Check: (1) bash islands/intake/scripts/intake-select.sh --island gateway names the unruled issues and their ages; (2) the island's receipts under s3://agent-transcripts/homelab/intake-<island>-<day>/ for an INTAKE-RULED line on that issue (deferred, or none: a sitting that ended before its writes); (3) IslandIntakeStale for a sitting that did not run. The KPI and its target are named in islands/intake/README.md §Consumer contracts."
+  #   (h4) 96 h for two hours (it fires, as in h3), then the next sitting pushes 0: quiet again.
+  - interval: 1m
+    name: "(h4) the next push at 0 clears it"
+    input_series:
+      - series: 'island_intake_oldest_unruled_age_seconds{job="island_intake", island="gateway"}'
+        values: "345600+0x120 0+0x120"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: IslandIntakeUnruledOld
+        exp_alerts: []
