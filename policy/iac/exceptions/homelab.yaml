@@ -111,6 +111,7 @@ spec:
             - eso-infisical-guard # ADR-168 (argocd/resources/extras/eso-guard.yaml): stack namespaces read only allowlisted Infisical keys
             - jail-clusters-pod-guard # ADR-167 (argocd/resources/jail-clusters/admission-policy.yaml): every pod in jail-clusters is kata on nx-01 with the pinned dind, no host access
             - kargo-write-guard # argocd/resources/kargo/admission-policy.yaml: the belt over every kargo-SA write
+            - kargo-stage-reverify-guard # argocd/resources/kargo/admission-policy.yaml: the prod-diagnose SA may change only the reverify annotation of a Stage
             - workflow-template-start-guard # homelab#3629 (agents/coordinator/kargo-prod-diagnose-argo.yaml): a guarded starter may create only a bare workflowTemplateRef to an allowed template
       - resources:
           kinds:
