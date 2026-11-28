@@ -215,7 +215,7 @@ RETURNS_ROWS = [
     pytest.param("policy-default", "worker", "goose", "openrouter",
                  "OPENAI_API_KEY a fresh gws_ token; OPENAI_BASE_URL …/openai/v1; GOOSE_PROVIDER openai; GOOSE_MODEL deepseek/deepseek-v4-flash",
                  id="the pull answers the goose env"),
-    pytest.param("policy-default · upstream-ok", "worker", "opencode", POLICY, "200; the row's requests = 1",
+    pytest.param("policy-default · upstream-ok", "worker", "opencode", POLICY, "POST /openai/v1/chat/completions with the pulled apiKey → 200; the row's requests = 1",
                  id="the pulled token rides the data plane"),
     pytest.param("policy-default", "worker", "opencode", POLICY, "token_hash = sha256(token); the token nowhere in the sqlite dump",
                  id="the row stores the pulled token's sha256 only"),
@@ -237,12 +237,12 @@ async def test_what_a_pull_returns(gw, reviews, settings, store, world, role, ha
     sid = doc["session"]["id"]
     with when(f"POST /sessions/{sid}/env with the bound pod's token"):
         env = (await pull(gw, sid)).json()["env"]
-    if expected_pulled.startswith("200;"):
+    if expected_pulled.startswith("POST /openai/v1/chat/completions with the pulled apiKey"):
         token = json.loads(env["OPENCODE_CONFIG_CONTENT"])["provider"]["gateway"]["options"]["apiKey"]
         with quiet():
             r = await gw.post("/openai/v1/chat/completions", json={"messages": []}, headers={"authorization": f"Bearer {token}"})
             requests = (await gw.get(f"/sessions/{sid}")).json()["requests"]
-        pulled = f"{r.status_code}; the row's requests = {requests}"
+        pulled = f"POST /openai/v1/chat/completions with the pulled apiKey → {r.status_code}; the row's requests = {requests}"
     elif expected_pulled.startswith("token_hash"):
         token = json.loads(env["OPENCODE_CONFIG_CONTENT"])["provider"]["gateway"]["options"]["apiKey"]
         dump = "\n".join(sqlite3.connect(settings.db_path).iterdump())

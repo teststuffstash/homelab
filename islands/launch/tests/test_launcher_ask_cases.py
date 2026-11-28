@@ -6,8 +6,7 @@ One case per page row; id = the row's description cell; `world`, and the `rc?` /
 and `reply` cells are prose, set up by the case carrying the row's id (SETUP below); the gateway's
 answer is the row's world loaded through the strict reader, changed only by what `reply` / `defect`
 says — never a second hand-written file. Every request sent is validated against the supplier's
-`post.input`, read in place — except the `canary` member, which that schema does not define yet
-(see `_validate`).
+`post.input`, read in place.
 """
 
 from __future__ import annotations
@@ -93,14 +92,8 @@ def _reply_body(world, reply):
 
 
 def _validate(req) -> None:
-    """The request validates against the supplier's `post.input`. `canary` is the one member the
-    supplier's schema does not define (additionalProperties:false) though its page names it
-    (gateway sessions.md, GW-CATALOG-OR-CANARY): it is checked here against the page's shape and left
-    out of the schema check — a supplier gap, reported on the PR."""
-    body = {k: v for k, v in req.body.items() if k != "canary"}
-    assert list(_request_validator().iter_errors(body)) == [], req.body
-    if "canary" in req.body:
-        assert set(req.body["canary"]) == {"model", "provider"}
+    """The request validates against the supplier's `post.input`, `canary` included."""
+    assert list(_request_validator().iter_errors(req.body)) == [], req.body
 
 
 def _request_cell(cell: str) -> dict[str, str]:
