@@ -743,9 +743,12 @@ rm -f "$TMP/pgw.body"; RUN_ENV="STUB_DEVBOX_INSTALL_RC=1 PUSHGATEWAY=http://pgw"
   || bad "devbox install failed" "rc=$rc calls=$(grep -c . "$TMP/devbox.calls") $(tail -2 "$TMP/run.log")"
 # the "did not start" push carries every series the script's own _push does (a gauge added to one and not the other goes stale silently)
 RUN_ENV="PUSHGATEWAY=http://pgw" run_script apply
-sed -n 's/^\(island_intake_[a-z_]*\({[^}]*}\)\{0,1\}\) .*/\1/p' "$TMP/pgw.body" | sort | uniq -c | awk '{print $1}' | sort -u > "$TMP/pgw.counts"
+sed -n 's/^\(island_intake_[a-z_]*\({[^}]*}\)\{0,1\}\) .*/\1/p' "$TMP/pgw.body" | grep -vx 'island_intake_oldest_unruled_age_seconds' | sort | uniq -c | awk '{print $1}' | sort -u > "$TMP/pgw.counts"
 [ "$(cat "$TMP/pgw.counts")" = 2 ] && ok "…and its series are exactly the script's own \`_push\` series" \
   || bad "did-not-start series" "$(sed -n 's/^\(island_intake_[a-z_]*\({[^}]*}\)\{0,1\}\) .*/\1/p' "$TMP/pgw.body" | sort | uniq -c | awk '$1 != 2' | tr '\n' ' ')"
+[ "$(grep -c '^island_intake_oldest_unruled_age_seconds ' "$TMP/pgw.body")" = 1 ] \
+  && ok "…but for island_intake_oldest_unruled_age_seconds: a sitting that did not start does not know it and pushes none, so its last value stands" \
+  || bad "did-not-start age" "$(grep -c '^island_intake_oldest_unruled_age_seconds ' "$TMP/pgw.body")"
 rm -f "$TMP/pgw.body"
 
 receipt 2026-10-26 intake-r1-e apply 2026-10-26T06:00:00Z \
@@ -761,6 +764,7 @@ rm -f "$TMP/pgw.body"; RUN_ENV="PUSHGATEWAY=http://pgw" run_script apply; rc=$?
   && ok "an empty selection: no claude call, \`island-intake: gateway — no inputs\`, exit 0" || bad "no inputs" "rc=$rc $(tail -3 "$TMP/run.log")"
 { grep -qE '^island_intake_last_run_timestamp_seconds [0-9]+$' "$TMP/pgw.body" && grep -qx 'island_intake_probe_ok 1' "$TMP/pgw.body" \
     && grep -qx 'island_intake_inputs 0' "$TMP/pgw.body" && grep -qx 'island_intake_session_ran 0' "$TMP/pgw.body" \
+    && grep -qx 'island_intake_oldest_unruled_age_seconds 0' "$TMP/pgw.body" \
     && [ "$(grep -c -- '--data-binary @-' "$TMP/curl.calls")" = 1 ] && grep -q '/metrics/job/island_intake/island/gateway$' "$TMP/curl.calls"; } 2>/dev/null \
   && ok "…and it pushes its metrics once (last-run timestamp, probe_ok 1, inputs 0) — a quiet island stays fresh" || bad "no-inputs metrics" "$(cat "$TMP/curl.calls" 2>/dev/null | tail -2)"
 # another island, empty: the same step under its own name and its own `island` grouping label
@@ -792,7 +796,8 @@ rm -f "$TMP/pgw.body" "$TMP/s5.dest"; PILE_JSON="$TMP/pile-rp.json" RUN_ENV="ISL
     && [ -z "$(grep -vE '^s3://b/homelab/intake-router-pair-[0-9]{4}-[0-9]{2}-[0-9]{2}/intake-r1-[0-9TZ]+/' "$TMP/s5.dest")" ]; } \
   && ok "…every record of it lands under s3://<bucket>/homelab/intake-router-pair-<day>/" || bad "receipt prefix" "$(sort -u "$TMP/s5.dest" 2>/dev/null | head -3)"
 { grep -q '/metrics/job/island_intake/island/router-pair$' "$TMP/curl.calls" && ! grep -q '/island/gateway' "$TMP/curl.calls" \
-    && grep -qx 'island_intake_session_ran 1' "$TMP/pgw.body" && grep -qx 'island_intake_inputs 1' "$TMP/pgw.body"; } 2>/dev/null \
+    && grep -qx 'island_intake_session_ran 1' "$TMP/pgw.body" && grep -qx 'island_intake_inputs 1' "$TMP/pgw.body" \
+    && grep -qE '^island_intake_oldest_unruled_age_seconds [1-9][0-9]*$' "$TMP/pgw.body"; } 2>/dev/null \
   && ok "…and its metrics carry \`island=router-pair\` (session_ran 1, inputs 1)" || bad "router-pair metrics" "$(grep metrics "$TMP/curl.calls" 2>/dev/null)"
 cp "$TMP/claude.out.keep" "$TMP/claude.out"; rm -rf "$TS/homelab/intake-gateway-2026-10-27" "$TMP/s5.dest"; rm -f "$TMP/pgw.body"
 

@@ -21,6 +21,7 @@ ND=0; NM=0; NRR=0; NG=0; NE=0   # this run's inputs per source: dig findings, pi
 NW=0; NST=0                     # …wait inputs (parking comments) and stale waits (re-read at once)
 WC_H=0; WC_R=0; WC_O=0; WC_U=0; NFW=0; NFWI=0   # the wait read: intake-written records by class, R+O, ledger items
 REVIEW_RAN=0
+OLDEST_S=""                     # the oldest unruled issue this sitting was offered, in seconds; empty until the selection is read — then the series is not pushed and its last value stands
 ISLAND_KEY="${ISLAND//\//-}"
 # the Pushgateway grouping key: a path segment cannot hold a slash, so a stack island's name rides base64
 # (`island@base64/<url-safe base64>` — the Pushgateway decodes it into the same `island` label)
@@ -47,6 +48,7 @@ _push() { # <probe_ok> <inputs> <session_ran> <ruled> <queued>
     "island_intake_wait_records{class=\"U\"} $WC_U" \
     "# TYPE island_intake_false_waits gauge" "island_intake_false_waits $NFW" \
     "# TYPE island_intake_false_wait_items gauge" "island_intake_false_wait_items $NFWI" \
+    ${OLDEST_S:+"# TYPE island_intake_oldest_unruled_age_seconds gauge"} ${OLDEST_S:+"island_intake_oldest_unruled_age_seconds $OLDEST_S"} \
     | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/island_intake/$PGW_ISLAND" >/dev/null 2>&1 \
     || echo "island-intake: pushgateway unreachable — metrics stale, rulings unaffected"
 }
@@ -188,6 +190,7 @@ NIN="$(jq -r '.counts.inputs' /tmp/sel.json)"; ND="$(jq -r '.counts.dig' /tmp/se
 NM="$(jq -r '.counts.members' /tmp/sel.json)"; NRR="$(jq -r '.counts.rereads' /tmp/sel.json)"
 NG="$(jq -r '.counts.gaps' /tmp/sel.json)"; NE="$(jq -r '.counts.escapes' /tmp/sel.json)"
 NW="$(jq -r '.counts.waits' /tmp/sel.json)"; NST="$(jq -r '.counts.stale' /tmp/sel.json)"
+OLDEST_S="$(jq -r '[.inputs[] | select(.age_h != null) | .age_h] | (max // 0) * 3600' /tmp/sel.json)"
 # An empty selection starts no session (homelab#3579): the island is quiet, and its metrics say it ran —
 # the per-island IslandIntakeStale reads this push, so a quiet island stays fresh.
 if [ "$NIN" -eq 0 ]; then
