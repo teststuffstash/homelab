@@ -1,4 +1,4 @@
-# IslandIntakeStale and IslandIntakeClaimsUnread (homelab#3580) + IntakeExperimentOverdue and IntakeExperimentReadStale (homelab#3604), lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
+# IslandIntakeStale and IslandIntakeClaimsUnread (homelab#3580) + IslandIntakeUnruledOld (homelab#3837) + IntakeExperimentOverdue and IntakeExperimentReadStale (homelab#3604), lifted VERBATIM out of prometheusrule.yaml (comments stripped — the manifest is its
 # one home) — the rules file that island-intake.promtool-test loads. Not a manifest and not applied to
 # anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
 # PrometheusRule keeps them under `.spec`. Named .promtool-rules rather than .yaml on purpose —
@@ -10,7 +10,7 @@
 # ⚠ Drift-pinned by `devbox run prometheus-rules-lint`'s bidirectional CR↔copy pin — re-copy after
 # editing the alert:
 #
-#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandIntakeStale" or .alert == "IslandIntakeClaimsUnread" or .alert == "IntakeExperimentOverdue" or .alert == "IntakeExperimentReadStale")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "IslandIntakeStale" or .alert == "IslandIntakeUnruledOld" or .alert == "IslandIntakeClaimsUnread" or .alert == "IntakeExperimentOverdue" or .alert == "IntakeExperimentReadStale")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
 groups:
   - name: agent-runs
     rules:
@@ -24,6 +24,15 @@ groups:
         annotations:
           summary: Island intake has not run for the {{ $labels.island }} island in >2 days — its findings, issues and waits are not being admitted
           description: 'The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) holds a sitting per island; the {{ $labels.island }} island''s has not pushed a run in over 2 days. Its dig findings, unruled issues and waits stay unread until it does. Check: argo -n agent-coordinator cron get island-intake and the newest island-intake-* workflow (the `sitting` step of that island, or a walk that ended before reaching it); re-fire that island via: argo -n agent-coordinator submit --from cronworkflow/island-intake -p island={{ $labels.island }}. Brief: islands/intake/rules/intake.md; the island list: islands/intake/scripts/intake-select.sh --list-islands.'
+      - alert: IslandIntakeUnruledOld
+        expr: max by (island) (island_intake_oldest_unruled_age_seconds) > 72 * 3600
+        for: 1h
+        labels:
+          severity: warning
+          triage: dig
+        annotations:
+          summary: The {{ $labels.island }} island's oldest unruled issue was {{ $value | humanizeDuration }} old at its last intake sitting — above the KPI target (72 h from filing to a ruling)
+          description: 'island_intake_oldest_unruled_age_seconds{island="{{ $labels.island }}"} is {{ $value | humanizeDuration }} (target: at most 72 h). The daily 05:00Z island-intake CronWorkflow (ns agent-coordinator) pushes it from every sitting that read its selection: the age of the oldest issue of the island that carried no agent/* label and no intake: ruling when the sitting was offered it (0 when none). An issue is offered at the first daily sitting after it is 24 h old, so a value above 72 h means sittings ran and left it unruled, or did not run. Check: (1) bash islands/intake/scripts/intake-select.sh --island {{ $labels.island }} names the unruled issues and their ages; (2) the island''s receipts under s3://agent-transcripts/homelab/intake-<island>-<day>/ for an INTAKE-RULED line on that issue (deferred, or none: a sitting that ended before its writes); (3) IslandIntakeStale for a sitting that did not run. The KPI and its target are named in islands/intake/README.md §Consumer contracts.'
       - alert: IslandIntakeClaimsUnread
         expr: max(island_intake_claims_read_ok) == 0
         for: 2d
