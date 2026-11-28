@@ -228,6 +228,31 @@
           "x-requirements": [
             "GW-SESSIONS-PULL"
           ]
+        },
+        "canary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model",
+            "provider"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the catalog model id of the cell under test"
+            },
+            "provider": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the provider of the cell under test"
+            }
+          },
+          "description": "the entry canary's cell (catalog.md GW-CATALOG-OR-CANARY): present = this admission is a canary on exactly that (model, provider) cell \u2014 the policy's canary role only, refused with prefer; absent = an ordinary admission",
+          "x-requirements": [
+            "GW-SESSIONS-ADMIT",
+            "GW-CATALOG-OR-CANARY"
+          ]
         }
       }
     },
